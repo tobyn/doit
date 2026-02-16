@@ -1,0 +1,41 @@
+C
+{
+    "0": {
+        "op": "check_battery",
+        "next": false
+    },
+    "1": {
+        "0": "Me",
+        "op": "get_self"
+    },
+    "2": {
+        "0": "Me",
+        "1": "Loc",
+        "op": "get_location"
+    },
+    "3": {
+        "0": "Loc",
+        "1": "MyX",
+        "2": "MyY",
+        "op": "separate_coordinate"
+    },
+    "4": {
+        "0": "MyX",
+        "1": {
+            "num": 1
+        },
+        "2": "MyX",
+        "op": "add"
+    },
+    "5": {
+        "0": "MyX",
+        "1": "MyY",
+        "2": "Loc",
+        "op": "combine_coordinate"
+    },
+    "6": {
+        "0": "Loc",
+        "op": "domove"
+    },
+    "name": "Simple Move"
+}
