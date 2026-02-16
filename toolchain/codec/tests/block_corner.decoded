@@ -1,0 +1,88 @@
+B
+{
+    "components": [
+        [
+            "c_scout_radar",
+            2
+        ],
+        [
+            "c_behavior",
+            3,
+            1
+        ],
+        [
+            "c_small_relay",
+            1
+        ]
+    ],
+    "frame": "f_building1x1d",
+    "dependencies": [
+        {
+            "0": {
+                "op": "unlock"
+            },
+            "1": {
+                "0": 2,
+                "1": {
+                    "num": 100000
+                },
+                "2": "A",
+                "op": "mul"
+            },
+            "2": {
+                "0": 3,
+                "1": {
+                    "num": 1000
+                },
+                "2": "B",
+                "op": "mul"
+            },
+            "3": {
+                "0": "A",
+                "1": "B",
+                "2": "A",
+                "op": "add"
+            },
+            "4": {
+                "0": 4,
+                "1": {
+                    "num": 10
+                },
+                "2": "B",
+                "op": "mul"
+            },
+            "5": {
+                "0": "A",
+                "1": "B",
+                "2": "A",
+                "op": "add"
+            },
+            "6": {
+                "0": 1,
+                "1": "A",
+                "2": -4,
+                "op": "set_number"
+            },
+            "7": {
+                "0": {
+                    "num": 5
+                },
+                "op": "wait"
+            },
+            "parameters": [
+                false,
+                false,
+                false,
+                false
+            ],
+            "name": "Block Corner",
+            "pnames": [
+                "Block Signal",
+                "Block Width",
+                "Block Height",
+                "Exterior Search Distance"
+            ]
+        }
+    ],
+    "name": "Block Corner"
+}

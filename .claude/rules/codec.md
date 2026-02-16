@@ -22,7 +22,15 @@ The `codec` package provides a Go implementation of the same functionality.
 ## Test Case Format
 
 Each test case is a pair of files sharing the same base name in `codec/tests/`:
-- **`.encoded`** — The Base62-encoded string as the game imports/exports it
-- **`.decoded`** — First line is a type indicator (`B` for blueprint, `C` for behavior); remaining lines are the JSON representation
+- **`.encoded`** — A Base62-encoded string in the format 'DS' + type + encoded value
+- **`.decoded`** — A file consisting of type + '\n' + JSON encoded value
 
-Tests verify round-trip correctness: decoding `.encoded` must produce the `.decoded` content, and encoding `.decoded` must produce the `.encoded` content.
+Each test case produces two tests:
+- The string in the `.encoded` file is decoded, and the type and value are compared with the data in the `.decoded` file
+- The decoded information is re-encoded and decoded again, and the comparison repeated. This verifies encoding does not change the data.
+
+The JSON in the `.decoded` file may differ from a JSON rendering of the `.encoded` value in trivial ways (e.g., whitespace,
+object key ordering). Do not rely on the JSON strings to be the same. Parse the JSON and validate deep equality between
+the decoded value and the reference JSON in the `.decoded` file.
+
+There may be multiple valid ways to encode the same data. Do not rely on two encodings of the same data to be equal.
