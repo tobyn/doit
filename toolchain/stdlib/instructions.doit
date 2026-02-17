@@ -1,0 +1,1160 @@
+# This file defines all the built-in game instructions defined in Desynced's `instructions.lua`
+
+# Abort an owned construction.
+#   target [in] - target construction
+fn abort_construction(target) {
+}
+
+# Adds a number or coordinate to another number or coordinate.
+#   to [in]
+#   num [in]
+#   result [out]
+fn add(to, num, result) {
+}
+
+# Moves towards a location stopping to attack any enemies encountered.
+#   target [in] - target unit or coordinate
+fn attack_move(target) {
+}
+
+# Performs a bitwise operation on two values.
+#   a [in] - first value (or value for NOT)
+#   b [in, optional] - second value (ignored for NOT)
+#   result [out] - bitwise operation result
+fn bitwise_op(a, b, result) {
+}
+
+# Places a construction site for a specific structure.
+#   coordinate [in, optional] - target location, or current location if not specified
+#   rotation [in, optional] - building rotation (0 to 3), default 0
+#   "Construction Failed" [branch] - where to continue if construction fails
+fn build(coordinate, rotation) {
+}
+
+# Places a building to be registered.
+#   coordinate [in, optional] - target location, or current location if not specified
+#   rotation [in, optional] - building rotation (0 to 3), default 0
+#   id [in] - id to register with
+#   "If Working" [branch] - where to continue if the unit started working
+#   "Construction Failed" [branch] - where to continue if construction fails
+fn build_registered(coordinate, rotation, id) {
+}
+
+# Call a subroutine. Parameters are determined by the subroutine.
+fn call() {
+}
+
+# Returns if a unit can produce an item.
+#   item [in] - production item
+#   component [in, optional] - component to check
+#   "Can Produce" [branch] - where to continue if the item can be produced
+#   "Cannot Produce" [branch] - where to continue if the item cannot be produced
+fn can_produce(item) {
+}
+
+# Divert program depending on location of a unit or coordinate.
+#   target [in, optional] - the unit or coordinate to check (if not self)
+#   "Valley" [branch] - where to continue if in a valley
+#   "Plateau" [branch] - where to continue if on a plateau
+#   "No Visibility" [branch, optional] - no visibility on target
+fn check_altitude(target) {
+}
+
+# Checks the battery level of a unit.
+#   unit [in, optional] - the unit to check (if not self)
+#   "Full" [branch] - where to continue if battery is fully recharged
+fn check_battery(unit) {
+}
+
+# Checks if a specific bit is set in a number.
+#   value [in] - the number to check
+#   bit_index [in] - bit index (1 = least significant)
+#   "Bit Set" [branch] - where to continue if bit is set
+#   "Bit Clear" [branch] - where to continue if bit is clear
+fn check_bit(value, bit_index) {
+}
+
+# Divert program depending on whether a unit or coordinate is in the blight.
+#   target [in, optional] - the unit or coordinate to check (if not self)
+#   "Blight" [branch] - where to continue if in the blight
+fn check_blightness(target) {
+}
+
+# Checks the efficiency of the logistics network the unit is on.
+#   unit [in, optional] - the unit to check (if not self)
+#   "Full" [branch] - where to continue if at full efficiency
+fn check_grid_effeciency(unit) {
+}
+
+# Check a unit's health.
+#   unit [in, optional] - the unit to check (if not self)
+#   "Full" [branch] - where to continue if at full health
+fn check_health(unit) {
+}
+
+# Divert program depending on comparison of two numbers.
+#   value [in] - the value to check
+#   compare [in] - the number to check against
+#   "If Equal" [branch] - where to continue if values are equal
+#   "If Larger" [branch] - where to continue if value is larger than compare
+#   "If Smaller" [branch] - where to continue if value is smaller than compare
+fn check_number(value, compare) {
+}
+
+# Checks if free space is available for an item and amount.
+#   item [in] - item and amount to check
+#   "Can't Fit" [branch] - where to continue if it can't fit
+fn checkfreespace(item) {
+}
+
+# Clear all register links on this unit.
+fn clear_all_links() {
+}
+
+# Clear a register link.
+#   from [in] - component/register index to start clearing
+#   from_index [in, optional] - component index if multiple are equipped
+#   to [in] - component/register index to end clearing
+#   to_index [in, optional] - component index if multiple are equipped
+fn clear_link(from, from_index, to, to_index) {
+}
+
+# Clears a research from the research queue, or entire queue if no tech passed.
+#   tech [in] - tech to remove from research queue
+fn clear_research(tech) {
+}
+
+# Returns a coordinate made from x and y values.
+#   x [in]
+#   y [in]
+#   result [out]
+fn combine_coordinate(x, y, result) {
+}
+
+# Combine separate parameters into a register.
+#   num [in]
+#   unit [in]
+#   register [out]
+#   x [in, optional]
+#   y [in, optional]
+fn combine_register(num, unit, register) {
+}
+
+# Compares two units.
+#   unit_1 [in]
+#   unit_2 [in]
+#   "If Equal" [branch] - where to continue if the units are the same
+#   "If Different" [branch] - where to continue if the units differ
+fn compare_entity(unit_1, unit_2) {
+}
+
+# Compares item or unit type.
+#   value_1 [in]
+#   value_2 [in]
+#   "If Equal" [branch] - where to continue if the types are the same
+#   "If Different" [branch] - where to continue if the types differ
+fn compare_item(value_1, value_2) {
+}
+
+# Compares registers for equality.
+#   value_1 [in]
+#   value_2 [in]
+#   "If Equal" [branch] - where to continue if the registers are the same
+#   "If Different" [branch] - where to continue if the registers differ
+fn compare_register(value_1, value_2) {
+}
+
+# Connects the unit to the logistics network.
+fn connect() {
+}
+
+# Counts the number of the passed item in the unit's inventory.
+#   item [in] - item to count
+#   result [out] - number of this item in inventory
+#   unit [in, optional] - the unit to check (if not self)
+fn count_item(item, result) {
+}
+
+# Returns the number of slots in this unit of the given type.
+#   result [out] - number of slots
+#   unit [in, optional] - the unit to check (if not self)
+fn count_slots(result) {
+}
+
+# Debug print to log.
+#   value [in] - value to print
+fn debug_print(value) {
+}
+
+# Deploys the first found held unit at the specified location.
+#   coord [in] - location to deploy
+fn deploy(coord) {
+}
+
+# Disable unit to deliver on transport route.
+fn disable_transport_route() {
+}
+
+# Disconnects the unit from the logistics network.
+fn disconnect() {
+}
+
+# Divides a number or coordinate by another number or coordinate.
+#   from [in]
+#   num [in]
+#   result [out]
+fn div(from, num, result) {
+}
+
+# Drop off items at a unit or location.
+#   destination [in] - unit or destination to bring items to
+#   item_amount [in, optional] - item and amount to drop off
+fn dodrop(destination) {
+}
+
+# Moves to another unit or within a range of another unit.
+#   target [in] - unit to move to; the number specifies the range
+fn domove(target) {
+}
+
+# Deprecated: use domove
+# Starts movement but does not wait for completion.
+#   target [in] - unit to move to
+fn domove_async(target) {
+}
+
+# Deprecated: use domove
+# Moves toward a target location until within a specified range.
+#   target [in] - unit to move to; the number specifies the range
+fn domove_range(target) {
+}
+
+# Picks up items from a unit.
+#   source [in] - unit to take items from
+#   item_amount [in, optional] - item and amount to pick up
+fn dopickup(source) {
+}
+
+# Enable unit to deliver on transport route.
+fn enable_transport_route() {
+}
+
+# Equips a component if it exists in the unit's inventory.
+#   component [in] - component to equip
+#   slot_index [in, optional] - individual slot to equip from
+#   "No Component" [branch] - if the unit doesn't hold the requested component
+fn equip_component(component) {
+}
+
+# Equips a component on an external unit if it exists in that unit's inventory.
+#   unit [in] - the unit to equip component on
+#   component [in] - component to equip
+#   slot_index [in, optional] - individual slot to equip from
+#   "No Component" [branch] - if the unit doesn't hold the requested component
+fn equip_component_remotely(unit, component) {
+}
+
+# Stops execution of the behavior.
+fn exit() {
+}
+
+# Counts the number of the passed item in the faction's logistics network.
+#   item [in] - item to count
+#   result [out] - number of this item in the faction
+#   "None" [branch] - when none of this item exists
+fn faction_item_amount(item, result) {
+}
+
+# Loops through equipped components.
+#   component [out] - equipped component
+#   index [out, optional] - index of the component
+#   "Done" [branch] - finished loop
+fn for_component(component) {
+}
+
+# Scans for nearby resources in power field or visibility range.
+#   resource [out]
+#   "Done" [branch] - finished loop
+fn for_count_resources(resource) {
+}
+
+# Loops through all units in visibility range matching filters.
+#   range [in] - range (up to visibility range)
+#   filter [in] - filter to check
+#   filter_2 [in, optional] - second filter
+#   filter_3 [in, optional] - third filter
+#   unit [out] - current unit in loop
+#   "Done" [branch] - finished loop
+fn for_entities_in_range(range, filter, unit) {
+}
+
+# Loops through inventory slots.
+#   inventory [out] - item inventory
+#   "Done" [branch] - finished loop
+#   reserved_stack [out, optional] - items reserved for outgoing order or recipe
+#   unreserved_stack [out, optional] - items available
+#   reserved_space [out, optional] - space reserved for an incoming order
+#   unreserved_space [out, optional] - remaining space
+fn for_inventory_item(inventory) {
+}
+
+# Loops through all numbers in a range.
+#   from [in] - loop start number
+#   to [in] - loop end number
+#   step [in, optional] - increment step, defaults to -1 or 1 based on inputs
+#   value [out] - current number
+#   "Done" [branch] - finished loop
+fn for_number(from, to, value) {
+}
+
+# Gets all producers for a production with their production time.
+#   production [in] - production
+#   producer [out] - producer
+#   "Done" [branch] - finished loop
+fn for_producers(production, producer) {
+}
+
+# Loops through recipe ingredients.
+#   recipe [in]
+#   ingredient [out] - recipe ingredient
+#   "Done" [branch] - finished loop
+fn for_recipe_ingredients(recipe, ingredient) {
+}
+
+# Loops through each ingredient required to repair a unit.
+#   target [in] - unit
+#   ingredient [out] - repair ingredient
+#   "Done" [branch] - finished loop
+fn for_repair_ingredients(target, ingredient) {
+}
+
+# Loops through all researchable tech.
+#   tech [out] - researchable tech
+#   "Done" [branch] - finished loop
+fn for_research(tech) {
+}
+
+# Loops through research ingredients.
+#   research [in]
+#   ingredient [out] - research ingredient
+#   "Done" [branch] - finished loop
+fn for_research_ingredients(research, ingredient) {
+}
+
+# Loops through all unlocks for a researchable tech.
+#   tech [in] - tech
+#   unlock [out] - unlocks
+#   "Done" [branch] - finished loop
+fn for_research_unlocks(tech, unlock) {
+}
+
+# Deprecated: use for_signal_match
+# Loops through all units with a signal.
+#   signal [in] - signal
+#   unit [out] - unit with signal
+#   "Done" [branch] - finished loop
+fn for_signal(signal, unit) {
+}
+
+# Loops through all units with a signal of similar type.
+#   signal [in] - signal
+#   unit [out] - found unit with signal
+#   found_signal [out, optional] - found signal
+#   "Done" [branch] - finished loop
+fn for_signal_match(signal, unit) {
+}
+
+# Collect information for running the auto base controller.
+#   range [in] - range of operation
+fn gather_information(range) {
+}
+
+# Gets the source, target, and amount data from the current active order.
+#   source [out]
+#   target [out]
+#   amount [out]
+fn get_active_order(source, target, amount) {
+}
+
+# Gets the battery level as a percent.
+#   result [out]
+fn get_battery(result) {
+}
+
+# Gets the closest visible unit matching a filter.
+#   filter [in] - filter to check
+#   filter_2 [in, optional] - second filter
+#   filter_3 [in, optional] - third filter
+#   output [out] - unit
+fn get_closest_entity(filter, output) {
+}
+
+# Reads a value from a component register.
+#   from [in] - component and register number to get
+#   value [out] - value of register
+#   component_index [in, optional] - component index if multiple are equipped
+fn get_comp_reg(from, value) {
+}
+
+# Returns distance to a unit.
+#   target [in] - target unit
+#   distance [out] - unit and its distance in the numerical part
+#   unit [in, optional] - the unit to measure from (if not self)
+fn get_distance(target, distance) {
+}
+
+# Gets the best matching unit at a coordinate.
+#   coordinate [in] - coordinate to get unit from
+#   result [out]
+fn get_entity_at(coordinate, result) {
+}
+
+# Returns how many of a component are equipped.
+#   component_id [in] - component to search for
+#   value [out]
+#   unit [in, optional] - the unit to check (if not self)
+fn get_equipped_num(component_id, value) {
+}
+
+# Gets the first item where the locked slot exists but there is no item in it.
+#   item [out] - the first locked item id with no item
+fn get_first_locked_0(item) {
+}
+
+# Gets the grid efficiency as a percent.
+#   result [out]
+fn get_grid_effeciency(result) {
+}
+
+# Gets a unit's health as a percentage.
+#   unit [in] - unit to check
+#   percent [out] - percentage of health remaining
+#   current [out, optional] - value of health remaining
+#   max [out, optional] - value of maximum health
+fn get_health(unit, percent) {
+}
+
+# Returns the ingredients required to produce an item.
+#   product [in]
+#   out_1 [out] - first ingredient
+#   out_2 [out] - second ingredient
+#   out_3 [out] - third ingredient
+fn get_ingredients(product, out_1, out_2, out_3) {
+}
+
+# Reads the first item in the inventory.
+#   item [out]
+#   "No Items" [branch] - no items in inventory
+fn get_inventory_item(item) {
+}
+
+# Reads the item contained in the specified slot index.
+#   index [in] - slot index
+#   item [out]
+#   "No Item" [branch] - item not found
+fn get_inventory_item_index(index, item) {
+}
+
+# Returns the total contained in inventory.
+#   result [out]
+#   unit [in, optional] - the unit to check (if not self)
+fn get_inventory_total(result) {
+}
+
+# Gets information on an item.
+#   item [in] - the item to check
+#   result [out] - item information value
+fn get_item_info(item, result) {
+}
+
+# Gets the location of a seen unit.
+#   unit [in] - unit to get coordinates of
+#   coord [out] - coordinate of unit
+fn get_location(unit, coord) {
+}
+
+# Returns the maximum stack size of an item.
+#   item [in] - item to check
+#   max_stack [out] - max stack size
+fn get_max_stack(item, max_stack) {
+}
+
+# Reads a value from a component register on an external unit.
+#   unit [in] - the unit to get component register from
+#   from [in] - component and register number to get
+#   value [out] - value of register
+#   component_index [in, optional] - component index if multiple are equipped
+#   "Failed" [branch, optional] - failed to get register
+fn get_reg_remotely(unit, from, value) {
+}
+
+# Get number of registered buildings.
+#   id [in] - id to get register of
+#   value [out] - value of registered unit
+fn get_registered(id, value) {
+}
+
+# Returns the first active research tech.
+#   tech [out] - first active research
+fn get_research(tech) {
+}
+
+# Returns the research required (if needed).
+#   tech [in] - the research to investigate
+#   requirement [out] - the tech required for the research
+fn get_research_requirement(tech, requirement) {
+}
+
+# Gets the resource type from a resource deposit.
+#   resource_deposit [in] - resource deposit
+#   resource [out] - resource type
+#   "Not Resource" [branch] - not a resource deposit
+fn get_resource_item(resource_deposit, resource) {
+}
+
+# Gets the amount of a resource.
+#   resource [in] - resource node to check
+#   result [out]
+fn get_resource_num(resource, result) {
+}
+
+# Divert program depending on season.
+#   "Winter" [branch]
+#   "Spring" [branch]
+#   "Summer" [branch]
+#   "Fall" [branch]
+fn get_season() {
+}
+
+# Gets the unit running the behavior.
+#   result [out]
+fn get_self(result) {
+}
+
+# Gets a unit's shield as a percentage.
+#   unit [in] - unit to check
+#   percent [out] - percentage of shield remaining
+#   current [out, optional] - value of shield remaining
+#   max [out, optional] - value of maximum shield
+fn get_shield(unit, percent) {
+}
+
+# Gets the current world stability.
+#   number [out] - stability
+fn get_stability(number) {
+}
+
+# Gets the type from an item or unit.
+#   item_unit [in]
+#   type [out]
+fn get_type(item_unit, type) {
+}
+
+# Gets information on a unit.
+#   unit [in] - the unit to check
+#   result [out] - unit info value
+fn get_unit_info(unit, result) {
+}
+
+# Gets power information on a unit.
+#   unit [in] - the unit to check
+#   result [out] - unit power info value
+fn get_unit_power_info(unit, result) {
+}
+
+# Get the frame type of a unit.
+#   unit [in] - the unit to check
+#   type [out]
+fn get_unit_type(unit, type) {
+}
+
+# Returns how many of the input item can fit in the inventory.
+#   item [in] - item to check
+#   result [out] - number that can fit
+#   unit [in, optional] - the unit to check (if not self)
+fn getfreespace(item, result) {
+}
+
+# Gets the faction's home unit.
+#   result [out] - faction's home unit
+fn gethome(result) {
+}
+
+# Gets the trust level of a unit towards your faction.
+#   unit [in] - target unit
+#   "Ally" [branch] - target considers you an ally
+#   "Neutral" [branch] - target considers you neutral
+#   "Enemy" [branch] - target considers you an enemy
+#   "No Unit" [branch] - no unit passed
+fn gettrust(unit) {
+}
+
+# Checks if you have at least a specified amount of an item.
+#   item [in] - item to count
+#   unit [in, optional] - the unit to check (if not self)
+#   "Have Item" [branch] - have the specified item
+fn have_item(item) {
+}
+
+# Compares if an item or unit is of a specific type.
+#   item [in]
+#   type [in]
+#   "If Equal" [branch] - where to continue if they are the same
+#   "If Different" [branch] - where to continue if they differ
+fn is_a(item, type) {
+}
+
+# Divert program depending on time of day.
+#   "Day" [branch]
+#   "Night" [branch]
+fn is_daynight() {
+}
+
+# Check if a unit is docked and get its garage.
+#   garage [out] - garage unit
+#   "No Dock" [branch] - unit is not docked
+fn is_docked(garage) {
+}
+
+# Checks if a value is empty.
+#   value [in] - value to check
+#   "Empty" [branch] - value is empty
+#   "Has Value" [branch] - value exists
+fn is_empty(value) {
+}
+
+# Check if a specific component has been equipped.
+#   component [in] - component to check
+#   result [out, optional] - how many instances are equipped
+#   "Component Equipped" [branch] - component is equipped
+fn is_equipped(component) {
+}
+
+# Check if a specific item slot index is fixed.
+#   slot_index [in] - individual slot to check
+#   "Is Fixed" [branch] - inventory slot is fixed
+fn is_fixed(slot_index) {
+}
+
+# Checks if a unit or coordinate is in the logistics network.
+#   unit [in] - unit or coordinate
+#   "Inside" [branch] - inside a logistics network
+#   "Outside" [branch] - not inside a logistics network
+fn is_logistics(unit) {
+}
+
+# Checks the movement state of a unit.
+#   unit [in, optional] - the unit to check (if not self)
+#   "Moving" [branch] - unit is moving
+#   "Not Moving" [branch] - unit is not moving
+#   "Path Blocked" [branch] - unit is path blocked
+#   "No Result" [branch] - unit is out of visual range
+fn is_moving(unit) {
+}
+
+# Checks whether a location is passable.
+#   coordinate [in] - location to check
+#   "Passable" [branch] - unit can pass through
+#   "Impassable" [branch] - unit cannot pass through
+fn is_passable(coordinate) {
+}
+
+# Checks if two units or coordinates are in the same logistics network.
+#   unit_a [in] - first unit or coordinate
+#   unit_b [in] - second unit or coordinate
+#   "Same Grid" [branch] - same logistics network
+#   "Different" [branch] - different logistics networks
+fn is_same_grid(unit_a, unit_b) {
+}
+
+# Checks if a unit is a specific frame type.
+#   unit [in] - the unit to check
+#   type [in]
+#   "Is" [branch] - unit is the specified type
+#   "Is Not" [branch] - unit is not the specified type
+fn is_unit_a(unit, type) {
+}
+
+# Checks whether the faction has an id unlocked.
+#   id [in] - input id
+#   "No Match" [branch] - id is not unlocked
+fn is_unlocked(id) {
+}
+
+# Checks whether a particular component is currently working.
+#   component [in] - component to check, or empty for all
+#   component_index [in, optional] - component index if multiple are equipped
+#   value [out, optional] - the currently working component
+#   "Is Not Working" [branch] - component is not currently working
+fn is_working(component) {
+}
+
+# Jumps execution to a label with the same label id.
+#   label [in] - label identifier
+fn jump(label) {
+}
+
+# Labels can be jumped to from anywhere in a behavior.
+#   label [in] - label identifier
+fn label(label) {
+}
+
+# Tells a launched satellite to land.
+fn land() {
+}
+
+# Break out of a loop.
+fn last() {
+}
+
+# Launches a satellite or drop pod.
+fn launch() {
+}
+
+# Run one instruction at a time.
+fn lock() {
+}
+
+# Fix all storage slots or a specific item slot.
+#   item [in] - item type to fix to the slots
+#   slot_index [in, optional] - individual slot to fix
+fn lock_slots(item) {
+}
+
+# Turns the unit to look at a unit or coordinate.
+#   target [in] - target unit or coordinate
+fn lookat(target) {
+}
+
+# Construct carrier bots for delivering orders.
+#   carriers [in] - type and count of carriers to make
+#   "If Working" [branch] - where to continue if the unit started working
+fn make_carrier(carriers) {
+}
+
+# Construct and equip miner components on available carrier bots.
+#   resource_count [in] - resource type and number of miners to maintain
+#   frame [in] - unit to create if none are free
+#   "If Working" [branch] - where to continue if the unit started working
+fn make_miner(resource_count, frame) {
+}
+
+# Build and maintain dedicated production buildings.
+#   item_count [in] - item type and number of producers to maintain
+#   component [in] - production component
+#   building [in] - building type to use as producer
+#   location [in] - location offset from self
+#   "If Working" [branch] - where to continue if the unit started working
+fn make_producer(item_count, component, building, location) {
+}
+
+# Construct and equip turret components on available carrier bots.
+#   number [in] - number of turret bots to maintain
+#   "If Working" [branch] - where to continue if the unit started working
+fn make_turret_bots(number) {
+}
+
+# Filters the passed unit.
+#   unit [in] - unit to filter, defaults to self
+#   filter [in] - filter to check
+#   filter_2 [in, optional] - second filter
+#   filter_3 [in, optional] - third filter
+#   "Failed" [branch] - did not match filter
+fn match(unit, filter) {
+}
+
+# Get memory array element.
+#   index [in] - array identifier and index
+#   value [out]
+fn memory_get(index, value) {
+}
+
+# Insert value into memory array.
+#   index [in] - array identifier and index
+#   value [in]
+fn memory_insert(index, value) {
+}
+
+# Get length of memory array.
+#   index [in] - array identifier
+#   value [out]
+fn memory_length(index, value) {
+}
+
+# Loops through memory array or known array identifiers.
+#   id [in] - array identifier, or empty to loop through known identifiers
+#   value [out]
+#   index [out, optional]
+#   "Done" [branch] - finished loop
+fn memory_loop(id, value) {
+}
+
+# Remove value from memory array.
+#   index [in] - array identifier and index
+#   old_value [out] - removed value
+fn memory_remove(index, old_value) {
+}
+
+# Set memory array value at a given index.
+#   index [in] - array identifier and index
+#   value [in]
+#   old [out] - previous value
+fn memory_set(index, value, old) {
+}
+
+# Mine a single resource deposit.
+#   resource [in] - resource to mine
+#   "Cannot Mine" [branch] - mining could not be performed
+#   "Full" [branch] - can't fit resource into inventory
+fn mine(resource) {
+}
+
+# Get the remainder of a division.
+#   num [in]
+#   by [in]
+#   result [out]
+fn modulo(num, by, result) {
+}
+
+# Moves towards a tile East of the current location.
+#   number [in] - number of tiles to move
+fn move_east(number) {
+}
+
+# Moves towards a tile North of the current location.
+#   number [in] - number of tiles to move
+fn move_north(number) {
+}
+
+# Moves towards a tile South of the current location.
+#   number [in] - number of tiles to move
+fn move_south(number) {
+}
+
+# Moves towards a tile West of the current location.
+#   number [in] - number of tiles to move
+fn move_west(number) {
+}
+
+# Moves out of range of another unit.
+#   target [in] - unit to move away from; the number specifies the range
+fn moveaway_range(target) {
+}
+
+# Multiplies a number or coordinate by another number or coordinate.
+#   to [in]
+#   num [in]
+#   result [out]
+fn mul(to, num, result) {
+}
+
+# Deprecated: placeholder for removed instructions
+fn nop() {
+}
+
+# Triggers a faction notification.
+#   txt - notification text
+fn notify(txt) {
+    instruction "notify" {
+        txt: txt
+    }
+}
+
+# Request inventory to be sent to nearest shared storage with corresponding fixed slots.
+fn order_to_shared_storage() {
+}
+
+# Transfers an item to another unit.
+#   target [in] - target unit
+#   item [in] - item and amount to transfer
+fn order_transfer(target, item) {
+}
+
+# Tries to pack all packable units into items.
+#   unit [in, optional] - the destination to pack (if not self)
+fn package_all() {
+}
+
+# Gives you the percent that value is of max value.
+#   value [in] - value to check
+#   max_value [in] - max value to get percentage of
+#   number [out] - percent
+fn percent_value(value, max_value, number) {
+}
+
+# Plays the ping effect and notifies other players in the same faction.
+#   target [in] - target unit
+fn ping(target) {
+}
+
+# Sets a production component to produce a blueprint.
+fn produce() {
+}
+
+# Sets a production component to produce a registered blueprint.
+#   id [in] - id to register with
+#   "If Working" [branch] - where to continue if the unit started working
+fn produce_registered(id) {
+}
+
+# Returns a random coordinate within a specified range of a location.
+#   coordinate [in] - entity or coordinate
+#   range [in] - radius range from coordinate
+#   result [out]
+fn random_coordinate(coordinate, range, result) {
+}
+
+# Returns a random number between a min and max value.
+#   min [in]
+#   max [in]
+#   result [out]
+fn random_number(min, max, result) {
+}
+
+# Reads the radio signal on a specified band.
+#   band [in] - the band to check
+#   result [out] - value of the radio signal
+fn read_radio(band, result) {
+}
+
+# Reads the signal register of another unit.
+#   unit [in] - the owned unit to check
+#   result [out] - value of the unit's signal register
+fn read_signal(unit, result) {
+}
+
+# Attempts to read the internal key of the unit.
+#   frame [in] - structure to read the key for
+#   key [out] - number key of structure
+fn readkey(frame, key) {
+}
+
+# Remaps a value between two ranges.
+#   value [in] - value to remap
+#   input_low [in] - low value for input
+#   input_high [in] - high value for input
+#   target_low [in] - low value for target
+#   target_high [in] - high value for target
+#   result [out] - remapped value
+fn remap_value(value, input_low, input_high, target_low, target_high, result) {
+}
+
+# Requests an item if it doesn't exist in the inventory.
+#   item [in] - item and amount to order
+#   channel [in, optional] - request on a specific logistics channel (1-4)
+fn request_item(item) {
+}
+
+# Requests an item and waits until that amount exists in inventory.
+#   item [in] - item and amount to order
+#   channel [in, optional] - request on a specific logistics channel (1-4)
+fn request_wait(item) {
+}
+
+# Restart execution of the behavior.
+fn restart() {
+}
+
+# Scan for the closest unit that matches the filters.
+#   filter_1 [in] - first filter
+#   filter_2 [in] - second filter
+#   filter_3 [in] - third filter
+#   result [out]
+#   "No Result" [branch] - no results found
+fn scan(filter_1, filter_2, filter_3, result) {
+}
+
+# Moves in a scouting pattern around the faction's home location.
+fn scout() {
+}
+
+# Moves in a random direction a specified amount.
+#   range [in] - range to scout
+#   coord [in] - last coordinate for directionality
+fn scout_rand_range(range, coord) {
+}
+
+# Branches based on which unit is closer.
+#   unit_a [in]
+#   unit_b [in]
+#   closest [out, optional] - closest unit
+#   "A" [branch] - A is nearer (or equal)
+#   "B" [branch] - B is nearer
+fn select_nearest(unit_a, unit_b) {
+}
+
+# Split a coordinate into x and y values.
+#   coordinate [in]
+#   x [out]
+#   y [out]
+fn separate_coordinate(coordinate, x, y) {
+}
+
+# Split a register into separate parameters.
+#   register [in]
+#   num [out]
+#   unit [out, optional]
+#   id [out, optional]
+#   x [out, optional]
+#   y [out, optional]
+fn separate_register(register, num) {
+}
+
+# Produce materials needed in construction sites.
+#   "If Working" [branch] - where to continue if the unit started working
+fn serve_construction() {
+}
+
+# Writes a value into a component register.
+#   value [in] - value to set
+#   to [in] - component and register number to set
+#   component_index [in, optional] - component index if multiple are equipped
+fn set_comp_reg(value, to) {
+}
+
+# Set a register link.
+#   from [in] - component and register number to start the link
+#   from_index [in, optional] - component index if multiple are equipped
+#   to [in] - component and register number to end the link
+#   to_index [in, optional] - component index if multiple are equipped
+fn set_link(from, from_index, to, to_index) {
+}
+
+# Sets current unit to the specified logistics settings.
+fn set_logistics_options() {
+}
+
+# Sets the numerical/coordinate part of a value.
+#   value [in]
+#   num_coord [in]
+#   to [out]
+fn set_number(value, num_coord, to) {
+}
+
+# Copy a value to a frame register, parameter, or variable.
+#   value [in]
+#   target [out]
+fn set_reg(value, target) {
+}
+
+# Writes a value into a component register on an external unit.
+#   unit [in] - the unit to set component register on
+#   value [in] - value to set
+#   to [in] - component and register number to set
+#   component_index [in, optional] - component index if multiple are equipped
+#   "Failed" [branch, optional] - failed to set register
+fn set_reg_remotely(unit, value, to) {
+}
+
+# Add a new research into the active research queue.
+#   tech [in] - tech to research
+fn set_research(tech) {
+}
+
+# Set the signpost to specific text.
+fn set_signpost() {
+}
+
+# Shuts down the power of the unit.
+fn shutdown() {
+}
+
+# Attempt to solve an explorable.
+#   target [in] - explorable to solve
+#   missing [out] - missing repair item, scanner component, or unpowered
+#   "Failed" [branch] - missing item, component, or power
+fn solve(target, missing) {
+}
+
+# Sorts storage containers on the unit.
+fn sort_storage() {
+}
+
+# Stop movement and abort current movement control.
+fn stop() {
+}
+
+# Subtracts a number or coordinate from another number or coordinate.
+#   from [in]
+#   num [in]
+#   result [out]
+fn sub(from, num, result) {
+}
+
+# Filters the passed unit or item, branching to matching cases.
+#   input [in] - unit or item to filter
+#   case_1 [in] - case 1 filter
+#   case_2 [in, optional] - case 2 filter
+#   case_3 [in, optional] - case 3 filter
+#   case_4 [in, optional] - case 4 filter
+#   case_5 [in, optional] - case 5 filter
+#   "Default" [branch] - did not match any filter
+#   "1"-"5" [branch] - matched respective case
+fn switch(input, case_1) {
+}
+
+# Turns on the power of the unit.
+fn turnon() {
+}
+
+# Unequips a component if it exists.
+#   component [in] - component to unequip
+#   slot_index [in, optional] - individual slot to unequip from
+#   "No Component" [branch] - component not found or slot was empty
+fn unequip_component(component) {
+}
+
+# Unequips a component on an external unit.
+#   unit [in] - the unit to unequip component on
+#   component [in] - component to unequip
+#   slot_index [in, optional] - individual slot to unequip from
+#   "No Component" [branch] - component not found or slot was empty
+fn unequip_component_remotely(unit, component) {
+}
+
+# Divert program depending on unit type.
+#   unit [in] - the unit to check
+#   "Building" [branch] - unit is a building
+#   "Bot" [branch] - unit is a bot
+#   "Construction" [branch, optional] - unit is a construction site
+#   "No Unit" [branch, optional] - no visible unit passed
+fn unit_type(unit) {
+}
+
+# Run as many instructions as possible. Use wait instructions to throttle execution.
+fn unlock() {
+}
+
+# Unfix all inventory slots or a specific item slot.
+#   slot_index [in, optional] - individual slot to unfix
+fn unlock_slots() {
+}
+
+# Tries to unpack all packaged items.
+#   unit [in, optional] - the destination to unpack (if not self)
+fn unpackage_all() {
+}
+
+# Switch based on type of value.
+#   data [in] - data to test
+#   "Item" [branch]
+#   "Unit" [branch]
+#   "Component" [branch]
+#   "Tech" [branch, optional]
+#   "Value" [branch, optional]
+#   "Coord" [branch, optional]
+#   "No Match" [branch] - no match
+fn value_type(data) {
+}
+
+# Pauses execution until 1 or more ticks later (5 ticks = 1 second).
+#   time [in] - number of ticks to wait
+fn wait(time) {
+}
+
+# Waits for a component before continuing.
+#   component [in] - component to wait for
+#   component_index [in, optional] - component index if multiple are equipped
+#   "Not Working" [branch, optional] - component isn't currently working
+fn wait_component(component) {
+}

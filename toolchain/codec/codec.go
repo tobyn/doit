@@ -167,28 +167,34 @@ func base62WriteData(buf *strings.Builder, data []byte) {
 
 // --- Compression layer ---
 
-func zlibDecompress(data []byte) ([]byte, error) {
+func zlibDecompress(data []byte) (out []byte, err error) {
 	r, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("zlib decompress: %w", err)
 	}
-	defer r.Close()
-	out, err := io.ReadAll(r)
+	defer func() {
+		closeErr := r.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}()
+	out, err = io.ReadAll(r)
 	if err != nil {
-		return nil, fmt.Errorf("zlib decompress: %w", err)
+		err = fmt.Errorf("zlib decompress: %w", err)
 	}
-	return out, nil
+	return
 }
 
 func zlibCompress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	w := zlib.NewWriter(&buf)
-	if _, err := w.Write(data); err != nil {
-		w.Close()
-		return nil, err
+	_, err := w.Write(data)
+	closeErr := w.Close()
+	if err == nil {
+		err = closeErr
 	}
-	if err := w.Close(); err != nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("zlib compress: %w", err)
 	}
 	return buf.Bytes(), nil
 }

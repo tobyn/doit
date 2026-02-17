@@ -1,0 +1,4 @@
+behavior hello_world {
+    name "Hello World"
+    notify "Hello, World!"
+}

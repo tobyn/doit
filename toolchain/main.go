@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -17,10 +17,13 @@ import (
 //go:embed usage/*.txt
 var usageFS embed.FS
 
+//go:embed stdlib
+var stdlibFS embed.FS
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: doit <command> [arguments]\n")
-		fmt.Fprintf(os.Stderr, "Run 'doit help' for a list of commands.\n")
+		_, _ = fmt.Fprintf(os.Stderr, "usage: doit <command> [arguments]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Run 'doit help' for a list of commands.\n")
 		os.Exit(1)
 	}
 
@@ -35,57 +38,79 @@ func main() {
 	case "help":
 		err = cmdHelp(os.Args[2:])
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
-		fmt.Fprintf(os.Stderr, "Run 'doit help' for a list of commands.\n")
+		_, _ = fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
+		_, _ = fmt.Fprintf(os.Stderr, "Run 'doit help' for a list of commands.\n")
 		os.Exit(1)
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func cmdCompile(args []string) error {
-	fs := flag.NewFlagSet("compile", flag.ContinueOnError)
-	outputPath := fs.String("o", "", "output file path")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	r, err := openInput(fs)
+// Compile compiles doit source from r using the given stdlib and returns the
+// encoded string.
+func Compile(r io.Reader, stdlib fs.FS) (string, error) {
+	obj, err := compiler.Compile(r, stdlib)
 	if err != nil {
-		return err
-	}
-	defer r.Close()
-
-	obj, err := compiler.Compile(r)
-	if err != nil {
-		return err
+		return "", err
 	}
 	if obj == nil {
-		return nil
+		return "", nil
+	}
+	return codec.EncodeString(obj)
+}
+
+func cmdCompile(args []string) (err error) {
+	flags := flag.NewFlagSet("compile", flag.ContinueOnError)
+	outputPath := flags.String("o", "", "output file path")
+	stdlibPath := flags.String("stdlib", "", "override stdlib path")
+	if err := flags.Parse(args); err != nil {
+		return err
 	}
 
-	encoded, err := codec.EncodeString(obj)
+	r, err := openInput(flags)
 	if err != nil {
-		return err
+		return
+	}
+	defer func() {
+		closeErr := r.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}()
+
+	var stdlib fs.FS
+	if *stdlibPath != "" {
+		stdlib = os.DirFS(*stdlibPath)
+	} else {
+		stdlib, _ = fs.Sub(stdlibFS, "stdlib")
+	}
+
+	encoded, err := Compile(r, stdlib)
+	if err != nil {
+		return
+	}
+	if encoded == "" {
+		return
 	}
 	encoded += "\n"
 
 	if *outputPath == "" {
 		_, err = io.WriteString(os.Stdout, encoded)
-		return err
+		return
 	}
-	return os.WriteFile(*outputPath, []byte(encoded), 0o644)
+	err = os.WriteFile(*outputPath, []byte(encoded), 0o644)
+	return
 }
 
-func cmdDecode(args []string) error {
-	fs := flag.NewFlagSet("decode", flag.ContinueOnError)
-	outputPath := fs.String("o", "", "output file path")
-	flagB := fs.Bool("b", false, "require blueprint")
-	flagC := fs.Bool("c", false, "require behavior")
-	if err := fs.Parse(args); err != nil {
+func cmdDecode(args []string) (err error) {
+	flags := flag.NewFlagSet("decode", flag.ContinueOnError)
+	outputPath := flags.String("o", "", "output file path")
+	flagB := flags.Bool("b", false, "require blueprint")
+	flagC := flags.Bool("c", false, "require behavior")
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
 
@@ -93,15 +118,20 @@ func cmdDecode(args []string) error {
 		return fmt.Errorf("-b and -c are mutually exclusive")
 	}
 
-	r, err := openInput(fs)
+	r, err := openInput(flags)
 	if err != nil {
-		return err
+		return
 	}
-	defer r.Close()
+	defer func() {
+		closeErr := r.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}()
 
 	obj, err := codec.Decode(r)
 	if err != nil {
-		return err
+		return
 	}
 
 	if *flagB && obj.Type != codec.Blueprint {
@@ -116,20 +146,21 @@ func cmdDecode(args []string) error {
 		output = obj.Value
 	} else {
 		output = map[string]any{
-			"type":  string(byte(obj.Type)),
+			"type":  string(obj.Type),
 			"value": obj.Value,
 		}
 	}
 
-	return writeJSON(output, *outputPath)
+	err = writeJSON(output, *outputPath)
+	return
 }
 
 func cmdEncode(args []string) error {
-	fs := flag.NewFlagSet("encode", flag.ContinueOnError)
-	outputPath := fs.String("o", "", "output file path")
-	flagB := fs.Bool("b", false, "input is a blueprint value")
-	flagC := fs.Bool("c", false, "input is a behavior value")
-	if err := fs.Parse(args); err != nil {
+	flags := flag.NewFlagSet("encode", flag.ContinueOnError)
+	outputPath := flags.String("o", "", "output file path")
+	flagB := flags.Bool("b", false, "input is a blueprint value")
+	flagC := flags.Bool("c", false, "input is a behavior value")
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
 
@@ -137,7 +168,7 @@ func cmdEncode(args []string) error {
 		return fmt.Errorf("-b and -c are mutually exclusive")
 	}
 
-	input, err := readInput(fs)
+	input, err := readInput(flags)
 	if err != nil {
 		return err
 	}
@@ -151,28 +182,25 @@ func cmdEncode(args []string) error {
 		} else {
 			objType = codec.Behavior
 		}
-		value, err = decodeJSONValue(input)
+		value, err = codec.UnmarshalJSON(input)
 		if err != nil {
-			return err
-		}
-	} else {
-		var envelope struct {
-			Type  string `json:"type"`
-			Value any    `json:"value"`
-		}
-		dec := json.NewDecoder(bytes.NewReader(input))
-		dec.UseNumber()
-		if err := dec.Decode(&envelope); err != nil {
 			return fmt.Errorf("parsing JSON: %w", err)
 		}
-		if len(envelope.Type) != 1 {
-			return fmt.Errorf("invalid type: %q", envelope.Type)
-		}
-		objType = codec.ObjectType(envelope.Type[0])
-		value, err = convertJSONNumbers(envelope.Value)
+	} else {
+		raw, err := codec.UnmarshalJSON(input)
 		if err != nil {
-			return err
+			return fmt.Errorf("parsing JSON: %w", err)
 		}
+		envelope, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("expected JSON object")
+		}
+		typ, ok := envelope["type"].(string)
+		if !ok || len(typ) != 1 {
+			return fmt.Errorf("invalid type: %v", envelope["type"])
+		}
+		objType = codec.ObjectType(typ[0])
+		value = envelope["value"]
 	}
 
 	encoded, err := codec.EncodeString(&codec.Object{Type: objType, Value: value})
@@ -221,18 +249,18 @@ func printUsageSummary() error {
 	return nil
 }
 
-func openInput(fs *flag.FlagSet) (io.ReadCloser, error) {
-	if fs.NArg() == 0 {
+func openInput(flags *flag.FlagSet) (io.ReadCloser, error) {
+	if flags.NArg() == 0 {
 		return os.Stdin, nil
 	}
-	return os.Open(fs.Arg(0))
+	return os.Open(flags.Arg(0))
 }
 
-func readInput(fs *flag.FlagSet) ([]byte, error) {
-	if fs.NArg() == 0 {
+func readInput(flags *flag.FlagSet) ([]byte, error) {
+	if flags.NArg() == 0 {
 		return io.ReadAll(os.Stdin)
 	}
-	return os.ReadFile(fs.Arg(0))
+	return os.ReadFile(flags.Arg(0))
 }
 
 func writeJSON(v any, outputPath string) error {
@@ -247,48 +275,4 @@ func writeJSON(v any, outputPath string) error {
 		return err
 	}
 	return os.WriteFile(outputPath, jsonBytes, 0o644)
-}
-
-func decodeJSONValue(data []byte) (any, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	var raw any
-	if err := dec.Decode(&raw); err != nil {
-		return nil, fmt.Errorf("parsing JSON: %w", err)
-	}
-	return convertJSONNumbers(raw)
-}
-
-func convertJSONNumbers(v any) (any, error) {
-	switch val := v.(type) {
-	case map[string]any:
-		for k, v := range val {
-			cv, err := convertJSONNumbers(v)
-			if err != nil {
-				return nil, err
-			}
-			val[k] = cv
-		}
-		return val, nil
-	case []any:
-		for i, v := range val {
-			cv, err := convertJSONNumbers(v)
-			if err != nil {
-				return nil, err
-			}
-			val[i] = cv
-		}
-		return val, nil
-	case json.Number:
-		if n, err := val.Int64(); err == nil {
-			return int(n), nil
-		}
-		f, err := val.Float64()
-		if err != nil {
-			return nil, fmt.Errorf("invalid number %v", val)
-		}
-		return f, nil
-	default:
-		return val, nil
-	}
 }

@@ -15,7 +15,7 @@ The `codec` package provides a Go implementation of the same functionality.
 ## Architecture
 
 - **`codec/codec.go`** — Codec implementation
-- **`codec/codec_test.go`** — Tests driven by file-based test cases
+- **`codec/json.go`** — JSON unmarshaling into the codec's native Go value types
 - **`codec/tests/`** — Test case pairs: `.encoded` (Base62 string) + `.decoded` (type indicator line + JSON)
 - **`codec/tests/reference/`** — Vendored [Stage Games JavaScript codec](https://github.com/StageGames/DesyncedJavaScriptUtils) used as the reference implementation; `index.html` can be opened in a browser to create new test cases
 
@@ -25,7 +25,7 @@ Each test case is a pair of files sharing the same base name in `codec/tests/`:
 - **`.encoded`** — A Base62-encoded string in the format 'DS' + type + encoded value
 - **`.decoded`** — A file consisting of type + '\n' + JSON encoded value
 
-Each test case produces two tests:
+Tests are in the root `main_test.go`. Each test case produces two subtests:
 - The string in the `.encoded` file is decoded, and the type and value are compared with the data in the `.decoded` file
 - The decoded information is re-encoded and decoded again, and the comparison repeated. This verifies encoding does not change the data.
 
