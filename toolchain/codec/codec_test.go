@@ -24,13 +24,12 @@ func TestCodec(t *testing.T) {
 		name := strings.TrimSuffix(filepath.Base(encodedFile), ".encoded")
 		decodedFile := strings.TrimSuffix(encodedFile, ".encoded") + ".decoded"
 
-		encodedBytes, err := os.ReadFile(encodedFile)
+		f, err := os.Open(encodedFile)
 		if err != nil {
 			t.Fatal(err)
 		}
-		encodedStr := strings.TrimSpace(string(encodedBytes))
-
-		obj, err := Decode(encodedStr)
+		obj, err := Decode(f)
+		f.Close()
 		if err != nil {
 			t.Fatalf("%s: Decode error: %v", name, err)
 		}
@@ -46,12 +45,12 @@ func TestCodec(t *testing.T) {
 		})
 
 		t.Run(name+"/roundtrip", func(t *testing.T) {
-			encoded, err := Encode(obj)
-			if err != nil {
+			var buf bytes.Buffer
+			if err := Encode(&buf, obj); err != nil {
 				t.Fatalf("Encode error: %v", err)
 			}
 
-			obj2, err := Decode(encoded)
+			obj2, err := Decode(&buf)
 			if err != nil {
 				t.Fatalf("Decode(re-encoded) error: %v", err)
 			}

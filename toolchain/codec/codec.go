@@ -729,7 +729,17 @@ type Object struct {
 	Value any
 }
 
-func Decode(s string) (obj *Object, err error) {
+// Decode reads a Base62-encoded string from r and decodes it.
+func Decode(r io.Reader) (*Object, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeString(strings.TrimSpace(string(data)))
+}
+
+// DecodeString decodes a Base62-encoded string.
+func DecodeString(s string) (obj *Object, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("decode: %v", r)
@@ -761,7 +771,18 @@ func Decode(s string) (obj *Object, err error) {
 	return &Object{Type: ObjectType(s[2]), Value: r.parse()}, nil
 }
 
-func Encode(obj *Object) (s string, err error) {
+// Encode encodes an Object and writes the Base62 string to w.
+func Encode(w io.Writer, obj *Object) error {
+	s, err := EncodeString(obj)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, s)
+	return err
+}
+
+// EncodeString encodes an Object as a Base62 string.
+func EncodeString(obj *Object) (s string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("encode: %v", r)

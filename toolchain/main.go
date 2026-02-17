@@ -56,12 +56,13 @@ func cmdDecode(args []string) error {
 		return fmt.Errorf("-b and -c are mutually exclusive")
 	}
 
-	input, err := readInput(fs)
+	r, err := openInput(fs)
 	if err != nil {
 		return err
 	}
+	defer r.Close()
 
-	obj, err := codec.Decode(strings.TrimSpace(string(input)))
+	obj, err := codec.Decode(r)
 	if err != nil {
 		return err
 	}
@@ -137,7 +138,7 @@ func cmdEncode(args []string) error {
 		}
 	}
 
-	encoded, err := codec.Encode(&codec.Object{Type: objType, Value: value})
+	encoded, err := codec.EncodeString(&codec.Object{Type: objType, Value: value})
 	if err != nil {
 		return err
 	}
@@ -181,6 +182,13 @@ func printUsageSummary() error {
 	fmt.Println()
 	fmt.Println("Run 'doit help <command>' for detailed usage.")
 	return nil
+}
+
+func openInput(fs *flag.FlagSet) (io.ReadCloser, error) {
+	if fs.NArg() == 0 {
+		return os.Stdin, nil
+	}
+	return os.Open(fs.Arg(0))
 }
 
 func readInput(fs *flag.FlagSet) ([]byte, error) {
