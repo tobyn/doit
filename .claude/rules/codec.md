@@ -34,3 +34,5 @@ object key ordering). Do not rely on the JSON strings to be the same. Parse the 
 the decoded value and the reference JSON in the `.decoded` file.
 
 There may be multiple valid ways to encode the same data. Do not rely on two encodings of the same data to be equal.
+
+The `.decoded` and `.encoded` files are trusted inputs. They should never be changed by anyone other than a human.
