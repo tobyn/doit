@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/tobyn/doit/toolchain/codec"
+	"github.com/tobyn/doit/toolchain/compiler"
 )
 
 //go:embed usage/*.txt
@@ -25,6 +26,8 @@ func main() {
 
 	var err error
 	switch os.Args[1] {
+	case "compile":
+		err = cmdCompile(os.Args[2:])
 	case "decode":
 		err = cmdDecode(os.Args[2:])
 	case "encode":
@@ -41,6 +44,40 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func cmdCompile(args []string) error {
+	fs := flag.NewFlagSet("compile", flag.ContinueOnError)
+	outputPath := fs.String("o", "", "output file path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	r, err := openInput(fs)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	obj, err := compiler.Compile(r)
+	if err != nil {
+		return err
+	}
+	if obj == nil {
+		return nil
+	}
+
+	encoded, err := codec.EncodeString(obj)
+	if err != nil {
+		return err
+	}
+	encoded += "\n"
+
+	if *outputPath == "" {
+		_, err = io.WriteString(os.Stdout, encoded)
+		return err
+	}
+	return os.WriteFile(*outputPath, []byte(encoded), 0o644)
 }
 
 func cmdDecode(args []string) error {

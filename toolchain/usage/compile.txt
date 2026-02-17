@@ -1,0 +1,7 @@
+Compile doit source into a Base62-encoded behavior string.
+
+doit compile [-o output_path] [input_path]
+
+Reads doit source from input_path, or stdin if no path is given. Compiles the
+source into a behavior and encodes it as a Base62 string. Writes the result to
+output_path if -o is provided, or stdout otherwise.
