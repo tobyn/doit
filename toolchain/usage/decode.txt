@@ -1,0 +1,25 @@
+Decode a Base62 exported string to JSON.
+
+doit decode [-b|-c] [-o output_path] [input_path]
+
+Desynced allows the player to export blueprints and behaviors as Base62-encoded
+strings. The decode subcommand reads an exported string, parses it, and writes a
+JSON object containing the parsed data.
+
+The structure of the written object is:
+
+  { "type": "<type>", "value": <object> }
+
+The value of "type" will be "B" if the string contains a blueprint, or "C" if
+the string contains a behavior. The structure of "value" depends on the type,
+and will match the output of the reference JavaScript decoder.
+
+If the -b option is provided, the command fails if the decoded object is not a
+blueprint. If the -c option is provided, the command fails if the decoded object
+is not a behavior. The -b and -c options are mutually exclusive. When either
+option is provided, only the value object is written instead of the type/value
+envelope.
+
+If no arguments are provided, decode reads from standard input and writes to
+standard output. If an input_path argument is provided, it reads from the given
+path. If the -o option is provided, it writes to the given output path.

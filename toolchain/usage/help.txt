@@ -1,0 +1,6 @@
+Print usage information.
+
+doit help [command]
+
+If no argument is provided, prints a summary of all available commands. If a
+command name is provided, prints detailed usage information for that command.

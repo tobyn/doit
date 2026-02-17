@@ -1,0 +1,22 @@
+Encode a JSON object to a Base62 exported string.
+
+doit encode [-b|-c] [-o output_path] [input_path]
+
+The encode subcommand reads a JSON object, encodes it as a Base62 string in
+Desynced's export format, and writes the result.
+
+If neither -b nor -c is provided, the input must be a JSON object with "type"
+and "value" fields:
+
+  { "type": "<type>", "value": <object> }
+
+The value of "type" must be "B" for a blueprint or "C" for a behavior. The
+structure of "value" depends on the type.
+
+If the -b option is provided, the input is treated as a blueprint value object
+directly. If the -c option is provided, the input is treated as a behavior value
+object directly. The -b and -c options are mutually exclusive.
+
+If no arguments are provided, encode reads from standard input and writes to
+standard output. If an input_path argument is provided, it reads from the given
+path. If the -o option is provided, it writes to the given output path.

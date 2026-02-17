@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,9 +13,13 @@ import (
 	"github.com/tobyn/doit/toolchain/codec"
 )
 
+//go:embed usage/*.txt
+var usageFS embed.FS
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "usage: doit <command> [arguments]\n")
+		fmt.Fprintf(os.Stderr, "Run 'doit help' for a list of commands.\n")
 		os.Exit(1)
 	}
 
@@ -24,8 +29,11 @@ func main() {
 		err = cmdDecode(os.Args[2:])
 	case "encode":
 		err = cmdEncode(os.Args[2:])
+	case "help":
+		err = cmdHelp(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "Run 'doit help' for a list of commands.\n")
 		os.Exit(1)
 	}
 
@@ -140,6 +148,39 @@ func cmdEncode(args []string) error {
 		return err
 	}
 	return os.WriteFile(*outputPath, []byte(encoded), 0o644)
+}
+
+func cmdHelp(args []string) error {
+	if len(args) == 0 {
+		return printUsageSummary()
+	}
+	content, err := usageFS.ReadFile("usage/" + args[0] + ".txt")
+	if err != nil {
+		return fmt.Errorf("unknown command: %s", args[0])
+	}
+	_, err = os.Stdout.Write(content)
+	return err
+}
+
+func printUsageSummary() error {
+	entries, err := usageFS.ReadDir("usage")
+	if err != nil {
+		return err
+	}
+	fmt.Println("The doit toolchain. Available commands:")
+	fmt.Println()
+	for _, e := range entries {
+		content, err := usageFS.ReadFile("usage/" + e.Name())
+		if err != nil {
+			return err
+		}
+		name := strings.TrimSuffix(e.Name(), ".txt")
+		summary, _, _ := strings.Cut(string(content), "\n")
+		fmt.Printf("  %-10s %s\n", name, summary)
+	}
+	fmt.Println()
+	fmt.Println("Run 'doit help <command>' for detailed usage.")
+	return nil
 }
 
 func readInput(fs *flag.FlagSet) ([]byte, error) {
