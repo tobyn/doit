@@ -282,10 +282,17 @@ func (r *reader) parse() any {
 	case mpTrue:
 		return true
 	case mpFloat32:
-		bits := r.readUint32()
-		return float64(math.Float32frombits(bits))
+		f := float64(math.Float32frombits(r.readUint32()))
+		if n := int(f); float64(n) == f {
+			return n
+		}
+		return f
 	case mpFloat64:
-		return r.readFloat64()
+		f := r.readFloat64()
+		if n := int(f); float64(n) == f {
+			return n
+		}
+		return f
 	case mpUint8:
 		return int(r.readByte())
 	case mpUint16:

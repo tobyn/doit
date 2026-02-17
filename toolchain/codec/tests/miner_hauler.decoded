@@ -1,0 +1,698 @@
+C
+{
+    "0": {
+        "cmt": "We're going to do some computation. It should run as fast as possible",
+        "op": "unlock"
+    },
+    "1": {
+        "0": 6,
+        "1": 1,
+        "2": false,
+        "cmt": "Have we set the item portion of the gang ID?",
+        "op": "compare_item"
+    },
+    "2": {
+        "0": false,
+        "1": false,
+        "2": -4,
+        "cmt": "We haven't. Clear any old signals",
+        "op": "set_number"
+    },
+    "3": {
+        "0": false,
+        "1": false,
+        "2": -3,
+        "op": "set_number",
+        "cmt": "Clear the visual register"
+    },
+    "4": {
+        "0": {
+            "num": 5
+        },
+        "cmt": "Wait a second, then check again",
+        "op": "wait",
+        "next": false
+    },
+    "5": {
+        "0": 1,
+        "1": {
+            "num": -2147483648
+        },
+        "2": -3,
+        "op": "set_number",
+        "cmt": "We have. Set the visual register to show how much of the resource we're carrying"
+    },
+    "6": {
+        "0": 9,
+        "1": 9,
+        "2": 1,
+        "3": false,
+        "cmt": "Have we set the number portion of the gang ID?",
+        "op": "check_number"
+    },
+    "7": {
+        "0": {
+            "num": 5
+        },
+        "cmt": "We haven't. Wait a second before checking again",
+        "next": false,
+        "nx": 1790,
+        "ny": 180.99998474121094,
+        "op": "wait"
+    },
+    "8": {
+        "1": 2,
+        "2": false,
+        "cmt": "Have we set a miner foreman?",
+        "next": 8,
+        "ny": 358,
+        "op": "compare_item",
+        "nx": 1491
+    },
+    "9": {
+        "0": 14,
+        "1": 3,
+        "2": false,
+        "cmt": "Have we set a store to receive our items?",
+        "op": "compare_item"
+    },
+    "10": {
+        "0": 1,
+        "1": {
+            "num": 3
+        },
+        "2": "A",
+        "cmt": "We haven't. Find a spot near the foreman to hang out for now",
+        "op": "set_number"
+    },
+    "11": {
+        "cmt": "Go back to normal execution speed so we don't exceed the instruction limit",
+        "op": "lock"
+    },
+    "12": {
+        "0": "A",
+        "cmt": "Move near the foreman",
+        "op": "domove",
+        "next": false
+    },
+    "13": {
+        "0": 1,
+        "1": {
+            "num": 1
+        },
+        "2": "A",
+        "cmt": "We have. Set this variable to one of the target resource",
+        "ny": 699.8235473632812,
+        "op": "set_number",
+        "nx": 2097.0591430664062
+    },
+    "14": {
+        "0": 57,
+        "1": "A",
+        "cmt": "Could it fit in our inventory?",
+        "op": "checkfreespace"
+    },
+    "15": {
+        "0": 2,
+        "1": "A",
+        "2": false,
+        "op": "get_distance",
+        "cmt": "It could, so we're in collection mode. How far are we from the foreman?"
+    },
+    "16": {
+        "0": 54,
+        "2": "A",
+        "3": {
+            "num": 15
+        },
+        "cmt": "Are we close enough to the foreman to be considered a potential collector?",
+        "op": "check_number"
+    },
+    "17": {
+        "0": 1,
+        "1": {
+            "num": 2000
+        },
+        "2": "A",
+        "cmt": "We are. Compute this gang's hauler collection signal",
+        "op": "add"
+    },
+    "18": {
+        "0": "A",
+        "1": "A",
+        "2": -4,
+        "3": false,
+        "4": false,
+        "cmt": "Broadcast the collection signal so other collecting haulers in this gang see us",
+        "op": "combine_register"
+    },
+    "19": {
+        "0": 1,
+        "1": {
+            "num": 1000
+        },
+        "2": "B",
+        "cmt": "Compute this gang's miner signal so we can find them",
+        "op": "add"
+    },
+    "20": {
+        "0": false,
+        "1": false,
+        "2": "C",
+        "3": false,
+        "4": false,
+        "cmt": "This variable tracks the miner we've targeted for collection",
+        "op": "combine_register"
+    },
+    "21": {
+        "0": {
+            "num": 1
+        },
+        "1": false,
+        "2": "D",
+        "3": false,
+        "4": false,
+        "cmt": "This variable tracks whether we've found a hauler with higher collection priority than us",
+        "op": "combine_register"
+    },
+    "22": {
+        "0": 1,
+        "1": "E",
+        "2": false,
+        "cmt": "How much resource are we carrying?",
+        "op": "count_item"
+    },
+    "23": {
+        "0": 1,
+        "1": "F",
+        "2": "G",
+        "3": 37,
+        "cmt": "Loop through entities broadcasting a signal matching the item part of the gang ID",
+        "op": "for_signal_match"
+    },
+    "24": {
+        "0": false,
+        "1": 33,
+        "2": "G",
+        "3": "A",
+        "cmt": "We found a matching signal. Is it another collecting hauler in our gang?",
+        "op": "check_number"
+    },
+    "25": {
+        "0": 1,
+        "1": "G",
+        "2": "F",
+        "cmt": "It is one of our collecting haulers. Read the hauler's inventory to see how much resource it has",
+        "op": "count_item"
+    },
+    "26": {
+        "1": false,
+        "2": "G",
+        "3": "E",
+        "cmt": "Does this hauler have more resource than we do?",
+        "op": "check_number",
+        "next": false
+    },
+    "27": {
+        "0": false,
+        "1": {
+            "num": 2
+        },
+        "2": "D",
+        "cmt": "It does. Set the flag so we know not to collect right now",
+        "op": "set_number"
+    },
+    "28": {
+        "0": 1,
+        "1": {
+            "num": 3
+        },
+        "2": "A",
+        "cmt": "Find a spot near the foreman",
+        "op": "set_number"
+    },
+    "29": {
+        "op": "lock"
+    },
+    "30": {
+        "0": "A",
+        "cmt": "Wait near the foreman until it's our turn to collect",
+        "op": "domove"
+    },
+    "31": {
+        "cmt": "Once we find a higher priority hauler we know what to do. We don't need to check the rest of the signals",
+        "op": "last"
+    },
+    "32": {
+        "0": false,
+        "1": false,
+        "2": "G",
+        "3": "B",
+        "cmt": "It wasn't another collecting hauler. Is it a miner in our gang?",
+        "op": "check_number"
+    },
+    "33": {
+        "0": 1,
+        "1": "G",
+        "2": "F",
+        "cmt": "It is a miner in our gang. Read the miner's inventory to see how much resource it has",
+        "op": "count_item"
+    },
+    "34": {
+        "1": false,
+        "2": "G",
+        "3": "C",
+        "cmt": "Does this miner have the most resource so far?",
+        "next": false,
+        "op": "check_number"
+    },
+    "35": {
+        "0": "G",
+        "1": "F",
+        "2": "C",
+        "3": false,
+        "4": false,
+        "cmt": "It does. This miner is the highest priority for collection so far",
+        "op": "combine_register",
+        "next": false
+    },
+    "36": {
+        "0": false,
+        "1": 41,
+        "2": "D",
+        "3": {
+            "num": 2
+        },
+        "cmt": "Did we find a higher priority collecting hauler?",
+        "ny": 1372.986328125,
+        "op": "check_number",
+        "nx": 5392.0411376953125
+    },
+    "37": {
+        "0": 2,
+        "1": {
+            "num": 5
+        },
+        "2": "A",
+        "cmt": "We did. Find a location close to the foreman to wait",
+        "op": "set_number"
+    },
+    "38": {
+        "op": "lock"
+    },
+    "39": {
+        "0": "A",
+        "cmt": "Move near the foreman",
+        "op": "domove",
+        "next": false
+    },
+    "40": {
+        "1": 51,
+        "2": "C",
+        "3": {
+            "num": 1
+        },
+        "cmt": "We're the highest priority hauler. Did we find a target miner? (One with at least 1 resource to collect)",
+        "ny": 1653.250244140625,
+        "op": "check_number",
+        "nx": 5685.1370849609375
+    },
+    "41": {
+        "cmt": "We found a miner that needs collection",
+        "op": "lock"
+    },
+    "42": {
+        "0": false,
+        "1": false,
+        "2": "D",
+        "op": "set_number",
+        "cmt": "Use this variable to keep track of how many times we've checked our distance to the miner"
+    },
+    "43": {
+        "0": "C",
+        "op": "domove_async"
+    },
+    "44": {
+        "0": "C",
+        "1": "E",
+        "2": false,
+        "cmt": "How far are we from the miner?",
+        "op": "get_distance"
+    },
+    "45": {
+        "0": 48,
+        "2": "E",
+        "3": {
+            "num": 1
+        },
+        "op": "check_number",
+        "cmt": "Are we directly adjacent to the miner?"
+    },
+    "46": {
+        "0": "C",
+        "1": false,
+        "cmt": "We are. Collect from the miner",
+        "next": false,
+        "op": "dopickup"
+    },
+    "47": {
+        "0": "D",
+        "1": {
+            "num": 1
+        },
+        "2": "D",
+        "cmt": "We aren't. Increment how many times we've checked",
+        "op": "add"
+    },
+    "48": {
+        "1": 44,
+        "2": "D",
+        "3": {
+            "num": 50
+        },
+        "cmt": "Have we failed to move adjacent to the miner too many times?",
+        "op": "check_number"
+    },
+    "49": {
+        "0": 1,
+        "cmt": "We have. The miner may be crowded. Notify the player so they can manually intervene",
+        "txt": "Unable to collect from miner",
+        "op": "notify",
+        "next": false
+    },
+    "50": {
+        "0": 2,
+        "1": {
+            "num": 3
+        },
+        "2": "A",
+        "cmt": "No miners need collection right now. Find a spot near the foreman",
+        "op": "set_number"
+    },
+    "51": {
+        "op": "lock"
+    },
+    "52": {
+        "0": "A",
+        "cmt": "Move close to the foreman",
+        "op": "domove",
+        "next": false
+    },
+    "53": {
+        "0": false,
+        "1": false,
+        "2": -4,
+        "3": false,
+        "4": false,
+        "cmt": "We're too farm from the foreman. Clear the hauler signal until we're closer",
+        "op": "combine_register"
+    },
+    "54": {
+        "0": 2,
+        "1": {
+            "num": 3
+        },
+        "2": "A",
+        "cmt": "Find a location close to the foreman",
+        "op": "set_number"
+    },
+    "55": {
+        "0": "A",
+        "cmt": "Move there",
+        "op": "domove",
+        "next": false
+    },
+    "56": {
+        "0": 1,
+        "1": {
+            "num": 3000
+        },
+        "2": "A",
+        "cmt": "We're full, so we're in dropoff mode. Compute this gang's hauler dropoff signal",
+        "ny": 2439.2111206054688,
+        "op": "add",
+        "nx": 2700.2208862304688
+    },
+    "57": {
+        "0": "A",
+        "1": "A",
+        "2": -4,
+        "3": false,
+        "4": false,
+        "cmt": "Broadcast the dropoff signal so other dropping off haulers in this gang see us",
+        "op": "combine_register"
+    },
+    "58": {
+        "0": false,
+        "1": {
+            "num": 1
+        },
+        "2": "B",
+        "cmt": "We use this variable to keep track of our move state (1 = in the field, 2 = waiting near the store, 3 = at the store)",
+        "op": "set_number"
+    },
+    "59": {
+        "0": false,
+        "1": {
+            "num": 1
+        },
+        "2": "C",
+        "cmt": "We use this variable to keep track of whether there's another dropping off hauler in our gang with higher priority",
+        "op": "set_number"
+    },
+    "60": {
+        "0": 3,
+        "1": "D",
+        "2": false,
+        "cmt": "How far are we from the store?",
+        "op": "get_distance"
+    },
+    "61": {
+        "0": 1,
+        "1": "E",
+        "2": false,
+        "cmt": "How much resource are we carrying?",
+        "op": "count_item"
+    },
+    "62": {
+        "0": "A",
+        "1": "F",
+        "2": "G",
+        "3": 71,
+        "cmt": "Loop through entities broadcasting the target resource signal (this doesn't match on number)",
+        "op": "for_signal_match"
+    },
+    "63": {
+        "0": false,
+        "1": false,
+        "2": "G",
+        "3": "A",
+        "cmt": "The signal matched the target resource. Is it another dropping off hauler in our gang?",
+        "op": "check_number"
+    },
+    "64": {
+        "0": 1,
+        "1": "G",
+        "2": "F",
+        "cmt": "It is. How much resource is it carrying?",
+        "op": "count_item"
+    },
+    "65": {
+        "0": false,
+        "1": 69,
+        "2": "G",
+        "3": "E",
+        "cmt": "Is it carrying less than we are?",
+        "op": "check_number"
+    },
+    "66": {
+        "0": 3,
+        "1": "G",
+        "2": "F",
+        "cmt": "It's carrying the same amount as us (probably full). How close is it to the store?",
+        "op": "get_distance"
+    },
+    "67": {
+        "0": false,
+        "2": "G",
+        "3": "D",
+        "cmt": "Is it closer than we are?",
+        "op": "check_number",
+        "next": false
+    },
+    "68": {
+        "0": false,
+        "1": {
+            "num": 2
+        },
+        "2": "C",
+        "cmt": "It is. We'll let it finish before we start dropping off. Update the priority flag value",
+        "ny": 2438.0908203125,
+        "op": "set_number",
+        "nx": 6317.2724609375
+    },
+    "69": {
+        "cmt": "Skip checking the rest of the signals for haulers. We found what we're looking for",
+        "op": "last"
+    },
+    "70": {
+        "0": 85,
+        "1": false,
+        "2": "C",
+        "3": {
+            "num": 1
+        },
+        "cmt": "Did we find a hauler with higher dropoff priority?",
+        "ny": 2803.2163696289062,
+        "op": "check_number",
+        "nx": 4788.89501953125
+    },
+    "71": {
+        "0": false,
+        "1": 82,
+        "2": "B",
+        "3": {
+            "num": 3
+        },
+        "cmt": "There's no other higher priority hauler. Are we at the store already?",
+        "op": "check_number"
+    },
+    "72": {
+        "cmt": "We're already at the store",
+        "op": "lock"
+    },
+    "73": {
+        "0": 3,
+        "1": false,
+        "cmt": "Put our items in the store",
+        "ny": 2801.8743896484375,
+        "op": "dodrop",
+        "nx": 6274.767333984375
+    },
+    "74": {
+        "op": "unlock"
+    },
+    "75": {
+        "0": 1,
+        "1": "A",
+        "2": false,
+        "cmt": "How much do we have left after dropping off?",
+        "op": "count_item"
+    },
+    "76": {
+        "0": 60,
+        "2": "A",
+        "3": {
+            "num": 1
+        },
+        "cmt": "Do we still have more items to drop off?",
+        "next": 60,
+        "op": "check_number"
+    },
+    "77": {
+        "0": false,
+        "1": false,
+        "2": -4,
+        "3": false,
+        "4": false,
+        "cmt": "We're empty. Stop broadcasting the dropoff signal so another hauler can take our place",
+        "op": "combine_register"
+    },
+    "78": {
+        "0": 1,
+        "1": {
+            "num": 3
+        },
+        "2": "A",
+        "cmt": "Find a location close to the foreman",
+        "op": "set_number"
+    },
+    "79": {
+        "op": "lock"
+    },
+    "80": {
+        "0": "A",
+        "cmt": "Move close to the foreman and wait to collect",
+        "next": false,
+        "op": "domove"
+    },
+    "81": {
+        "0": false,
+        "1": {
+            "num": 3
+        },
+        "2": "B",
+        "cmt": "We're going to the store. Update the move state",
+        "op": "set_number"
+    },
+    "82": {
+        "op": "lock"
+    },
+    "83": {
+        "0": 3,
+        "cmt": "Go to the store",
+        "next": 74,
+        "op": "domove"
+    },
+    "84": {
+        "0": false,
+        "1": 87,
+        "2": "B",
+        "3": {
+            "num": 2
+        },
+        "cmt": "We found a higher priority hauler. Are we already waiting near the store?",
+        "op": "check_number"
+    },
+    "85": {
+        "0": {
+            "num": 5
+        },
+        "cmt": "We're at or near the store already. Wait a second before checking to see if the other hauler is finished dropping off",
+        "next": 60,
+        "op": "wait"
+    },
+    "86": {
+        "0": 3,
+        "1": {
+            "num": 2
+        },
+        "2": "F",
+        "cmt": "We're still in the field. Find a spot near the store and move there",
+        "ny": 3403.499755859375,
+        "op": "set_number",
+        "nx": 5387.49951171875
+    },
+    "87": {
+        "0": false,
+        "1": {
+            "num": 2
+        },
+        "2": "B",
+        "cmt": "We're moving to a wait location near the store. Update the move state",
+        "op": "set_number"
+    },
+    "88": {
+        "op": "lock"
+    },
+    "89": {
+        "0": "F",
+        "cmt": "Move to the wait location",
+        "op": "domove"
+    },
+    "90": {
+        "op": "unlock",
+        "next": 60
+    },
+    "parameters": [
+        false,
+        false,
+        false
+    ],
+    "name": "Miner Hauler",
+    "pnames": [
+        "Gang ID",
+        "Foreman",
+        "Store"
+    ]
+}
