@@ -26,14 +26,25 @@ func CompileString(src string, stdlib fs.FS) (*codec.Object, error) {
 		return nil, fmt.Errorf("stdlib: %w", err)
 	}
 	p := &parser{src: src, fns: fns}
-	return p.parseBehavior()
+	return p.parseFile()
 }
 
 // --- Stdlib ---
 
 type fnDef struct {
 	params []string
-	frame  map[string]any // the instruction template, stored as parsed
+	frame  map[string]any // instruction-based (stdlib)
+	body   []fnBodyCall   // call-based (user-defined)
+}
+
+type fnBodyArg struct {
+	isIdent bool
+	val     string
+}
+
+type fnBodyCall struct {
+	name string
+	args []fnBodyArg
 }
 
 func parseStdlib(stdlib fs.FS) (map[string]*fnDef, error) {
@@ -134,6 +145,212 @@ func parseStdlibFile(src string, fns map[string]*fnDef) error {
 			frame:  frame,
 		}
 	}
+}
+
+// --- Two-pass file parsing ---
+
+func (p *parser) parseFile() (*codec.Object, error) {
+	// Pass 1: collect user-defined function definitions
+	if err := p.collectUserFns(); err != nil {
+		return nil, err
+	}
+
+	// Pass 2: find and compile the behavior
+	p.pos = 0
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind == tokEOF {
+			return nil, nil
+		}
+		if tok.kind != tokIdent {
+			return nil, p.errorf(tok.pos, "expected declaration, got %s", tok.describe())
+		}
+		switch tok.val {
+		case "behavior":
+			return p.parseBehaviorBody()
+		case "private":
+			fnTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			if fnTok.val != "fn" {
+				return nil, p.errorf(fnTok.pos, "expected 'fn' after 'private', got %q", fnTok.val)
+			}
+			if err := p.skipFnDef(); err != nil {
+				return nil, err
+			}
+		case "fn":
+			if err := p.skipFnDef(); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
+		}
+	}
+}
+
+func (p *parser) collectUserFns() error {
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return err
+		}
+		if tok.kind == tokEOF {
+			return nil
+		}
+		if tok.kind != tokIdent {
+			return p.errorf(tok.pos, "expected declaration, got %s", tok.describe())
+		}
+		switch tok.val {
+		case "behavior":
+			if _, err := p.expect(tokIdent); err != nil {
+				return err
+			}
+			if err := p.skipBraceBlock(); err != nil {
+				return err
+			}
+		case "private":
+			fnTok, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			if fnTok.val != "fn" {
+				return p.errorf(fnTok.pos, "expected 'fn' after 'private', got %q", fnTok.val)
+			}
+			if err := p.parseUserFn(); err != nil {
+				return err
+			}
+		case "fn":
+			if err := p.parseUserFn(); err != nil {
+				return err
+			}
+		default:
+			return p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
+		}
+	}
+}
+
+func (p *parser) parseUserFn() error {
+	nameTok, err := p.expect(tokIdent)
+	if err != nil {
+		return err
+	}
+	if _, err := p.expect(tokLParen); err != nil {
+		return err
+	}
+
+	var params []string
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return err
+		}
+		if tok.kind == tokRParen {
+			break
+		}
+		if len(params) > 0 {
+			if tok.kind != tokComma {
+				return p.errorf(tok.pos, "expected ',' or ')', got %s", tok.describe())
+			}
+			tok, err = p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+		}
+		if tok.kind != tokIdent {
+			return p.errorf(tok.pos, "expected parameter name, got %s", tok.describe())
+		}
+		params = append(params, tok.val)
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return err
+	}
+
+	var body []fnBodyCall
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return err
+		}
+		if tok.kind == tokRBrace {
+			break
+		}
+		if tok.kind != tokIdent {
+			return p.errorf(tok.pos, "expected function call or '}', got %s", tok.describe())
+		}
+
+		callee := p.fns[tok.val]
+		if callee == nil {
+			return p.errorf(tok.pos, "unknown function %q", tok.val)
+		}
+
+		args := make([]fnBodyArg, len(callee.params))
+		for i := range callee.params {
+			argTok, err := p.next()
+			if err != nil {
+				return err
+			}
+			switch argTok.kind {
+			case tokString:
+				args[i] = fnBodyArg{val: argTok.val}
+			case tokIdent:
+				args[i] = fnBodyArg{isIdent: true, val: argTok.val}
+			default:
+				return p.errorf(argTok.pos, "expected string or identifier, got %s", argTok.describe())
+			}
+		}
+
+		body = append(body, fnBodyCall{name: tok.val, args: args})
+	}
+
+	p.fns[nameTok.val] = &fnDef{params: params, body: body}
+	return nil
+}
+
+func (p *parser) skipBraceBlock() error {
+	if _, err := p.expect(tokLBrace); err != nil {
+		return err
+	}
+	depth := 1
+	for depth > 0 {
+		tok, err := p.next()
+		if err != nil {
+			return err
+		}
+		if tok.kind == tokEOF {
+			return p.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+		if tok.kind == tokLBrace {
+			depth++
+		}
+		if tok.kind == tokRBrace {
+			depth--
+		}
+	}
+	return nil
+}
+
+func (p *parser) skipFnDef() error {
+	if _, err := p.expect(tokIdent); err != nil {
+		return err
+	}
+	if _, err := p.expect(tokLParen); err != nil {
+		return err
+	}
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return err
+		}
+		if tok.kind == tokRParen {
+			break
+		}
+	}
+	return p.skipBraceBlock()
 }
 
 // --- Scanner ---
@@ -357,15 +574,54 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 	return frame, nil
 }
 
-func (p *parser) parseBehavior() (*codec.Object, error) {
-	tok, err := p.expect(tokIdent)
-	if err != nil {
-		return nil, err
-	}
-	if tok.val != "behavior" {
-		return nil, p.errorf(tok.pos, "expected 'behavior', got %q", tok.val)
+func (p *parser) expandCall(name string, args []string, value map[string]any, frame *int, pos int) error {
+	fn := p.fns[name]
+	if fn == nil {
+		return p.errorf(pos, "unknown statement %q", name)
 	}
 
+	paramMap := map[string]string{}
+	for i, pname := range fn.params {
+		paramMap[pname] = args[i]
+	}
+
+	if fn.frame != nil {
+		instr := make(map[string]any, len(fn.frame))
+		for k, v := range fn.frame {
+			if s, ok := v.(string); ok {
+				if arg, ok := paramMap[s]; ok {
+					instr[k] = arg
+					continue
+				}
+			}
+			instr[k] = v
+		}
+		value[strconv.Itoa(*frame)] = instr
+		*frame++
+		return nil
+	}
+
+	for _, call := range fn.body {
+		resolvedArgs := make([]string, len(call.args))
+		for i, arg := range call.args {
+			if arg.isIdent {
+				if val, ok := paramMap[arg.val]; ok {
+					resolvedArgs[i] = val
+				} else {
+					resolvedArgs[i] = arg.val
+				}
+			} else {
+				resolvedArgs[i] = arg.val
+			}
+		}
+		if err := p.expandCall(call.name, resolvedArgs, value, frame, pos); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *parser) parseBehaviorBody() (*codec.Object, error) {
 	if _, err := p.expect(tokIdent); err != nil {
 		return nil, err
 	}
@@ -406,13 +662,11 @@ func (p *parser) parseBehavior() (*codec.Object, error) {
 			value[strconv.Itoa(frame)] = instr
 			frame++
 		default:
-			// Look up stdlib function
 			fn := p.fns[tok.val]
 			if fn == nil {
 				return nil, p.errorf(tok.pos, "unknown statement %q", tok.val)
 			}
 
-			// Parse arguments (string literals, one per parameter)
 			args := make([]string, len(fn.params))
 			for i := range fn.params {
 				str, err := p.expect(tokString)
@@ -422,26 +676,9 @@ func (p *parser) parseBehavior() (*codec.Object, error) {
 				args[i] = str.val
 			}
 
-			// Build parameter map
-			paramMap := map[string]string{}
-			for i, name := range fn.params {
-				paramMap[name] = args[i]
+			if err := p.expandCall(tok.val, args, value, &frame, tok.pos); err != nil {
+				return nil, err
 			}
-
-			// Inline the instruction: substitute parameters
-			instr := make(map[string]any, len(fn.frame))
-			for k, v := range fn.frame {
-				if s, ok := v.(string); ok {
-					if arg, ok := paramMap[s]; ok {
-						instr[k] = arg
-						continue
-					}
-				}
-				instr[k] = v
-			}
-
-			value[strconv.Itoa(frame)] = instr
-			frame++
 		}
 	}
 

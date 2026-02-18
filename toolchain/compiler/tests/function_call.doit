@@ -1,0 +1,8 @@
+behavior function_call {
+    name "Function Call"
+    my_notify "Function called!"
+}
+
+private fn my_notify(txt) {
+    notify txt
+}
