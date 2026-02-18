@@ -1,0 +1,36 @@
+{
+  "0": {
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "txt": "Loop iteration",
+    "op": "notify"
+  },
+  "2": {
+    "1": 5,
+    "2": "i",
+    "3": {
+      "num": 5
+    },
+    "op": "check_number"
+  },
+  "3": {
+    "txt": "Loop finished",
+    "next": false,
+    "op": "notify"
+  },
+  "4": {
+    "0": "i",
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "op": "add",
+    "next": 2
+  },
+  "name": "Loop"
+}

@@ -5,6 +5,8 @@ paths:
 
 # Desynced Blueprint/Behavior Codec
 
+See `manual/toolchain.md` for user-facing decode/encode documentation.
+
 Desynced supports the importing and exporting of blueprints and behaviors. These are encoded as
 Base62 strings. The developers of Desynced have provided an open source JavaScript library that
 can bidirectionally convert between these strings and a structured representation of the blueprint

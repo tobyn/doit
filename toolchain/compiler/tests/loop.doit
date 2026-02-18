@@ -1,0 +1,16 @@
+behavior loop {
+    name "Loop"
+
+    var i = 1
+    loop {
+        notify "Loop iteration"
+
+        if i >= 5 {
+            break
+        }
+
+        i += 1
+    }
+
+    notify "Loop finished"
+}

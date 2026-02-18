@@ -1,0 +1,24 @@
+behavior if {
+    name "If"
+
+    var a = 4
+    if a < 9 {
+        notify "a < 9!"
+    }
+
+    a = 2
+    if a >= 3 {
+        notify "a >= 3?! Wrongo!"
+    } else {
+        notify "a < 3!"
+    }
+
+    a = 5
+    if a == 1 {
+        notify "a == 1?! Wrongo!"
+    } else if a > 1 {
+        notify "a > 1!"
+    } else {
+        notify "a < 1?! Wrongo!"
+    }
+}

@@ -1,0 +1,78 @@
+{
+  "0": {
+    "1": {
+      "num": 4
+    },
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "1": 12,
+    "2": "a",
+    "3": {
+      "num": 9
+    },
+    "op": "check_number"
+  },
+  "2": {
+    "1": {
+      "num": 2
+    },
+    "2": "a",
+    "op": "set_number"
+  },
+  "3": {
+    "1": 11,
+    "2": "a",
+    "3": {
+      "num": 3
+    },
+    "op": "check_number"
+  },
+  "4": {
+    "txt": "a >= 3?! Wrongo!",
+    "op": "notify"
+  },
+  "5": {
+    "1": {
+      "num": 5
+    },
+    "2": "a",
+    "op": "set_number"
+  },
+  "6": {
+    "0": 9,
+    "1": 10,
+    "2": "a",
+    "3": {
+      "num": 1
+    },
+    "op": "check_number"
+  },
+  "7": {
+    "txt": "a == 1?! Wrongo!",
+    "op": "notify",
+    "next": false
+  },
+  "8": {
+    "txt": "a > 1!",
+    "op": "notify",
+    "next": false
+  },
+  "9": {
+    "txt": "a < 1?! Wrongo!",
+    "op": "notify",
+    "next": false
+  },
+  "10": {
+    "txt": "a < 3!",
+    "op": "notify",
+    "next": 6
+  },
+  "11": {
+    "txt": "a < 9!",
+    "op": "notify",
+    "next": 3
+  },
+  "name": "If"
+}

@@ -29,6 +29,8 @@ go test -run TestCodec          # Run codec tests only
 
 ## Toolchain functionality
 
+See `manual/toolchain.md` for user-facing CLI documentation.
+
 The toolchain itself is a self-contained executable canonically named `doit`. Its functionality is accessed via its
 various subcommands. See `usage/` for subcommand documentation. Each file contains a one-line summary followed by detailed
 help text. These files are embedded into the binary and used as the output of `doit help`.

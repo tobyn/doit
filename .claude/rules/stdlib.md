@@ -1,5 +1,7 @@
 # doit Standard Library
 
+See `manual/functions.md` for user-facing standard library documentation.
+
 doit has a standard library that the compiler makes available to all programs. It consists of all
 the `*.doit` files in the `toolchain/stdlib/` directory.
 
