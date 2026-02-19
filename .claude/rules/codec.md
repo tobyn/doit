@@ -18,8 +18,12 @@ The `codec` package provides a Go implementation of the same functionality.
 
 - **`codec/codec.go`** — Codec implementation
 - **`codec/json.go`** — JSON unmarshaling into the codec's native Go value types
-- **`codec/tests/`** — Test case pairs: `.encoded` (Base62 string) + `.decoded` (type indicator line + JSON)
-- **`codec/tests/reference/`** — Vendored [Stage Games JavaScript codec](https://github.com/StageGames/DesyncedJavaScriptUtils) used as the reference implementation; `index.html` can be opened in a browser to create new test cases
+- **`codec/tests/`** — Test case pairs: `.encoded` (Base62 string) +
+  `.decoded` (type indicator line + JSON)
+- **`codec/tests/reference/`** — Vendored
+  [Stage Games JavaScript codec](https://github.com/StageGames/DesyncedJavaScriptUtils)
+  used as the reference implementation; `index.html` can be opened in a
+  browser to create new test cases
 
 ## Test Case Format
 
@@ -28,13 +32,19 @@ Each test case is a pair of files sharing the same base name in `codec/tests/`:
 - **`.decoded`** — A file consisting of type + '\n' + JSON encoded value
 
 Tests are in the root `main_test.go`. Each test case produces two subtests:
-- The string in the `.encoded` file is decoded, and the type and value are compared with the data in the `.decoded` file
-- The decoded information is re-encoded and decoded again, and the comparison repeated. This verifies encoding does not change the data.
+- The string in the `.encoded` file is decoded, and the type and value are
+  compared with the data in the `.decoded` file
+- The decoded information is re-encoded and decoded again, and the comparison
+  repeated. This verifies encoding does not change the data.
 
-The JSON in the `.decoded` file may differ from a JSON rendering of the `.encoded` value in trivial ways (e.g., whitespace,
-object key ordering). Do not rely on the JSON strings to be the same. Parse the JSON and validate deep equality between
-the decoded value and the reference JSON in the `.decoded` file.
+The JSON in the `.decoded` file may differ from a JSON rendering of the
+`.encoded` value in trivial ways (e.g., whitespace, object key ordering). Do
+not rely on the JSON strings to be the same. Parse the JSON and validate deep
+equality between the decoded value and the reference JSON in the `.decoded`
+file.
 
-There may be multiple valid ways to encode the same data. Do not rely on two encodings of the same data to be equal.
+There may be multiple valid ways to encode the same data. Do not rely on two
+encodings of the same data to be equal.
 
-The `.decoded` and `.encoded` files are trusted inputs. They should never be changed by anyone other than a human.
+The `.decoded` and `.encoded` files are trusted inputs. They should never be
+changed by anyone other than a human.

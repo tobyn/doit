@@ -19,7 +19,8 @@ structure:
 
 Each frame is a `map[string]any` with:
 
-- **`"op"`** — `string`. The instruction opcode (e.g., `"notify"`, `"set_number"`, `"check_number"`).
+- **`"op"`** — `string`. The instruction opcode
+  (e.g., `"notify"`, `"set_number"`, `"check_number"`).
 - **`"next"`** (optional) — Controls execution flow after this frame:
   - Absent: fall through to the next sequential frame.
   - `false` (`bool`): terminal, execution stops.
