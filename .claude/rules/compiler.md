@@ -21,13 +21,33 @@ output format.
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled
   output)
 
-The compiler is structured as a standalone `scanner` struct embedded in a recursive-descent
-`parser`. The scanner tokenizes the source into identifiers, string literals, numbers,
-braces, parentheses, colons, commas, `@`, and comparison/assignment operators, skipping
-whitespace and line comments (`//` and `#`). The parser consumes tokens via the promoted
-scanner methods and directly emits the
-`*codec.Object` output (type `Behavior`) without an intermediate AST. Errors include line:column
-positions. The exported `Keywords` map lists all reserved keywords for use by editor tooling.
+The compiler is structured as a standalone `scanner` struct embedded in a
+recursive-descent `parser`. The scanner tokenizes the source into identifiers,
+string literals, numbers, braces, parentheses, colons, commas, `@`, and
+comparison/assignment operators, skipping whitespace and line comments (`//`
+and `#`). The parser consumes tokens via the promoted scanner methods and
+directly emits the `*codec.Object` output (type `Behavior`) without an
+intermediate AST. Errors include line:column positions. The exported `Keywords`
+map lists all reserved keywords for use by editor tooling.
+
+Brace-delimited blocks fall into two categories. **Statement blocks** (behavior
+bodies, function bodies, if/else/while/loop bodies) all contain a sequence of
+statements and can be parsed uniformly. **Structured data blocks** (the
+`instruction` intrinsic and the `@name` localized block) each have their own
+parsing rules and semantics.
+
+**Statement termination** (not yet implemented): The language is line-oriented.
+Statements terminate at end-of-line by default, with three exceptions:
+(1) block-ending statements extend to `}` and peek for `else`/`else if`
+continuation; (2) parenthesized function calls extend to the closing `)`
+across lines; (3) unparenthesized function calls with a trailing comma
+continue onto the next line. The scanner currently treats newlines as plain
+whitespace; implementing these rules will require newline awareness.
+
+**Function calls**: Parentheses are optional. `notify "Hello"` and
+`notify("Hello")` are equivalent. The no-parens style is preferred for
+statement-level calls. Parenthesized calls will become useful for argument
+grouping in complex expressions.
 
 Behavior IDs can be bareword identifiers or quoted strings. The `@name` attribute sets the display
 name (at most once per behavior); if omitted, the behavior ID is used as the default name. `@name`

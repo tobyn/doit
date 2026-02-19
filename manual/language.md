@@ -65,6 +65,41 @@ doit compile -b harvest source.doit
 
 When a file contains only one behavior, `-b` is optional.
 
+## Statements
+
+Behavior bodies and control flow blocks contain sequences of statements. A
+statement terminates at the end of the line, with the following exceptions:
+
+1. If a statement ends in a brace-delimited block, it extends to the closing
+   `}`. For `if` statements, `else if` and `else` clauses continue the
+   statement regardless of whether they appear on the same line as the `}`.
+2. If a statement is a parenthesized function call, it extends to the closing
+   `)`, even across multiple lines.
+3. If a statement is an unparenthesized function call and the line ends in a
+   comma, the statement continues onto the next line.
+
+## Function Calls
+
+Functions can be called with or without parentheses:
+
+```doit
+notify "Hello"
+notify("Hello")
+```
+
+Both forms are equivalent. The preferred style for statement-level calls is
+without parentheses. Parenthesized calls are useful for argument grouping in
+more complex expressions.
+
+For unparenthesized calls, a trailing comma continues the argument list onto
+the next line:
+
+```doit
+my_function "arg1",
+    "arg2",
+    "arg3"
+```
+
 ## Comments
 
 Line comments start with `//` or `#`:
