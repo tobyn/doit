@@ -3,6 +3,7 @@
 # Abort an owned construction.
 #   target [in] - target construction
 fn abort_construction(target) {
+    # frame: {"op": "abort_construction", "0": target [in]}
 }
 
 # Adds a number or coordinate to another number or coordinate.
@@ -10,11 +11,13 @@ fn abort_construction(target) {
 #   num [in]
 #   result [out]
 fn add(to, num, result) {
+    # frame: {"op": "add", "0": to [in], "1": num [in], "2": result [out]}
 }
 
 # Moves towards a location stopping to attack any enemies encountered.
 #   target [in] - target unit or coordinate
 fn attack_move(target) {
+    # frame: {"op": "attack_move", "0": target [in]}
 }
 
 # Performs a bitwise operation on two values.
@@ -22,6 +25,7 @@ fn attack_move(target) {
 #   b [in, optional] - second value (ignored for NOT)
 #   result [out] - bitwise operation result
 fn bitwise_op(a, b, result) {
+    # frame: {"op": "bitwise_op", "0": a [in], "1": b [in], "2": result [out], "c": <mode>}
 }
 
 # Places a construction site for a specific structure.
@@ -29,6 +33,8 @@ fn bitwise_op(a, b, result) {
 #   rotation [in, optional] - building rotation (0 to 3), default 0
 #   "Construction Failed" [branch] - where to continue if construction fails
 fn build(coordinate, rotation) {
+    # frame: {"op": "build", "0": coordinate [in], "1": rotation [in],
+    #   "2": "Construction Failed" [exec], "bp": <blueprint>, "frame": <frame_type>}
 }
 
 # Places a building to be registered.
@@ -38,10 +44,14 @@ fn build(coordinate, rotation) {
 #   "If Working" [branch] - where to continue if the unit started working
 #   "Construction Failed" [branch] - where to continue if construction fails
 fn build_registered(coordinate, rotation, id) {
+    # frame: {"op": "build_registered", "0": coordinate [in], "1": rotation [in],
+    #   "2": id [in], "3": "If Working" [exec], "4": "Construction Failed" [exec],
+    #   "bp": <blueprint>, "frame": <frame_type>}
 }
 
 # Call a subroutine. Parameters are determined by the subroutine.
 fn call() {
+    # frame: {"op": "call", "sub": <subroutine_id>, ...params from subroutine}
 }
 
 # Returns if a unit can produce an item.
@@ -50,6 +60,8 @@ fn call() {
 #   "Can Produce" [branch] - where to continue if the item can be produced
 #   "Cannot Produce" [branch] - where to continue if the item cannot be produced
 fn can_produce(item) {
+    # frame: {"op": "can_produce", "0": "Can Produce" [exec], "1": item [in],
+    #   "2": component [in], "next": "Cannot Produce"}
 }
 
 # Divert program depending on location of a unit or coordinate.
@@ -58,12 +70,15 @@ fn can_produce(item) {
 #   "Plateau" [branch] - where to continue if on a plateau
 #   "No Visibility" [branch, optional] - no visibility on target
 fn check_altitude(target) {
+    # frame: {"op": "check_altitude", "0": target [in], "1": "Valley" [exec],
+    #   "2": "Plateau" [exec], "next": "No Visibility"}
 }
 
 # Checks the battery level of a unit.
 #   unit [in, optional] - the unit to check (if not self)
 #   "Full" [branch] - where to continue if battery is fully recharged
 fn check_battery(unit) {
+    # frame: {"op": "check_battery", "0": "Full" [exec], "1": unit [in]}
 }
 
 # Checks if a specific bit is set in a number.
@@ -72,24 +87,29 @@ fn check_battery(unit) {
 #   "Bit Set" [branch] - where to continue if bit is set
 #   "Bit Clear" [branch] - where to continue if bit is clear
 fn check_bit(value, bit_index) {
+    # frame: {"op": "check_bit", "0": "Bit Clear" [exec], "1": value [in],
+    #   "2": bit_index [in], "next": "Bit Set"}
 }
 
 # Divert program depending on whether a unit or coordinate is in the blight.
 #   target [in, optional] - the unit or coordinate to check (if not self)
 #   "Blight" [branch] - where to continue if in the blight
 fn check_blightness(target) {
+    # frame: {"op": "check_blightness", "0": target [in], "1": "Blight" [exec]}
 }
 
 # Checks the efficiency of the logistics network the unit is on.
 #   unit [in, optional] - the unit to check (if not self)
 #   "Full" [branch] - where to continue if at full efficiency
 fn check_grid_effeciency(unit) {
+    # frame: {"op": "check_grid_effeciency", "0": "Full" [exec], "1": unit [in]}
 }
 
 # Check a unit's health.
 #   unit [in, optional] - the unit to check (if not self)
 #   "Full" [branch] - where to continue if at full health
 fn check_health(unit) {
+    # frame: {"op": "check_health", "0": "Full" [exec], "1": unit [in]}
 }
 
 # Divert program depending on comparison of two numbers.
@@ -99,16 +119,20 @@ fn check_health(unit) {
 #   "If Larger" [branch] - where to continue if value is larger than compare
 #   "If Smaller" [branch] - where to continue if value is smaller than compare
 fn check_number(value, compare) {
+    # frame: {"op": "check_number", "0": "If Larger" [exec], "1": "If Smaller" [exec],
+    #   "2": value [in], "3": compare [in], "next": "If Equal"}
 }
 
 # Checks if free space is available for an item and amount.
 #   item [in] - item and amount to check
 #   "Can't Fit" [branch] - where to continue if it can't fit
 fn checkfreespace(item) {
+    # frame: {"op": "checkfreespace", "0": "Can't Fit" [exec], "1": item [in]}
 }
 
 # Clear all register links on this unit.
 fn clear_all_links() {
+    # frame: {"op": "clear_all_links"}
 }
 
 # Clear a register link.
@@ -117,11 +141,14 @@ fn clear_all_links() {
 #   to [in] - component/register index to end clearing
 #   to_index [in, optional] - component index if multiple are equipped
 fn clear_link(from, from_index, to, to_index) {
+    # frame: {"op": "clear_link", "0": from [in], "1": from_index [in],
+    #   "2": to [in], "3": to_index [in]}
 }
 
 # Clears a research from the research queue, or entire queue if no tech passed.
 #   tech [in] - tech to remove from research queue
 fn clear_research(tech) {
+    # frame: {"op": "clear_research", "0": tech [in]}
 }
 
 # Returns a coordinate made from x and y values.
@@ -129,6 +156,7 @@ fn clear_research(tech) {
 #   y [in]
 #   result [out]
 fn combine_coordinate(x, y, result) {
+    # frame: {"op": "combine_coordinate", "0": x [in], "1": y [in], "2": result [out]}
 }
 
 # Combine separate parameters into a register.
@@ -138,6 +166,8 @@ fn combine_coordinate(x, y, result) {
 #   x [in, optional]
 #   y [in, optional]
 fn combine_register(num, unit, register) {
+    # frame: {"op": "combine_register", "0": num [in], "1": unit [in],
+    #   "2": register [out], "3": x [in], "4": y [in]}
 }
 
 # Compares two units.
@@ -146,6 +176,8 @@ fn combine_register(num, unit, register) {
 #   "If Equal" [branch] - where to continue if the units are the same
 #   "If Different" [branch] - where to continue if the units differ
 fn compare_entity(unit_1, unit_2) {
+    # frame: {"op": "compare_entity", "0": "If Different" [exec], "1": unit_1 [in],
+    #   "2": unit_2 [in], "next": "If Equal"}
 }
 
 # Compares item or unit type.
@@ -154,6 +186,8 @@ fn compare_entity(unit_1, unit_2) {
 #   "If Equal" [branch] - where to continue if the types are the same
 #   "If Different" [branch] - where to continue if the types differ
 fn compare_item(value_1, value_2) {
+    # frame: {"op": "compare_item", "0": "If Different" [exec], "1": value_1 [in],
+    #   "2": value_2 [in], "next": "If Equal"}
 }
 
 # Compares registers for equality.
@@ -162,10 +196,13 @@ fn compare_item(value_1, value_2) {
 #   "If Equal" [branch] - where to continue if the registers are the same
 #   "If Different" [branch] - where to continue if the registers differ
 fn compare_register(value_1, value_2) {
+    # frame: {"op": "compare_register", "0": "If Different" [exec], "1": value_1 [in],
+    #   "2": value_2 [in], "next": "If Equal"}
 }
 
 # Connects the unit to the logistics network.
 fn connect() {
+    # frame: {"op": "connect"}
 }
 
 # Counts the number of the passed item in the unit's inventory.
@@ -173,30 +210,37 @@ fn connect() {
 #   result [out] - number of this item in inventory
 #   unit [in, optional] - the unit to check (if not self)
 fn count_item(item, result) {
+    # frame: {"op": "count_item", "0": item [in], "1": result [out], "2": unit [in],
+    #   "c": <mode>}
 }
 
 # Returns the number of slots in this unit of the given type.
 #   result [out] - number of slots
 #   unit [in, optional] - the unit to check (if not self)
 fn count_slots(result) {
+    # frame: {"op": "count_slots", "0": result [out], "1": unit [in], "c": <mode>}
 }
 
 # Debug print to log.
 #   value [in] - value to print
 fn debug_print(value) {
+    # frame: {"op": "debug_print", "0": value [in]}
 }
 
 # Deploys the first found held unit at the specified location.
 #   coord [in] - location to deploy
 fn deploy(coord) {
+    # frame: {"op": "deploy", "0": coord [in]}
 }
 
 # Disable unit to deliver on transport route.
 fn disable_transport_route() {
+    # frame: {"op": "disable_transport_route"}
 }
 
 # Disconnects the unit from the logistics network.
 fn disconnect() {
+    # frame: {"op": "disconnect"}
 }
 
 # Divides a number or coordinate by another number or coordinate.
@@ -204,39 +248,46 @@ fn disconnect() {
 #   num [in]
 #   result [out]
 fn div(from, num, result) {
+    # frame: {"op": "div", "0": from [in], "1": num [in], "2": result [out]}
 }
 
 # Drop off items at a unit or location.
 #   destination [in] - unit or destination to bring items to
 #   item_amount [in, optional] - item and amount to drop off
 fn dodrop(destination) {
+    # frame: {"op": "dodrop", "0": destination [in], "1": item_amount [in], "c": <mode>}
 }
 
 # Moves to another unit or within a range of another unit.
 #   target [in] - unit to move to; the number specifies the range
 fn domove(target) {
+    # frame: {"op": "domove", "0": target [in], "c": <mode>}
 }
 
 # Deprecated: use domove
 # Starts movement but does not wait for completion.
 #   target [in] - unit to move to
 fn domove_async(target) {
+    # frame: {"op": "domove_async", "0": target [in]}
 }
 
 # Deprecated: use domove
 # Moves toward a target location until within a specified range.
 #   target [in] - unit to move to; the number specifies the range
 fn domove_range(target) {
+    # frame: {"op": "domove_range", "0": target [in]}
 }
 
 # Picks up items from a unit.
 #   source [in] - unit to take items from
 #   item_amount [in, optional] - item and amount to pick up
 fn dopickup(source) {
+    # frame: {"op": "dopickup", "0": source [in], "1": item_amount [in], "c": <mode>}
 }
 
 # Enable unit to deliver on transport route.
 fn enable_transport_route() {
+    # frame: {"op": "enable_transport_route"}
 }
 
 # Equips a component if it exists in the unit's inventory.
@@ -244,6 +295,8 @@ fn enable_transport_route() {
 #   slot_index [in, optional] - individual slot to equip from
 #   "No Component" [branch] - if the unit doesn't hold the requested component
 fn equip_component(component) {
+    # frame: {"op": "equip_component", "0": "No Component" [exec], "1": component [in],
+    #   "2": slot_index [in]}
 }
 
 # Equips a component on an external unit if it exists in that unit's inventory.
@@ -252,10 +305,13 @@ fn equip_component(component) {
 #   slot_index [in, optional] - individual slot to equip from
 #   "No Component" [branch] - if the unit doesn't hold the requested component
 fn equip_component_remotely(unit, component) {
+    # frame: {"op": "equip_component_remotely", "0": unit [in],
+    #   "1": "No Component" [exec], "2": component [in], "3": slot_index [in]}
 }
 
 # Stops execution of the behavior.
 fn exit() {
+    # frame: {"op": "exit"} (terminal)
 }
 
 # Counts the number of the passed item in the faction's logistics network.
@@ -263,6 +319,8 @@ fn exit() {
 #   result [out] - number of this item in the faction
 #   "None" [branch] - when none of this item exists
 fn faction_item_amount(item, result) {
+    # frame: {"op": "faction_item_amount", "0": item [in], "1": result [out],
+    #   "2": "None" [exec]}
 }
 
 # Loops through equipped components.
@@ -270,12 +328,15 @@ fn faction_item_amount(item, result) {
 #   index [out, optional] - index of the component
 #   "Done" [branch] - finished loop
 fn for_component(component) {
+    # frame: {"op": "for_component", "0": component [out], "1": index [out],
+    #   "2": "Done" [exec]}
 }
 
 # Scans for nearby resources in power field or visibility range.
 #   resource [out]
 #   "Done" [branch] - finished loop
 fn for_count_resources(resource) {
+    # frame: {"op": "for_count_resources", "0": resource [out], "1": "Done" [exec]}
 }
 
 # Loops through all units in visibility range matching filters.
@@ -286,6 +347,8 @@ fn for_count_resources(resource) {
 #   unit [out] - current unit in loop
 #   "Done" [branch] - finished loop
 fn for_entities_in_range(range, filter, unit) {
+    # frame: {"op": "for_entities_in_range", "0": range [in], "1": filter [in],
+    #   "2": filter_2 [in], "3": filter_3 [in], "4": unit [out], "5": "Done" [exec]}
 }
 
 # Loops through inventory slots.
@@ -296,6 +359,9 @@ fn for_entities_in_range(range, filter, unit) {
 #   reserved_space [out, optional] - space reserved for an incoming order
 #   unreserved_space [out, optional] - remaining space
 fn for_inventory_item(inventory) {
+    # frame: {"op": "for_inventory_item", "0": inventory [out], "1": "Done" [exec],
+    #   "2": reserved_stack [out], "3": unreserved_stack [out],
+    #   "4": reserved_space [out], "5": unreserved_space [out]}
 }
 
 # Loops through all numbers in a range.
@@ -305,6 +371,8 @@ fn for_inventory_item(inventory) {
 #   value [out] - current number
 #   "Done" [branch] - finished loop
 fn for_number(from, to, value) {
+    # frame: {"op": "for_number", "0": from [in], "1": to [in], "2": step [in],
+    #   "3": value [out], "4": "Done" [exec]}
 }
 
 # Gets all producers for a production with their production time.
@@ -312,6 +380,8 @@ fn for_number(from, to, value) {
 #   producer [out] - producer
 #   "Done" [branch] - finished loop
 fn for_producers(production, producer) {
+    # frame: {"op": "for_producers", "0": production [in], "1": producer [out],
+    #   "2": "Done" [exec]}
 }
 
 # Loops through recipe ingredients.
@@ -319,6 +389,8 @@ fn for_producers(production, producer) {
 #   ingredient [out] - recipe ingredient
 #   "Done" [branch] - finished loop
 fn for_recipe_ingredients(recipe, ingredient) {
+    # frame: {"op": "for_recipe_ingredients", "0": recipe [in], "1": ingredient [out],
+    #   "2": "Done" [exec]}
 }
 
 # Loops through each ingredient required to repair a unit.
@@ -326,12 +398,15 @@ fn for_recipe_ingredients(recipe, ingredient) {
 #   ingredient [out] - repair ingredient
 #   "Done" [branch] - finished loop
 fn for_repair_ingredients(target, ingredient) {
+    # frame: {"op": "for_repair_ingredients", "0": target [in], "1": ingredient [out],
+    #   "2": "Done" [exec]}
 }
 
 # Loops through all researchable tech.
 #   tech [out] - researchable tech
 #   "Done" [branch] - finished loop
 fn for_research(tech) {
+    # frame: {"op": "for_research", "0": tech [out], "1": "Done" [exec]}
 }
 
 # Loops through research ingredients.
@@ -339,6 +414,8 @@ fn for_research(tech) {
 #   ingredient [out] - research ingredient
 #   "Done" [branch] - finished loop
 fn for_research_ingredients(research, ingredient) {
+    # frame: {"op": "for_research_ingredients", "0": research [in],
+    #   "1": ingredient [out], "2": "Done" [exec]}
 }
 
 # Loops through all unlocks for a researchable tech.
@@ -346,6 +423,8 @@ fn for_research_ingredients(research, ingredient) {
 #   unlock [out] - unlocks
 #   "Done" [branch] - finished loop
 fn for_research_unlocks(tech, unlock) {
+    # frame: {"op": "for_research_unlocks", "0": tech [in], "1": unlock [out],
+    #   "2": "Done" [exec]}
 }
 
 # Deprecated: use for_signal_match
@@ -354,6 +433,7 @@ fn for_research_unlocks(tech, unlock) {
 #   unit [out] - unit with signal
 #   "Done" [branch] - finished loop
 fn for_signal(signal, unit) {
+    # frame: {"op": "for_signal", "0": signal [in], "1": unit [out], "2": "Done" [exec]}
 }
 
 # Loops through all units with a signal of similar type.
@@ -362,11 +442,14 @@ fn for_signal(signal, unit) {
 #   found_signal [out, optional] - found signal
 #   "Done" [branch] - finished loop
 fn for_signal_match(signal, unit) {
+    # frame: {"op": "for_signal_match", "0": signal [in], "1": unit [out],
+    #   "2": found_signal [out], "3": "Done" [exec], "c": <mode>}
 }
 
 # Collect information for running the auto base controller.
 #   range [in] - range of operation
 fn gather_information(range) {
+    # frame: {"op": "gather_information", "0": range [in]}
 }
 
 # Gets the source, target, and amount data from the current active order.
@@ -374,11 +457,14 @@ fn gather_information(range) {
 #   target [out]
 #   amount [out]
 fn get_active_order(source, target, amount) {
+    # frame: {"op": "get_active_order", "0": source [out], "1": target [out],
+    #   "2": amount [out]}
 }
 
 # Gets the battery level as a percent.
 #   result [out]
 fn get_battery(result) {
+    # frame: {"op": "get_battery", "0": result [out]}
 }
 
 # Gets the closest visible unit matching a filter.
@@ -387,6 +473,8 @@ fn get_battery(result) {
 #   filter_3 [in, optional] - third filter
 #   output [out] - unit
 fn get_closest_entity(filter, output) {
+    # frame: {"op": "get_closest_entity", "0": filter [in], "1": filter_2 [in],
+    #   "2": filter_3 [in], "3": output [out]}
 }
 
 # Reads a value from a component register.
@@ -394,6 +482,8 @@ fn get_closest_entity(filter, output) {
 #   value [out] - value of register
 #   component_index [in, optional] - component index if multiple are equipped
 fn get_comp_reg(from, value) {
+    # frame: {"op": "get_comp_reg", "0": from [in], "1": value [out],
+    #   "2": component_index [in]}
 }
 
 # Returns distance to a unit.
@@ -401,12 +491,14 @@ fn get_comp_reg(from, value) {
 #   distance [out] - unit and its distance in the numerical part
 #   unit [in, optional] - the unit to measure from (if not self)
 fn get_distance(target, distance) {
+    # frame: {"op": "get_distance", "0": target [in], "1": distance [out], "2": unit [in]}
 }
 
 # Gets the best matching unit at a coordinate.
 #   coordinate [in] - coordinate to get unit from
 #   result [out]
 fn get_entity_at(coordinate, result) {
+    # frame: {"op": "get_entity_at", "0": coordinate [in], "1": result [out]}
 }
 
 # Returns how many of a component are equipped.
@@ -414,16 +506,20 @@ fn get_entity_at(coordinate, result) {
 #   value [out]
 #   unit [in, optional] - the unit to check (if not self)
 fn get_equipped_num(component_id, value) {
+    # frame: {"op": "get_equipped_num", "0": component_id [in], "1": value [out],
+    #   "2": unit [in]}
 }
 
 # Gets the first item where the locked slot exists but there is no item in it.
 #   item [out] - the first locked item id with no item
 fn get_first_locked_0(item) {
+    # frame: {"op": "get_first_locked_0", "0": item [out]}
 }
 
 # Gets the grid efficiency as a percent.
 #   result [out]
 fn get_grid_effeciency(result) {
+    # frame: {"op": "get_grid_effeciency", "0": result [out]}
 }
 
 # Gets a unit's health as a percentage.
@@ -432,6 +528,8 @@ fn get_grid_effeciency(result) {
 #   current [out, optional] - value of health remaining
 #   max [out, optional] - value of maximum health
 fn get_health(unit, percent) {
+    # frame: {"op": "get_health", "0": unit [in], "1": percent [out],
+    #   "2": current [out], "3": max [out]}
 }
 
 # Returns the ingredients required to produce an item.
@@ -440,12 +538,15 @@ fn get_health(unit, percent) {
 #   out_2 [out] - second ingredient
 #   out_3 [out] - third ingredient
 fn get_ingredients(product, out_1, out_2, out_3) {
+    # frame: {"op": "get_ingredients", "0": product [in], "1": out_1 [out],
+    #   "2": out_2 [out], "3": out_3 [out]}
 }
 
 # Reads the first item in the inventory.
 #   item [out]
 #   "No Items" [branch] - no items in inventory
 fn get_inventory_item(item) {
+    # frame: {"op": "get_inventory_item", "0": item [out], "1": "No Items" [exec]}
 }
 
 # Reads the item contained in the specified slot index.
@@ -453,30 +554,36 @@ fn get_inventory_item(item) {
 #   item [out]
 #   "No Item" [branch] - item not found
 fn get_inventory_item_index(index, item) {
+    # frame: {"op": "get_inventory_item_index", "0": index [in], "1": item [out],
+    #   "2": "No Item" [exec]}
 }
 
 # Returns the total contained in inventory.
 #   result [out]
 #   unit [in, optional] - the unit to check (if not self)
 fn get_inventory_total(result) {
+    # frame: {"op": "get_inventory_total", "0": result [out], "1": unit [in]}
 }
 
 # Gets information on an item.
 #   item [in] - the item to check
 #   result [out] - item information value
 fn get_item_info(item, result) {
+    # frame: {"op": "get_item_info", "0": item [in], "1": result [out], "c": <mode>}
 }
 
 # Gets the location of a seen unit.
 #   unit [in] - unit to get coordinates of
 #   coord [out] - coordinate of unit
 fn get_location(unit, coord) {
+    # frame: {"op": "get_location", "0": unit [in], "1": coord [out]}
 }
 
 # Returns the maximum stack size of an item.
 #   item [in] - item to check
 #   max_stack [out] - max stack size
 fn get_max_stack(item, max_stack) {
+    # frame: {"op": "get_max_stack", "0": item [in], "1": max_stack [out]}
 }
 
 # Reads a value from a component register on an external unit.
@@ -486,23 +593,28 @@ fn get_max_stack(item, max_stack) {
 #   component_index [in, optional] - component index if multiple are equipped
 #   "Failed" [branch, optional] - failed to get register
 fn get_reg_remotely(unit, from, value) {
+    # frame: {"op": "get_reg_remotely", "0": unit [in], "1": from [in],
+    #   "2": value [out], "3": component_index [in], "4": "Failed" [exec]}
 }
 
 # Get number of registered buildings.
 #   id [in] - id to get register of
 #   value [out] - value of registered unit
 fn get_registered(id, value) {
+    # frame: {"op": "get_registered", "0": id [in], "1": value [out]}
 }
 
 # Returns the first active research tech.
 #   tech [out] - first active research
 fn get_research(tech) {
+    # frame: {"op": "get_research", "0": tech [out]}
 }
 
 # Returns the research required (if needed).
 #   tech [in] - the research to investigate
 #   requirement [out] - the tech required for the research
 fn get_research_requirement(tech, requirement) {
+    # frame: {"op": "get_research_requirement", "0": tech [in], "1": requirement [out]}
 }
 
 # Gets the resource type from a resource deposit.
@@ -510,12 +622,15 @@ fn get_research_requirement(tech, requirement) {
 #   resource [out] - resource type
 #   "Not Resource" [branch] - not a resource deposit
 fn get_resource_item(resource_deposit, resource) {
+    # frame: {"op": "get_resource_item", "0": resource_deposit [in],
+    #   "1": resource [out], "2": "Not Resource" [exec]}
 }
 
 # Gets the amount of a resource.
 #   resource [in] - resource node to check
 #   result [out]
 fn get_resource_num(resource, result) {
+    # frame: {"op": "get_resource_num", "0": resource [in], "1": result [out]}
 }
 
 # Divert program depending on season.
@@ -524,11 +639,14 @@ fn get_resource_num(resource, result) {
 #   "Summer" [branch]
 #   "Fall" [branch]
 fn get_season() {
+    # frame: {"op": "get_season", "0": "Winter" [exec], "1": "Spring" [exec],
+    #   "2": "Summer" [exec], "3": "Fall" [exec]} (terminal)
 }
 
 # Gets the unit running the behavior.
 #   result [out]
 fn get_self(result) {
+    # frame: {"op": "get_self", "0": result [out]}
 }
 
 # Gets a unit's shield as a percentage.
@@ -537,35 +655,42 @@ fn get_self(result) {
 #   current [out, optional] - value of shield remaining
 #   max [out, optional] - value of maximum shield
 fn get_shield(unit, percent) {
+    # frame: {"op": "get_shield", "0": unit [in], "1": percent [out],
+    #   "2": current [out], "3": max [out]}
 }
 
 # Gets the current world stability.
 #   number [out] - stability
 fn get_stability(number) {
+    # frame: {"op": "get_stability", "0": number [out]}
 }
 
 # Gets the type from an item or unit.
 #   item_unit [in]
 #   type [out]
 fn get_type(item_unit, type) {
+    # frame: {"op": "get_type", "0": item_unit [in], "1": type [out]}
 }
 
 # Gets information on a unit.
 #   unit [in] - the unit to check
 #   result [out] - unit info value
 fn get_unit_info(unit, result) {
+    # frame: {"op": "get_unit_info", "0": unit [in], "1": result [out], "c": <mode>}
 }
 
 # Gets power information on a unit.
 #   unit [in] - the unit to check
 #   result [out] - unit power info value
 fn get_unit_power_info(unit, result) {
+    # frame: {"op": "get_unit_power_info", "0": unit [in], "1": result [out], "c": <mode>}
 }
 
 # Get the frame type of a unit.
 #   unit [in] - the unit to check
 #   type [out]
 fn get_unit_type(unit, type) {
+    # frame: {"op": "get_unit_type", "0": unit [in], "1": type [out]}
 }
 
 # Returns how many of the input item can fit in the inventory.
@@ -573,11 +698,13 @@ fn get_unit_type(unit, type) {
 #   result [out] - number that can fit
 #   unit [in, optional] - the unit to check (if not self)
 fn getfreespace(item, result) {
+    # frame: {"op": "getfreespace", "0": item [in], "1": result [out], "2": unit [in]}
 }
 
 # Gets the faction's home unit.
 #   result [out] - faction's home unit
 fn gethome(result) {
+    # frame: {"op": "gethome", "0": result [out]}
 }
 
 # Gets the trust level of a unit towards your faction.
@@ -587,6 +714,8 @@ fn gethome(result) {
 #   "Enemy" [branch] - target considers you an enemy
 #   "No Unit" [branch] - no unit passed
 fn gettrust(unit) {
+    # frame: {"op": "gettrust", "0": "Ally" [exec], "1": "Neutral" [exec],
+    #   "2": "Enemy" [exec], "3": unit [in], "next": "No Unit"}
 }
 
 # Checks if you have at least a specified amount of an item.
@@ -594,6 +723,7 @@ fn gettrust(unit) {
 #   unit [in, optional] - the unit to check (if not self)
 #   "Have Item" [branch] - have the specified item
 fn have_item(item) {
+    # frame: {"op": "have_item", "0": item [in], "1": "Have Item" [exec], "2": unit [in]}
 }
 
 # Compares if an item or unit is of a specific type.
@@ -602,18 +732,22 @@ fn have_item(item) {
 #   "If Equal" [branch] - where to continue if they are the same
 #   "If Different" [branch] - where to continue if they differ
 fn is_a(item, type) {
+    # frame: {"op": "is_a", "0": "If Different" [exec], "1": item [in], "2": type [in],
+    #   "next": "If Equal"}
 }
 
 # Divert program depending on time of day.
 #   "Day" [branch]
 #   "Night" [branch]
 fn is_daynight() {
+    # frame: {"op": "is_daynight", "0": "Day" [exec], "1": "Night" [exec]} (terminal)
 }
 
 # Check if a unit is docked and get its garage.
 #   garage [out] - garage unit
 #   "No Dock" [branch] - unit is not docked
 fn is_docked(garage) {
+    # frame: {"op": "is_docked", "0": "No Dock" [exec], "1": garage [out]}
 }
 
 # Checks if a value is empty.
@@ -621,6 +755,8 @@ fn is_docked(garage) {
 #   "Empty" [branch] - value is empty
 #   "Has Value" [branch] - value exists
 fn is_empty(value) {
+    # frame: {"op": "is_empty", "0": value [in], "1": "Empty" [exec],
+    #   "2": "Has Value" [exec]}
 }
 
 # Check if a specific component has been equipped.
@@ -628,12 +764,15 @@ fn is_empty(value) {
 #   result [out, optional] - how many instances are equipped
 #   "Component Equipped" [branch] - component is equipped
 fn is_equipped(component) {
+    # frame: {"op": "is_equipped", "0": component [in],
+    #   "1": "Component Equipped" [exec], "2": result [out]}
 }
 
 # Check if a specific item slot index is fixed.
 #   slot_index [in] - individual slot to check
 #   "Is Fixed" [branch] - inventory slot is fixed
 fn is_fixed(slot_index) {
+    # frame: {"op": "is_fixed", "0": slot_index [in], "1": "Is Fixed" [exec]}
 }
 
 # Checks if a unit or coordinate is in the logistics network.
@@ -641,6 +780,8 @@ fn is_fixed(slot_index) {
 #   "Inside" [branch] - inside a logistics network
 #   "Outside" [branch] - not inside a logistics network
 fn is_logistics(unit) {
+    # frame: {"op": "is_logistics", "0": unit [in], "1": "Outside" [exec],
+    #   "next": "Inside"}
 }
 
 # Checks the movement state of a unit.
@@ -650,6 +791,8 @@ fn is_logistics(unit) {
 #   "Path Blocked" [branch] - unit is path blocked
 #   "No Result" [branch] - unit is out of visual range
 fn is_moving(unit) {
+    # frame: {"op": "is_moving", "0": "Not Moving" [exec], "1": "Path Blocked" [exec],
+    #   "2": "No Result" [exec], "3": unit [in], "next": "Moving"}
 }
 
 # Checks whether a location is passable.
@@ -657,6 +800,8 @@ fn is_moving(unit) {
 #   "Passable" [branch] - unit can pass through
 #   "Impassable" [branch] - unit cannot pass through
 fn is_passable(coordinate) {
+    # frame: {"op": "is_passable", "0": coordinate [in], "1": "Impassable" [exec],
+    #   "2": "Passable" [exec]}
 }
 
 # Checks if two units or coordinates are in the same logistics network.
@@ -665,6 +810,8 @@ fn is_passable(coordinate) {
 #   "Same Grid" [branch] - same logistics network
 #   "Different" [branch] - different logistics networks
 fn is_same_grid(unit_a, unit_b) {
+    # frame: {"op": "is_same_grid", "0": unit_a [in], "1": unit_b [in],
+    #   "2": "Different" [exec], "next": "Same Grid"}
 }
 
 # Checks if a unit is a specific frame type.
@@ -673,12 +820,15 @@ fn is_same_grid(unit_a, unit_b) {
 #   "Is" [branch] - unit is the specified type
 #   "Is Not" [branch] - unit is not the specified type
 fn is_unit_a(unit, type) {
+    # frame: {"op": "is_unit_a", "0": unit [in], "1": type [in],
+    #   "2": "Is Not" [exec], "next": "Is"}
 }
 
 # Checks whether the faction has an id unlocked.
 #   id [in] - input id
 #   "No Match" [branch] - id is not unlocked
 fn is_unlocked(id) {
+    # frame: {"op": "is_unlocked", "0": id [in], "1": "No Match" [exec]}
 }
 
 # Checks whether a particular component is currently working.
@@ -687,49 +837,60 @@ fn is_unlocked(id) {
 #   value [out, optional] - the currently working component
 #   "Is Not Working" [branch] - component is not currently working
 fn is_working(component) {
+    # frame: {"op": "is_working", "0": "Is Not Working" [exec], "1": component [in],
+    #   "2": component_index [in], "3": value [out]}
 }
 
 # Jumps execution to a label with the same label id.
 #   label [in] - label identifier
 fn jump(label) {
+    # frame: {"op": "jump", "0": label [in]}
 }
 
 # Labels can be jumped to from anywhere in a behavior.
 #   label [in] - label identifier
 fn label(label) {
+    # frame: {"op": "label", "0": label [in]}
 }
 
 # Tells a launched satellite to land.
 fn land() {
+    # frame: {"op": "land"}
 }
 
 # Break out of a loop.
 fn last() {
+    # frame: {"op": "last"} (terminal)
 }
 
 # Launches a satellite or drop pod.
 fn launch() {
+    # frame: {"op": "launch"}
 }
 
 # Run one instruction at a time.
 fn lock() {
+    # frame: {"op": "lock"}
 }
 
 # Fix all storage slots or a specific item slot.
 #   item [in] - item type to fix to the slots
 #   slot_index [in, optional] - individual slot to fix
 fn lock_slots(item) {
+    # frame: {"op": "lock_slots", "0": item [in], "1": slot_index [in], "c": <mode>}
 }
 
 # Turns the unit to look at a unit or coordinate.
 #   target [in] - target unit or coordinate
 fn lookat(target) {
+    # frame: {"op": "lookat", "0": target [in]}
 }
 
 # Construct carrier bots for delivering orders.
 #   carriers [in] - type and count of carriers to make
 #   "If Working" [branch] - where to continue if the unit started working
 fn make_carrier(carriers) {
+    # frame: {"op": "make_carrier", "0": carriers [in], "1": "If Working" [exec]}
 }
 
 # Construct and equip miner components on available carrier bots.
@@ -737,6 +898,8 @@ fn make_carrier(carriers) {
 #   frame [in] - unit to create if none are free
 #   "If Working" [branch] - where to continue if the unit started working
 fn make_miner(resource_count, frame) {
+    # frame: {"op": "make_miner", "0": resource_count [in], "1": frame [in],
+    #   "2": "If Working" [exec]}
 }
 
 # Build and maintain dedicated production buildings.
@@ -746,12 +909,15 @@ fn make_miner(resource_count, frame) {
 #   location [in] - location offset from self
 #   "If Working" [branch] - where to continue if the unit started working
 fn make_producer(item_count, component, building, location) {
+    # frame: {"op": "make_producer", "0": item_count [in], "1": component [in],
+    #   "2": building [in], "3": location [in], "4": "If Working" [exec]}
 }
 
 # Construct and equip turret components on available carrier bots.
 #   number [in] - number of turret bots to maintain
 #   "If Working" [branch] - where to continue if the unit started working
 fn make_turret_bots(number) {
+    # frame: {"op": "make_turret_bots", "0": number [in], "1": "If Working" [exec]}
 }
 
 # Filters the passed unit.
@@ -761,24 +927,29 @@ fn make_turret_bots(number) {
 #   filter_3 [in, optional] - third filter
 #   "Failed" [branch] - did not match filter
 fn match(unit, filter) {
+    # frame: {"op": "match", "0": unit [in], "1": filter [in], "2": filter_2 [in],
+    #   "3": filter_3 [in], "4": "Failed" [exec]}
 }
 
 # Get memory array element.
 #   index [in] - array identifier and index
 #   value [out]
 fn memory_get(index, value) {
+    # frame: {"op": "memory_get", "0": index [in], "1": value [out]}
 }
 
 # Insert value into memory array.
 #   index [in] - array identifier and index
 #   value [in]
 fn memory_insert(index, value) {
+    # frame: {"op": "memory_insert", "0": index [in], "1": value [in]}
 }
 
 # Get length of memory array.
 #   index [in] - array identifier
 #   value [out]
 fn memory_length(index, value) {
+    # frame: {"op": "memory_length", "0": index [in], "1": value [out]}
 }
 
 # Loops through memory array or known array identifiers.
@@ -787,12 +958,15 @@ fn memory_length(index, value) {
 #   index [out, optional]
 #   "Done" [branch] - finished loop
 fn memory_loop(id, value) {
+    # frame: {"op": "memory_loop", "0": id [in], "1": value [out], "2": "Done" [exec],
+    #   "3": index [out]}
 }
 
 # Remove value from memory array.
 #   index [in] - array identifier and index
 #   old_value [out] - removed value
 fn memory_remove(index, old_value) {
+    # frame: {"op": "memory_remove", "0": index [in], "1": old_value [out]}
 }
 
 # Set memory array value at a given index.
@@ -800,6 +974,7 @@ fn memory_remove(index, old_value) {
 #   value [in]
 #   old [out] - previous value
 fn memory_set(index, value, old) {
+    # frame: {"op": "memory_set", "0": index [in], "1": value [in], "2": old [out]}
 }
 
 # Mine a single resource deposit.
@@ -807,6 +982,8 @@ fn memory_set(index, value, old) {
 #   "Cannot Mine" [branch] - mining could not be performed
 #   "Full" [branch] - can't fit resource into inventory
 fn mine(resource) {
+    # frame: {"op": "mine", "0": resource [in], "1": "Cannot Mine" [exec],
+    #   "2": "Full" [exec]}
 }
 
 # Get the remainder of a division.
@@ -814,31 +991,37 @@ fn mine(resource) {
 #   by [in]
 #   result [out]
 fn modulo(num, by, result) {
+    # frame: {"op": "modulo", "0": num [in], "1": by [in], "2": result [out]}
 }
 
 # Moves towards a tile East of the current location.
 #   number [in] - number of tiles to move
 fn move_east(number) {
+    # frame: {"op": "move_east", "0": number [in]}
 }
 
 # Moves towards a tile North of the current location.
 #   number [in] - number of tiles to move
 fn move_north(number) {
+    # frame: {"op": "move_north", "0": number [in]}
 }
 
 # Moves towards a tile South of the current location.
 #   number [in] - number of tiles to move
 fn move_south(number) {
+    # frame: {"op": "move_south", "0": number [in]}
 }
 
 # Moves towards a tile West of the current location.
 #   number [in] - number of tiles to move
 fn move_west(number) {
+    # frame: {"op": "move_west", "0": number [in]}
 }
 
 # Moves out of range of another unit.
 #   target [in] - unit to move away from; the number specifies the range
 fn moveaway_range(target) {
+    # frame: {"op": "moveaway_range", "0": target [in], "c": <mode>}
 }
 
 # Multiplies a number or coordinate by another number or coordinate.
@@ -846,15 +1029,18 @@ fn moveaway_range(target) {
 #   num [in]
 #   result [out]
 fn mul(to, num, result) {
+    # frame: {"op": "mul", "0": to [in], "1": num [in], "2": result [out]}
 }
 
 # Deprecated: placeholder for removed instructions
 fn nop() {
+    # frame: {"op": "nop"}
 }
 
 # Triggers a faction notification.
 #   txt - notification text
 fn notify(txt) {
+    # frame: {"op": "notify", "0": notify_value [in], "1": timeout [in], "txt": <text>}
     instruction "notify" {
         txt: txt
     }
@@ -862,17 +1048,20 @@ fn notify(txt) {
 
 # Request inventory to be sent to nearest shared storage with corresponding fixed slots.
 fn order_to_shared_storage() {
+    # frame: {"op": "order_to_shared_storage"}
 }
 
 # Transfers an item to another unit.
 #   target [in] - target unit
 #   item [in] - item and amount to transfer
 fn order_transfer(target, item) {
+    # frame: {"op": "order_transfer", "0": target [in], "1": item [in]}
 }
 
 # Tries to pack all packable units into items.
 #   unit [in, optional] - the destination to pack (if not self)
 fn package_all() {
+    # frame: {"op": "package_all", "0": unit [in]}
 }
 
 # Gives you the percent that value is of max value.
@@ -880,21 +1069,27 @@ fn package_all() {
 #   max_value [in] - max value to get percentage of
 #   number [out] - percent
 fn percent_value(value, max_value, number) {
+    # frame: {"op": "percent_value", "0": value [in], "1": max_value [in],
+    #   "2": number [out]}
 }
 
 # Plays the ping effect and notifies other players in the same faction.
 #   target [in] - target unit
 fn ping(target) {
+    # frame: {"op": "ping", "0": target [in]}
 }
 
 # Sets a production component to produce a blueprint.
 fn produce() {
+    # frame: {"op": "produce", "bp": <blueprint>, "frame": <frame_type>}
 }
 
 # Sets a production component to produce a registered blueprint.
 #   id [in] - id to register with
 #   "If Working" [branch] - where to continue if the unit started working
 fn produce_registered(id) {
+    # frame: {"op": "produce_registered", "0": id [in], "1": "If Working" [exec],
+    #   "bp": <blueprint>, "frame": <frame_type>}
 }
 
 # Returns a random coordinate within a specified range of a location.
@@ -902,6 +1097,8 @@ fn produce_registered(id) {
 #   range [in] - radius range from coordinate
 #   result [out]
 fn random_coordinate(coordinate, range, result) {
+    # frame: {"op": "random_coordinate", "0": coordinate [in], "1": range [in],
+    #   "2": result [out]}
 }
 
 # Returns a random number between a min and max value.
@@ -909,24 +1106,28 @@ fn random_coordinate(coordinate, range, result) {
 #   max [in]
 #   result [out]
 fn random_number(min, max, result) {
+    # frame: {"op": "random_number", "0": min [in], "1": max [in], "2": result [out]}
 }
 
 # Reads the radio signal on a specified band.
 #   band [in] - the band to check
 #   result [out] - value of the radio signal
 fn read_radio(band, result) {
+    # frame: {"op": "read_radio", "0": band [in], "1": result [out]}
 }
 
 # Reads the signal register of another unit.
 #   unit [in] - the owned unit to check
 #   result [out] - value of the unit's signal register
 fn read_signal(unit, result) {
+    # frame: {"op": "read_signal", "0": unit [in], "1": result [out]}
 }
 
 # Attempts to read the internal key of the unit.
 #   frame [in] - structure to read the key for
 #   key [out] - number key of structure
 fn readkey(frame, key) {
+    # frame: {"op": "readkey", "0": frame [in], "1": key [out]}
 }
 
 # Remaps a value between two ranges.
@@ -937,22 +1138,28 @@ fn readkey(frame, key) {
 #   target_high [in] - high value for target
 #   result [out] - remapped value
 fn remap_value(value, input_low, input_high, target_low, target_high, result) {
+    # frame: {"op": "remap_value", "0": value [in], "1": input_low [in],
+    #   "2": input_high [in], "3": target_low [in], "4": target_high [in],
+    #   "5": result [out]}
 }
 
 # Requests an item if it doesn't exist in the inventory.
 #   item [in] - item and amount to order
 #   channel [in, optional] - request on a specific logistics channel (1-4)
 fn request_item(item) {
+    # frame: {"op": "request_item", "0": item [in], "1": channel [in], "c": <mode>}
 }
 
 # Requests an item and waits until that amount exists in inventory.
 #   item [in] - item and amount to order
 #   channel [in, optional] - request on a specific logistics channel (1-4)
 fn request_wait(item) {
+    # frame: {"op": "request_wait", "0": item [in], "1": channel [in], "c": <mode>}
 }
 
 # Restart execution of the behavior.
 fn restart() {
+    # frame: {"op": "restart"} (terminal)
 }
 
 # Scan for the closest unit that matches the filters.
@@ -962,16 +1169,20 @@ fn restart() {
 #   result [out]
 #   "No Result" [branch] - no results found
 fn scan(filter_1, filter_2, filter_3, result) {
+    # frame: {"op": "scan", "0": filter_1 [in], "1": filter_2 [in],
+    #   "2": filter_3 [in], "3": result [out], "4": "No Result" [exec]}
 }
 
 # Moves in a scouting pattern around the faction's home location.
 fn scout() {
+    # frame: {"op": "scout", "c": <mode>}
 }
 
 # Moves in a random direction a specified amount.
 #   range [in] - range to scout
 #   coord [in] - last coordinate for directionality
 fn scout_rand_range(range, coord) {
+    # frame: {"op": "scout_rand_range", "0": range [in], "1": coord [in]}
 }
 
 # Branches based on which unit is closer.
@@ -981,6 +1192,8 @@ fn scout_rand_range(range, coord) {
 #   "A" [branch] - A is nearer (or equal)
 #   "B" [branch] - B is nearer
 fn select_nearest(unit_a, unit_b) {
+    # frame: {"op": "select_nearest", "0": "A" [exec], "1": "B" [exec],
+    #   "2": unit_a [in], "3": unit_b [in], "4": closest [out]}
 }
 
 # Split a coordinate into x and y values.
@@ -988,6 +1201,8 @@ fn select_nearest(unit_a, unit_b) {
 #   x [out]
 #   y [out]
 fn separate_coordinate(coordinate, x, y) {
+    # frame: {"op": "separate_coordinate", "0": coordinate [in], "1": x [out],
+    #   "2": y [out]}
 }
 
 # Split a register into separate parameters.
@@ -998,11 +1213,14 @@ fn separate_coordinate(coordinate, x, y) {
 #   x [out, optional]
 #   y [out, optional]
 fn separate_register(register, num) {
+    # frame: {"op": "separate_register", "0": register [in], "1": num [out],
+    #   "2": unit [out], "3": id [out], "4": x [out], "5": y [out]}
 }
 
 # Produce materials needed in construction sites.
 #   "If Working" [branch] - where to continue if the unit started working
 fn serve_construction() {
+    # frame: {"op": "serve_construction", "0": "If Working" [exec]}
 }
 
 # Writes a value into a component register.
@@ -1010,6 +1228,8 @@ fn serve_construction() {
 #   to [in] - component and register number to set
 #   component_index [in, optional] - component index if multiple are equipped
 fn set_comp_reg(value, to) {
+    # frame: {"op": "set_comp_reg", "0": value [in], "1": to [in],
+    #   "2": component_index [in]}
 }
 
 # Set a register link.
@@ -1018,10 +1238,13 @@ fn set_comp_reg(value, to) {
 #   to [in] - component and register number to end the link
 #   to_index [in, optional] - component index if multiple are equipped
 fn set_link(from, from_index, to, to_index) {
+    # frame: {"op": "set_link", "0": from [in], "1": from_index [in],
+    #   "2": to [in], "3": to_index [in]}
 }
 
 # Sets current unit to the specified logistics settings.
 fn set_logistics_options() {
+    # frame: {"op": "set_logistics_options", "c": <flags>, "c2": <flags>}
 }
 
 # Sets the numerical/coordinate part of a value.
@@ -1029,12 +1252,14 @@ fn set_logistics_options() {
 #   num_coord [in]
 #   to [out]
 fn set_number(value, num_coord, to) {
+    # frame: {"op": "set_number", "0": value [in], "1": num_coord [in], "2": to [out]}
 }
 
 # Copy a value to a frame register, parameter, or variable.
 #   value [in]
 #   target [out]
 fn set_reg(value, target) {
+    # frame: {"op": "set_reg", "0": value [in], "1": target [out]}
 }
 
 # Writes a value into a component register on an external unit.
@@ -1044,19 +1269,24 @@ fn set_reg(value, target) {
 #   component_index [in, optional] - component index if multiple are equipped
 #   "Failed" [branch, optional] - failed to set register
 fn set_reg_remotely(unit, value, to) {
+    # frame: {"op": "set_reg_remotely", "0": unit [in], "1": value [in], "2": to [in],
+    #   "3": component_index [in], "4": "Failed" [exec]}
 }
 
 # Add a new research into the active research queue.
 #   tech [in] - tech to research
 fn set_research(tech) {
+    # frame: {"op": "set_research", "0": tech [in]}
 }
 
 # Set the signpost to specific text.
 fn set_signpost() {
+    # frame: {"op": "set_signpost", "txt": <text>}
 }
 
 # Shuts down the power of the unit.
 fn shutdown() {
+    # frame: {"op": "shutdown"}
 }
 
 # Attempt to solve an explorable.
@@ -1064,14 +1294,18 @@ fn shutdown() {
 #   missing [out] - missing repair item, scanner component, or unpowered
 #   "Failed" [branch] - missing item, component, or power
 fn solve(target, missing) {
+    # frame: {"op": "solve", "0": target [in], "1": missing [out],
+    #   "2": "Failed" [exec]}
 }
 
 # Sorts storage containers on the unit.
 fn sort_storage() {
+    # frame: {"op": "sort_storage"}
 }
 
 # Stop movement and abort current movement control.
 fn stop() {
+    # frame: {"op": "stop"}
 }
 
 # Subtracts a number or coordinate from another number or coordinate.
@@ -1079,6 +1313,7 @@ fn stop() {
 #   num [in]
 #   result [out]
 fn sub(from, num, result) {
+    # frame: {"op": "sub", "0": from [in], "1": num [in], "2": result [out]}
 }
 
 # Filters the passed unit or item, branching to matching cases.
@@ -1091,10 +1326,15 @@ fn sub(from, num, result) {
 #   "Default" [branch] - did not match any filter
 #   "1"-"5" [branch] - matched respective case
 fn switch(input, case_1) {
+    # frame: {"op": "switch", "0": input [in], "1": case_1 [in], "2": "1" [exec],
+    #   "3": case_2 [in], "4": "2" [exec], "5": case_3 [in], "6": "3" [exec],
+    #   "7": case_4 [in], "8": "4" [exec], "9": case_5 [in], "10": "5" [exec],
+    #   "next": "Default"}
 }
 
 # Turns on the power of the unit.
 fn turnon() {
+    # frame: {"op": "turnon"}
 }
 
 # Unequips a component if it exists.
@@ -1102,6 +1342,8 @@ fn turnon() {
 #   slot_index [in, optional] - individual slot to unequip from
 #   "No Component" [branch] - component not found or slot was empty
 fn unequip_component(component) {
+    # frame: {"op": "unequip_component", "0": "No Component" [exec],
+    #   "1": component [in], "2": slot_index [in]}
 }
 
 # Unequips a component on an external unit.
@@ -1110,6 +1352,8 @@ fn unequip_component(component) {
 #   slot_index [in, optional] - individual slot to unequip from
 #   "No Component" [branch] - component not found or slot was empty
 fn unequip_component_remotely(unit, component) {
+    # frame: {"op": "unequip_component_remotely", "0": unit [in],
+    #   "1": "No Component" [exec], "2": component [in], "3": slot_index [in]}
 }
 
 # Divert program depending on unit type.
@@ -1119,20 +1363,25 @@ fn unequip_component_remotely(unit, component) {
 #   "Construction" [branch, optional] - unit is a construction site
 #   "No Unit" [branch, optional] - no visible unit passed
 fn unit_type(unit) {
+    # frame: {"op": "unit_type", "0": unit [in], "1": "Building" [exec],
+    #   "2": "Bot" [exec], "3": "Construction" [exec], "next": "No Unit"}
 }
 
 # Run as many instructions as possible. Use wait instructions to throttle execution.
 fn unlock() {
+    # frame: {"op": "unlock"}
 }
 
 # Unfix all inventory slots or a specific item slot.
 #   slot_index [in, optional] - individual slot to unfix
 fn unlock_slots() {
+    # frame: {"op": "unlock_slots", "0": slot_index [in]}
 }
 
 # Tries to unpack all packaged items.
 #   unit [in, optional] - the destination to unpack (if not self)
 fn unpackage_all() {
+    # frame: {"op": "unpackage_all", "0": unit [in]}
 }
 
 # Switch based on type of value.
@@ -1145,11 +1394,15 @@ fn unpackage_all() {
 #   "Coord" [branch, optional]
 #   "No Match" [branch] - no match
 fn value_type(data) {
+    # frame: {"op": "value_type", "0": data [in], "1": "Item" [exec],
+    #   "2": "Unit" [exec], "3": "Component" [exec], "4": "Tech" [exec],
+    #   "5": "Value" [exec], "6": "Coord" [exec], "next": "No Match"}
 }
 
 # Pauses execution until 1 or more ticks later (5 ticks = 1 second).
 #   time [in] - number of ticks to wait
 fn wait(time) {
+    # frame: {"op": "wait", "0": time [in]}
 }
 
 # Waits for a component before continuing.
@@ -1157,4 +1410,6 @@ fn wait(time) {
 #   component_index [in, optional] - component index if multiple are equipped
 #   "Not Working" [branch, optional] - component isn't currently working
 fn wait_component(component) {
+    # frame: {"op": "wait_component", "0": component [in],
+    #   "1": component_index [in], "2": "Not Working" [exec]}
 }

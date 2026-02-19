@@ -25,6 +25,13 @@ Each frame is a `map[string]any` with:
   - `false` (`bool`): terminal, execution stops.
   - `int`: jump to the frame with that number.
 - **`"txt"`** (optional) — `string`. Text parameter (e.g., the message for `"notify"`).
+- **`"c"`** (optional) — Combo/mode selector. Integer for most instructions, table for
+  `set_logistics_options`.
+- **`"sub"`** (optional) — `int`. Subroutine behavior ID (used by `"call"`).
+- **`"bp"`** (optional) — Blueprint library ID (used by `"build"`, `"produce"` and registered
+  variants).
+- **`"frame"`** (optional) — Frame type ID (used by `"build"`, `"produce"` when not using a
+  library blueprint).
 - **`"0"`, `"1"`, ...** — Numbered parameter slots. Values: `string` (register name), `int`
   (data value or frame reference), `map[string]any` (literal, e.g., `{"num": 5}`), `bool` (flag).
 
