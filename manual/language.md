@@ -102,11 +102,10 @@ my_function "arg1",
 
 ## Comments
 
-Line comments start with `//` or `#`:
+Line comments start with `#`:
 
 ```doit
-// This is a comment
-# This is also a comment
+# This is a comment
 ```
 
 ## Variables

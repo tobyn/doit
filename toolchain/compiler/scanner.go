@@ -83,10 +83,6 @@ func (s *scanner) skipWhitespaceAndComments() {
 		c := s.src[s.pos]
 		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
 			s.pos++
-		} else if c == '/' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '/' {
-			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
-				s.pos++
-			}
 		} else if c == '#' {
 			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
 				s.pos++

@@ -24,8 +24,7 @@ output format.
 The compiler is structured as a standalone `scanner` struct embedded in a
 recursive-descent `parser`. The scanner tokenizes the source into identifiers,
 string literals, numbers, braces, parentheses, colons, commas, `@`, and
-comparison/assignment operators, skipping whitespace and line comments (`//`
-and `#`). The parser consumes tokens via the promoted scanner methods and
+comparison/assignment operators, skipping whitespace and `#` line comments. The parser consumes tokens via the promoted scanner methods and
 directly emits the `*codec.Object` output (type `Behavior`) without an
 intermediate AST. Errors include line:column positions. The exported `Keywords`
 map lists all reserved keywords for use by editor tooling.
