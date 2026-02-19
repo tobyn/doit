@@ -12,16 +12,17 @@ output format.
 ## Architecture
 
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`) and shared types
-- **`compiler/scanner.go`** — Token types, scanner, error formatting
+- **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`), token types, `Keywords` map, error formatting
 - **`compiler/parse.go`** — Stdlib parsing, file-level parsing, function definitions, call expansion
 - **`compiler/codegen.go`** — Behavior body compilation: loops, if/else, deferred body emission
 - **`compiler/tests/`** — Test case pairs: `.doit` (doit language source code) + `.json` (JSON representation of the compiled code)
 
-The compiler is structured as a scanner and recursive descent parser. The scanner tokenizes the
-source into identifiers, string literals, numbers, braces, parentheses, colons, commas, and
-comparison/assignment operators, skipping whitespace and line comments (`//` and `#`). The parser
-consumes tokens and directly emits the `*codec.Object` output (type `Behavior`) without an
-intermediate AST. Errors include line:column positions.
+The compiler is structured as a standalone `scanner` struct embedded in a recursive-descent `parser`.
+The scanner tokenizes the source into identifiers, string literals, numbers, braces, parentheses,
+colons, commas, and comparison/assignment operators, skipping whitespace and line comments (`//` and
+`#`). The parser consumes tokens via the promoted scanner methods and directly emits the
+`*codec.Object` output (type `Behavior`) without an intermediate AST. Errors include line:column
+positions. The exported `Keywords` map lists all reserved keywords for use by editor tooling.
 
 The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library and a
 `behaviorID string` that selects which behavior to compile. When `behaviorID` is empty and the source

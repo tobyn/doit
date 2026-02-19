@@ -36,19 +36,38 @@ type token struct {
 	pos  int
 }
 
+// Keywords lists all reserved keywords in the doit language.
+var Keywords = map[string]bool{
+	"behavior":    true,
+	"break":       true,
+	"else":        true,
+	"fn":          true,
+	"if":          true,
+	"instruction": true,
+	"loop":        true,
+	"name":        true,
+	"private":     true,
+	"var":         true,
+	"while":       true,
+}
+
+type scanner struct {
+	src   string
+	pos   int
+	ungot *token
+}
+
 type parser struct {
-	src         string
-	pos         int
+	scanner
 	fns         map[string]*fnDef
-	ungot       *token
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
 }
 
-func (p *parser) errorf(pos int, format string, args ...any) error {
+func (s *scanner) errorf(pos int, format string, args ...any) error {
 	line, col := 1, 1
-	for i := 0; i < pos && i < len(p.src); i++ {
-		if p.src[i] == '\n' {
+	for i := 0; i < pos && i < len(s.src); i++ {
+		if s.src[i] == '\n' {
 			line++
 			col = 1
 		} else {
@@ -58,18 +77,18 @@ func (p *parser) errorf(pos int, format string, args ...any) error {
 	return fmt.Errorf("%d:%d: %s", line, col, fmt.Sprintf(format, args...))
 }
 
-func (p *parser) skipWhitespaceAndComments() {
-	for p.pos < len(p.src) {
-		c := p.src[p.pos]
+func (s *scanner) skipWhitespaceAndComments() {
+	for s.pos < len(s.src) {
+		c := s.src[s.pos]
 		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
-			p.pos++
-		} else if c == '/' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '/' {
-			for p.pos < len(p.src) && p.src[p.pos] != '\n' {
-				p.pos++
+			s.pos++
+		} else if c == '/' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '/' {
+			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
+				s.pos++
 			}
 		} else if c == '#' {
-			for p.pos < len(p.src) && p.src[p.pos] != '\n' {
-				p.pos++
+			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
+				s.pos++
 			}
 		} else {
 			break
@@ -77,90 +96,90 @@ func (p *parser) skipWhitespaceAndComments() {
 	}
 }
 
-func (p *parser) next() (token, error) {
-	if p.ungot != nil {
-		tok := *p.ungot
-		p.ungot = nil
+func (s *scanner) next() (token, error) {
+	if s.ungot != nil {
+		tok := *s.ungot
+		s.ungot = nil
 		return tok, nil
 	}
 
-	p.skipWhitespaceAndComments()
-	if p.pos >= len(p.src) {
-		return token{kind: tokEOF, pos: p.pos}, nil
+	s.skipWhitespaceAndComments()
+	if s.pos >= len(s.src) {
+		return token{kind: tokEOF, pos: s.pos}, nil
 	}
 
-	start := p.pos
-	c := p.src[p.pos]
+	start := s.pos
+	c := s.src[s.pos]
 	switch {
 	case c == '{':
-		p.pos++
+		s.pos++
 		return token{tokLBrace, "{", start}, nil
 	case c == '}':
-		p.pos++
+		s.pos++
 		return token{tokRBrace, "}", start}, nil
 	case c == ':':
-		p.pos++
+		s.pos++
 		return token{tokColon, ":", start}, nil
 	case c == '(':
-		p.pos++
+		s.pos++
 		return token{tokLParen, "(", start}, nil
 	case c == ')':
-		p.pos++
+		s.pos++
 		return token{tokRParen, ")", start}, nil
 	case c == ',':
-		p.pos++
+		s.pos++
 		return token{tokComma, ",", start}, nil
-	case c == '=' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
-		p.pos += 2
+	case c == '=' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
+		s.pos += 2
 		return token{tokDoubleEquals, "==", start}, nil
 	case c == '=':
-		p.pos++
+		s.pos++
 		return token{tokEquals, "=", start}, nil
-	case c == '+' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '+':
-		p.pos += 2
+	case c == '+' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '+':
+		s.pos += 2
 		return token{tokPlusPlus, "++", start}, nil
-	case c == '+' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
-		p.pos += 2
+	case c == '+' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
+		s.pos += 2
 		return token{tokPlusEquals, "+=", start}, nil
-	case c == '>' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
-		p.pos += 2
+	case c == '>' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
+		s.pos += 2
 		return token{tokGreaterEquals, ">=", start}, nil
 	case c == '>':
-		p.pos++
+		s.pos++
 		return token{tokGreater, ">", start}, nil
-	case c == '<' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
-		p.pos += 2
+	case c == '<' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
+		s.pos += 2
 		return token{tokLessEquals, "<=", start}, nil
 	case c == '<':
-		p.pos++
+		s.pos++
 		return token{tokLess, "<", start}, nil
 	case c == '"':
-		return p.scanString()
+		return s.scanString()
 	case c >= '0' && c <= '9':
-		return p.scanNumber(), nil
+		return s.scanNumber(), nil
 	case isIdentStart(c):
-		return p.scanIdent(), nil
+		return s.scanIdent(), nil
 	default:
-		return token{}, p.errorf(start, "unexpected character %q", c)
+		return token{}, s.errorf(start, "unexpected character %q", c)
 	}
 }
 
-func (p *parser) scanString() (token, error) {
-	start := p.pos
-	p.pos++ // skip opening quote
+func (s *scanner) scanString() (token, error) {
+	start := s.pos
+	s.pos++ // skip opening quote
 	var b strings.Builder
-	for p.pos < len(p.src) {
-		c := p.src[p.pos]
-		p.pos++
+	for s.pos < len(s.src) {
+		c := s.src[s.pos]
+		s.pos++
 		if c == '"' {
 			return token{tokString, b.String(), start}, nil
 		}
 		if c == '\\' {
-			if p.pos >= len(p.src) {
-				return token{}, p.errorf(p.pos-1, "unterminated escape sequence")
+			if s.pos >= len(s.src) {
+				return token{}, s.errorf(s.pos-1, "unterminated escape sequence")
 			}
-			esc := p.src[p.pos]
-			p.pos++
+			esc := s.src[s.pos]
+			s.pos++
 			switch esc {
 			case '"', '\\':
 				b.WriteByte(esc)
@@ -169,29 +188,29 @@ func (p *parser) scanString() (token, error) {
 			case 't':
 				b.WriteByte('\t')
 			default:
-				return token{}, p.errorf(p.pos-1, "unknown escape \\%c", esc)
+				return token{}, s.errorf(s.pos-1, "unknown escape \\%c", esc)
 			}
 		} else {
 			b.WriteByte(c)
 		}
 	}
-	return token{}, p.errorf(start, "unterminated string")
+	return token{}, s.errorf(start, "unterminated string")
 }
 
-func (p *parser) scanIdent() token {
-	start := p.pos
-	for p.pos < len(p.src) && isIdentCont(p.src[p.pos]) {
-		p.pos++
+func (s *scanner) scanIdent() token {
+	start := s.pos
+	for s.pos < len(s.src) && isIdentCont(s.src[s.pos]) {
+		s.pos++
 	}
-	return token{tokIdent, p.src[start:p.pos], start}
+	return token{tokIdent, s.src[start:s.pos], start}
 }
 
-func (p *parser) scanNumber() token {
-	start := p.pos
-	for p.pos < len(p.src) && p.src[p.pos] >= '0' && p.src[p.pos] <= '9' {
-		p.pos++
+func (s *scanner) scanNumber() token {
+	start := s.pos
+	for s.pos < len(s.src) && s.src[s.pos] >= '0' && s.src[s.pos] <= '9' {
+		s.pos++
 	}
-	return token{tokNumber, p.src[start:p.pos], start}
+	return token{tokNumber, s.src[start:s.pos], start}
 }
 
 func isIdentStart(c byte) bool {
@@ -202,13 +221,13 @@ func isIdentCont(c byte) bool {
 	return isIdentStart(c) || c >= '0' && c <= '9'
 }
 
-func (p *parser) expect(kind tokenKind) (token, error) {
-	tok, err := p.next()
+func (s *scanner) expect(kind tokenKind) (token, error) {
+	tok, err := s.next()
 	if err != nil {
 		return tok, err
 	}
 	if tok.kind != kind {
-		return tok, p.errorf(tok.pos, "unexpected %s", tok.describe())
+		return tok, s.errorf(tok.pos, "unexpected %s", tok.describe())
 	}
 	return tok, nil
 }

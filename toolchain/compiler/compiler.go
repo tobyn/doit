@@ -26,7 +26,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID string) (*codec.Object, 
 	if err != nil {
 		return nil, fmt.Errorf("stdlib: %w", err)
 	}
-	p := &parser{src: src, fns: fns, target: behaviorID}
+	p := &parser{scanner: scanner{src: src}, fns: fns, target: behaviorID}
 	return p.parseFile()
 }
 

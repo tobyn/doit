@@ -31,7 +31,7 @@ func parseStdlib(stdlib fs.FS) (map[string]*fnDef, error) {
 }
 
 func parseStdlibFile(src string, fns map[string]*fnDef) error {
-	p := &parser{src: src}
+	p := &parser{scanner: scanner{src: src}}
 	for {
 		tok, err := p.next()
 		if err != nil {
