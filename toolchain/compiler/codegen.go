@@ -60,12 +60,16 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		if tok.kind != tokIdent {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
+		comment := p.docComment
 
 		switch tok.val {
 		case "instruction":
 			instr, err := p.parseInstruction()
 			if err != nil {
 				return nil, err
+			}
+			if comment != "" {
+				instr["cmt"] = comment
 			}
 			value[strconv.Itoa(frame)] = instr
 			frame++
@@ -83,11 +87,15 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				return nil, err
 			}
 			num, _ := strconv.Atoi(numTok.val)
-			value[strconv.Itoa(frame)] = map[string]any{
+			f := map[string]any{
 				"op": "set_number",
 				"1":  map[string]any{"num": num},
 				"2":  nameTok.val,
 			}
+			if comment != "" {
+				f["cmt"] = comment
+			}
+			value[strconv.Itoa(frame)] = f
 			frame++
 
 		case "loop":
@@ -102,17 +110,17 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			}
 
 		case "if":
-			if err := p.compileIfStmt(value, &frame, &deferred); err != nil {
+			if err := p.compileIfStmt(value, &frame, &deferred, comment); err != nil {
 				return nil, err
 			}
 
 		case "while":
-			if err := p.compileWhile(value, &frame); err != nil {
+			if err := p.compileWhile(value, &frame, comment); err != nil {
 				return nil, err
 			}
 
 		default:
-			if err := p.compileDefaultStatement(tok, value, &frame); err != nil {
+			if err := p.compileDefaultStatement(tok, value, &frame, comment); err != nil {
 				return nil, err
 			}
 		}
@@ -129,12 +137,12 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				// Last instruction in behavior; stop execution
 				instr["next"] = false
 				frame = resumeFrame
-				p.ungot = &peek
+				p.unget(peek)
 			} else {
 				// More instructions follow; skip over loop body frames
 				instr["next"] = resumeFrame
 				frame = resumeFrame
-				p.ungot = &peek
+				p.unget(peek)
 			}
 			breakTargetFrame = -1
 			resumeFrame = -1
@@ -211,16 +219,18 @@ func (p *parser) compileLoop(value map[string]any, frame *int) (int, error) {
 			return -1, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
 
+		comment := p.docComment
+
 		switch tok.val {
 		case "if":
-			cf, err := p.compileIfBreak(value, frame)
+			cf, err := p.compileIfBreak(value, frame, comment)
 			if err != nil {
 				return -1, err
 			}
 			checkFrame = cf
 
 		default:
-			if err := p.compileDefaultStatement(tok, value, frame); err != nil {
+			if err := p.compileDefaultStatement(tok, value, frame, comment); err != nil {
 				return -1, err
 			}
 		}
@@ -238,7 +248,7 @@ func (p *parser) compileLoop(value map[string]any, frame *int) (int, error) {
 // compileIfBreak compiles `if lhs >= rhs { break }` inside a loop body.
 // It emits a check_number instruction and reserves the next frame for the
 // break target. Returns the check frame index.
-func (p *parser) compileIfBreak(value map[string]any, frame *int) (int, error) {
+func (p *parser) compileIfBreak(value map[string]any, frame *int, comment string) (int, error) {
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
 		return -1, err
@@ -267,12 +277,16 @@ func (p *parser) compileIfBreak(value map[string]any, frame *int) (int, error) {
 	}
 
 	checkFrame := *frame
-	value[strconv.Itoa(*frame)] = map[string]any{
+	f := map[string]any{
 		"op": "check_number",
 		"1":  5, // >= comparison
 		"2":  lhsTok.val,
 		"3":  map[string]any{"num": rhsNum},
 	}
+	if comment != "" {
+		f["cmt"] = comment
+	}
+	value[strconv.Itoa(*frame)] = f
 	*frame++
 
 	// Reserve the next frame for the break target (filled by caller)
@@ -284,7 +298,7 @@ func (p *parser) compileIfBreak(value map[string]any, frame *int) (int, error) {
 // compileWhile compiles `while ident <= number { body }`.
 // It emits a check_number and the body. The body's last instruction loops back
 // to the check, and the check's if_larger slot exits to the continuation.
-func (p *parser) compileWhile(value map[string]any, frame *int) error {
+func (p *parser) compileWhile(value map[string]any, frame *int, comment string) error {
 	varTok, err := p.expect(tokIdent)
 	if err != nil {
 		return err
@@ -304,6 +318,9 @@ func (p *parser) compileWhile(value map[string]any, frame *int) error {
 		"op": "check_number",
 		"2":  varTok.val,
 		"3":  map[string]any{"num": limitNum},
+	}
+	if comment != "" {
+		check["cmt"] = comment
 	}
 	value[strconv.Itoa(*frame)] = check
 	*frame++
@@ -332,7 +349,7 @@ func (p *parser) compileWhile(value map[string]any, frame *int) error {
 }
 
 // compileDefaultStatement compiles a function call or compound assignment.
-func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame *int) error {
+func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame *int, comment string) error {
 	// Peek to distinguish function call from compound assignment
 	tok2, err := p.next()
 	if err != nil {
@@ -340,12 +357,16 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 	}
 
 	if tok2.kind == tokPlusPlus {
-		value[strconv.Itoa(*frame)] = map[string]any{
+		f := map[string]any{
 			"op": "add",
 			"0":  tok.val,
 			"1":  map[string]any{"num": 1},
 			"2":  tok.val,
 		}
+		if comment != "" {
+			f["cmt"] = comment
+		}
+		value[strconv.Itoa(*frame)] = f
 		*frame++
 		return nil
 	}
@@ -356,11 +377,15 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 			return err
 		}
 		num, _ := strconv.Atoi(numTok.val)
-		value[strconv.Itoa(*frame)] = map[string]any{
+		f := map[string]any{
 			"op": "set_number",
 			"1":  map[string]any{"num": num},
 			"2":  tok.val,
 		}
+		if comment != "" {
+			f["cmt"] = comment
+		}
+		value[strconv.Itoa(*frame)] = f
 		*frame++
 		return nil
 	}
@@ -371,18 +396,22 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 			return err
 		}
 		num, _ := strconv.Atoi(numTok.val)
-		value[strconv.Itoa(*frame)] = map[string]any{
+		f := map[string]any{
 			"op": "add",
 			"0":  tok.val,
 			"1":  map[string]any{"num": num},
 			"2":  tok.val,
 		}
+		if comment != "" {
+			f["cmt"] = comment
+		}
+		value[strconv.Itoa(*frame)] = f
 		*frame++
 		return nil
 	}
 
 	// Function call — push back the token we peeked
-	p.ungot = &tok2
+	p.unget(tok2)
 
 	fn := p.fns[tok.val]
 	if fn == nil {
@@ -398,7 +427,7 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 		args[i] = str.val
 	}
 
-	return p.expandCall(tok.val, args, value, frame, tok.pos)
+	return p.expandCall(tok.val, args, value, frame, tok.pos, comment)
 }
 
 // --- If statement compilation ---
@@ -422,7 +451,8 @@ func (p *parser) compileBody() ([]map[string]any, error) {
 		if tok.kind != tokIdent {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
-		if err := p.compileDefaultStatement(tok, tmp, &frame); err != nil {
+		comment := p.docComment
+		if err := p.compileDefaultStatement(tok, tmp, &frame, comment); err != nil {
 			return nil, err
 		}
 	}
@@ -435,7 +465,7 @@ func (p *parser) compileBody() ([]map[string]any, error) {
 
 // compileIfStmt compiles an if / else-if / else statement.
 // The "if" keyword has already been consumed.
-func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]deferredBody) error {
+func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]deferredBody, comment string) error {
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
 		return err
@@ -455,6 +485,9 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 		"op": "check_number",
 		"2":  lhsTok.val,
 		"3":  map[string]any{"num": rhsNum},
+	}
+	if comment != "" {
+		check["cmt"] = comment
 	}
 	value[strconv.Itoa(*frame)] = check
 	*frame++
@@ -501,7 +534,7 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 				slot:       "1",
 			})
 		} else {
-			p.ungot = &tok
+			p.unget(tok)
 		}
 
 	case tokDoubleEquals:
@@ -520,7 +553,7 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 				return err
 			}
 		} else {
-			p.ungot = &tok
+			p.unget(tok)
 		}
 
 	case tokGreater:
@@ -616,11 +649,11 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 				slot:       elseSlot,
 			})
 		} else {
-			p.ungot = &tok2
+			p.unget(tok2)
 		}
 	} else {
 		// Plain else block
-		p.ungot = &tok
+		p.unget(tok)
 		if _, err := p.expect(tokLBrace); err != nil {
 			return err
 		}

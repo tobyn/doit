@@ -48,6 +48,15 @@ whitespace; implementing these rules will require newline awareness.
 statement-level calls. Parenthesized calls will become useful for argument
 grouping in complex expressions.
 
+**Doc comments** (`#!`): The scanner collects `#!` lines into a
+`docComment` field, reset on each `skipWhitespaceAndComments` call and
+preserved across `unget`. The parser captures `docComment` after scanning
+the first token of each statement, then passes it through compilation. For
+instruction-based stdlib calls, the comment is set as `"cmt"` on the
+emitted frame. For user-defined function calls, each body call uses its
+own `#!` comment if present, otherwise inherits the caller's comment,
+recursively up the call stack.
+
 Behavior IDs can be bareword identifiers or quoted strings. The `@name` attribute sets the display
 name (at most once per behavior); if omitted, the behavior ID is used as the default name. `@name`
 supports a localized block form (`@name { en_US "English" ja "日本語" }`) that selects the best

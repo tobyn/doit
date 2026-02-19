@@ -293,6 +293,7 @@ func (p *parser) parseUserFn() error {
 		if tok.kind != tokIdent {
 			return p.errorf(tok.pos, "expected function call or '}', got %s", tok.describe())
 		}
+		comment := p.docComment
 
 		callee := p.fns[tok.val]
 		if callee == nil {
@@ -315,7 +316,7 @@ func (p *parser) parseUserFn() error {
 			}
 		}
 
-		body = append(body, fnBodyCall{name: tok.val, args: args})
+		body = append(body, fnBodyCall{name: tok.val, args: args, comment: comment})
 	}
 
 	p.fns[nameTok.val] = &fnDef{params: params, body: body}
@@ -403,7 +404,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 	return frame, nil
 }
 
-func (p *parser) expandCall(name string, args []string, value map[string]any, frame *int, pos int) error {
+func (p *parser) expandCall(name string, args []string, value map[string]any, frame *int, pos int, comment string) error {
 	fn := p.fns[name]
 	if fn == nil {
 		return p.errorf(pos, "unknown statement %q", name)
@@ -425,6 +426,9 @@ func (p *parser) expandCall(name string, args []string, value map[string]any, fr
 			}
 			instr[k] = v
 		}
+		if comment != "" {
+			instr["cmt"] = comment
+		}
 		value[strconv.Itoa(*frame)] = instr
 		*frame++
 		return nil
@@ -443,7 +447,11 @@ func (p *parser) expandCall(name string, args []string, value map[string]any, fr
 				resolvedArgs[i] = arg.val
 			}
 		}
-		if err := p.expandCall(call.name, resolvedArgs, value, frame, pos); err != nil {
+		callComment := call.comment
+		if callComment == "" {
+			callComment = comment
+		}
+		if err := p.expandCall(call.name, resolvedArgs, value, frame, pos, callComment); err != nil {
 			return err
 		}
 	}

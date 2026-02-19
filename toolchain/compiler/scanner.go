@@ -52,9 +52,11 @@ var Keywords = map[string]bool{
 }
 
 type scanner struct {
-	src   string
-	pos   int
-	ungot *token
+	src            string
+	pos            int
+	ungot          *token
+	docComment     string // accumulated #! lines before the current token
+	ungotComment   string // saved docComment for ungotten token
 }
 
 type parser struct {
@@ -79,10 +81,23 @@ func (s *scanner) errorf(pos int, format string, args ...any) error {
 }
 
 func (s *scanner) skipWhitespaceAndComments() {
+	s.docComment = ""
 	for s.pos < len(s.src) {
 		c := s.src[s.pos]
 		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
 			s.pos++
+		} else if c == '#' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '!' {
+			s.pos += 2 // skip #!
+			start := s.pos
+			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
+				s.pos++
+			}
+			line := strings.TrimSpace(s.src[start:s.pos])
+			if s.docComment != "" {
+				s.docComment += " " + line
+			} else {
+				s.docComment = line
+			}
 		} else if c == '#' {
 			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
 				s.pos++
@@ -93,10 +108,17 @@ func (s *scanner) skipWhitespaceAndComments() {
 	}
 }
 
+func (s *scanner) unget(tok token) {
+	t := tok
+	s.ungot = &t
+	s.ungotComment = s.docComment
+}
+
 func (s *scanner) next() (token, error) {
 	if s.ungot != nil {
 		tok := *s.ungot
 		s.ungot = nil
+		s.docComment = s.ungotComment
 		return tok, nil
 	}
 

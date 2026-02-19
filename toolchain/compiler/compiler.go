@@ -45,8 +45,9 @@ type fnBodyArg struct {
 }
 
 type fnBodyCall struct {
-	name string
-	args []fnBodyArg
+	name    string
+	args    []fnBodyArg
+	comment string // #! doc comment
 }
 
 type deferredBody struct {

@@ -108,6 +108,43 @@ Line comments start with `#`:
 # This is a comment
 ```
 
+### Doc comments (`#!`)
+
+Lines starting with `#!` are doc comments. When placed before a statement,
+they set the `"cmt"` field on the compiled instruction, which appears as a
+comment on the instruction node in-game.
+
+```doit
+#! Move to the target
+move_to target
+```
+
+Multiple `#!` lines are joined with spaces:
+
+```doit
+#! This is a longer comment
+#! that spans two lines
+notify "Hello"
+```
+
+Doc comments propagate through function calls: if a function call has a
+`#!` comment, all instructions expanded from that call inherit it, unless
+they have their own `#!` comment.
+
+```doit
+fn greet() {
+    #! Says hello
+    notify "Hello"
+    notify "World"
+}
+
+#! Greeting sequence
+greet
+```
+
+In this example, the first `notify` gets `"Says hello"` (its own), and the
+second gets `"Greeting sequence"` (inherited from the call site).
+
 ## Variables
 
 Declare a variable with `var` and an initial numeric value:

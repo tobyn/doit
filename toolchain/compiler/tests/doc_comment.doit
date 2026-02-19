@@ -1,0 +1,4 @@
+behavior doc_comment {
+    #! Hello notification
+    notify "Hello"
+}

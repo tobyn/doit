@@ -147,6 +147,47 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("doc_comment_inherit", func(t *testing.T) {
+		src := "fn greet() { notify \"Hello\" }\nbehavior a {\n#! Greeting\ngreet\n}"
+		obj, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
+		if frame["cmt"] != "Greeting" {
+			t.Fatalf("expected cmt %q, got %v", "Greeting", frame["cmt"])
+		}
+	})
+
+	t.Run("doc_comment_override", func(t *testing.T) {
+		src := "fn greet() {\n#! Inner\nnotify \"Hello\"\nnotify \"World\"\n}\nbehavior a {\n#! Outer\ngreet\n}"
+		obj, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		v := obj.Value.(map[string]any)
+		f0 := v["0"].(map[string]any)
+		f1 := v["1"].(map[string]any)
+		if f0["cmt"] != "Inner" {
+			t.Fatalf("frame 0: expected cmt %q, got %v", "Inner", f0["cmt"])
+		}
+		if f1["cmt"] != "Outer" {
+			t.Fatalf("frame 1: expected cmt %q, got %v", "Outer", f1["cmt"])
+		}
+	})
+
+	t.Run("no_doc_comment", func(t *testing.T) {
+		src := `behavior a { notify "Hello" }`
+		obj, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
+		if _, exists := frame["cmt"]; exists {
+			t.Fatalf("expected no cmt field, got %v", frame["cmt"])
+		}
+	})
 }
 
 func TestCodec(t *testing.T) {

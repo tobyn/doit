@@ -1,0 +1,5 @@
+behavior doc_comment_multiline {
+    #! First line
+    #! Second line
+    notify "Hello"
+}
