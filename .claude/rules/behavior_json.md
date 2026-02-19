@@ -23,7 +23,8 @@ Each frame is a `map[string]any` with:
   (e.g., `"notify"`, `"set_number"`, `"check_number"`).
 - **`"next"`** (optional) — Controls execution flow after this frame:
   - Absent: fall through to the next sequential frame.
-  - `false` (`bool`): terminal, execution stops.
+  - `false` (`bool`): do not proceed to the next frame. If there is no
+    other path to continue, the behavior restarts from the beginning.
   - `int`: jump to the frame with that number.
 - **`"txt"`** (optional) — `string`. Text parameter (e.g., the message for `"notify"`).
 - **`"c"`** (optional) — Combo/mode selector. Integer for most instructions, table for
