@@ -1,5 +1,5 @@
 behavior function_call {
-    name "Function Call"
+    @name "Function Call"
     my_notify "Function called!"
 }
 

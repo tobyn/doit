@@ -1,0 +1,3 @@
+behavior no_name {
+    notify "No name given"
+}

@@ -113,6 +113,17 @@ func parseStdlibFile(src string, fns map[string]*fnDef) error {
 
 // --- Two-pass file parsing ---
 
+func (p *parser) parseBehaviorID() (token, error) {
+	tok, err := p.next()
+	if err != nil {
+		return tok, err
+	}
+	if tok.kind != tokIdent && tok.kind != tokString {
+		return tok, p.errorf(tok.pos, "expected behavior id, got %s", tok.describe())
+	}
+	return tok, nil
+}
+
 func (p *parser) parseFile() (*codec.Object, error) {
 	// Pass 1: collect user-defined function definitions
 	if err := p.collectUserFns(); err != nil {
@@ -158,12 +169,12 @@ func (p *parser) parseFile() (*codec.Object, error) {
 		}
 		switch tok.val {
 		case "behavior":
-			idTok, err := p.expect(tokIdent) // behavior id
+			idTok, err := p.parseBehaviorID()
 			if err != nil {
 				return nil, err
 			}
 			if idTok.val == p.target {
-				return p.parseBehaviorBody()
+				return p.parseBehaviorBody(idTok.val)
 			}
 			// Skip non-matching behavior
 			if err := p.skipBraceBlock(); err != nil {
@@ -204,7 +215,7 @@ func (p *parser) collectUserFns() error {
 		}
 		switch tok.val {
 		case "behavior":
-			idTok, err := p.expect(tokIdent) // behavior id
+			idTok, err := p.parseBehaviorID()
 			if err != nil {
 				return err
 			}

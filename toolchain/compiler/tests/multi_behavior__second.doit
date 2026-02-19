@@ -1,9 +1,9 @@
 behavior first {
-    name "First"
+    @name "First"
     notify "Hello from first"
 }
 
 behavior second {
-    name "Second"
+    @name "Second"
     notify "Hello from second"
 }

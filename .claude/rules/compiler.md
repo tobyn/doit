@@ -19,10 +19,13 @@ output format.
 
 The compiler is structured as a standalone `scanner` struct embedded in a recursive-descent `parser`.
 The scanner tokenizes the source into identifiers, string literals, numbers, braces, parentheses,
-colons, commas, and comparison/assignment operators, skipping whitespace and line comments (`//` and
-`#`). The parser consumes tokens via the promoted scanner methods and directly emits the
+colons, commas, `@`, and comparison/assignment operators, skipping whitespace and line comments (`//`
+and `#`). The parser consumes tokens via the promoted scanner methods and directly emits the
 `*codec.Object` output (type `Behavior`) without an intermediate AST. Errors include line:column
 positions. The exported `Keywords` map lists all reserved keywords for use by editor tooling.
+
+Behavior IDs can be bareword identifiers or quoted strings. The `@name` attribute sets the display
+name (at most once per behavior); if omitted, the behavior ID is used as the default name.
 
 The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library and a
 `behaviorID string` that selects which behavior to compile. When `behaviorID` is empty and the source

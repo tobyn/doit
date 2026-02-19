@@ -7,7 +7,7 @@ import (
 	"github.com/tobyn/doit/toolchain/codec"
 )
 
-func (p *parser) parseBehaviorBody() (*codec.Object, error) {
+func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
@@ -33,18 +33,32 @@ func (p *parser) parseBehaviorBody() (*codec.Object, error) {
 		if tok.kind == tokEOF {
 			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
 		}
+		if tok.kind == tokAt {
+			attr, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			switch attr.val {
+			case "name":
+				if _, exists := value["name"]; exists {
+					return nil, p.errorf(tok.pos, "duplicate @name")
+				}
+				str, err := p.expect(tokString)
+				if err != nil {
+					return nil, err
+				}
+				value["name"] = str.val
+			default:
+				return nil, p.errorf(attr.pos, "unknown attribute @%s", attr.val)
+			}
+			continue
+		}
+
 		if tok.kind != tokIdent {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
 
 		switch tok.val {
-		case "name":
-			str, err := p.expect(tokString)
-			if err != nil {
-				return nil, err
-			}
-			value["name"] = str.val
-
 		case "instruction":
 			instr, err := p.parseInstruction()
 			if err != nil {
@@ -161,6 +175,10 @@ func (p *parser) parseBehaviorBody() (*codec.Object, error) {
 			checkInstr := value[strconv.Itoa(d.checkFrame)].(map[string]any)
 			checkInstr[d.slot] = bodyFrame + 1
 		}
+	}
+
+	if _, exists := value["name"]; !exists {
+		value["name"] = behaviorID
 	}
 
 	return &codec.Object{Type: codec.Behavior, Value: value}, nil

@@ -70,7 +70,7 @@ func TestCompileErrors(t *testing.T) {
 	stdlib := os.DirFS("stdlib")
 
 	t.Run("multiple_behaviors_no_selection", func(t *testing.T) {
-		src := `behavior a { name "A" } behavior b { name "B" }`
+		src := `behavior a { @name "A" } behavior b { @name "B" }`
 		_, err := compiler.CompileString(src, stdlib, "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -81,12 +81,23 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("behavior_not_found", func(t *testing.T) {
-		src := `behavior a { name "A" } behavior b { name "B" }`
+		src := `behavior a { @name "A" } behavior b { @name "B" }`
 		_, err := compiler.CompileString(src, stdlib, "c")
 		if err == nil {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("duplicate_name", func(t *testing.T) {
+		src := `behavior a { @name "A" @name "B" }`
+		_, err := compiler.CompileString(src, stdlib, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate @name") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

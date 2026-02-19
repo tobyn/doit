@@ -1,5 +1,5 @@
 behavior loop {
-    name "Loop"
+    @name "Loop"
 
     var i = 1
     loop {

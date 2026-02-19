@@ -1,4 +1,4 @@
 behavior hello_world {
-    name "Hello World"
+    @name "Hello World"
     notify "Hello, World!"
 }

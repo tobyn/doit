@@ -8,24 +8,41 @@ A doit program consists of one or more `behavior` declarations:
 
 ```doit
 behavior my_behavior {
-    name "My Behavior"
+    @name "My Behavior"
     // ... body ...
 }
 ```
 
-The identifier after `behavior` is the behavior id. The `name` statement sets
-its display name in-game.
+The identifier after `behavior` is the behavior id. It can be a bareword
+identifier or a quoted string (for IDs containing spaces):
+
+```doit
+behavior "My Behavior" {
+    // ...
+}
+```
+
+The `@name` attribute sets the display name shown in-game. It is optional and
+can appear at most once per behavior. If omitted, the display name defaults to
+the behavior id:
+
+```doit
+behavior patrol {
+    // display name will be "patrol"
+    notify "Patrolling"
+}
+```
 
 When a file contains multiple behaviors, the `-b` flag selects which to compile:
 
 ```doit
 behavior patrol {
-    name "Patrol"
+    @name "Patrol"
     // ...
 }
 
 behavior harvest {
-    name "Harvest"
+    @name "Harvest"
     // ...
 }
 ```

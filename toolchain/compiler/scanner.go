@@ -28,6 +28,7 @@ const (
 	tokLessEquals
 	tokGreater
 	tokGreaterEquals
+	tokAt
 )
 
 type token struct {
@@ -45,7 +46,6 @@ var Keywords = map[string]bool{
 	"if":          true,
 	"instruction": true,
 	"loop":        true,
-	"name":        true,
 	"private":     true,
 	"var":         true,
 	"while":       true,
@@ -153,6 +153,9 @@ func (s *scanner) next() (token, error) {
 	case c == '<':
 		s.pos++
 		return token{tokLess, "<", start}, nil
+	case c == '@':
+		s.pos++
+		return token{tokAt, "@", start}, nil
 	case c == '"':
 		return s.scanString()
 	case c >= '0' && c <= '9':
@@ -270,6 +273,8 @@ func (t token) describe() string {
 		return "'>'"
 	case tokGreaterEquals:
 		return "'>='"
+	case tokAt:
+		return "'@'"
 	}
 	return t.val
 }

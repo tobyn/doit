@@ -1,5 +1,5 @@
 behavior if {
-    name "If"
+    @name "If"
 
     var a = 4
     if a < 9 {
