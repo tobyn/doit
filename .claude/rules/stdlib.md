@@ -25,6 +25,16 @@ compiled instruction. These were derived from `instructions.lua` by mapping:
 - **`node_ui`** patterns → special fields: `"txt"` (free text), `"c"` (combo/mode), `"sub"`
   (subroutine), `"bp"`/`"frame"` (blueprint selection)
 
+Comments marked `(low confidence)` have JSON fields inferred from Lua variable names in `node_ui`
+code rather than from structured `args` data. These should be verified against actual game output
+before relying on them for code generation. The low-confidence instructions are:
+
+- **`call`** — numbered params are dynamic, determined by the selected subroutine
+- **`build`**, **`build_registered`**, **`produce`**, **`produce_registered`** — `"bp"`/`"frame"`
+  field names inferred from `build_produce_ui` Lua code
+- **`set_logistics_options`** — `"c"`/`"c2"` are flag tables (not simple integers like other
+  `"c"` fields)
+
 `instructions.lua` is a commercially licensed file, so it cannot be committed to the repository. It is the developer's
 responsibility to provide a copy of this file, if necessary. If this file is needed and missing, notify the developer and
 tell them it can be found inside `Desynced/Content/mods/main.zip` in the `data` directory. If the game is installed via

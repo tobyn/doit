@@ -35,6 +35,7 @@ fn bitwise_op(a, b, result) {
 fn build(coordinate, rotation) {
     # frame: {"op": "build", "0": coordinate [in], "1": rotation [in],
     #   "2": "Construction Failed" [exec], "bp": <blueprint>, "frame": <frame_type>}
+    # (low confidence: bp/frame fields inferred from build_produce_ui)
 }
 
 # Places a building to be registered.
@@ -47,11 +48,13 @@ fn build_registered(coordinate, rotation, id) {
     # frame: {"op": "build_registered", "0": coordinate [in], "1": rotation [in],
     #   "2": id [in], "3": "If Working" [exec], "4": "Construction Failed" [exec],
     #   "bp": <blueprint>, "frame": <frame_type>}
+    # (low confidence: bp/frame fields inferred from build_produce_ui)
 }
 
 # Call a subroutine. Parameters are determined by the subroutine.
 fn call() {
     # frame: {"op": "call", "sub": <subroutine_id>, ...params from subroutine}
+    # (low confidence: numbered params are dynamic, determined by subroutine)
 }
 
 # Returns if a unit can produce an item.
@@ -640,7 +643,8 @@ fn get_resource_num(resource, result) {
 #   "Fall" [branch]
 fn get_season() {
     # frame: {"op": "get_season", "0": "Winter" [exec], "1": "Spring" [exec],
-    #   "2": "Summer" [exec], "3": "Fall" [exec]} (terminal)
+    #   "2": "Summer" [exec], "3": "Fall" [exec]}
+    # (no fall-through: always branches to a season)
 }
 
 # Gets the unit running the behavior.
@@ -740,7 +744,8 @@ fn is_a(item, type) {
 #   "Day" [branch]
 #   "Night" [branch]
 fn is_daynight() {
-    # frame: {"op": "is_daynight", "0": "Day" [exec], "1": "Night" [exec]} (terminal)
+    # frame: {"op": "is_daynight", "0": "Day" [exec], "1": "Night" [exec]}
+    # (no fall-through: always branches to Day or Night)
 }
 
 # Check if a unit is docked and get its garage.
@@ -1082,6 +1087,7 @@ fn ping(target) {
 # Sets a production component to produce a blueprint.
 fn produce() {
     # frame: {"op": "produce", "bp": <blueprint>, "frame": <frame_type>}
+    # (low confidence: bp/frame fields inferred from build_produce_ui)
 }
 
 # Sets a production component to produce a registered blueprint.
@@ -1090,6 +1096,7 @@ fn produce() {
 fn produce_registered(id) {
     # frame: {"op": "produce_registered", "0": id [in], "1": "If Working" [exec],
     #   "bp": <blueprint>, "frame": <frame_type>}
+    # (low confidence: bp/frame fields inferred from build_produce_ui)
 }
 
 # Returns a random coordinate within a specified range of a location.
@@ -1245,6 +1252,7 @@ fn set_link(from, from_index, to, to_index) {
 # Sets current unit to the specified logistics settings.
 fn set_logistics_options() {
     # frame: {"op": "set_logistics_options", "c": <flags>, "c2": <flags>}
+    # (low confidence: c/c2 are flag tables, not simple integers)
 }
 
 # Sets the numerical/coordinate part of a value.
