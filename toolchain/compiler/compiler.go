@@ -9,21 +9,24 @@ import (
 )
 
 // Compile reads doit source from r and compiles it into a codec Object.
-func Compile(r io.Reader, stdlib fs.FS) (*codec.Object, error) {
+// If behaviorID is non-empty, it selects the behavior to compile from a
+// multi-behavior source file. When the source contains a single behavior,
+// behaviorID may be empty to auto-select it.
+func Compile(r io.Reader, stdlib fs.FS, behaviorID string) (*codec.Object, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	return CompileString(string(data), stdlib)
+	return CompileString(string(data), stdlib, behaviorID)
 }
 
 // CompileString compiles doit source into a codec Object.
-func CompileString(src string, stdlib fs.FS) (*codec.Object, error) {
+func CompileString(src string, stdlib fs.FS, behaviorID string) (*codec.Object, error) {
 	fns, err := parseStdlib(stdlib)
 	if err != nil {
 		return nil, fmt.Errorf("stdlib: %w", err)
 	}
-	p := &parser{src: src, fns: fns}
+	p := &parser{src: src, fns: fns, target: behaviorID}
 	return p.parseFile()
 }
 

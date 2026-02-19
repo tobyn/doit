@@ -1,0 +1,9 @@
+behavior first {
+    name "First"
+    notify "Hello from first"
+}
+
+behavior second {
+    name "Second"
+    notify "Hello from second"
+}

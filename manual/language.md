@@ -4,7 +4,7 @@
 
 ## Program Structure
 
-A doit program consists of a single `behavior` declaration:
+A doit program consists of one or more `behavior` declarations:
 
 ```doit
 behavior my_behavior {
@@ -13,8 +13,28 @@ behavior my_behavior {
 }
 ```
 
-The identifier after `behavior` is the behavior's internal name. The `name`
-statement sets its display name in-game.
+The identifier after `behavior` is the behavior id. The `name` statement sets
+its display name in-game.
+
+When a file contains multiple behaviors, the `-b` flag selects which to compile:
+
+```doit
+behavior patrol {
+    name "Patrol"
+    // ...
+}
+
+behavior harvest {
+    name "Harvest"
+    // ...
+}
+```
+
+```sh
+doit compile -b harvest source.doit
+```
+
+When a file contains only one behavior, `-b` is optional.
 
 ## Comments
 

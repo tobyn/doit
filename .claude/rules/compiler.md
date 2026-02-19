@@ -23,19 +23,27 @@ comparison/assignment operators, skipping whitespace and line comments (`//` and
 consumes tokens and directly emits the `*codec.Object` output (type `Behavior`) without an
 intermediate AST. Errors include line:column positions.
 
-The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library. The
-compiler parses stdlib function definitions first, then compiles user source. Stdlib functions that
-contain an `instruction` intrinsic are inlined at call sites — the compiler substitutes arguments
-into the instruction template fields.
- 
+The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library and a
+`behaviorID string` that selects which behavior to compile. When `behaviorID` is empty and the source
+contains a single behavior, it is auto-selected. When the source contains multiple behaviors,
+`behaviorID` must name one of them. The compiler parses stdlib function definitions first, then
+compiles user source. Stdlib functions that contain an `instruction` intrinsic are inlined at call
+sites — the compiler substitutes arguments into the instruction template fields.
+
 ## Test Case Format
 
 Each test case is a pair of files sharing the same base name in `compiler/tests/`:
 - **`.doit`** — a doit language source file
 - **`.json`** — The expected JSON representation of the compiler output
 
-Tests are in the root `main_test.go`. For each test case, the source is compiled and encoded via `Compile`, then decoded
-and compared against the JSON file.
+For multi-behavior test cases, the file name uses the `__` convention: the part after `__` is the
+behavior ID passed to the compiler. For example, `multi_behavior__second.doit` compiles the
+`second` behavior and compares against `multi_behavior__second.json`.
+
+Tests are in the root `main_test.go`. `TestCompile` compiles each test case, encodes via `Compile`,
+decodes, and compares against the JSON file. `TestCompileErrors` tests error cases (e.g., multiple
+behaviors without `-b`, nonexistent behavior ID, no behaviors) using `compiler.CompileString`
+directly.
 
 The JSON in the JSON file may differ from a JSON rendering of the compiled code in trivial ways (e.g., whitespace,
 object key ordering). Do not rely on the JSON strings to be the same. The compiler may also emit frames in a different

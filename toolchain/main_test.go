@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/tobyn/doit/toolchain/codec"
+	"github.com/tobyn/doit/toolchain/compiler"
 )
 
 func TestCompile(t *testing.T) {
@@ -28,6 +29,12 @@ func TestCompile(t *testing.T) {
 		name := strings.TrimSuffix(filepath.Base(doitFile), ".doit")
 		jsonFile := strings.TrimSuffix(doitFile, ".doit") + ".json"
 
+		// If the name contains "__", the part after it is the behavior ID.
+		behaviorID := ""
+		if idx := strings.Index(name, "__"); idx >= 0 {
+			behaviorID = name[idx+2:]
+		}
+
 		t.Run(name, func(t *testing.T) {
 			f, err := os.Open(doitFile)
 			if err != nil {
@@ -35,7 +42,7 @@ func TestCompile(t *testing.T) {
 			}
 			defer f.Close()
 
-			encoded, err := Compile(f, stdlib)
+			encoded, err := Compile(f, stdlib, behaviorID)
 			if err != nil {
 				t.Fatalf("Compile error: %v", err)
 			}
@@ -57,6 +64,43 @@ func TestCompile(t *testing.T) {
 			matchBehaviors(t, obj.Value.(map[string]any), wantVal.(map[string]any))
 		})
 	}
+}
+
+func TestCompileErrors(t *testing.T) {
+	stdlib := os.DirFS("stdlib")
+
+	t.Run("multiple_behaviors_no_selection", func(t *testing.T) {
+		src := `behavior a { name "A" } behavior b { name "B" }`
+		_, err := compiler.CompileString(src, stdlib, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "multiple behaviors") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("behavior_not_found", func(t *testing.T) {
+		src := `behavior a { name "A" } behavior b { name "B" }`
+		_, err := compiler.CompileString(src, stdlib, "c")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("no_behaviors", func(t *testing.T) {
+		src := `fn greet() { notify "hi" }`
+		_, err := compiler.CompileString(src, stdlib, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "no behavior") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestCodec(t *testing.T) {

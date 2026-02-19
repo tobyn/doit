@@ -8,9 +8,6 @@ import (
 )
 
 func (p *parser) parseBehaviorBody() (*codec.Object, error) {
-	if _, err := p.expect(tokIdent); err != nil {
-		return nil, err
-	}
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}

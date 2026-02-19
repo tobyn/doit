@@ -37,10 +37,12 @@ type token struct {
 }
 
 type parser struct {
-	src   string
-	pos   int
-	fns   map[string]*fnDef
-	ungot *token
+	src         string
+	pos         int
+	fns         map[string]*fnDef
+	ungot       *token
+	target      string   // behavior ID to compile ("" = auto-select)
+	behaviorIDs []string // collected during pass 1
 }
 
 func (p *parser) errorf(pos int, format string, args ...any) error {

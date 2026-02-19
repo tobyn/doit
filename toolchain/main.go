@@ -51,8 +51,8 @@ func main() {
 
 // Compile compiles doit source from r using the given stdlib and returns the
 // encoded string.
-func Compile(r io.Reader, stdlib fs.FS) (string, error) {
-	obj, err := compiler.Compile(r, stdlib)
+func Compile(r io.Reader, stdlib fs.FS, behaviorID string) (string, error) {
+	obj, err := compiler.Compile(r, stdlib, behaviorID)
 	if err != nil {
 		return "", err
 	}
@@ -64,6 +64,7 @@ func Compile(r io.Reader, stdlib fs.FS) (string, error) {
 
 func cmdCompile(args []string) (err error) {
 	flags := flag.NewFlagSet("compile", flag.ContinueOnError)
+	behaviorID := flags.String("b", "", "behavior ID to compile")
 	outputPath := flags.String("o", "", "output file path")
 	stdlibPath := flags.String("stdlib", "", "override stdlib path")
 	jsonFlag := flags.Bool("j", false, "output JSON instead of Base62")
@@ -91,7 +92,7 @@ func cmdCompile(args []string) (err error) {
 	}
 
 	if *jsonFlag || *jsonLongFlag {
-		obj, compileErr := compiler.Compile(r, stdlib)
+		obj, compileErr := compiler.Compile(r, stdlib, *behaviorID)
 		if compileErr != nil {
 			err = compileErr
 			return
@@ -103,7 +104,7 @@ func cmdCompile(args []string) (err error) {
 		return
 	}
 
-	encoded, compileErr := Compile(r, stdlib)
+	encoded, compileErr := Compile(r, stdlib, *behaviorID)
 	if compileErr != nil {
 		err = compileErr
 		return

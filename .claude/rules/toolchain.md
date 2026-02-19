@@ -16,6 +16,7 @@ All commands run from the `toolchain/` directory:
 go build -o doit                # Build the toolchain binary (use `doit.exe` instead of `doit` on Windows)
 go test ./...                   # Run all tests
 go test -run TestCompile        # Run compile tests only
+go test -run TestCompileErrors  # Run compiler error case tests only
 go test -run TestCodec          # Run codec tests only
 ```
 

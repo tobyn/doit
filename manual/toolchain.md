@@ -11,12 +11,17 @@ export format.
 Compile doit source into a Base62-encoded behavior string.
 
 ```
-doit compile [--stdlib stdlib_path] [-o output_path] [input_path]
+doit compile [--stdlib stdlib_path] [-j|--json] [-b behavior_id] [-o output_path] [input_path]
 ```
 
-Reads doit source from `input_path`, or stdin if no path is given. Compiles the
-source into a behavior and encodes it as a Base62 string. Writes the result to
-`output_path` if `-o` is provided, or stdout otherwise.
+Reads doit source from `input_path`, or stdin if no path is given. If the source
+contains a single behavior it is compiled automatically. If the source contains
+multiple behaviors, the `-b` option selects which behavior to compile by its
+behavior ID.
+
+The compiled behavior is encoded as a Base62 string and written to `output_path`
+if `-o` is provided, or stdout otherwise. If `-j` or `--json` is provided, the
+JSON representation of the behavior is emitted instead of the Base62 string.
 
 The `--stdlib` option overrides the embedded standard library with one at the
 given path. This is useful for standard library development or for using a

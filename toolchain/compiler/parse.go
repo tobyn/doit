@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"strconv"
+	"strings"
 
 	"github.com/tobyn/doit/toolchain/codec"
 )
@@ -118,6 +119,29 @@ func (p *parser) parseFile() (*codec.Object, error) {
 		return nil, err
 	}
 
+	// Validate behavior selection
+	switch {
+	case len(p.behaviorIDs) == 0:
+		return nil, fmt.Errorf("source contains no behavior declarations")
+	case p.target == "" && len(p.behaviorIDs) == 1:
+		p.target = p.behaviorIDs[0] // auto-select
+	case p.target == "":
+		return nil, fmt.Errorf("source contains multiple behaviors; use -b to select one: %s",
+			strings.Join(p.behaviorIDs, ", "))
+	default:
+		found := false
+		for _, id := range p.behaviorIDs {
+			if id == p.target {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("behavior %q not found; available behaviors: %s",
+				p.target, strings.Join(p.behaviorIDs, ", "))
+		}
+	}
+
 	// Pass 2: find and compile the behavior
 	p.pos = 0
 	p.ungot = nil
@@ -134,7 +158,17 @@ func (p *parser) parseFile() (*codec.Object, error) {
 		}
 		switch tok.val {
 		case "behavior":
-			return p.parseBehaviorBody()
+			idTok, err := p.expect(tokIdent) // behavior id
+			if err != nil {
+				return nil, err
+			}
+			if idTok.val == p.target {
+				return p.parseBehaviorBody()
+			}
+			// Skip non-matching behavior
+			if err := p.skipBraceBlock(); err != nil {
+				return nil, err
+			}
 		case "private":
 			fnTok, err := p.expect(tokIdent)
 			if err != nil {
@@ -170,9 +204,11 @@ func (p *parser) collectUserFns() error {
 		}
 		switch tok.val {
 		case "behavior":
-			if _, err := p.expect(tokIdent); err != nil {
+			idTok, err := p.expect(tokIdent) // behavior id
+			if err != nil {
 				return err
 			}
+			p.behaviorIDs = append(p.behaviorIDs, idTok.val)
 			if err := p.skipBraceBlock(); err != nil {
 				return err
 			}
