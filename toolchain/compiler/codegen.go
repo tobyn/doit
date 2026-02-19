@@ -92,6 +92,11 @@ func (p *parser) parseBehaviorBody() (*codec.Object, error) {
 				return nil, err
 			}
 
+		case "while":
+			if err := p.compileWhile(value, &frame); err != nil {
+				return nil, err
+			}
+
 		default:
 			if err := p.compileDefaultStatement(tok, value, &frame); err != nil {
 				return nil, err
@@ -258,12 +263,73 @@ func (p *parser) compileIfBreak(value map[string]any, frame *int) (int, error) {
 	return checkFrame, nil
 }
 
+// compileWhile compiles `while ident <= number { body }`.
+// It emits a check_number and the body. The body's last instruction loops back
+// to the check, and the check's if_larger slot exits to the continuation.
+func (p *parser) compileWhile(value map[string]any, frame *int) error {
+	varTok, err := p.expect(tokIdent)
+	if err != nil {
+		return err
+	}
+	if _, err := p.expect(tokLessEquals); err != nil {
+		return err
+	}
+	limitTok, err := p.expect(tokNumber)
+	if err != nil {
+		return err
+	}
+	limitNum, _ := strconv.Atoi(limitTok.val)
+
+	// Emit check_number: equal and smaller fall through to body.
+	checkFrame := *frame
+	check := map[string]any{
+		"op": "check_number",
+		"2":  varTok.val,
+		"3":  map[string]any{"num": limitNum},
+	}
+	value[strconv.Itoa(*frame)] = check
+	*frame++
+
+	// Compile body.
+	if _, err := p.expect(tokLBrace); err != nil {
+		return err
+	}
+	bodyFrames, err := p.compileBody()
+	if err != nil {
+		return err
+	}
+	for _, f := range bodyFrames {
+		value[strconv.Itoa(*frame)] = f
+		*frame++
+	}
+
+	// Loop back: set "next" on the body's last instruction.
+	lastBody := value[strconv.Itoa(*frame-1)].(map[string]any)
+	lastBody["next"] = checkFrame + 1
+
+	// Patch check's if_larger to exit to the continuation.
+	check["0"] = *frame + 1
+
+	return nil
+}
+
 // compileDefaultStatement compiles a function call or compound assignment.
 func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame *int) error {
 	// Peek to distinguish function call from compound assignment
 	tok2, err := p.next()
 	if err != nil {
 		return err
+	}
+
+	if tok2.kind == tokPlusPlus {
+		value[strconv.Itoa(*frame)] = map[string]any{
+			"op": "add",
+			"0":  tok.val,
+			"1":  map[string]any{"num": 1},
+			"2":  tok.val,
+		}
+		*frame++
+		return nil
 	}
 
 	if tok2.kind == tokEquals {

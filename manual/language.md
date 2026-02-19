@@ -39,10 +39,11 @@ Assign a new value with `=`:
 x = 2
 ```
 
-Compound assignment is also supported:
+Compound assignment and increment are also supported:
 
 ```doit
 x += 1
+x++
 ```
 
 ## Control Flow
@@ -73,8 +74,23 @@ if a == 1 {
 
 - `==` — equal
 - `<` — less than
+- `<=` — less than or equal
 - `>` — greater than
 - `>=` — greater than or equal
+
+### `while`
+
+`while` loops while a condition holds:
+
+```doit
+var i = 1
+while i <= 5 {
+    notify "While iteration"
+    i++
+}
+```
+
+The body executes as long as `i <= 5`, then execution continues past the loop.
 
 ### `loop` and `break`
 

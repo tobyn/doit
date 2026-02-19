@@ -1,0 +1,35 @@
+{
+  "0": {
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 5,
+    "2": "i",
+    "3": {
+      "num": 5
+    },
+    "op": "check_number"
+  },
+  "2": {
+    "txt": "While iteration",
+    "op": "notify"
+  },
+  "3": {
+    "0": "i",
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "op": "add",
+    "next": 2
+  },
+  "4": {
+    "txt": "While finished",
+    "op": "notify"
+  },
+  "name": "While"
+}

@@ -23,7 +23,9 @@ const (
 	tokEquals
 	tokDoubleEquals
 	tokPlusEquals
+	tokPlusPlus
 	tokLess
+	tokLessEquals
 	tokGreater
 	tokGreaterEquals
 )
@@ -112,6 +114,9 @@ func (p *parser) next() (token, error) {
 	case c == '=':
 		p.pos++
 		return token{tokEquals, "=", start}, nil
+	case c == '+' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '+':
+		p.pos += 2
+		return token{tokPlusPlus, "++", start}, nil
 	case c == '+' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
 		p.pos += 2
 		return token{tokPlusEquals, "+=", start}, nil
@@ -121,6 +126,9 @@ func (p *parser) next() (token, error) {
 	case c == '>':
 		p.pos++
 		return token{tokGreater, ">", start}, nil
+	case c == '<' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
+		p.pos += 2
+		return token{tokLessEquals, "<=", start}, nil
 	case c == '<':
 		p.pos++
 		return token{tokLess, "<", start}, nil
@@ -229,10 +237,14 @@ func (t token) describe() string {
 		return "'='"
 	case tokDoubleEquals:
 		return "'=='"
+	case tokPlusPlus:
+		return "'++'"
 	case tokPlusEquals:
 		return "'+='"
 	case tokLess:
 		return "'<'"
+	case tokLessEquals:
+		return "'<='"
 	case tokGreater:
 		return "'>'"
 	case tokGreaterEquals:

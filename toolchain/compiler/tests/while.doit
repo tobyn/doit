@@ -1,0 +1,11 @@
+behavior while {
+    name "While"
+
+    var i = 1
+    while i <= 5 {
+        notify "While iteration"
+        i++
+    }
+
+    notify "While finished"
+}
