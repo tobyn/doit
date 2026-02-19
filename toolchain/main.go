@@ -66,6 +66,8 @@ func cmdCompile(args []string) (err error) {
 	flags := flag.NewFlagSet("compile", flag.ContinueOnError)
 	outputPath := flags.String("o", "", "output file path")
 	stdlibPath := flags.String("stdlib", "", "override stdlib path")
+	jsonFlag := flags.Bool("j", false, "output JSON instead of Base62")
+	jsonLongFlag := flags.Bool("json", false, "output JSON instead of Base62")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -88,8 +90,22 @@ func cmdCompile(args []string) (err error) {
 		stdlib, _ = fs.Sub(stdlibFS, "stdlib")
 	}
 
-	encoded, err := Compile(r, stdlib)
-	if err != nil {
+	if *jsonFlag || *jsonLongFlag {
+		obj, compileErr := compiler.Compile(r, stdlib)
+		if compileErr != nil {
+			err = compileErr
+			return
+		}
+		if obj == nil {
+			return
+		}
+		err = writeJSON(obj.Value, *outputPath)
+		return
+	}
+
+	encoded, compileErr := Compile(r, stdlib)
+	if compileErr != nil {
+		err = compileErr
 		return
 	}
 	if encoded == "" {

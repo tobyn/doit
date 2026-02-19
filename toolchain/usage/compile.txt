@@ -1,6 +1,6 @@
 Compile doit source into a Base62-encoded behavior string.
 
-doit compile [--stdlib stdlib_path] [-o output_path] [input_path]
+doit compile [--stdlib stdlib_path] [-j|--json] [-o output_path] [input_path]
 
 Reads doit source from input_path, or stdin if no path is given. Compiles the
 source into a behavior and encodes it as a Base62 string. Writes the result to
@@ -10,3 +10,8 @@ Normally, the doit CLI uses an embedded copy of the standard library. This can
 be overridden with the `--stdlib` argument, which may be useful for standard
 library development, or if the user wishes to use a version of the standard
 library that differs from the one that ships with the compiler.
+
+If the `-j` or `--json` option is provided, the JSON representation of the
+behavior will be emitted instead of the Base62 string. This can be passed to
+`doit encode` or run through the reference JavaScript encoder to create a
+usable behavior string.
