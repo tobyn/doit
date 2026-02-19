@@ -11,22 +11,23 @@ import (
 // Compile reads doit source from r and compiles it into a codec Object.
 // If behaviorID is non-empty, it selects the behavior to compile from a
 // multi-behavior source file. When the source contains a single behavior,
-// behaviorID may be empty to auto-select it.
-func Compile(r io.Reader, stdlib fs.FS, behaviorID string) (*codec.Object, error) {
+// behaviorID may be empty to auto-select it. The locale parameter is a BCP 47
+// tag used to resolve localized @name blocks; if empty, the first entry is used.
+func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string) (*codec.Object, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	return CompileString(string(data), stdlib, behaviorID)
+	return CompileString(string(data), stdlib, behaviorID, locale)
 }
 
 // CompileString compiles doit source into a codec Object.
-func CompileString(src string, stdlib fs.FS, behaviorID string) (*codec.Object, error) {
+func CompileString(src string, stdlib fs.FS, behaviorID, locale string) (*codec.Object, error) {
 	fns, err := parseStdlib(stdlib)
 	if err != nil {
 		return nil, fmt.Errorf("stdlib: %w", err)
 	}
-	p := &parser{scanner: scanner{src: src}, fns: fns, target: behaviorID}
+	p := &parser{scanner: scanner{src: src}, fns: fns, target: behaviorID, locale: locale}
 	return p.parseFile()
 }
 

@@ -50,9 +50,10 @@ func main() {
 }
 
 // Compile compiles doit source from r using the given stdlib and returns the
-// encoded string.
-func Compile(r io.Reader, stdlib fs.FS, behaviorID string) (string, error) {
-	obj, err := compiler.Compile(r, stdlib, behaviorID)
+// encoded string. The locale parameter is a BCP 47 tag for resolving localized
+// @name blocks; if empty, the first entry is used.
+func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string) (string, error) {
+	obj, err := compiler.Compile(r, stdlib, behaviorID, locale)
 	if err != nil {
 		return "", err
 	}
@@ -69,8 +70,21 @@ func cmdCompile(args []string) (err error) {
 	stdlibPath := flags.String("stdlib", "", "override stdlib path")
 	jsonFlag := flags.Bool("j", false, "output JSON instead of Base62")
 	jsonLongFlag := flags.Bool("json", false, "output JSON instead of Base62")
+	localeFlag := flags.String("l", "", "locale for @name resolution")
+	localeLongFlag := flags.String("locale", "", "locale for @name resolution")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+
+	if *localeFlag != "" && *localeLongFlag != "" {
+		return fmt.Errorf("-l and --locale are mutually exclusive")
+	}
+	locale := *localeFlag
+	if locale == "" {
+		locale = *localeLongFlag
+	}
+	if locale == "" {
+		locale = detectLocale()
 	}
 
 	r, err := openInput(flags)
@@ -92,7 +106,7 @@ func cmdCompile(args []string) (err error) {
 	}
 
 	if *jsonFlag || *jsonLongFlag {
-		obj, compileErr := compiler.Compile(r, stdlib, *behaviorID)
+		obj, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale)
 		if compileErr != nil {
 			err = compileErr
 			return
@@ -104,7 +118,7 @@ func cmdCompile(args []string) (err error) {
 		return
 	}
 
-	encoded, compileErr := Compile(r, stdlib, *behaviorID)
+	encoded, compileErr := Compile(r, stdlib, *behaviorID, locale)
 	if compileErr != nil {
 		err = compileErr
 		return

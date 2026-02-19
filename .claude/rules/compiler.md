@@ -25,14 +25,18 @@ and `#`). The parser consumes tokens via the promoted scanner methods and direct
 positions. The exported `Keywords` map lists all reserved keywords for use by editor tooling.
 
 Behavior IDs can be bareword identifiers or quoted strings. The `@name` attribute sets the display
-name (at most once per behavior); if omitted, the behavior ID is used as the default name.
+name (at most once per behavior); if omitted, the behavior ID is used as the default name. `@name`
+supports a localized block form (`@name { en_US "English" ja "日本語" }`) that selects the best
+match for the compiler's locale setting using `golang.org/x/text/language`.
 
-The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library and a
-`behaviorID string` that selects which behavior to compile. When `behaviorID` is empty and the source
-contains a single behavior, it is auto-selected. When the source contains multiple behaviors,
-`behaviorID` must name one of them. The compiler parses stdlib function definitions first, then
-compiles user source. Stdlib functions that contain an `instruction` intrinsic are inlined at call
-sites — the compiler substitutes arguments into the instruction template fields.
+The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library, a
+`behaviorID string` that selects which behavior to compile, and a `locale string` (BCP 47 tag) for
+resolving localized `@name` blocks. When `behaviorID` is empty and the source contains a single
+behavior, it is auto-selected. When the source contains multiple behaviors, `behaviorID` must name
+one of them. When `locale` is empty, localized `@name` blocks use their first entry. The compiler
+parses stdlib function definitions first, then compiles user source. Stdlib functions that contain an
+`instruction` intrinsic are inlined at call sites — the compiler substitutes arguments into the
+instruction template fields.
 
 ## Test Case Format
 

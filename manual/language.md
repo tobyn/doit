@@ -33,6 +33,18 @@ behavior patrol {
 }
 ```
 
+For localized names, use the block form with locale codes:
+
+```doit
+@name {
+    en_US "US English name"
+    ja    "日本語の名前"
+}
+```
+
+The compiler selects the best match for the active locale (set via `-l` or
+auto-detected). If no match is found, the first entry is used.
+
 When a file contains multiple behaviors, the `-b` flag selects which to compile:
 
 ```doit

@@ -1,0 +1,7 @@
+behavior localized_name {
+    @name {
+        en_US "Localized Name"
+        ja "ローカライズされた名前"
+    }
+    notify "Hello"
+}

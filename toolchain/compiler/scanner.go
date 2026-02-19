@@ -62,6 +62,7 @@ type parser struct {
 	fns         map[string]*fnDef
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
+	locale      string   // BCP 47 locale tag; empty = use first entry
 }
 
 func (s *scanner) errorf(pos int, format string, args ...any) error {

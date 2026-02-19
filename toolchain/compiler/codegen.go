@@ -1,10 +1,13 @@
 package compiler
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/tobyn/doit/toolchain/codec"
+	"golang.org/x/text/language"
 )
 
 func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
@@ -43,11 +46,11 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				if _, exists := value["name"]; exists {
 					return nil, p.errorf(tok.pos, "duplicate @name")
 				}
-				str, err := p.expect(tokString)
+				name, err := p.parseName()
 				if err != nil {
 					return nil, err
 				}
-				value["name"] = str.val
+				value["name"] = name
 			default:
 				return nil, p.errorf(attr.pos, "unknown attribute @%s", attr.val)
 			}
@@ -639,4 +642,69 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 	}
 
 	return nil
+}
+
+// parseName parses the value of an @name attribute. It handles both the simple
+// string form and the localized block form.
+func (p *parser) parseName() (string, error) {
+	tok, err := p.next()
+	if err != nil {
+		return "", err
+	}
+	if tok.kind == tokString {
+		return tok.val, nil
+	}
+	if tok.kind == tokLBrace {
+		return p.resolveLocalizedName()
+	}
+	return "", p.errorf(tok.pos, "expected string or '{' after @name, got %s", tok.describe())
+}
+
+// resolveLocalizedName parses locale/string pairs until '}' and returns the
+// best match for p.locale. If p.locale is empty, the first entry is used.
+func (p *parser) resolveLocalizedName() (string, error) {
+	type entry struct {
+		locale string
+		name   string
+	}
+	var entries []entry
+
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return "", err
+		}
+		if tok.kind == tokRBrace {
+			break
+		}
+		if tok.kind == tokEOF {
+			return "", p.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+		if tok.kind != tokIdent {
+			return "", p.errorf(tok.pos, "expected locale identifier or '}', got %s", tok.describe())
+		}
+		nameTok, err := p.expect(tokString)
+		if err != nil {
+			return "", err
+		}
+		entries = append(entries, entry{locale: tok.val, name: nameTok.val})
+	}
+
+	if len(entries) == 0 {
+		return "", fmt.Errorf("empty @name block")
+	}
+
+	if p.locale == "" {
+		return entries[0].name, nil
+	}
+
+	tags := make([]language.Tag, len(entries))
+	for i, e := range entries {
+		tags[i] = language.Make(strings.ReplaceAll(e.locale, "_", "-"))
+	}
+
+	desired := language.Make(strings.ReplaceAll(p.locale, "_", "-"))
+	matcher := language.NewMatcher(tags)
+	_, idx, _ := matcher.Match(desired)
+	return entries[idx].name, nil
 }

@@ -42,7 +42,7 @@ func TestCompile(t *testing.T) {
 			}
 			defer f.Close()
 
-			encoded, err := Compile(f, stdlib, behaviorID)
+			encoded, err := Compile(f, stdlib, behaviorID, "")
 			if err != nil {
 				t.Fatalf("Compile error: %v", err)
 			}
@@ -71,7 +71,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("multiple_behaviors_no_selection", func(t *testing.T) {
 		src := `behavior a { @name "A" } behavior b { @name "B" }`
-		_, err := compiler.CompileString(src, stdlib, "")
+		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -82,7 +82,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("behavior_not_found", func(t *testing.T) {
 		src := `behavior a { @name "A" } behavior b { @name "B" }`
-		_, err := compiler.CompileString(src, stdlib, "c")
+		_, err := compiler.CompileString(src, stdlib, "c", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -93,7 +93,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("duplicate_name", func(t *testing.T) {
 		src := `behavior a { @name "A" @name "B" }`
-		_, err := compiler.CompileString(src, stdlib, "")
+		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -104,11 +104,46 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("no_behaviors", func(t *testing.T) {
 		src := `fn greet() { notify "hi" }`
-		_, err := compiler.CompileString(src, stdlib, "")
+		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "no behavior") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("localized_name_with_locale", func(t *testing.T) {
+		src := `behavior a { @name { en_US "English" ja "日本語" } notify "hi" }`
+		obj, err := compiler.CompileString(src, stdlib, "", "ja")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		name := obj.Value.(map[string]any)["name"]
+		if name != "日本語" {
+			t.Fatalf("expected name %q, got %q", "日本語", name)
+		}
+	})
+
+	t.Run("localized_name_no_match", func(t *testing.T) {
+		src := `behavior a { @name { en_US "English" ja "日本語" } notify "hi" }`
+		obj, err := compiler.CompileString(src, stdlib, "", "fr")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		name := obj.Value.(map[string]any)["name"]
+		if name != "English" {
+			t.Fatalf("expected name %q, got %q", "English", name)
+		}
+	})
+
+	t.Run("localized_name_empty_block", func(t *testing.T) {
+		src := `behavior a { @name {} notify "hi" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
