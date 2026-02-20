@@ -413,7 +413,7 @@ func (r *reader) parseTable(sz int, isMap bool) any {
 			val := r.parse()
 			if i < sizeArray {
 				if isMap {
-					m[strconv.Itoa(i)] = val
+					m[strconv.Itoa(i+1)] = val
 				} else {
 					arr[i] = val
 				}
@@ -429,7 +429,7 @@ func (r *reader) parseTable(sz int, isMap bool) any {
 				case string:
 					keyStr = k
 				case int:
-					keyStr = strconv.Itoa(k - 1)
+					keyStr = strconv.Itoa(k)
 				default:
 					panic(fmt.Sprintf("unexpected table key type: %T", key))
 				}
@@ -621,13 +621,13 @@ func (w *writer) serializeArray(arr []any) {
 }
 
 func (w *writer) serializeMap(m map[string]any) {
-	// Determine array part: contiguous keys from "0", allowing 1 gap.
+	// Determine array part: contiguous keys from "1", allowing 1 gap.
 	sizeArray := 0
 	arrayKeys := 0
 	for {
-		if _, ok := m[strconv.Itoa(sizeArray)]; ok {
+		if _, ok := m[strconv.Itoa(sizeArray+1)]; ok {
 			arrayKeys++
-		} else if _, ok := m[strconv.Itoa(sizeArray+1)]; !ok {
+		} else if _, ok := m[strconv.Itoa(sizeArray+2)]; !ok {
 			break
 		}
 		sizeArray++
@@ -666,7 +666,7 @@ func (w *writer) serializeMap(m map[string]any) {
 	hashKeys := make([]string, 0, mapKeys)
 	for k := range m {
 		n, err := strconv.Atoi(k)
-		if err != nil || n < 0 || n >= sizeArray {
+		if err != nil || n < 1 || n > sizeArray {
 			hashKeys = append(hashKeys, k)
 		}
 	}
@@ -690,7 +690,7 @@ func (w *writer) serializeMap(m map[string]any) {
 				continue
 			}
 			if i < sizeArray {
-				val, ok := m[strconv.Itoa(i)]
+				val, ok := m[strconv.Itoa(i+1)]
 				if !ok {
 					vacancyBits |= 1 << bit
 					continue
@@ -701,7 +701,7 @@ func (w *writer) serializeMap(m map[string]any) {
 				w.serialize(m[key])
 				if isNumericKey(key) {
 					n, _ := strconv.Atoi(key)
-					w.serialize(n + 1)
+					w.serialize(n)
 				} else {
 					w.serialize(key)
 				}

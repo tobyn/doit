@@ -16,7 +16,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	}
 
 	value := map[string]any{}
-	frame := 0
+	b := &frameBuilder{}
 
 	// State for break target patching after a loop
 	breakTargetFrame := -1
@@ -71,8 +71,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			if comment != "" {
 				instr["cmt"] = comment
 			}
-			value[strconv.Itoa(frame)] = instr
-			frame++
+			b.emit(instr)
 
 		case "var":
 			nameTok, err := p.expect(tokIdent)
@@ -89,45 +88,44 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			num, _ := strconv.Atoi(numTok.val)
 			f := map[string]any{
 				"op": "set_number",
-				"1":  map[string]any{"num": num},
-				"2":  nameTok.val,
+				"2":  map[string]any{"num": num},
+				"3":  nameTok.val,
 			}
 			if comment != "" {
 				f["cmt"] = comment
 			}
-			value[strconv.Itoa(frame)] = f
-			frame++
+			b.emit(f)
 
 		case "loop":
-			checkFrame, err := p.compileLoop(value, &frame)
+			checkFrame, err := p.compileLoop(b)
 			if err != nil {
 				return nil, err
 			}
 			if checkFrame >= 0 {
 				breakTargetFrame = checkFrame + 1
-				resumeFrame = frame
-				frame = breakTargetFrame
+				resumeFrame = b.pos()
+				b.seek(breakTargetFrame)
 			}
 
 		case "if":
-			if err := p.compileIfStmt(value, &frame, &deferred, comment); err != nil {
+			if err := p.compileIfStmt(b, &deferred, comment); err != nil {
 				return nil, err
 			}
 
 		case "while":
-			if err := p.compileWhile(value, &frame, comment); err != nil {
+			if err := p.compileWhile(b, comment); err != nil {
 				return nil, err
 			}
 
 		default:
-			if err := p.compileDefaultStatement(tok, value, &frame, comment); err != nil {
+			if err := p.compileDefaultStatement(tok, b, comment); err != nil {
 				return nil, err
 			}
 		}
 
 		// After emitting an instruction, check if we need to patch a break target
-		if breakTargetFrame >= 0 && frame-1 == breakTargetFrame {
-			instr := value[strconv.Itoa(breakTargetFrame)].(map[string]any)
+		if breakTargetFrame >= 0 && b.pos()-1 == breakTargetFrame {
+			instr := b.get(breakTargetFrame)
 			// Peek to see if there are more statements
 			peek, err := p.next()
 			if err != nil {
@@ -136,12 +134,12 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			if peek.kind == tokRBrace {
 				// Last instruction in behavior; stop execution
 				instr["next"] = false
-				frame = resumeFrame
+				b.seek(resumeFrame)
 				p.unget(peek)
 			} else {
 				// More instructions follow; skip over loop body frames
-				instr["next"] = resumeFrame
-				frame = resumeFrame
+				instr["next"] = frameRef(resumeFrame)
+				b.seek(resumeFrame)
 				p.unget(peek)
 			}
 			breakTargetFrame = -1
@@ -150,17 +148,17 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	}
 
 	// Emit deferred bodies after all main-line frames.
-	mainFrameCount := frame
+	mainFrameCount := b.pos()
 	if len(deferred) > 0 {
 		// Prevent the last main-line frame from falling into deferred frames.
 		if mainFrameCount > 0 {
-			lastInstr := value[strconv.Itoa(mainFrameCount-1)].(map[string]any)
+			lastInstr := b.get(mainFrameCount - 1)
 			if _, hasNext := lastInstr["next"]; !hasNext {
 				lastInstr["next"] = false
 			}
 		}
 
-		// Sort: reverse chronological by check frame, slot "0" before "1".
+		// Sort: reverse chronological by check frame, slot "1" before "2".
 		sort.SliceStable(deferred, func(i, j int) bool {
 			if deferred[i].checkFrame != deferred[j].checkFrame {
 				return deferred[i].checkFrame > deferred[j].checkFrame
@@ -170,21 +168,20 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 
 		for i := range deferred {
 			d := &deferred[i]
-			bodyFrame := frame
+			bodyFrame := b.pos()
 			for _, f := range d.frames {
-				value[strconv.Itoa(frame)] = f
-				frame++
+				b.emit(f)
 			}
 			// Set "next" on the body's last frame.
-			lastBody := value[strconv.Itoa(frame-1)].(map[string]any)
+			lastBody := b.get(b.pos() - 1)
 			if d.continuation < mainFrameCount {
-				lastBody["next"] = d.continuation + 1
+				lastBody["next"] = frameRef(d.continuation)
 			} else {
 				lastBody["next"] = false
 			}
 			// Patch the check_number's branch slot.
-			checkInstr := value[strconv.Itoa(d.checkFrame)].(map[string]any)
-			checkInstr[d.slot] = bodyFrame + 1
+			checkInstr := b.get(d.checkFrame)
+			checkInstr[d.slot] = frameRef(bodyFrame)
 		}
 	}
 
@@ -192,16 +189,18 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		value["name"] = behaviorID
 	}
 
+	b.finalize(value)
 	return &codec.Object{Type: codec.Behavior, Value: value}, nil
 }
 
 // compileLoop compiles a loop body. It returns the check frame index (or -1
 // if the loop contains no if/break).
-func (p *parser) compileLoop(value map[string]any, frame *int) (int, error) {
+func (p *parser) compileLoop(b *frameBuilder) (int, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return -1, err
 	}
 
+	loopStart := b.pos()
 	checkFrame := -1
 
 	for {
@@ -223,23 +222,23 @@ func (p *parser) compileLoop(value map[string]any, frame *int) (int, error) {
 
 		switch tok.val {
 		case "if":
-			cf, err := p.compileIfBreak(value, frame, comment)
+			cf, err := p.compileIfBreak(b, comment)
 			if err != nil {
 				return -1, err
 			}
 			checkFrame = cf
 
 		default:
-			if err := p.compileDefaultStatement(tok, value, frame, comment); err != nil {
+			if err := p.compileDefaultStatement(tok, b, comment); err != nil {
 				return -1, err
 			}
 		}
 	}
 
-	// Set next on last loop body instruction to jump back to check
+	// Set next on last loop body instruction to loop back to start of body
 	if checkFrame >= 0 {
-		lastInstr := value[strconv.Itoa(*frame-1)].(map[string]any)
-		lastInstr["next"] = checkFrame
+		lastInstr := b.get(b.pos() - 1)
+		lastInstr["next"] = frameRef(loopStart)
 	}
 
 	return checkFrame, nil
@@ -248,7 +247,7 @@ func (p *parser) compileLoop(value map[string]any, frame *int) (int, error) {
 // compileIfBreak compiles `if lhs >= rhs { break }` inside a loop body.
 // It emits a check_number instruction and reserves the next frame for the
 // break target. Returns the check frame index.
-func (p *parser) compileIfBreak(value map[string]any, frame *int, comment string) (int, error) {
+func (p *parser) compileIfBreak(b *frameBuilder, comment string) (int, error) {
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
 		return -1, err
@@ -276,21 +275,21 @@ func (p *parser) compileIfBreak(value map[string]any, frame *int, comment string
 		return -1, err
 	}
 
-	checkFrame := *frame
 	f := map[string]any{
 		"op": "check_number",
-		"1":  5, // >= comparison
-		"2":  lhsTok.val,
-		"3":  map[string]any{"num": rhsNum},
+		"3":  lhsTok.val,
+		"4":  map[string]any{"num": rhsNum},
 	}
 	if comment != "" {
 		f["cmt"] = comment
 	}
-	value[strconv.Itoa(*frame)] = f
-	*frame++
+	checkFrame := b.emit(f)
 
-	// Reserve the next frame for the break target (filled by caller)
-	*frame++
+	// Reserve the next frame for the break target (filled by caller).
+	b.emit(nil)
+
+	// Set if_smaller to skip past break target to the next loop body frame.
+	f["2"] = frameRef(b.pos())
 
 	return checkFrame, nil
 }
@@ -298,7 +297,7 @@ func (p *parser) compileIfBreak(value map[string]any, frame *int, comment string
 // compileWhile compiles `while ident <= number { body }`.
 // It emits a check_number and the body. The body's last instruction loops back
 // to the check, and the check's if_larger slot exits to the continuation.
-func (p *parser) compileWhile(value map[string]any, frame *int, comment string) error {
+func (p *parser) compileWhile(b *frameBuilder, comment string) error {
 	varTok, err := p.expect(tokIdent)
 	if err != nil {
 		return err
@@ -313,17 +312,15 @@ func (p *parser) compileWhile(value map[string]any, frame *int, comment string) 
 	limitNum, _ := strconv.Atoi(limitTok.val)
 
 	// Emit check_number: equal and smaller fall through to body.
-	checkFrame := *frame
 	check := map[string]any{
 		"op": "check_number",
-		"2":  varTok.val,
-		"3":  map[string]any{"num": limitNum},
+		"3":  varTok.val,
+		"4":  map[string]any{"num": limitNum},
 	}
 	if comment != "" {
 		check["cmt"] = comment
 	}
-	value[strconv.Itoa(*frame)] = check
-	*frame++
+	checkFrame := b.emit(check)
 
 	// Compile body.
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -334,22 +331,21 @@ func (p *parser) compileWhile(value map[string]any, frame *int, comment string) 
 		return err
 	}
 	for _, f := range bodyFrames {
-		value[strconv.Itoa(*frame)] = f
-		*frame++
+		b.emit(f)
 	}
 
 	// Loop back: set "next" on the body's last instruction.
-	lastBody := value[strconv.Itoa(*frame-1)].(map[string]any)
-	lastBody["next"] = checkFrame + 1
+	lastBody := b.get(b.pos() - 1)
+	lastBody["next"] = frameRef(checkFrame)
 
 	// Patch check's if_larger to exit to the continuation.
-	check["0"] = *frame + 1
+	check["1"] = frameRef(b.pos())
 
 	return nil
 }
 
 // compileDefaultStatement compiles a function call or compound assignment.
-func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame *int, comment string) error {
+func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment string) error {
 	// Peek to distinguish function call from compound assignment
 	tok2, err := p.next()
 	if err != nil {
@@ -359,15 +355,14 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 	if tok2.kind == tokPlusPlus {
 		f := map[string]any{
 			"op": "add",
-			"0":  tok.val,
-			"1":  map[string]any{"num": 1},
-			"2":  tok.val,
+			"1":  tok.val,
+			"2":  map[string]any{"num": 1},
+			"3":  tok.val,
 		}
 		if comment != "" {
 			f["cmt"] = comment
 		}
-		value[strconv.Itoa(*frame)] = f
-		*frame++
+		b.emit(f)
 		return nil
 	}
 
@@ -379,14 +374,13 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 		num, _ := strconv.Atoi(numTok.val)
 		f := map[string]any{
 			"op": "set_number",
-			"1":  map[string]any{"num": num},
-			"2":  tok.val,
+			"2":  map[string]any{"num": num},
+			"3":  tok.val,
 		}
 		if comment != "" {
 			f["cmt"] = comment
 		}
-		value[strconv.Itoa(*frame)] = f
-		*frame++
+		b.emit(f)
 		return nil
 	}
 
@@ -398,15 +392,14 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 		num, _ := strconv.Atoi(numTok.val)
 		f := map[string]any{
 			"op": "add",
-			"0":  tok.val,
-			"1":  map[string]any{"num": num},
-			"2":  tok.val,
+			"1":  tok.val,
+			"2":  map[string]any{"num": num},
+			"3":  tok.val,
 		}
 		if comment != "" {
 			f["cmt"] = comment
 		}
-		value[strconv.Itoa(*frame)] = f
-		*frame++
+		b.emit(f)
 		return nil
 	}
 
@@ -427,7 +420,7 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 		args[i] = str.val
 	}
 
-	return p.expandCall(tok.val, args, value, frame, tok.pos, comment)
+	return p.expandCall(tok.val, args, b, tok.pos, comment)
 }
 
 // --- If statement compilation ---
@@ -435,8 +428,7 @@ func (p *parser) compileDefaultStatement(tok token, value map[string]any, frame 
 // compileBody compiles a brace-delimited block into a slice of frames.
 // The opening '{' must already be consumed.
 func (p *parser) compileBody() ([]map[string]any, error) {
-	tmp := map[string]any{}
-	frame := 0
+	b := &frameBuilder{}
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -452,20 +444,16 @@ func (p *parser) compileBody() ([]map[string]any, error) {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
 		comment := p.docComment
-		if err := p.compileDefaultStatement(tok, tmp, &frame, comment); err != nil {
+		if err := p.compileDefaultStatement(tok, b, comment); err != nil {
 			return nil, err
 		}
 	}
-	frames := make([]map[string]any, frame)
-	for i := 0; i < frame; i++ {
-		frames[i] = tmp[strconv.Itoa(i)].(map[string]any)
-	}
-	return frames, nil
+	return b.frames, nil
 }
 
 // compileIfStmt compiles an if / else-if / else statement.
 // The "if" keyword has already been consumed.
-func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]deferredBody, comment string) error {
+func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, comment string) error {
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
 		return err
@@ -480,17 +468,15 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 	}
 	rhsNum, _ := strconv.Atoi(rhsTok.val)
 
-	checkFrame := *frame
 	check := map[string]any{
 		"op": "check_number",
-		"2":  lhsTok.val,
-		"3":  map[string]any{"num": rhsNum},
+		"3":  lhsTok.val,
+		"4":  map[string]any{"num": rhsNum},
 	}
 	if comment != "" {
 		check["cmt"] = comment
 	}
-	value[strconv.Itoa(*frame)] = check
-	*frame++
+	checkFrame := b.emit(check)
 
 	if _, err := p.expect(tokLBrace); err != nil {
 		return err
@@ -506,14 +492,13 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 		*deferred = append(*deferred, deferredBody{
 			frames:     bodyFrames,
 			checkFrame: checkFrame,
-			slot:       "1",
+			slot:       "2",
 		})
 
 	case tokGreaterEquals:
 		// a >= N: body when larger or equal. Inline (both fall through).
 		for _, f := range bodyFrames {
-			value[strconv.Itoa(*frame)] = f
-			*frame++
+			b.emit(f)
 		}
 		// Parse optional else
 		tok, err := p.next()
@@ -531,7 +516,7 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 			*deferred = append(*deferred, deferredBody{
 				frames:     elseFrames,
 				checkFrame: checkFrame,
-				slot:       "1",
+				slot:       "2",
 			})
 		} else {
 			p.unget(tok)
@@ -540,8 +525,7 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 	case tokDoubleEquals:
 		// a == N: body when equal. Inline (falls through).
 		for _, f := range bodyFrames {
-			value[strconv.Itoa(*frame)] = f
-			*frame++
+			b.emit(f)
 		}
 		// Parse else if / else
 		tok, err := p.next()
@@ -561,7 +545,7 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 		*deferred = append(*deferred, deferredBody{
 			frames:     bodyFrames,
 			checkFrame: checkFrame,
-			slot:       "0",
+			slot:       "1",
 		})
 
 	default:
@@ -569,7 +553,7 @@ func (p *parser) compileIfStmt(value map[string]any, frame *int, deferred *[]def
 	}
 
 	// Set continuation on all deferred bodies from this if block.
-	continuation := *frame
+	continuation := b.pos()
 	for i := range *deferred {
 		if (*deferred)[i].continuation == 0 && (*deferred)[i].checkFrame == checkFrame {
 			(*deferred)[i].continuation = continuation
@@ -603,9 +587,9 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 		var slot string
 		switch opTok.kind {
 		case tokGreater:
-			slot = "0"
-		case tokLess:
 			slot = "1"
+		case tokLess:
+			slot = "2"
 		default:
 			return p.errorf(opTok.pos, "unsupported else-if operator %s", opTok.describe())
 		}
@@ -631,10 +615,10 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 		if tok2.kind == tokIdent && tok2.val == "else" {
 			// Determine the remaining slot
 			var elseSlot string
-			if slot == "0" {
-				elseSlot = "1"
+			if slot == "1" {
+				elseSlot = "2"
 			} else {
-				elseSlot = "0"
+				elseSlot = "1"
 			}
 			if _, err := p.expect(tokLBrace); err != nil {
 				return err
@@ -665,12 +649,12 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 		*deferred = append(*deferred, deferredBody{
 			frames:     elseFrames,
 			checkFrame: checkFrame,
-			slot:       "0",
+			slot:       "1",
 		})
 		*deferred = append(*deferred, deferredBody{
 			frames:     elseFrames,
 			checkFrame: checkFrame,
-			slot:       "1",
+			slot:       "2",
 		})
 	}
 

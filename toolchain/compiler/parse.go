@@ -3,7 +3,6 @@ package compiler
 import (
 	"fmt"
 	"io/fs"
-	"strconv"
 	"strings"
 
 	"github.com/tobyn/doit/toolchain/codec"
@@ -404,7 +403,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 	return frame, nil
 }
 
-func (p *parser) expandCall(name string, args []string, value map[string]any, frame *int, pos int, comment string) error {
+func (p *parser) expandCall(name string, args []string, b *frameBuilder, pos int, comment string) error {
 	fn := p.fns[name]
 	if fn == nil {
 		return p.errorf(pos, "unknown statement %q", name)
@@ -429,8 +428,7 @@ func (p *parser) expandCall(name string, args []string, value map[string]any, fr
 		if comment != "" {
 			instr["cmt"] = comment
 		}
-		value[strconv.Itoa(*frame)] = instr
-		*frame++
+		b.emit(instr)
 		return nil
 	}
 
@@ -451,7 +449,7 @@ func (p *parser) expandCall(name string, args []string, value map[string]any, fr
 		if callComment == "" {
 			callComment = comment
 		}
-		if err := p.expandCall(call.name, resolvedArgs, value, frame, pos, callComment); err != nil {
+		if err := p.expandCall(call.name, resolvedArgs, b, pos, callComment); err != nil {
 			return err
 		}
 	}

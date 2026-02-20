@@ -22,6 +22,13 @@ proceed (no successor instruction), the behavior controller restarts
 the behavior from the beginning. The `exit` instruction explicitly
 terminates the behavior without restarting.
 
+Some instructions modify the behavior controller's state rather than
+operating on data. `lock` and `unlock` change the execution mode, and
+this state persists on the controller component — it survives behavior
+restarts. These are side effects on the hardware, not on the program.
+In unlocked mode, executing too many instructions in a single tick
+causes the controller to panic and stop executing (no auto restart).
+
 ## Data Types
 
 There are six data types: Item, Unit, Component, Technology, Informational
@@ -80,8 +87,8 @@ Instructions are the nodes in the behavior graph. Each has:
 - Execution flow pins (next instruction, conditional branches)
 
 Conditional instructions (e.g., `check_number`) have multiple output
-paths. In the compiled JSON, these map to numbered slots (`"0"` for
-if_larger, `"1"` for if_smaller) containing jump targets.
+paths. In the compiled JSON, these map to numbered slots (`"1"` for
+if_larger, `"2"` for if_smaller) containing jump targets.
 
 ## Import/Export
 

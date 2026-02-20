@@ -1,3 +1,4 @@
+# AI-generated test
 behavior doc_comment {
     #! Hello notification
     notify "Hello"

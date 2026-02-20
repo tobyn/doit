@@ -37,6 +37,12 @@ before relying on them for code generation. The low-confidence instructions are:
 - **`set_logistics_options`** — `"c"`/`"c2"` are flag tables (not simple integers like other
   `"c"` fields)
 
+The `instruction` builtin's field keys and values should match the reference
+JSON decoding (0-based parameter slot keys, as produced by the reference JS
+codec). The `# frame:` comments reflect this same reference format. The
+compiler is responsible for any conversion between the reference format and
+the wire format — the details of this conversion are a future concern.
+
 `instructions.lua` is a commercially licensed file, so it cannot be committed
 to the repository. It is the developer's responsibility to provide a copy of
 this file, if necessary. If this file is needed and missing, notify the

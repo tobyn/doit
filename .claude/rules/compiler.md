@@ -11,7 +11,8 @@ output format.
 
 ## Architecture
 
-- **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`) and shared types
+- **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types,
+  and `frameBuilder`/`frameRef` abstraction for frame management
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`), token types,
   `Keywords` map, error formatting
 - **`compiler/parse.go`** — Stdlib parsing, file-level parsing, function definitions,
@@ -25,8 +26,11 @@ The compiler is structured as a standalone `scanner` struct embedded in a
 recursive-descent `parser`. The scanner tokenizes the source into identifiers,
 string literals, numbers, braces, parentheses, colons, commas, `@`, and
 comparison/assignment operators, skipping whitespace and `#` line comments. The parser consumes tokens via the promoted scanner methods and
-directly emits the `*codec.Object` output (type `Behavior`) without an
-intermediate AST. Errors include line:column positions. The exported `Keywords`
+directly emits the `*codec.Object` output (type `Behavior`) via `frameBuilder`
+without an intermediate AST. Errors include line:column positions. Wire format
+details (like Lua's 1-based indexing) are encapsulated at the `frameBuilder`
+boundary — compilation logic uses 0-based indices internally, and `frameRef`
+values are converted to 1-based wire format integers by `finalize`. The exported `Keywords`
 map lists all reserved keywords for use by editor tooling.
 
 Brace-delimited blocks fall into two categories. **Statement blocks** (behavior
@@ -91,3 +95,19 @@ ways (e.g., whitespace, object key ordering). Do not rely on the JSON strings to
 same. The compiler may also emit frames in a different order than the handwritten expected
 output — the test comparison uses graph-isomorphism (`matchBehaviors` in `main_test.go`)
 to verify structural equivalence regardless of frame numbering.
+
+The `.json` test files were generated from the reference JavaScript codec and
+should not be modified programmatically. When our implementation's output format
+differs from the reference (e.g., 1-based vs 0-based integer keys), the test
+code bridges the gap via the `refToNative` conversion routine in `main_test.go`
+rather than modifying the test data.
+
+### AI-generated tests
+
+AI-generated `.doit` test files are marked with a `# AI-generated test`
+comment on their first line. When creating a new test case, add this comment.
+
+All files belonging to an AI-generated test case (`.doit`, `.json`, and any
+other associated files) may be edited freely to fix or improve them.
+All files belonging to a test case without this marker are human-authored
+and should not be modified programmatically.

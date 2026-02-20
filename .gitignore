@@ -1,5 +1,8 @@
 # Desynced's instructions.lua (this file is commercially licensed)
 /toolchain/stdlib/instructions.lua
 
+# LLM input
+/example
+
 # Claude Code stuff
 /.claude/**/*.local.json

@@ -60,6 +60,9 @@ func TestCompile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("UnmarshalJSON error: %v", err)
 			}
+			// Convert reference implementation output (0-based keys) to our
+			// native format (1-based keys).
+			wantVal = refToNative(wantVal)
 
 			matchBehaviors(t, obj.Value.(map[string]any), wantVal.(map[string]any))
 		})
@@ -154,7 +157,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["0"].(map[string]any)
+		frame := obj.Value.(map[string]any)["1"].(map[string]any)
 		if frame["cmt"] != "Greeting" {
 			t.Fatalf("expected cmt %q, got %v", "Greeting", frame["cmt"])
 		}
@@ -167,13 +170,13 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		v := obj.Value.(map[string]any)
-		f0 := v["0"].(map[string]any)
 		f1 := v["1"].(map[string]any)
-		if f0["cmt"] != "Inner" {
-			t.Fatalf("frame 0: expected cmt %q, got %v", "Inner", f0["cmt"])
+		f2 := v["2"].(map[string]any)
+		if f1["cmt"] != "Inner" {
+			t.Fatalf("frame 1: expected cmt %q, got %v", "Inner", f1["cmt"])
 		}
-		if f1["cmt"] != "Outer" {
-			t.Fatalf("frame 1: expected cmt %q, got %v", "Outer", f1["cmt"])
+		if f2["cmt"] != "Outer" {
+			t.Fatalf("frame 2: expected cmt %q, got %v", "Outer", f2["cmt"])
 		}
 	})
 
@@ -183,7 +186,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["0"].(map[string]any)
+		frame := obj.Value.(map[string]any)["1"].(map[string]any)
 		if _, exists := frame["cmt"]; exists {
 			t.Fatalf("expected no cmt field, got %v", frame["cmt"])
 		}
@@ -218,6 +221,9 @@ func TestCodec(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantType, wantVal := parseDecodedFile(t, string(decodedBytes))
+		// Convert reference implementation output (0-based keys) to our
+		// native format (1-based keys).
+		wantVal = refToNative(wantVal)
 
 		t.Run(name+"/decode", func(t *testing.T) {
 			if obj.Type != wantType {
@@ -266,9 +272,36 @@ func parseDecodedFile(t *testing.T, content string) (codec.ObjectType, any) {
 	return typ, val
 }
 
+// refToNative converts reference implementation decoded output to match our
+// codec's native format. The reference JS codec stores Lua integer table keys
+// as 0-based strings (k - 1); our codec preserves Lua's native 1-based
+// numbering. This function shifts all numeric string keys in maps by +1.
+func refToNative(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(val))
+		for k, child := range val {
+			newKey := k
+			if n, err := strconv.Atoi(k); err == nil {
+				newKey = strconv.Itoa(n + 1)
+			}
+			result[newKey] = refToNative(child)
+		}
+		return result
+	case []any:
+		result := make([]any, len(val))
+		for i, elem := range val {
+			result[i] = refToNative(elem)
+		}
+		return result
+	default:
+		return v
+	}
+}
+
 // matchBehaviors compares two behavior maps using graph isomorphism.
 // Frame numbers may differ between got and want; the comparison builds a
-// bijective frame-number mapping via BFS from frame "0".
+// bijective frame-number mapping via BFS from frame "1".
 func matchBehaviors(t *testing.T, got, want map[string]any) {
 	t.Helper()
 
@@ -292,7 +325,7 @@ func matchBehaviors(t *testing.T, got, want map[string]any) {
 		return
 	}
 
-	// 3. BFS from ("0", "0").
+	// 3. BFS from ("1", "1").
 	g2w := map[string]string{} // got frame key → want frame key
 	w2g := map[string]string{} // want frame key → got frame key
 
@@ -320,7 +353,7 @@ func matchBehaviors(t *testing.T, got, want map[string]any) {
 		queue = append(queue, framePair{g, w})
 	}
 
-	addMapping("0", "0")
+	addMapping("1", "1")
 
 	for len(queue) > 0 {
 		p := queue[0]

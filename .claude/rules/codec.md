@@ -46,5 +46,10 @@ file.
 There may be multiple valid ways to encode the same data. Do not rely on two
 encodings of the same data to be equal.
 
-The `.decoded` and `.encoded` files are trusted inputs. They should never be
-changed by anyone other than a human.
+The `.decoded` and `.encoded` files are trusted inputs derived from the
+reference JavaScript implementation. They should never be changed
+programmatically — changes require human verification against the reference
+implementation. When our codec's output format differs from the reference
+(e.g., 1-based vs 0-based integer keys), the test code bridges the gap via
+a conversion routine (`refToNative` in `main_test.go`) rather than modifying
+the test data.

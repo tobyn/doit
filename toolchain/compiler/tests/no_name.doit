@@ -1,3 +1,4 @@
+# AI-generated test
 behavior no_name {
     notify "No name given"
 }

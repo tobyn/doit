@@ -25,9 +25,9 @@ structure:
   entry is `false` (no default) or a literal value (e.g., `{"id": "foundationplate",
   "num": 22}`). Can be shorter than `"parameters"` — trailing entries are implicitly
   `false`.
-- **`"0"`, `"1"`, `"2"`, ...** — `map[string]any`. Numbered frames representing the
+- **`"1"`, `"2"`, `"3"`, ...** — `map[string]any`. Numbered frames representing the
   behavior's instruction sequence. Keys are sequential integer strings starting from
-  `"0"`.
+  `"1"` (matching Lua's 1-based indexing).
 
 ## Frame keys
 
@@ -48,7 +48,7 @@ Each frame is a `map[string]any` with:
   variants).
 - **`"frame"`** (optional) — Frame type ID (used by `"build"`, `"produce"` when not using a
   library blueprint).
-- **`"0"`, `"1"`, ...** — Numbered parameter slots. Values:
+- **`"1"`, `"2"`, ...** — Numbered parameter slots (1-based). Values:
   - `string` — variable name (arbitrary)
   - `int` — positive: 1-indexed parameter reference; negative: unit register (`-4`
     Signal, `-3` Visual, `-2` Store, `-1` Goto); also used for frame references and
@@ -62,9 +62,9 @@ Each frame is a `map[string]any` with:
 ```json
 {
   "name": "Example",
-  "0": { "op": "set_number", "1": {"num": 1}, "2": "i" },
-  "1": { "op": "notify", "txt": "Loop iteration" },
-  "2": { "op": "notify", "txt": "Done", "next": false }
+  "1": { "op": "set_number", "2": {"num": 1}, "3": "i" },
+  "2": { "op": "notify", "txt": "Loop iteration" },
+  "3": { "op": "notify", "txt": "Done", "next": false }
 }
 ```
 

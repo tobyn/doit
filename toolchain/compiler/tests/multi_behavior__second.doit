@@ -1,3 +1,4 @@
+# AI-generated test
 behavior first {
     @name "First"
     notify "Hello from first"
