@@ -25,12 +25,15 @@ terminates the behavior without restarting.
 ## Data Types
 
 There are six data types: Item, Unit, Component, Technology, Informational
-Value, and Coordinate. There is no dedicated number type — numbers are
-always encoded alongside one of the other data types. A zero numeric
+Value, and Coordinate. Every register value is a composite of a typed
+value and a number — there is no dedicated number type. A zero numeric
 value does not display.
 
 Coordinates are composite: (X, Y, number). Math operations on
 coordinates apply component-wise (X to X, Y to Y).
+
+Several instructions exist for splitting register values into their
+constituent parts (value and number) and combining parts back together.
 
 ## Data Storage
 
@@ -40,13 +43,33 @@ Three kinds of registers are available:
   behavior UI. Each has a corresponding external register on the Behavior
   Controller component. Data flows bidirectionally: external writes are
   read as inputs, parameter writes are visible externally.
-- **Variables** — Automatically allocated (A, B, C, ...) when an
-  instruction produces output. Internal to the behavior.
-- **Unit Registers** — Four fixed registers with default data (e.g.,
-  self-reference). Can be overwritten.
+- **Variables** — Internal registers, allocated when an instruction
+  produces output. The game suggests default names (A, B, C, ...)
+  but they can be renamed to any string.
+- **Unit Registers** — Four fixed registers with special purposes.
+  They can be read and written normally, but should only be used for
+  their intended purpose to avoid breaking player expectations:
+  - **Signal** — readable by other units with a signal reader equipped,
+    enabling inter-unit communication.
+  - **Visual** — its value is overlaid on the unit in the game world
+    (e.g., showing what a unit is constructing or mining).
+  - **Store** — if set and the unit has inventory items, it will
+    automatically deliver them to the target (e.g., a storage building).
+  - **Goto** — the unit's default destination when it has no other
+    orders.
 
-In the compiled JSON, all three register kinds are referenced by name
-strings in instruction parameter slots.
+In the compiled JSON, variables and parameters are referenced by name
+strings in instruction parameter slots. Unit registers are referenced
+as negative integers: `-4` (Signal), `-3` (Visual), `-2` (Store),
+`-1` (Goto).
+
+Variable names are arbitrary strings. The game suggests default
+names (A, B, C, ...) but users can rename them freely.
+
+Parameters are declared via a top-level `"parameters"` array in the
+behavior JSON. Each entry represents a parameter slot (`false` for
+no default value). The game UI can only display 10 parameters, so
+the compiler should warn if a behavior declares more than 10.
 
 ## Instructions
 

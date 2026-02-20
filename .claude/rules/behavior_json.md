@@ -12,8 +12,21 @@ structure:
 ## Top-level keys
 
 - **`"name"`** — `string`. The behavior's display name.
-- **`"0"`, `"1"`, `"2"`, ...** — `map[string]any`. Numbered frames representing the behavior's
-  instruction sequence. Keys are sequential integer strings starting from `"0"`.
+- **`"parameters"`** (optional) — `[]bool`. Array declaring parameter slots. The array
+  length determines how many parameters exist. Values are `bool` (`true`/`false`) with
+  no observable difference; the compiler should emit `false`. The game UI can only
+  display 10 parameters.
+- **`"pnames"`** (optional) — `[]any`. Array of parameter display names. Each entry is a
+  `string` (custom name) or `false` (default name: `"Parameter N"` where N is the
+  1-indexed position). Can be shorter than `"parameters"` — trailing entries are
+  implicitly `false`.
+- **`"pinits"`** (optional) — `[]any`. Array of parameter initial/default values. Each
+  entry is `false` (no default) or a literal value (e.g., `{"id": "foundationplate",
+  "num": 22}`). Can be shorter than `"parameters"` — trailing entries are implicitly
+  `false`.
+- **`"0"`, `"1"`, `"2"`, ...** — `map[string]any`. Numbered frames representing the
+  behavior's instruction sequence. Keys are sequential integer strings starting from
+  `"0"`.
 
 ## Frame keys
 
@@ -34,8 +47,14 @@ Each frame is a `map[string]any` with:
   variants).
 - **`"frame"`** (optional) — Frame type ID (used by `"build"`, `"produce"` when not using a
   library blueprint).
-- **`"0"`, `"1"`, ...** — Numbered parameter slots. Values: `string` (register name), `int`
-  (data value or frame reference), `map[string]any` (literal, e.g., `{"num": 5}`), `bool` (flag).
+- **`"0"`, `"1"`, ...** — Numbered parameter slots. Values:
+  - `string` — variable name (arbitrary)
+  - `int` — positive: 1-indexed parameter reference; negative: unit register (`-4`
+    Signal, `-3` Visual, `-2` Store, `-1` Goto); also used for frame references and
+    data values depending on context
+  - `map[string]any` — literal value (e.g., `{"num": 5}`,
+    `{"id": "foundationplate", "num": 22}`)
+  - `bool` — flag
 
 ## Example
 
