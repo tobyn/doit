@@ -391,46 +391,57 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown_unit_register", func(t *testing.T) {
+	t.Run("unknown_register", func(t *testing.T) {
 		src := `behavior a { domove $foo }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "unknown unit register") {
+		if !strings.Contains(err.Error(), "unknown register") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("param_after_instruction", func(t *testing.T) {
-		src := `behavior a { notify "hi"; param x "X" }`
+		src := `behavior a { notify "hi"; @param in x "X" }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "param must be declared before any instructions") {
+		if !strings.Contains(err.Error(), "@param must be declared before any instructions") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("param_name_conflict", func(t *testing.T) {
-		src := "behavior a { param $signal \"Signal\" }"
+	t.Run("param_builtin_conflict", func(t *testing.T) {
+		src := `behavior a { @param in signal "Signal" }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "conflicts with a unit register") {
+		if !strings.Contains(err.Error(), "conflicts with a built-in register") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("var_shadows_param", func(t *testing.T) {
-		src := `behavior a { param x "X"; var x = 5 }`
+	t.Run("param_duplicate_name", func(t *testing.T) {
+		src := `behavior a { @param in x "X1"; @param out x "X2" }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "conflicts with a parameter") {
+		if !strings.Contains(err.Error(), "duplicate parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("param_invalid_direction", func(t *testing.T) {
+		src := `behavior a { @param rw x "X" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected parameter direction") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

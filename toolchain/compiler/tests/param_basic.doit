@@ -1,9 +1,9 @@
 # AI-generated test
 behavior param_basic {
     @name "Param Basic"
-    param target "Target"
-    param store "Store"
+    @param in target "Target"
+    @param inout storage "Storage"
 
-    domove target
-    set_reg store, $store
+    domove $target
+    set_reg $storage, $store
 }

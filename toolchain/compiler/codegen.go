@@ -53,6 +53,13 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 					return nil, err
 				}
 				value["name"] = name
+			case "param":
+				if hasInstruction {
+					return nil, p.errorf(tok.pos, "@param must be declared before any instructions")
+				}
+				if err := p.parseParamAttr(syms, tok.pos); err != nil {
+					return nil, err
+				}
 			default:
 				return nil, p.errorf(attr.pos, "unknown attribute @%s", attr.val)
 			}
@@ -65,15 +72,6 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		comment := p.docComment
 
 		switch tok.val {
-		case "param":
-			if hasInstruction {
-				return nil, p.errorf(tok.pos, "param must be declared before any instructions")
-			}
-			if err := p.parseParamDecl(syms, tok.pos); err != nil {
-				return nil, err
-			}
-			continue
-
 		case "instruction":
 			hasInstruction = true
 			instr, err := p.parseInstruction()
@@ -419,10 +417,10 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int) (a
 		if reg, ok := unitRegisters[name]; ok {
 			return reg, nil
 		}
-		return nil, p.errorf(pos, "unknown unit register %q", name)
-	}
-	if idx, ok := syms.paramMap[name]; ok {
-		return idx, nil
+		if idx, ok := syms.paramMap[name]; ok {
+			return idx, nil
+		}
+		return nil, p.errorf(pos, "unknown register %q", name)
 	}
 	return name, nil // regular variable name
 }
@@ -448,10 +446,10 @@ func (p *parser) parseArgValue(syms *symbolTable) (any, error) {
 			if reg, ok := unitRegisters[tok.val]; ok {
 				return reg, nil
 			}
-			return nil, p.errorf(tok.pos, "unknown unit register %q", tok.val)
-		}
-		if idx, ok := syms.paramMap[tok.val]; ok {
-			return idx, nil
+			if idx, ok := syms.paramMap[tok.val]; ok {
+				return idx, nil
+			}
+			return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
 		}
 		return tok.val, nil // variable name
 	default:
@@ -849,31 +847,51 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody, sy
 	return nil
 }
 
-// parseParamDecl parses a `param` declaration inside a behavior body.
-// Syntax: param <name> ["display name"]
-func (p *parser) parseParamDecl(syms *symbolTable, pos int) error {
+// parseParamAttr parses an @param attribute inside a behavior body.
+// Syntax: @param <direction> <name> <"display name" | { localized block }>
+// Direction is one of: in, out, inout.
+func (p *parser) parseParamAttr(syms *symbolTable, pos int) error {
+	// Parse direction
+	dirTok, err := p.expect(tokIdent)
+	if err != nil {
+		return err
+	}
+	switch dirTok.val {
+	case "in", "out", "inout":
+		// valid
+	default:
+		return p.errorf(dirTok.pos, "expected parameter direction (in, out, inout), got %q", dirTok.val)
+	}
+
+	// Parse variable name
 	nameTok, err := p.expect(tokIdent)
 	if err != nil {
 		return err
 	}
-	name := nameTok.val
+	dollarName := "$" + nameTok.val
 
 	// Check for naming conflicts
-	if _, ok := unitRegisters[name]; ok {
-		return p.errorf(nameTok.pos, "parameter name %q conflicts with a unit register", name)
+	if _, ok := unitRegisters[dollarName]; ok {
+		return p.errorf(nameTok.pos, "parameter name %q conflicts with a built-in register", dollarName)
 	}
-	if _, ok := syms.paramMap[name]; ok {
-		return p.errorf(nameTok.pos, "duplicate parameter %q", name)
+	if _, ok := syms.paramMap[dollarName]; ok {
+		return p.errorf(nameTok.pos, "duplicate parameter %q", dollarName)
 	}
 
-	// Optional display name (string literal)
-	displayName := name
+	// Parse display name: string literal or localized block
+	displayName := nameTok.val
 	peek, err := p.next()
 	if err != nil {
 		return err
 	}
 	if peek.kind == tokString {
 		displayName = peek.val
+	} else if peek.kind == tokLBrace {
+		resolved, err := p.resolveLocalizedName()
+		if err != nil {
+			return err
+		}
+		displayName = resolved
 	} else {
 		p.unget(peek)
 	}
@@ -884,22 +902,17 @@ func (p *parser) parseParamDecl(syms *symbolTable, pos int) error {
 
 	idx := len(syms.params) + 1
 	syms.params = append(syms.params, paramInfo{
-		index: idx,
-		name:  displayName,
+		index:     idx,
+		name:      displayName,
+		direction: dirTok.val,
 	})
-	syms.paramMap[name] = idx
+	syms.paramMap[dollarName] = idx
 	return nil
 }
 
 // checkVarName validates that a variable name doesn't conflict with existing
 // declarations.
 func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
-	if _, ok := unitRegisters[name]; ok {
-		return p.errorf(pos, "variable name %q conflicts with a unit register", name)
-	}
-	if _, ok := syms.paramMap[name]; ok {
-		return p.errorf(pos, "variable name %q conflicts with a parameter", name)
-	}
 	if _, ok := syms.vars[name]; ok {
 		return p.errorf(pos, "variable %q already declared", name)
 	}

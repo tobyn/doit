@@ -97,14 +97,14 @@ type varInfo struct {
 }
 
 type paramInfo struct {
-	index int    // 1-based parameter index
-	name  string // display name
-	out   bool   // output parameter
+	index     int    // 1-based parameter index
+	name      string // display name
+	direction string // "in", "out", or "inout"
 }
 
 type symbolTable struct {
 	params   []paramInfo
-	paramMap map[string]int     // identifier name → 1-based index
+	paramMap map[string]int     // "$name" → 1-based index
 	vars     map[string]varInfo // declared variables
 }
 

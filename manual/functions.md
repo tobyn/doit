@@ -31,7 +31,8 @@ set_number null, 5, x
 add x, 10, x
 ```
 
-Identifiers are resolved in order: parameters (by name), then variables.
+Unit register and parameter references use the `$` prefix (e.g., `$store`,
+`$my_param`). Bare identifiers resolve as variable names.
 
 ## The Standard Library
 

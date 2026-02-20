@@ -154,32 +154,45 @@ second gets `"Greeting sequence"` (inherited from the call site).
 
 ## Parameters
 
-Parameters are behavior-level inputs declared with `param`. They appear as
-editable registers on the behavior controller component in-game. Each
-parameter gets a 1-based index in declaration order.
+Parameters are behavior-level registers declared with the `@param` attribute.
+They appear as editable registers on the behavior controller component
+in-game. Each parameter gets a 1-based index in declaration order.
 
 ```doit
 behavior miner_hauler {
     @name "Miner Hauler"
-    param gang_id "Gang ID"
-    param foreman "Foreman"
-    param store "Store"
+    @param in gang_id "Gang ID"
+    @param inout foreman "Foreman"
+    @param inout storage "Storage"
 
-    domove foreman
-    set_reg store, $store
+    domove $foreman
+    set_reg $storage, $store
 }
 ```
 
-- `param name` — declares a parameter; the display name defaults to the
-  identifier name
-- `param name "Display Name"` — declares a parameter with a custom display
-  name
+The syntax is `@param <direction> <name> <display>`:
+
+- **Direction**: `in` (read-only input), `out` (write-only output), or
+  `inout` (read/write)
+- **Name**: the identifier used to reference this parameter as `$name`
+- **Display**: a string literal or a localized block (same as `@name`)
+
+```doit
+@param in target "Target"
+@param inout gang_id {
+    en "Gang ID"
+    ja "ギャングID"
+}
+```
+
+If the display name is omitted, it defaults to the identifier name.
 
 Parameters must be declared before any instructions. The game UI can display
-at most 10 parameters; the compiler warns if more are declared.
+at most 10 parameters; the compiler errors if more are declared.
 
-Parameter names can be used as function arguments and assignment targets,
-where they compile to the parameter's 1-based index.
+Parameter names are referenced with the `$` prefix (e.g., `$target`) and
+can be used as function arguments and assignment targets. The parameter name
+must not conflict with a built-in unit register or another parameter.
 
 ## Variables
 

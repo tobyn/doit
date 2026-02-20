@@ -40,8 +40,8 @@ exported `Keywords` map lists all reserved keywords for use by editor tooling.
 Brace-delimited blocks fall into two categories. **Statement blocks** (behavior
 bodies, function bodies, if/else/while/loop bodies) all contain a sequence of
 statements and can be parsed uniformly. **Structured data blocks** (the
-`instruction` intrinsic and the `@name` localized block) each have their own
-parsing rules and semantics.
+`instruction` intrinsic and the `@name`/`@param` localized blocks) each
+have their own parsing rules and semantics.
 
 **Statement termination** (not yet implemented): The language is line-oriented.
 Statements terminate at end-of-line by default, with three exceptions:
@@ -66,9 +66,10 @@ own `#!` comment if present, otherwise inherits the caller's comment,
 recursively up the call stack.
 
 Behavior IDs can be bareword identifiers or quoted strings. The `@name` attribute sets the display
-name (at most once per behavior); if omitted, the behavior ID is used as the default name. `@name`
-supports a localized block form (`@name { en_US "English" ja "日本語" }`) that selects the best
-match for the compiler's locale setting using `golang.org/x/text/language`.
+name (at most once per behavior); if omitted, the behavior ID is used as the default name. The
+`@param` attribute declares behavior parameters (see "Behavior parameters" below). Both `@name`
+and `@param` support a localized block form (`@name { en_US "English" ja "日本語" }`) that
+selects the best match for the compiler's locale setting using `golang.org/x/text/language`.
 
 The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library, a
 `behaviorID string` that selects which behavior to compile, and a `locale string` (BCP 47 tag) for
@@ -91,18 +92,19 @@ and keyword (empty for positional). Helper methods on `fnDef` support
 keyword lookup and positional counting.
 
 **Symbol table**: During behavior compilation, a `symbolTable` tracks
-`param` declarations (with 1-based indices and display names), `var`
-declarations (mutable), and `let` declarations (immutable). Unit registers
-(`$signal`, `$visual`, `$store`, `$goto`) are a package-level
-`unitRegisters` map. The symbol table is threaded through all compilation
-functions via a `syms *symbolTable` parameter.
+`@param` declarations (with `$name` keys mapping to 1-based indices,
+direction, and display names), `var` declarations (mutable), and `let`
+declarations (immutable). Unit registers (`$signal`, `$visual`, `$store`,
+`$goto`) are a package-level `unitRegisters` map. The symbol table is
+threaded through all compilation functions via a `syms *symbolTable`
+parameter.
 
 **Rich argument types**: At behavior level, function arguments accept five
 value types: string literals (`"hello"` → string), number literals
-(`42` → `map[string]any{"num": 42}`), `null` (`false`), `$register`
-references (negative ints), and identifiers (resolved as param index or
-variable name string). Identifier resolution order: `null` → `$register` →
-param name → variable name. The same resolution applies to assignment
+(`42` → `map[string]any{"num": 42}`), `null` (`false`), `$`-prefixed
+references (unit register negative ints or parameter 1-based indices),
+and bare identifiers (variable name strings). `$name` resolution order:
+unit register → parameter. The same resolution applies to assignment
 targets (`=`, `+=`, `++`), with an immutability check for `let` variables.
 
 In function bodies (`fnBodyArg`), numbers, `null`, and `$register` are
@@ -112,11 +114,16 @@ that refer to function parameters are resolved at expansion time via
 `[]any`/`map[string]any` for args and kwArgs, allowing non-string values
 to flow through to instruction template substitution.
 
-**Behavior parameters**: Declared with `param name ["display name"]` before
-any instructions. Each gets a 1-based index. References to param names
-compile to the index integer. The compiler emits `"parameters"` (array of
-default values, currently all `false`) and `"pnames"` (array of display
-name strings) in the behavior JSON. Maximum 10 parameters.
+**Behavior parameters**: Declared with the `@param` attribute before any
+instructions: `@param <direction> <name> <display>` where direction is
+`in`, `out`, or `inout`. The display name can be a string literal or a
+localized block (same as `@name`). Each parameter gets a 1-based index in
+declaration order. References use the `$name` syntax (same prefix as unit
+registers). Resolution order: unit registers first, then parameters.
+Duplicate parameter names and conflicts with built-in unit register names
+are compiler errors. The compiler emits `"parameters"` (array of default
+values, currently all `false`) and `"pnames"` (array of display name
+strings) in the behavior JSON. Maximum 10 parameters.
 
 **Positional arg separators**: At behavior level, commas between positional
 arguments are optional. This preserves backward compatibility with

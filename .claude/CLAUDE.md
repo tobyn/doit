@@ -16,6 +16,13 @@ the language helps guide its evolution. If something isn't supported by the
 language or doesn't seem to work correctly, ask the developer for help or
 permission to fall back to raw JSON.
 
+## Project Memory
+
+The `.claude/rules/` files are the source of truth for how the codebase
+works. After implementing a feature or making a design change, update the
+relevant rules files to reflect the new state. This keeps future sessions
+accurate — they rely on these files rather than re-exploring the codebase.
+
 ## Architecture
 
 - **`toolchain/`** — The doit language's Go-based toolchain implementation
