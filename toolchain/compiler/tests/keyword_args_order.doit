@@ -1,0 +1,5 @@
+# AI-generated test
+behavior keyword_args_order {
+    @name "Keyword Args Order"
+    notify "Test", timeout: "5", value: "x"
+}

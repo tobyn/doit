@@ -53,3 +53,8 @@ implementation. When our codec's output format differs from the reference
 (e.g., 1-based vs 0-based integer keys), the test code bridges the gap via
 a conversion routine (`refToNative` in `main_test.go`) rather than modifying
 the test data.
+
+`TestDecodeErrors` in `main_test.go` covers invalid-input cases for the
+decoder (empty input, malformed prefix, bad checksums, corrupted data, etc.).
+When adding new codec functionality, include error case tests for each
+explicit error path, not just happy-path roundtrip cases.

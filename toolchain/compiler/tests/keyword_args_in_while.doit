@@ -1,0 +1,12 @@
+# AI-generated test
+behavior keyword_args_in_while {
+    @name "Keyword Args In While"
+
+    var i = 1
+    while i <= 3 {
+        notify "Iteration", timeout: "5"
+        i++
+    }
+
+    notify "Done"
+}

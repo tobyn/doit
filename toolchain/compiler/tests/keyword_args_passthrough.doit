@@ -1,0 +1,9 @@
+# AI-generated test
+fn timed_notify(txt, timeout t) {
+    notify txt, timeout: t
+}
+
+behavior keyword_args_passthrough {
+    @name "Keyword Args Passthrough"
+    timed_notify "Hello!", timeout: "10"
+}

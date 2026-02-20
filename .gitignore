@@ -2,7 +2,7 @@
 /toolchain/stdlib/instructions.lua
 
 # LLM input
-/example
+/example*
 
 # Claude Code stuff
 /.claude/**/*.local.json

@@ -191,6 +191,172 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatalf("expected no cmt field, got %v", frame["cmt"])
 		}
 	})
+
+	t.Run("unknown_keyword_arg", func(t *testing.T) {
+		src := `behavior a { notify "Hello", unknown: "x" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown keyword argument") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("positional_param_after_keyword", func(t *testing.T) {
+		src := "fn bad(value v, txt) {}\nbehavior a { notify \"hi\" }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "positional parameter after keyword parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("duplicate_keyword_arg", func(t *testing.T) {
+		src := `behavior a { notify "Hello", timeout: "5", timeout: "10" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate keyword argument") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("duplicate_keyword_arg_in_fn_body", func(t *testing.T) {
+		src := "fn bad(txt) { notify txt, timeout: \"5\", timeout: \"10\" }\nbehavior a { bad \"hi\" }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate keyword argument") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("extra_positional_arg", func(t *testing.T) {
+		src := `behavior a { notify "Hello" "extra" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many positional arguments") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unterminated_string", func(t *testing.T) {
+		src := `behavior a { notify "Hello }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unterminated string") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unknown_escape", func(t *testing.T) {
+		src := `behavior a { notify "Hello\q" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown escape") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unexpected_character", func(t *testing.T) {
+		src := `behavior a { $ }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unexpected character") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unknown_function_in_behavior", func(t *testing.T) {
+		src := `behavior a { nonexistent "x" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown statement") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unknown_function_in_fn_body", func(t *testing.T) {
+		src := "fn foo() { nonexistent \"x\" }\nbehavior a { foo }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("missing_closing_brace", func(t *testing.T) {
+		src := `behavior a { notify "Hello"`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unexpected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unknown_attribute", func(t *testing.T) {
+		src := `behavior a { @foo "bar" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown attribute") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("missing_function_arg", func(t *testing.T) {
+		src := `behavior a { check_number "x" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		// check_number expects 2 positional args; providing only 1 should fail
+		if err.Error() == "" {
+			t.Fatalf("expected non-empty error")
+		}
+	})
+
+	t.Run("invalid_top_level", func(t *testing.T) {
+		src := `foobar {}`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("empty_source", func(t *testing.T) {
+		src := ``
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "no behavior") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestCodec(t *testing.T) {
@@ -255,6 +421,66 @@ func TestCodec(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDecodeErrors(t *testing.T) {
+	t.Run("empty_input", func(t *testing.T) {
+		_, err := codec.DecodeString("")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too short") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("too_short", func(t *testing.T) {
+		_, err := codec.DecodeString("DS")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too short") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("missing_prefix", func(t *testing.T) {
+		_, err := codec.DecodeString("XXCabcde")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "does not begin with") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("invalid_base62_character", func(t *testing.T) {
+		_, err := codec.DecodeString("DSC!!!!!!!!!")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("bad_checksum", func(t *testing.T) {
+		// Take a valid-looking string and corrupt the checksum (last char)
+		// The format is DS + type + base62_u32(decompressLen) + base62_data + checksum_char
+		// Construct a minimal one with a wrong checksum
+		_, err := codec.DecodeString("DSC0a0b0c0d0")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("corrupted_zlib", func(t *testing.T) {
+		// A string that claims to have compressed data but the data is garbage.
+		// The decompressLen > 0 triggers zlib decompression.
+		// "DSC" + base62 for a non-zero decompressLen + some base62 data
+		// We'll use a known-encoded string and corrupt the data portion.
+		_, err := codec.DecodeString("DSCz00000000000z")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
 }
 
 func parseDecodedFile(t *testing.T, content string) (codec.ObjectType, any) {

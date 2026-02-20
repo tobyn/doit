@@ -1044,10 +1044,15 @@ fn nop() {
 
 # Triggers a faction notification.
 #   txt - notification text
-fn notify(txt) {
-    # frame: {"op": "notify", "0": notify_value [in], "1": timeout [in], "txt": <text>}
+#   notify_value [in, optional] - value displayed with the notification
+#   timeout [in, optional] - seconds before auto-dismiss; if absent, persists
+#     until the player dismisses it
+fn notify(txt, value value, timeout timeout) {
+    # frame: {"op": "notify", "0": value [in], "1": timeout [in], "txt": <text>}
     instruction "notify" {
         txt: txt
+        0: value
+        1: timeout
     }
 }
 

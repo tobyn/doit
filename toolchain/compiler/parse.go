@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 	"io/fs"
+	"strconv"
 	"strings"
 
 	"github.com/tobyn/doit/toolchain/codec"
@@ -29,6 +30,56 @@ func parseStdlib(stdlib fs.FS) (map[string]*fnDef, error) {
 	return fns, nil
 }
 
+func (p *parser) parseParamList() ([]paramDef, error) {
+	if _, err := p.expect(tokLParen); err != nil {
+		return nil, err
+	}
+	var params []paramDef
+	seenKeyword := false
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind == tokRParen {
+			break
+		}
+		if len(params) > 0 {
+			if tok.kind != tokComma {
+				return nil, p.errorf(tok.pos, "expected ',' or ')', got %s", tok.describe())
+			}
+			tok, err = p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if tok.kind != tokIdent {
+			return nil, p.errorf(tok.pos, "expected parameter name, got %s", tok.describe())
+		}
+
+		// Peek: if next is an identifier, this is a keyword param
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokIdent {
+			// keyword param: tok is keyword, peek is variable name
+			seenKeyword = true
+			params = append(params, paramDef{
+				name: peek.val, keyword: tok.val,
+			})
+		} else {
+			// positional param
+			p.unget(peek)
+			if seenKeyword {
+				return nil, p.errorf(tok.pos, "positional parameter after keyword parameter")
+			}
+			params = append(params, paramDef{name: tok.val})
+		}
+	}
+	return params, nil
+}
+
 func parseStdlibFile(src string, fns map[string]*fnDef) error {
 	p := &parser{scanner: scanner{src: src}}
 	for {
@@ -47,32 +98,10 @@ func parseStdlibFile(src string, fns map[string]*fnDef) error {
 		if err != nil {
 			return err
 		}
-		if _, err := p.expect(tokLParen); err != nil {
-			return err
-		}
 
-		var params []string
-		for {
-			tok, err := p.next()
-			if err != nil {
-				return err
-			}
-			if tok.kind == tokRParen {
-				break
-			}
-			if len(params) > 0 {
-				if tok.kind != tokComma {
-					return p.errorf(tok.pos, "expected ',' or ')', got %s", tok.describe())
-				}
-				tok, err = p.expect(tokIdent)
-				if err != nil {
-					return err
-				}
-			}
-			if tok.kind != tokIdent {
-				return p.errorf(tok.pos, "expected parameter name, got %s", tok.describe())
-			}
-			params = append(params, tok.val)
+		params, err := p.parseParamList()
+		if err != nil {
+			return err
 		}
 
 		if _, err := p.expect(tokLBrace); err != nil {
@@ -248,32 +277,10 @@ func (p *parser) parseUserFn() error {
 	if err != nil {
 		return err
 	}
-	if _, err := p.expect(tokLParen); err != nil {
-		return err
-	}
 
-	var params []string
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return err
-		}
-		if tok.kind == tokRParen {
-			break
-		}
-		if len(params) > 0 {
-			if tok.kind != tokComma {
-				return p.errorf(tok.pos, "expected ',' or ')', got %s", tok.describe())
-			}
-			tok, err = p.expect(tokIdent)
-			if err != nil {
-				return err
-			}
-		}
-		if tok.kind != tokIdent {
-			return p.errorf(tok.pos, "expected parameter name, got %s", tok.describe())
-		}
-		params = append(params, tok.val)
+	params, err := p.parseParamList()
+	if err != nil {
+		return err
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -299,8 +306,9 @@ func (p *parser) parseUserFn() error {
 			return p.errorf(tok.pos, "unknown function %q", tok.val)
 		}
 
-		args := make([]fnBodyArg, len(callee.params))
-		for i := range callee.params {
+		posCount := callee.positionalCount()
+		args := make([]fnBodyArg, posCount)
+		for i := 0; i < posCount; i++ {
 			argTok, err := p.next()
 			if err != nil {
 				return err
@@ -315,7 +323,68 @@ func (p *parser) parseUserFn() error {
 			}
 		}
 
-		body = append(body, fnBodyCall{name: tok.val, args: args, comment: comment})
+		// Parse optional keyword args: , keyword: value
+		// First check for extra positional args that should be keyword args.
+		var kwArgs map[string]fnBodyArg
+		peek, err := p.next()
+		if err != nil {
+			return err
+		}
+		if (peek.kind == tokString || peek.kind == tokIdent) && callee.positionalCount() < len(callee.params) {
+			// Could be an extra positional arg — but in fn bodies, identifiers
+			// are also valid as the start of the next statement. Only flag
+			// strings, which are unambiguously an argument.
+			if peek.kind == tokString {
+				return p.errorf(peek.pos,
+					"too many positional arguments for %s (remaining parameters are keyword-only)", tok.val)
+			}
+			// For identifiers, push back and let the next iteration handle it.
+			p.unget(peek)
+		} else if peek.kind == tokComma {
+			kwArgs = map[string]fnBodyArg{}
+			for {
+				kwTok, err := p.expect(tokIdent)
+				if err != nil {
+					return err
+				}
+				kw := callee.keywordByName(kwTok.val)
+				if kw == nil {
+					return p.errorf(kwTok.pos, "unknown keyword argument %q", kwTok.val)
+				}
+				if _, exists := kwArgs[kwTok.val]; exists {
+					return p.errorf(kwTok.pos, "duplicate keyword argument %q", kwTok.val)
+				}
+				if _, err := p.expect(tokColon); err != nil {
+					return err
+				}
+				valTok, err := p.next()
+				if err != nil {
+					return err
+				}
+				switch valTok.kind {
+				case tokString:
+					kwArgs[kwTok.val] = fnBodyArg{val: valTok.val}
+				case tokIdent:
+					kwArgs[kwTok.val] = fnBodyArg{isIdent: true, val: valTok.val}
+				default:
+					return p.errorf(valTok.pos, "expected string or identifier, got %s", valTok.describe())
+				}
+
+				// Check for another comma
+				next, err := p.next()
+				if err != nil {
+					return err
+				}
+				if next.kind != tokComma {
+					p.unget(next)
+					break
+				}
+			}
+		} else {
+			p.unget(peek)
+		}
+
+		body = append(body, fnBodyCall{name: tok.val, args: args, kwArgs: kwArgs, comment: comment})
 	}
 
 	p.fns[nameTok.val] = &fnDef{params: params, body: body}
@@ -382,7 +451,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 		if tok.kind == tokRBrace {
 			break
 		}
-		if tok.kind != tokIdent {
+		if tok.kind != tokIdent && tok.kind != tokNumber {
 			return nil, p.errorf(tok.pos, "expected field name or '}', got %s", tok.describe())
 		}
 		key := tok.val
@@ -403,27 +472,44 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 	return frame, nil
 }
 
-func (p *parser) expandCall(name string, args []string, b *frameBuilder, pos int, comment string) error {
+func (p *parser) expandCall(name string, args []string, kwArgs map[string]string, b *frameBuilder, pos int, comment string) error {
 	fn := p.fns[name]
 	if fn == nil {
 		return p.errorf(pos, "unknown statement %q", name)
 	}
 
 	paramMap := map[string]string{}
-	for i, pname := range fn.params {
-		paramMap[pname] = args[i]
+	posIdx := 0
+	for _, pd := range fn.params {
+		if pd.keyword == "" {
+			paramMap[pd.name] = args[posIdx]
+			posIdx++
+		} else if kwArgs != nil {
+			if val, ok := kwArgs[pd.keyword]; ok {
+				paramMap[pd.name] = val
+			}
+		}
 	}
 
 	if fn.frame != nil {
+		kwVars := fn.keywordVarNames()
 		instr := make(map[string]any, len(fn.frame))
 		for k, v := range fn.frame {
+			// Convert 0-based reference keys to 1-based native keys.
+			nativeKey := k
+			if n, err := strconv.Atoi(k); err == nil {
+				nativeKey = strconv.Itoa(n + 1)
+			}
 			if s, ok := v.(string); ok {
 				if arg, ok := paramMap[s]; ok {
-					instr[k] = arg
+					instr[nativeKey] = arg
 					continue
 				}
+				if kwVars[s] {
+					continue // omit absent keyword param
+				}
 			}
-			instr[k] = v
+			instr[nativeKey] = v
 		}
 		if comment != "" {
 			instr["cmt"] = comment
@@ -445,11 +531,23 @@ func (p *parser) expandCall(name string, args []string, b *frameBuilder, pos int
 				resolvedArgs[i] = arg.val
 			}
 		}
+		resolvedKwArgs := map[string]string{}
+		for kw, arg := range call.kwArgs {
+			if arg.isIdent {
+				if val, ok := paramMap[arg.val]; ok {
+					resolvedKwArgs[kw] = val
+				} else {
+					resolvedKwArgs[kw] = arg.val
+				}
+			} else {
+				resolvedKwArgs[kw] = arg.val
+			}
+		}
 		callComment := call.comment
 		if callComment == "" {
 			callComment = comment
 		}
-		if err := p.expandCall(call.name, resolvedArgs, b, pos, callComment); err != nil {
+		if err := p.expandCall(call.name, resolvedArgs, resolvedKwArgs, b, pos, callComment); err != nil {
 			return err
 		}
 	}

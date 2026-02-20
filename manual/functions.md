@@ -27,6 +27,37 @@ all programs — no import is needed.
 For example, `notify` is a standard library function that maps to Desynced's
 `notify` instruction.
 
+## Keyword Arguments
+
+Some functions accept keyword arguments — named, optional parameters that
+follow the positional arguments. Keyword arguments are separated from
+positional arguments (and from each other) by commas, and use `keyword: value`
+syntax:
+
+```doit
+notify "Hello!", timeout: "10"
+notify "Hello!", value: x, timeout: y
+notify "Hello!"
+```
+
+Keyword arguments can be provided in any order and are optional — omitting one
+omits the corresponding field from the compiled instruction.
+
+### Defining keyword parameters
+
+In a function definition, keyword parameters are written as `keyword varname`
+after all positional parameters:
+
+```doit
+fn timed_notify(txt, timeout t) {
+    notify txt, timeout: t
+}
+```
+
+The keyword and variable name can be the same: `timeout timeout`.
+
+All positional parameters must come before keyword parameters.
+
 ## Defining Functions
 
 Define a function with `fn`:

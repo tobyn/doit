@@ -1,0 +1,5 @@
+# AI-generated test
+behavior keyword_args {
+    @name "Keyword Args"
+    notify "Hello!", timeout: "10"
+}

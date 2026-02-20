@@ -74,6 +74,17 @@ single behavior, it is auto-selected. When the source contains multiple behavior
 their first entry. The compiler parses stdlib function definitions first, then compiles
 user source. Stdlib functions that contain an `instruction` intrinsic are inlined at call
 sites — the compiler substitutes arguments into the instruction template fields.
+Numeric keys in instruction templates are converted from 0-based (reference
+format) to 1-based (native wire format) during expansion.
+
+**Function parameters** support keyword arguments with the `keyword varname`
+syntax in parameter lists (e.g., `fn notify(txt, value v, timeout t)`).
+All positional parameters must precede keyword parameters. At call sites,
+keyword args follow positional args after a comma: `notify "Hello!", timeout: "10"`.
+Keyword args are optional — omitting one omits the corresponding field from
+the compiled instruction. The `paramDef` type tracks each parameter's name
+and keyword (empty for positional). Helper methods on `fnDef` support
+keyword lookup and positional counting.
 
 ## Test Case Format
 
@@ -111,3 +122,13 @@ All files belonging to an AI-generated test case (`.doit`, `.json`, and any
 other associated files) may be edited freely to fix or improve them.
 All files belonging to a test case without this marker are human-authored
 and should not be modified programmatically.
+
+### Error case coverage
+
+New language features must include error case tests in `TestCompileErrors`
+(or `TestDecodeErrors` for codec changes), not just happy-path `.doit`/`.json`
+pairs. Cover at minimum: invalid syntax the user is likely to write by
+mistake, and each explicit error path added by the implementation. For
+example, keyword arguments added tests for unknown keywords, duplicate
+keywords, positional-after-keyword in definitions, and extra positional
+args at call sites.

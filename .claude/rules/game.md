@@ -42,6 +42,23 @@ coordinates apply component-wise (X to X, Y to Y).
 Several instructions exist for splitting register values into their
 constituent parts (value and number) and combining parts back together.
 
+In the compiled JSON, typed values are represented as objects:
+
+- **Item, Component, Technology, Informational Value**:
+  `{"id": "<game_id>", "num": <n>}` — the type is implicit in the
+  ID string's namespace (e.g., `"metalbar"` for an item, `"c_behavior"`
+  for a component, `"t_signals2"` for a tech, `"v_pentagon"` for a value)
+- **Coordinate**: `{"coord": {"x": <x>, "y": <y>}, "num": <n>}`
+- **Number only**: `{"num": <n>}`
+- **Empty/no value**: `null` or `false`
+
+The `value_type` instruction ("Data type switch" in the game UI) is a
+6-way branch on data type. It takes one input and has 6 execution
+branch slots (one per type) plus a fall-through for empty/no-match.
+The branch order is: Item, Unit, Component, Tech, Value, Coord. In
+the compiled JSON, the input is slot `"0"` and the branches are exec
+slots `"1"` through `"6"`, with `"next"` as the no-match path.
+
 ## Data Storage
 
 Three kinds of registers are available:
@@ -86,9 +103,14 @@ Instructions are the nodes in the behavior graph. Each has:
 - Input/output data pins (parameters/variables)
 - Execution flow pins (next instruction, conditional branches)
 
-Conditional instructions (e.g., `check_number`) have multiple output
-paths. In the compiled JSON, these map to numbered slots (`"1"` for
-if_larger, `"2"` for if_smaller) containing jump targets.
+Conditional instructions have multiple output paths. In the compiled
+JSON, these map to numbered exec slots containing jump targets.
+
+The `check_number` instruction ("Compare Number" in the game UI) is a
+3-way branch that compares the numeric part of two registers. It takes
+two inputs: a value (slot `"2"`) and a comparison target (slot `"3"`).
+The three output paths are: slot `"0"` (if larger), slot `"1"` (if
+smaller), and `"next"` (if equal, fall-through).
 
 ## Import/Export
 

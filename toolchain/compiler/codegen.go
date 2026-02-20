@@ -411,8 +411,10 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		return p.errorf(tok.pos, "unknown statement %q", tok.val)
 	}
 
-	args := make([]string, len(fn.params))
-	for i := range fn.params {
+	// Parse positional args (string literals only at behavior level)
+	posCount := fn.positionalCount()
+	args := make([]string, posCount)
+	for i := 0; i < posCount; i++ {
 		str, err := p.expect(tokString)
 		if err != nil {
 			return err
@@ -420,7 +422,60 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		args[i] = str.val
 	}
 
-	return p.expandCall(tok.val, args, b, tok.pos, comment)
+	// Parse optional keyword args: , keyword: value
+	// First check for extra positional args that should be keyword args.
+	var kwArgs map[string]string
+	peek, err := p.next()
+	if err != nil {
+		return err
+	}
+	if peek.kind == tokString && fn.positionalCount() < len(fn.params) {
+		return p.errorf(peek.pos,
+			"too many positional arguments for %s (remaining parameters are keyword-only)", tok.val)
+	}
+	if peek.kind == tokComma {
+		kwArgs = map[string]string{}
+		for {
+			kwTok, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			kw := fn.keywordByName(kwTok.val)
+			if kw == nil {
+				return p.errorf(kwTok.pos, "unknown keyword argument %q", kwTok.val)
+			}
+			if _, exists := kwArgs[kwTok.val]; exists {
+				return p.errorf(kwTok.pos, "duplicate keyword argument %q", kwTok.val)
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return err
+			}
+			valTok, err := p.next()
+			if err != nil {
+				return err
+			}
+			switch valTok.kind {
+			case tokString, tokIdent:
+				kwArgs[kwTok.val] = valTok.val
+			default:
+				return p.errorf(valTok.pos, "expected string or identifier, got %s", valTok.describe())
+			}
+
+			// Check for another comma
+			next, err := p.next()
+			if err != nil {
+				return err
+			}
+			if next.kind != tokComma {
+				p.unget(next)
+				break
+			}
+		}
+	} else {
+		p.unget(peek)
+	}
+
+	return p.expandCall(tok.val, args, kwArgs, b, tok.pos, comment)
 }
 
 // --- If statement compilation ---

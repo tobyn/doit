@@ -34,10 +34,48 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string) (*codec.
 
 // --- Shared types ---
 
+type paramDef struct {
+	name    string // variable name used in the function body
+	keyword string // "" for positional, keyword name for keyword params
+}
+
 type fnDef struct {
-	params []string
+	params []paramDef
 	frame  map[string]any // instruction-based (stdlib)
 	body   []fnBodyCall   // call-based (user-defined)
+}
+
+// positionalCount returns the number of positional params.
+func (f *fnDef) positionalCount() int {
+	n := 0
+	for _, p := range f.params {
+		if p.keyword == "" {
+			n++
+		}
+	}
+	return n
+}
+
+// keywordVarNames returns the set of variable names that belong to
+// keyword params.
+func (f *fnDef) keywordVarNames() map[string]bool {
+	m := map[string]bool{}
+	for _, p := range f.params {
+		if p.keyword != "" {
+			m[p.name] = true
+		}
+	}
+	return m
+}
+
+// keywordByName returns the paramDef for the given keyword, or nil.
+func (f *fnDef) keywordByName(keyword string) *paramDef {
+	for i := range f.params {
+		if f.params[i].keyword == keyword {
+			return &f.params[i]
+		}
+	}
+	return nil
 }
 
 type fnBodyArg struct {
@@ -47,8 +85,9 @@ type fnBodyArg struct {
 
 type fnBodyCall struct {
 	name    string
-	args    []fnBodyArg
-	comment string // #! doc comment
+	args    []fnBodyArg          // positional args
+	kwArgs  map[string]fnBodyArg // keyword -> value
+	comment string               // #! doc comment
 }
 
 type deferredBody struct {
