@@ -12,6 +12,11 @@ fn abort_construction(target) {
 #   result [out]
 fn add(to, num, result) {
     # frame: {"op": "add", "0": to [in], "1": num [in], "2": result [out]}
+    instruction "add" {
+        0: to
+        1: num
+        2: result
+    }
 }
 
 # Moves towards a location stopping to attack any enemies encountered.
@@ -160,6 +165,11 @@ fn clear_research(tech) {
 #   result [out]
 fn combine_coordinate(x, y, result) {
     # frame: {"op": "combine_coordinate", "0": x [in], "1": y [in], "2": result [out]}
+    instruction "combine_coordinate" {
+        0: x
+        1: y
+        2: result
+    }
 }
 
 # Combine separate parameters into a register.
@@ -265,6 +275,9 @@ fn dodrop(destination) {
 #   target [in] - unit to move to; the number specifies the range
 fn domove(target) {
     # frame: {"op": "domove", "0": target [in], "c": <mode>}
+    instruction "domove" {
+        0: target
+    }
 }
 
 # Deprecated: use domove
@@ -580,6 +593,10 @@ fn get_item_info(item, result) {
 #   coord [out] - coordinate of unit
 fn get_location(unit, coord) {
     # frame: {"op": "get_location", "0": unit [in], "1": coord [out]}
+    instruction "get_location" {
+        0: unit
+        1: coord
+    }
 }
 
 # Returns the maximum stack size of an item.
@@ -651,6 +668,9 @@ fn get_season() {
 #   result [out]
 fn get_self(result) {
     # frame: {"op": "get_self", "0": result [out]}
+    instruction "get_self" {
+        0: result
+    }
 }
 
 # Gets a unit's shield as a percentage.
@@ -876,6 +896,8 @@ fn launch() {
 # Run one instruction at a time.
 fn lock() {
     # frame: {"op": "lock"}
+    instruction "lock" {
+    }
 }
 
 # Fix all storage slots or a specific item slot.
@@ -1215,6 +1237,11 @@ fn select_nearest(unit_a, unit_b) {
 fn separate_coordinate(coordinate, x, y) {
     # frame: {"op": "separate_coordinate", "0": coordinate [in], "1": x [out],
     #   "2": y [out]}
+    instruction "separate_coordinate" {
+        0: coordinate
+        1: x
+        2: y
+    }
 }
 
 # Split a register into separate parameters.
@@ -1266,6 +1293,11 @@ fn set_logistics_options() {
 #   to [out]
 fn set_number(value, num_coord, to) {
     # frame: {"op": "set_number", "0": value [in], "1": num_coord [in], "2": to [out]}
+    instruction "set_number" {
+        0: value
+        1: num_coord
+        2: to
+    }
 }
 
 # Copy a value to a frame register, parameter, or variable.
@@ -1273,6 +1305,10 @@ fn set_number(value, num_coord, to) {
 #   target [out]
 fn set_reg(value, target) {
     # frame: {"op": "set_reg", "0": value [in], "1": target [out]}
+    instruction "set_reg" {
+        0: value
+        1: target
+    }
 }
 
 # Writes a value into a component register on an external unit.
@@ -1327,6 +1363,11 @@ fn stop() {
 #   result [out]
 fn sub(from, num, result) {
     # frame: {"op": "sub", "0": from [in], "1": num [in], "2": result [out]}
+    instruction "sub" {
+        0: from
+        1: num
+        2: result
+    }
 }
 
 # Filters the passed unit or item, branching to matching cases.
@@ -1383,6 +1424,8 @@ fn unit_type(unit) {
 # Run as many instructions as possible. Use wait instructions to throttle execution.
 fn unlock() {
     # frame: {"op": "unlock"}
+    instruction "unlock" {
+    }
 }
 
 # Unfix all inventory slots or a specific item slot.
@@ -1416,6 +1459,9 @@ fn value_type(data) {
 #   time [in] - number of ticks to wait
 fn wait(time) {
     # frame: {"op": "wait", "0": time [in]}
+    instruction "wait" {
+        0: time
+    }
 }
 
 # Waits for a component before continuing.

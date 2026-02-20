@@ -11,27 +11,31 @@ output format.
 
 ## Architecture
 
-- **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types,
+- **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
+  (`fnDef`, `fnBodyArg`, `symbolTable`, `unitRegisters`),
   and `frameBuilder`/`frameRef` abstraction for frame management
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`), token types,
-  `Keywords` map, error formatting
+  `Keywords` map, `$`-prefix scanning, error formatting
 - **`compiler/parse.go`** — Stdlib parsing, file-level parsing, function definitions,
-  call expansion
-- **`compiler/codegen.go`** — Behavior body compilation: loops, if/else, deferred body
-  emission
+  call expansion with `[]any`/`map[string]any` argument types
+- **`compiler/codegen.go`** — Behavior body compilation: param/let/var declarations,
+  symbol table tracking, rich argument parsing, assignment target resolution,
+  loops, if/else, deferred body emission
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled
   output)
 
 The compiler is structured as a standalone `scanner` struct embedded in a
-recursive-descent `parser`. The scanner tokenizes the source into identifiers,
-string literals, numbers, braces, parentheses, colons, commas, `@`, and
-comparison/assignment operators, skipping whitespace and `#` line comments. The parser consumes tokens via the promoted scanner methods and
-directly emits the `*codec.Object` output (type `Behavior`) via `frameBuilder`
-without an intermediate AST. Errors include line:column positions. Wire format
-details (like Lua's 1-based indexing) are encapsulated at the `frameBuilder`
+recursive-descent `parser`. The scanner tokenizes the source into identifiers
+(including `$`-prefixed unit register names), string literals, numbers,
+braces, parentheses, colons, commas, `@`, and comparison/assignment
+operators, skipping whitespace and `#` line comments. The parser consumes
+tokens via the promoted scanner methods and directly emits the
+`*codec.Object` output (type `Behavior`) via `frameBuilder` without an
+intermediate AST. Errors include line:column positions. Wire format details
+(like Lua's 1-based indexing) are encapsulated at the `frameBuilder`
 boundary — compilation logic uses 0-based indices internally, and `frameRef`
-values are converted to 1-based wire format integers by `finalize`. The exported `Keywords`
-map lists all reserved keywords for use by editor tooling.
+values are converted to 1-based wire format integers by `finalize`. The
+exported `Keywords` map lists all reserved keywords for use by editor tooling.
 
 Brace-delimited blocks fall into two categories. **Statement blocks** (behavior
 bodies, function bodies, if/else/while/loop bodies) all contain a sequence of
@@ -85,6 +89,39 @@ Keyword args are optional — omitting one omits the corresponding field from
 the compiled instruction. The `paramDef` type tracks each parameter's name
 and keyword (empty for positional). Helper methods on `fnDef` support
 keyword lookup and positional counting.
+
+**Symbol table**: During behavior compilation, a `symbolTable` tracks
+`param` declarations (with 1-based indices and display names), `var`
+declarations (mutable), and `let` declarations (immutable). Unit registers
+(`$signal`, `$visual`, `$store`, `$goto`) are a package-level
+`unitRegisters` map. The symbol table is threaded through all compilation
+functions via a `syms *symbolTable` parameter.
+
+**Rich argument types**: At behavior level, function arguments accept five
+value types: string literals (`"hello"` → string), number literals
+(`42` → `map[string]any{"num": 42}`), `null` (`false`), `$register`
+references (negative ints), and identifiers (resolved as param index or
+variable name string). Identifier resolution order: `null` → `$register` →
+param name → variable name. The same resolution applies to assignment
+targets (`=`, `+=`, `++`), with an immutability check for `let` variables.
+
+In function bodies (`fnBodyArg`), numbers, `null`, and `$register` are
+pre-resolved at parse time into the `literal` field. Identifier arguments
+that refer to function parameters are resolved at expansion time via
+`resolveBodyArg` and the `paramMap`. The `expandCall` function uses
+`[]any`/`map[string]any` for args and kwArgs, allowing non-string values
+to flow through to instruction template substitution.
+
+**Behavior parameters**: Declared with `param name ["display name"]` before
+any instructions. Each gets a 1-based index. References to param names
+compile to the index integer. The compiler emits `"parameters"` (array of
+default values, currently all `false`) and `"pnames"` (array of display
+name strings) in the behavior JSON. Maximum 10 parameters.
+
+**Positional arg separators**: At behavior level, commas between positional
+arguments are optional. This preserves backward compatibility with
+string-only args (which are unambiguous without commas) while supporting
+the natural `set_reg x, $store` style with mixed types.
 
 ## Test Case Format
 

@@ -17,6 +17,8 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 
 	value := map[string]any{}
 	b := &frameBuilder{}
+	syms := newSymbolTable()
+	hasInstruction := false // true after any instruction-emitting statement
 
 	// State for break target patching after a loop
 	breakTargetFrame := -1
@@ -63,7 +65,17 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		comment := p.docComment
 
 		switch tok.val {
+		case "param":
+			if hasInstruction {
+				return nil, p.errorf(tok.pos, "param must be declared before any instructions")
+			}
+			if err := p.parseParamDecl(syms, tok.pos); err != nil {
+				return nil, err
+			}
+			continue
+
 		case "instruction":
+			hasInstruction = true
 			instr, err := p.parseInstruction()
 			if err != nil {
 				return nil, err
@@ -74,8 +86,12 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			b.emit(instr)
 
 		case "var":
+			hasInstruction = true
 			nameTok, err := p.expect(tokIdent)
 			if err != nil {
+				return nil, err
+			}
+			if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
 				return nil, err
 			}
 			if _, err := p.expect(tokEquals); err != nil {
@@ -86,6 +102,35 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				return nil, err
 			}
 			num, _ := strconv.Atoi(numTok.val)
+			syms.vars[nameTok.val] = varInfo{mutable: true}
+			f := map[string]any{
+				"op": "set_number",
+				"2":  map[string]any{"num": num},
+				"3":  nameTok.val,
+			}
+			if comment != "" {
+				f["cmt"] = comment
+			}
+			b.emit(f)
+
+		case "let":
+			hasInstruction = true
+			nameTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(tokEquals); err != nil {
+				return nil, err
+			}
+			numTok, err := p.expect(tokNumber)
+			if err != nil {
+				return nil, err
+			}
+			num, _ := strconv.Atoi(numTok.val)
+			syms.vars[nameTok.val] = varInfo{mutable: false}
 			f := map[string]any{
 				"op": "set_number",
 				"2":  map[string]any{"num": num},
@@ -97,7 +142,8 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			b.emit(f)
 
 		case "loop":
-			checkFrame, err := p.compileLoop(b)
+			hasInstruction = true
+			checkFrame, err := p.compileLoop(b, syms)
 			if err != nil {
 				return nil, err
 			}
@@ -108,17 +154,20 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			}
 
 		case "if":
-			if err := p.compileIfStmt(b, &deferred, comment); err != nil {
+			hasInstruction = true
+			if err := p.compileIfStmt(b, &deferred, comment, syms); err != nil {
 				return nil, err
 			}
 
 		case "while":
-			if err := p.compileWhile(b, comment); err != nil {
+			hasInstruction = true
+			if err := p.compileWhile(b, comment, syms); err != nil {
 				return nil, err
 			}
 
 		default:
-			if err := p.compileDefaultStatement(tok, b, comment); err != nil {
+			hasInstruction = true
+			if err := p.compileDefaultStatement(tok, b, comment, syms); err != nil {
 				return nil, err
 			}
 		}
@@ -185,6 +234,18 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		}
 	}
 
+	// Emit parameter declarations.
+	if len(syms.params) > 0 {
+		params := make([]any, len(syms.params))
+		pnames := make([]any, len(syms.params))
+		for i, pi := range syms.params {
+			params[i] = false // default value (empty)
+			pnames[i] = pi.name
+		}
+		value["parameters"] = params
+		value["pnames"] = pnames
+	}
+
 	if _, exists := value["name"]; !exists {
 		value["name"] = behaviorID
 	}
@@ -195,7 +256,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 
 // compileLoop compiles a loop body. It returns the check frame index (or -1
 // if the loop contains no if/break).
-func (p *parser) compileLoop(b *frameBuilder) (int, error) {
+func (p *parser) compileLoop(b *frameBuilder, syms *symbolTable) (int, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return -1, err
 	}
@@ -229,7 +290,7 @@ func (p *parser) compileLoop(b *frameBuilder) (int, error) {
 			checkFrame = cf
 
 		default:
-			if err := p.compileDefaultStatement(tok, b, comment); err != nil {
+			if err := p.compileDefaultStatement(tok, b, comment, syms); err != nil {
 				return -1, err
 			}
 		}
@@ -297,7 +358,7 @@ func (p *parser) compileIfBreak(b *frameBuilder, comment string) (int, error) {
 // compileWhile compiles `while ident <= number { body }`.
 // It emits a check_number and the body. The body's last instruction loops back
 // to the check, and the check's if_larger slot exits to the continuation.
-func (p *parser) compileWhile(b *frameBuilder, comment string) error {
+func (p *parser) compileWhile(b *frameBuilder, comment string, syms *symbolTable) error {
 	varTok, err := p.expect(tokIdent)
 	if err != nil {
 		return err
@@ -326,7 +387,7 @@ func (p *parser) compileWhile(b *frameBuilder, comment string) error {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return err
 	}
-	bodyFrames, err := p.compileBody()
+	bodyFrames, err := p.compileBody(syms)
 	if err != nil {
 		return err
 	}
@@ -344,8 +405,62 @@ func (p *parser) compileWhile(b *frameBuilder, comment string) error {
 	return nil
 }
 
+// resolveAssignTarget resolves an assignment target identifier through the
+// symbol table: $register → unit register int, param → index, else → variable name.
+// Returns an error if the target is an immutable let variable.
+func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int) (any, error) {
+	if vi, ok := syms.vars[name]; ok {
+		if !vi.mutable {
+			return nil, p.errorf(pos, "cannot assign to immutable variable %q", name)
+		}
+		return name, nil
+	}
+	if strings.HasPrefix(name, "$") {
+		if reg, ok := unitRegisters[name]; ok {
+			return reg, nil
+		}
+		return nil, p.errorf(pos, "unknown unit register %q", name)
+	}
+	if idx, ok := syms.paramMap[name]; ok {
+		return idx, nil
+	}
+	return name, nil // regular variable name
+}
+
+// parseArgValue parses a single argument value at behavior level.
+// Accepts strings, numbers, null, $register, param names, and variable names.
+func (p *parser) parseArgValue(syms *symbolTable) (any, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	switch tok.kind {
+	case tokString:
+		return tok.val, nil
+	case tokNumber:
+		num, _ := strconv.Atoi(tok.val)
+		return map[string]any{"num": num}, nil
+	case tokIdent:
+		if tok.val == "null" {
+			return false, nil
+		}
+		if strings.HasPrefix(tok.val, "$") {
+			if reg, ok := unitRegisters[tok.val]; ok {
+				return reg, nil
+			}
+			return nil, p.errorf(tok.pos, "unknown unit register %q", tok.val)
+		}
+		if idx, ok := syms.paramMap[tok.val]; ok {
+			return idx, nil
+		}
+		return tok.val, nil // variable name
+	default:
+		return nil, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
+	}
+}
+
 // compileDefaultStatement compiles a function call or compound assignment.
-func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment string) error {
+func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment string, syms *symbolTable) error {
 	// Peek to distinguish function call from compound assignment
 	tok2, err := p.next()
 	if err != nil {
@@ -353,11 +468,15 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 	}
 
 	if tok2.kind == tokPlusPlus {
+		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos)
+		if err != nil {
+			return err
+		}
 		f := map[string]any{
 			"op": "add",
-			"1":  tok.val,
+			"1":  target,
 			"2":  map[string]any{"num": 1},
-			"3":  tok.val,
+			"3":  target,
 		}
 		if comment != "" {
 			f["cmt"] = comment
@@ -367,6 +486,10 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 	}
 
 	if tok2.kind == tokEquals {
+		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos)
+		if err != nil {
+			return err
+		}
 		numTok, err := p.expect(tokNumber)
 		if err != nil {
 			return err
@@ -375,7 +498,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		f := map[string]any{
 			"op": "set_number",
 			"2":  map[string]any{"num": num},
-			"3":  tok.val,
+			"3":  target,
 		}
 		if comment != "" {
 			f["cmt"] = comment
@@ -385,6 +508,10 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 	}
 
 	if tok2.kind == tokPlusEquals {
+		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos)
+		if err != nil {
+			return err
+		}
 		numTok, err := p.expect(tokNumber)
 		if err != nil {
 			return err
@@ -392,9 +519,9 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		num, _ := strconv.Atoi(numTok.val)
 		f := map[string]any{
 			"op": "add",
-			"1":  tok.val,
+			"1":  target,
 			"2":  map[string]any{"num": num},
-			"3":  tok.val,
+			"3":  target,
 		}
 		if comment != "" {
 			f["cmt"] = comment
@@ -411,30 +538,40 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		return p.errorf(tok.pos, "unknown statement %q", tok.val)
 	}
 
-	// Parse positional args (string literals only at behavior level)
+	// Parse positional args (rich value types at behavior level)
 	posCount := fn.positionalCount()
-	args := make([]string, posCount)
+	args := make([]any, posCount)
 	for i := 0; i < posCount; i++ {
-		str, err := p.expect(tokString)
+		// Consume optional comma separator between positional args
+		if i > 0 {
+			sep, err := p.next()
+			if err != nil {
+				return err
+			}
+			if sep.kind != tokComma {
+				p.unget(sep)
+			}
+		}
+		val, err := p.parseArgValue(syms)
 		if err != nil {
 			return err
 		}
-		args[i] = str.val
+		args[i] = val
 	}
 
 	// Parse optional keyword args: , keyword: value
 	// First check for extra positional args that should be keyword args.
-	var kwArgs map[string]string
+	var kwArgs map[string]any
 	peek, err := p.next()
 	if err != nil {
 		return err
 	}
-	if peek.kind == tokString && fn.positionalCount() < len(fn.params) {
+	if (peek.kind == tokString || peek.kind == tokNumber) && fn.positionalCount() < len(fn.params) {
 		return p.errorf(peek.pos,
 			"too many positional arguments for %s (remaining parameters are keyword-only)", tok.val)
 	}
 	if peek.kind == tokComma {
-		kwArgs = map[string]string{}
+		kwArgs = map[string]any{}
 		for {
 			kwTok, err := p.expect(tokIdent)
 			if err != nil {
@@ -450,16 +587,11 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			if _, err := p.expect(tokColon); err != nil {
 				return err
 			}
-			valTok, err := p.next()
+			val, err := p.parseArgValue(syms)
 			if err != nil {
 				return err
 			}
-			switch valTok.kind {
-			case tokString, tokIdent:
-				kwArgs[kwTok.val] = valTok.val
-			default:
-				return p.errorf(valTok.pos, "expected string or identifier, got %s", valTok.describe())
-			}
+			kwArgs[kwTok.val] = val
 
 			// Check for another comma
 			next, err := p.next()
@@ -478,11 +610,12 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 	return p.expandCall(tok.val, args, kwArgs, b, tok.pos, comment)
 }
 
+
 // --- If statement compilation ---
 
 // compileBody compiles a brace-delimited block into a slice of frames.
 // The opening '{' must already be consumed.
-func (p *parser) compileBody() ([]map[string]any, error) {
+func (p *parser) compileBody(syms *symbolTable) ([]map[string]any, error) {
 	b := &frameBuilder{}
 	for {
 		tok, err := p.next()
@@ -499,7 +632,7 @@ func (p *parser) compileBody() ([]map[string]any, error) {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
 		comment := p.docComment
-		if err := p.compileDefaultStatement(tok, b, comment); err != nil {
+		if err := p.compileDefaultStatement(tok, b, comment, syms); err != nil {
 			return nil, err
 		}
 	}
@@ -508,7 +641,7 @@ func (p *parser) compileBody() ([]map[string]any, error) {
 
 // compileIfStmt compiles an if / else-if / else statement.
 // The "if" keyword has already been consumed.
-func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, comment string) error {
+func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, comment string, syms *symbolTable) error {
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
 		return err
@@ -536,7 +669,7 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 	if _, err := p.expect(tokLBrace); err != nil {
 		return err
 	}
-	bodyFrames, err := p.compileBody()
+	bodyFrames, err := p.compileBody(syms)
 	if err != nil {
 		return err
 	}
@@ -564,7 +697,7 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 			if _, err := p.expect(tokLBrace); err != nil {
 				return err
 			}
-			elseFrames, err := p.compileBody()
+			elseFrames, err := p.compileBody(syms)
 			if err != nil {
 				return err
 			}
@@ -588,7 +721,7 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 			return err
 		}
 		if tok.kind == tokIdent && tok.val == "else" {
-			if err := p.compileElseClauses(checkFrame, deferred); err != nil {
+			if err := p.compileElseClauses(checkFrame, deferred, syms); err != nil {
 				return err
 			}
 		} else {
@@ -619,7 +752,7 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 }
 
 // compileElseClauses compiles the else / else-if chain after an == condition.
-func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) error {
+func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody, syms *symbolTable) error {
 	// Check for "else if" vs plain "else"
 	tok, err := p.next()
 	if err != nil {
@@ -652,7 +785,7 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 		if _, err := p.expect(tokLBrace); err != nil {
 			return err
 		}
-		frames, err := p.compileBody()
+		frames, err := p.compileBody(syms)
 		if err != nil {
 			return err
 		}
@@ -678,7 +811,7 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 			if _, err := p.expect(tokLBrace); err != nil {
 				return err
 			}
-			elseFrames, err := p.compileBody()
+			elseFrames, err := p.compileBody(syms)
 			if err != nil {
 				return err
 			}
@@ -696,7 +829,7 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 		if _, err := p.expect(tokLBrace); err != nil {
 			return err
 		}
-		elseFrames, err := p.compileBody()
+		elseFrames, err := p.compileBody(syms)
 		if err != nil {
 			return err
 		}
@@ -713,6 +846,63 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody) er
 		})
 	}
 
+	return nil
+}
+
+// parseParamDecl parses a `param` declaration inside a behavior body.
+// Syntax: param <name> ["display name"]
+func (p *parser) parseParamDecl(syms *symbolTable, pos int) error {
+	nameTok, err := p.expect(tokIdent)
+	if err != nil {
+		return err
+	}
+	name := nameTok.val
+
+	// Check for naming conflicts
+	if _, ok := unitRegisters[name]; ok {
+		return p.errorf(nameTok.pos, "parameter name %q conflicts with a unit register", name)
+	}
+	if _, ok := syms.paramMap[name]; ok {
+		return p.errorf(nameTok.pos, "duplicate parameter %q", name)
+	}
+
+	// Optional display name (string literal)
+	displayName := name
+	peek, err := p.next()
+	if err != nil {
+		return err
+	}
+	if peek.kind == tokString {
+		displayName = peek.val
+	} else {
+		p.unget(peek)
+	}
+
+	if len(syms.params) >= 10 {
+		return p.errorf(pos, "too many parameters (maximum 10)")
+	}
+
+	idx := len(syms.params) + 1
+	syms.params = append(syms.params, paramInfo{
+		index: idx,
+		name:  displayName,
+	})
+	syms.paramMap[name] = idx
+	return nil
+}
+
+// checkVarName validates that a variable name doesn't conflict with existing
+// declarations.
+func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
+	if _, ok := unitRegisters[name]; ok {
+		return p.errorf(pos, "variable name %q conflicts with a unit register", name)
+	}
+	if _, ok := syms.paramMap[name]; ok {
+		return p.errorf(pos, "variable name %q conflicts with a parameter", name)
+	}
+	if _, ok := syms.vars[name]; ok {
+		return p.errorf(pos, "variable %q already declared", name)
+	}
 	return nil
 }
 

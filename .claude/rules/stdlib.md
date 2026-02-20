@@ -16,7 +16,9 @@ the `*.doit` files in the `toolchain/stdlib/` directory.
 `instructions.doit` wraps Desynced's built-in game instructions as doit functions using the
 `instruction` intrinsic. Each function corresponds to an instruction defined in `instructions.lua`.
 Functions with empty bodies (`fn foo() {}`) are stubs — they are parsed but skipped until their
-`instruction` body is implemented.
+`instruction` body is implemented. Functions with implemented instruction bodies include:
+`notify`, `get_self`, `get_location`, `separate_coordinate`, `combine_coordinate`,
+`set_reg`, `set_number`, `add`, `sub`, `domove`, `lock`, `unlock`, `wait`.
 
 Each function body contains a `# frame:` comment showing the inferred JSON structure of the
 compiled instruction. These were derived from `instructions.lua` by mapping:

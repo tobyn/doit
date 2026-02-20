@@ -81,6 +81,38 @@ func (f *fnDef) keywordByName(keyword string) *paramDef {
 type fnBodyArg struct {
 	isIdent bool
 	val     string
+	literal any // non-nil for numbers, null, $register (pre-resolved)
+}
+
+// unitRegisters maps $name identifiers to their wire-format integers.
+var unitRegisters = map[string]int{
+	"$signal": -4,
+	"$visual": -3,
+	"$store":  -2,
+	"$goto":   -1,
+}
+
+type varInfo struct {
+	mutable bool // true for var, false for let
+}
+
+type paramInfo struct {
+	index int    // 1-based parameter index
+	name  string // display name
+	out   bool   // output parameter
+}
+
+type symbolTable struct {
+	params   []paramInfo
+	paramMap map[string]int     // identifier name → 1-based index
+	vars     map[string]varInfo // declared variables
+}
+
+func newSymbolTable() *symbolTable {
+	return &symbolTable{
+		paramMap: map[string]int{},
+		vars:     map[string]varInfo{},
+	}
 }
 
 type fnBodyCall struct {

@@ -1,0 +1,9 @@
+# AI-generated test
+behavior param_basic {
+    @name "Param Basic"
+    param target "Target"
+    param store "Store"
+
+    domove target
+    set_reg store, $store
+}

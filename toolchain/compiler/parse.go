@@ -309,18 +309,11 @@ func (p *parser) parseUserFn() error {
 		posCount := callee.positionalCount()
 		args := make([]fnBodyArg, posCount)
 		for i := 0; i < posCount; i++ {
-			argTok, err := p.next()
+			arg, err := p.parseFnBodyArgValue()
 			if err != nil {
 				return err
 			}
-			switch argTok.kind {
-			case tokString:
-				args[i] = fnBodyArg{val: argTok.val}
-			case tokIdent:
-				args[i] = fnBodyArg{isIdent: true, val: argTok.val}
-			default:
-				return p.errorf(argTok.pos, "expected string or identifier, got %s", argTok.describe())
-			}
+			args[i] = arg
 		}
 
 		// Parse optional keyword args: , keyword: value
@@ -357,18 +350,11 @@ func (p *parser) parseUserFn() error {
 				if _, err := p.expect(tokColon); err != nil {
 					return err
 				}
-				valTok, err := p.next()
+				val, err := p.parseFnBodyArgValue()
 				if err != nil {
 					return err
 				}
-				switch valTok.kind {
-				case tokString:
-					kwArgs[kwTok.val] = fnBodyArg{val: valTok.val}
-				case tokIdent:
-					kwArgs[kwTok.val] = fnBodyArg{isIdent: true, val: valTok.val}
-				default:
-					return p.errorf(valTok.pos, "expected string or identifier, got %s", valTok.describe())
-				}
+				kwArgs[kwTok.val] = val
 
 				// Check for another comma
 				next, err := p.next()
@@ -389,6 +375,35 @@ func (p *parser) parseUserFn() error {
 
 	p.fns[nameTok.val] = &fnDef{params: params, body: body}
 	return nil
+}
+
+// parseFnBodyArgValue parses a single argument value in a function body call.
+// Accepts strings, identifiers, numbers, null, and $register references.
+func (p *parser) parseFnBodyArgValue() (fnBodyArg, error) {
+	tok, err := p.next()
+	if err != nil {
+		return fnBodyArg{}, err
+	}
+	switch tok.kind {
+	case tokString:
+		return fnBodyArg{val: tok.val}, nil
+	case tokNumber:
+		num, _ := strconv.Atoi(tok.val)
+		return fnBodyArg{literal: map[string]any{"num": num}}, nil
+	case tokIdent:
+		if tok.val == "null" {
+			return fnBodyArg{literal: false}, nil
+		}
+		if strings.HasPrefix(tok.val, "$") {
+			if reg, ok := unitRegisters[tok.val]; ok {
+				return fnBodyArg{literal: reg}, nil
+			}
+			return fnBodyArg{}, p.errorf(tok.pos, "unknown unit register %q", tok.val)
+		}
+		return fnBodyArg{isIdent: true, val: tok.val}, nil
+	default:
+		return fnBodyArg{}, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
+	}
 }
 
 func (p *parser) skipBraceBlock() error {
@@ -472,13 +487,26 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 	return frame, nil
 }
 
-func (p *parser) expandCall(name string, args []string, kwArgs map[string]string, b *frameBuilder, pos int, comment string) error {
+func resolveBodyArg(arg fnBodyArg, paramMap map[string]any) any {
+	if arg.literal != nil {
+		return arg.literal
+	}
+	if arg.isIdent {
+		if val, ok := paramMap[arg.val]; ok {
+			return val
+		}
+		return arg.val // variable name string
+	}
+	return arg.val // string literal
+}
+
+func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, b *frameBuilder, pos int, comment string) error {
 	fn := p.fns[name]
 	if fn == nil {
 		return p.errorf(pos, "unknown statement %q", name)
 	}
 
-	paramMap := map[string]string{}
+	paramMap := map[string]any{}
 	posIdx := 0
 	for _, pd := range fn.params {
 		if pd.keyword == "" {
@@ -519,29 +547,13 @@ func (p *parser) expandCall(name string, args []string, kwArgs map[string]string
 	}
 
 	for _, call := range fn.body {
-		resolvedArgs := make([]string, len(call.args))
+		resolvedArgs := make([]any, len(call.args))
 		for i, arg := range call.args {
-			if arg.isIdent {
-				if val, ok := paramMap[arg.val]; ok {
-					resolvedArgs[i] = val
-				} else {
-					resolvedArgs[i] = arg.val
-				}
-			} else {
-				resolvedArgs[i] = arg.val
-			}
+			resolvedArgs[i] = resolveBodyArg(arg, paramMap)
 		}
-		resolvedKwArgs := map[string]string{}
+		resolvedKwArgs := map[string]any{}
 		for kw, arg := range call.kwArgs {
-			if arg.isIdent {
-				if val, ok := paramMap[arg.val]; ok {
-					resolvedKwArgs[kw] = val
-				} else {
-					resolvedKwArgs[kw] = arg.val
-				}
-			} else {
-				resolvedKwArgs[kw] = arg.val
-			}
+			resolvedKwArgs[kw] = resolveBodyArg(arg, paramMap)
 		}
 		callComment := call.comment
 		if callComment == "" {

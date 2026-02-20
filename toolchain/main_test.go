@@ -270,7 +270,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("unexpected_character", func(t *testing.T) {
-		src := `behavior a { $ }`
+		src := `behavior a { ~ }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -354,6 +354,94 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "no behavior") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("let_reassign", func(t *testing.T) {
+		src := `behavior a { let x = 5; x = 10 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("let_plus_equals", func(t *testing.T) {
+		src := `behavior a { let x = 5; x += 1 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("let_plus_plus", func(t *testing.T) {
+		src := `behavior a { let x = 5; x++ }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unknown_unit_register", func(t *testing.T) {
+		src := `behavior a { domove $foo }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown unit register") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("param_after_instruction", func(t *testing.T) {
+		src := `behavior a { notify "hi"; param x "X" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "param must be declared before any instructions") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("param_name_conflict", func(t *testing.T) {
+		src := "behavior a { param $signal \"Signal\" }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with a unit register") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("var_shadows_param", func(t *testing.T) {
+		src := `behavior a { param x "X"; var x = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with a parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("dollar_sign_alone", func(t *testing.T) {
+		src := `behavior a { domove $ }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected register name after '$'") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -535,6 +623,20 @@ func matchBehaviors(t *testing.T, got, want map[string]any) {
 	if got["name"] != want["name"] {
 		t.Errorf("name mismatch: got %v, want %v", got["name"], want["name"])
 		return
+	}
+
+	// Compare "parameters" and "pnames" if present.
+	for _, key := range []string{"parameters", "pnames"} {
+		gv, gok := got[key]
+		wv, wok := want[key]
+		if gok != wok {
+			t.Errorf("%s presence mismatch: got %v, want %v", key, gok, wok)
+			return
+		}
+		if gok && !reflect.DeepEqual(gv, wv) {
+			t.Errorf("%s mismatch: got %v, want %v", key, gv, wv)
+			return
+		}
 	}
 
 	// 2. Count numeric-string keys (frames). Must be equal.

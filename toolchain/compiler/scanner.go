@@ -45,7 +45,10 @@ var Keywords = map[string]bool{
 	"fn":          true,
 	"if":          true,
 	"instruction": true,
+	"let":         true,
 	"loop":        true,
+	"null":        true,
+	"param":       true,
 	"private":     true,
 	"var":         true,
 	"while":       true,
@@ -175,6 +178,15 @@ func (s *scanner) next() (token, error) {
 	case c == '@':
 		s.pos++
 		return token{tokAt, "@", start}, nil
+	case c == '$':
+		s.pos++
+		if s.pos >= len(s.src) || !isIdentStart(s.src[s.pos]) {
+			return token{}, s.errorf(start, "expected register name after '$'")
+		}
+		for s.pos < len(s.src) && isIdentCont(s.src[s.pos]) {
+			s.pos++
+		}
+		return token{tokIdent, s.src[start:s.pos], start}, nil
 	case c == '"':
 		return s.scanString()
 	case c >= '0' && c <= '9':

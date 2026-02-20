@@ -1,0 +1,6 @@
+# AI-generated test
+behavior let_variable {
+    @name "Let Variable"
+    let x = 5
+    notify "Value is:", value: x
+}

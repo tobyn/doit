@@ -11,12 +11,27 @@ are quoted; multiple arguments are separated by commas:
 notify "Hello, World!"
 ```
 
-Arguments that are variables are written without quotes:
+### Argument types
+
+Function arguments accept several value types:
+
+| Syntax | Example | Description |
+|--------|---------|-------------|
+| String literal | `"Hello"` | Quoted string |
+| Number literal | `42` | Numeric value |
+| Identifier | `target` | Variable, parameter, or function parameter |
+| Unit register | `$store` | Unit register reference |
+| `null` | `null` | Empty value |
 
 ```doit
 var x = 5
-set_number x, 10
+set_number x, 10, x
+domove $goto
+set_number null, 5, x
+add x, 10, x
 ```
+
+Identifiers are resolved in order: parameters (by name), then variables.
 
 ## The Standard Library
 

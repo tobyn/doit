@@ -1,0 +1,6 @@
+# AI-generated test
+behavior unit_registers {
+    @name "Unit Registers"
+    domove $goto
+    set_reg $signal, $store
+}

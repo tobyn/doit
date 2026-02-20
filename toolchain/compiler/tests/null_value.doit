@@ -1,0 +1,5 @@
+# AI-generated test
+behavior null_value {
+    @name "Null Value"
+    set_number null, 5, x
+}

@@ -152,13 +152,52 @@ greet
 In this example, the first `notify` gets `"Says hello"` (its own), and the
 second gets `"Greeting sequence"` (inherited from the call site).
 
+## Parameters
+
+Parameters are behavior-level inputs declared with `param`. They appear as
+editable registers on the behavior controller component in-game. Each
+parameter gets a 1-based index in declaration order.
+
+```doit
+behavior miner_hauler {
+    @name "Miner Hauler"
+    param gang_id "Gang ID"
+    param foreman "Foreman"
+    param store "Store"
+
+    domove foreman
+    set_reg store, $store
+}
+```
+
+- `param name` — declares a parameter; the display name defaults to the
+  identifier name
+- `param name "Display Name"` — declares a parameter with a custom display
+  name
+
+Parameters must be declared before any instructions. The game UI can display
+at most 10 parameters; the compiler warns if more are declared.
+
+Parameter names can be used as function arguments and assignment targets,
+where they compile to the parameter's 1-based index.
+
 ## Variables
 
-Declare a variable with `var` and an initial numeric value:
+Declare a mutable variable with `var` and an initial numeric value:
 
 ```doit
 var x = 1
 ```
+
+Declare an immutable variable with `let`:
+
+```doit
+let x = 5
+```
+
+Both `var` and `let` emit a `set_number` instruction and map to a behavior
+variable register. The difference is that `let` prevents reassignment — the
+compiler errors on `=`, `+=`, or `++` targeting a `let` variable.
 
 Assign a new value with `=`:
 
@@ -172,6 +211,38 @@ Compound assignment and increment are also supported:
 x += 1
 x++
 ```
+
+Assignment targets can also be unit registers (`$store = 5`) or parameters.
+
+## Unit Registers
+
+Four special registers are available via the `$` prefix:
+
+- `$signal` — readable by other units with a signal reader
+- `$visual` — overlaid on the unit in the game world
+- `$store` — automatic item delivery target
+- `$goto` — the unit's default destination
+
+Unit registers can be used anywhere a value is expected:
+
+```doit
+domove $goto
+set_reg x, $store
+$signal = 0
+```
+
+Unknown `$` names are a compile error.
+
+## Null
+
+The `null` keyword represents an empty value. Use it in argument positions
+for instruction slots that should be explicitly empty:
+
+```doit
+set_number null, 5, x
+```
+
+`null` compiles to `false` in the behavior JSON.
 
 ## Control Flow
 
