@@ -13,9 +13,10 @@ structure:
 
 - **`"name"`** — `string`. The behavior's display name.
 - **`"parameters"`** (optional) — `[]bool`. Array declaring parameter slots. The array
-  length determines how many parameters exist. Values are `bool` (`true`/`false`) with
-  no observable difference; the compiler should emit `false`. The game UI can only
-  display 10 parameters.
+  length determines how many parameters exist. `false` = input-only (the behavior
+  only reads from this parameter), `true` = output (the behavior writes to this
+  parameter). The game UI uses this to display I/O direction indicators. The game UI
+  can only display 10 parameters.
 - **`"pnames"`** (optional) — `[]any`. Array of parameter display names. Each entry is a
   `string` (custom name) or `false` (default name: `"Parameter N"` where N is the
   1-indexed position). Can be shorter than `"parameters"` — trailing entries are
