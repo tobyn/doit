@@ -1,0 +1,5 @@
+# AI-generated test
+behavior semicolons {
+    @name "Semicolons"
+    var i = 0; notify "Hello"; i++
+}

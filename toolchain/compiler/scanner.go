@@ -84,7 +84,7 @@ func (s *scanner) skipWhitespaceAndComments() {
 	s.docComment = ""
 	for s.pos < len(s.src) {
 		c := s.src[s.pos]
-		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
+		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ';' {
 			s.pos++
 		} else if c == '#' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '!' {
 			s.pos += 2 // skip #!

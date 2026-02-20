@@ -68,7 +68,14 @@ When a file contains only one behavior, `-b` is optional.
 ## Statements
 
 Behavior bodies and control flow blocks contain sequences of statements. A
-statement terminates at the end of the line, with the following exceptions:
+statement terminates at the end of the line. Semicolons can be used to
+separate multiple statements on a single line:
+
+```doit
+lock; notify "Hello"; unlock
+```
+
+Exceptions to end-of-line termination:
 
 1. If a statement ends in a brace-delimited block, it extends to the closing
    `}`. For `if` statements, `else if` and `else` clauses continue the
