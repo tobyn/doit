@@ -105,22 +105,6 @@ fn locate_self() {
 }
 ```
 
-### Defining return values with `@1`
-
-Instruction-based functions mark output slots with `@1` to indicate they
-produce a return value:
-
-```doit
-fn get_self() {
-    instruction "get_self" { 0: @1 }
-}
-```
-
-The `@1` marker tells the compiler that this instruction slot is the first
-return value. At the call site, `@1` is replaced with the assignment target
-(e.g., the variable name from `let me = get_self`), or with an empty slot
-if the return is discarded.
-
 ## Defining Functions
 
 Define a function with `fn`:
@@ -136,8 +120,8 @@ to other function calls.
 
 ### The `return` statement
 
-User-defined functions use `return` to declare which local name is the
-function's return value:
+The `return` statement declares which local name is the function's return
+value:
 
 ```doit
 fn locate_self() {

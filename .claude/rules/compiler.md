@@ -94,27 +94,26 @@ the compiled instruction. The `paramDef` type tracks each parameter's name
 and keyword (empty for positional). Helper methods on `fnDef` support
 keyword lookup and positional counting.
 
-**Return values**: Functions can return values in two ways:
+**Return values**: Functions can produce return values. The `return`
+statement in a function body declares which local name is the function's
+return value:
+`fn locate_self() { let me = get_self; let coord = get_location me; return coord }`.
+The return identifier is stored in `fnDef.ret` (a `string`; empty = no
+return). In `expandCall`, `fn.ret` is added to `paramMap` with `retVal`
+as its value, so body calls that reference the returned name write
+directly into the caller's return target with no copies. The `return`
+statement is a compile-time binding — it does not emit a runtime
+instruction.
 
-1. **Instruction-based** (`@1` marker): The `@1` syntax inside an
-   `instruction` block marks an output slot as the first return value:
-   `fn get_self() { instruction "get_self" { 0: @1 } }`. The `@1` is
-   stored in the instruction frame as a `returnSlot(1)` value. During
-   `expandCall`, `returnSlot` values are replaced with `retVal` (or
-   `false` if discarded). Only `@1` is supported (single return); `@2`+
-   will be used for multiple returns in the future. The `returnSlot` type
-   is defined in compiler.go.
+The `@1` syntax inside an `instruction` block marks an output slot as
+the first return value:
+`fn get_self() { instruction "get_self" { 0: @1 } }`. The `@1` is stored
+in the instruction frame as a `returnSlot(1)` value. During `expandCall`,
+`returnSlot` values are replaced with `retVal` (or `false` if discarded).
+Only `@1` is supported (single return); `@2`+ will be used for multiple
+returns in the future. The `returnSlot` type is defined in compiler.go.
 
-2. **User-defined** (`return` statement): The `return` statement in a
-   function body declares which local name is the function's return value:
-   `fn locate_self() { let me = get_self; let coord = get_location me; return coord }`.
-   The return identifiers are stored in `fnDef.ret` (a `[]string`). In
-   `expandCall`, `ret[0]` is added to `paramMap` with `retVal` as its value,
-   so body calls that reference the returned name write directly into the
-   caller's return target with no copies. The `return` statement is a
-   compile-time binding — it does not emit a runtime instruction.
-
-The `fnDef.hasReturn()` method checks both mechanisms: `len(ret) > 0` OR
+The `fnDef.hasReturn()` method checks both mechanisms: `ret != ""` OR
 the frame contains a `returnSlot`. All call-site error checks ("has no
 return value") use `hasReturn()`.
 

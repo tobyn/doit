@@ -46,7 +46,7 @@ type paramDef struct {
 
 type fnDef struct {
 	params []paramDef
-	ret    []string       // return identifiers from return statement
+	ret    string         // return parameter name (empty = no return)
 	frame  map[string]any // instruction-based (stdlib)
 	body   []fnBodyCall   // call-based (user-defined)
 }
@@ -89,10 +89,11 @@ func (f *fnDef) keywordByName(keyword string) *paramDef {
 type returnSlot int
 
 // hasReturn reports whether the function produces a return value.
-// This is true if the function has a return statement (user-defined fns)
-// or if its instruction frame contains a returnSlot (@1 marker).
+// This is true if the function has a named return parameter, a return
+// statement (user-defined fns), or if its instruction frame contains
+// a returnSlot (@1 marker).
 func (f *fnDef) hasReturn() bool {
-	if len(f.ret) > 0 {
+	if f.ret != "" {
 		return true
 	}
 	for _, v := range f.frame {

@@ -288,7 +288,7 @@ func (p *parser) parseUserFn() error {
 	}
 
 	var body []fnBodyCall
-	var ret []string
+	var ret string
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -308,7 +308,7 @@ func (p *parser) parseUserFn() error {
 			if err != nil {
 				return err
 			}
-			ret = []string{retTok.val}
+			ret = retTok.val
 			continue
 		}
 
@@ -584,11 +584,11 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		}
 	}
 
-	if len(fn.ret) > 0 {
+	if fn.ret != "" {
 		if retVal != nil {
-			paramMap[fn.ret[0]] = retVal
+			paramMap[fn.ret] = retVal
 		} else {
-			paramMap[fn.ret[0]] = false
+			paramMap[fn.ret] = false
 		}
 	}
 
