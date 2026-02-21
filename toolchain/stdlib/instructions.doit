@@ -578,13 +578,13 @@ fn gather_information(range) {
 #   source [out]
 #   target [out]
 #   amount [out]
-fn get_active_order(target target, amount amount) {
+fn get_active_order() {
     # frame: {"op": "get_active_order", "0": source [out], "1": target [out],
     #   "2": amount [out]}
     return instruction "get_active_order" {
         0: @1
-        1: target
-        2: amount
+        1: @2
+        2: @3
     }
 }
 
@@ -688,14 +688,14 @@ fn get_grid_effeciency() {
 #   percent [out] - percentage of health remaining
 #   current [out, optional] - value of health remaining
 #   max [out, optional] - value of maximum health
-fn get_health(unit, current current, max max) {
+fn get_health(unit) {
     # frame: {"op": "get_health", "0": unit [in], "1": percent [out],
     #   "2": current [out], "3": max [out]}
     return instruction "get_health" {
         0: unit
         1: @1
-        2: current
-        3: max
+        2: @2
+        3: @3
     }
 }
 
@@ -704,14 +704,14 @@ fn get_health(unit, current current, max max) {
 #   out_1 [out] - first ingredient
 #   out_2 [out] - second ingredient
 #   out_3 [out] - third ingredient
-fn get_ingredients(product, out_2 out_2, out_3 out_3) {
+fn get_ingredients(product) {
     # frame: {"op": "get_ingredients", "0": product [in], "1": out_1 [out],
     #   "2": out_2 [out], "3": out_3 [out]}
     return instruction "get_ingredients" {
         0: product
         1: @1
-        2: out_2
-        3: out_3
+        2: @2
+        3: @3
     }
 }
 
@@ -867,14 +867,14 @@ fn get_self() {
 #   percent [out] - percentage of shield remaining
 #   current [out, optional] - value of shield remaining
 #   max [out, optional] - value of maximum shield
-fn get_shield(unit, current current, max max) {
+fn get_shield(unit) {
     # frame: {"op": "get_shield", "0": unit [in], "1": percent [out],
     #   "2": current [out], "3": max [out]}
     return instruction "get_shield" {
         0: unit
         1: @1
-        2: current
-        3: max
+        2: @2
+        3: @3
     }
 }
 
@@ -1273,12 +1273,12 @@ fn memory_remove(index) {
 #   index [in] - array identifier and index
 #   value [in]
 #   old [out] - previous value
-fn memory_set(index, value, old old) {
+fn memory_set(index, value) {
     # frame: {"op": "memory_set", "0": index [in], "1": value [in], "2": old [out]}
-    instruction "memory_set" {
+    return instruction "memory_set" {
         0: index
         1: value
-        2: old
+        2: @1
     }
 }
 
@@ -1623,16 +1623,16 @@ fn separate_coordinate(coordinate) {
 #   id [out, optional]
 #   x [out, optional]
 #   y [out, optional]
-fn separate_register(register, unit unit, id id, x x, y y) {
+fn separate_register(register) {
     # frame: {"op": "separate_register", "0": register [in], "1": num [out],
     #   "2": unit [out], "3": id [out], "4": x [out], "5": y [out]}
     return instruction "separate_register" {
         0: register
         1: @1
-        2: unit
-        3: id
-        4: x
-        5: y
+        2: @2
+        3: @3
+        4: @4
+        5: @5
     }
 }
 
