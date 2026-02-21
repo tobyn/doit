@@ -1,0 +1,6 @@
+# AI-generated test
+behavior var_fn_return {
+    @name "Var Fn Return"
+    var me = get_self
+    notify "Got self", value: me
+}

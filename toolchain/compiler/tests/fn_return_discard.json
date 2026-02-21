@@ -1,0 +1,11 @@
+{
+    "0": {
+        "op": "get_self",
+        "0": false
+    },
+    "1": {
+        "op": "notify",
+        "txt": "Done"
+    },
+    "name": "Fn Return Discard"
+}

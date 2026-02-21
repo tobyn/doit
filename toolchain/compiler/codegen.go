@@ -95,21 +95,9 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			if _, err := p.expect(tokEquals); err != nil {
 				return nil, err
 			}
-			numTok, err := p.expect(tokNumber)
-			if err != nil {
+			if err := p.compileVarInit(nameTok, true, b, comment, syms); err != nil {
 				return nil, err
 			}
-			num, _ := strconv.Atoi(numTok.val)
-			syms.vars[nameTok.val] = varInfo{mutable: true}
-			f := map[string]any{
-				"op": "set_number",
-				"2":  map[string]any{"num": num},
-				"3":  nameTok.val,
-			}
-			if comment != "" {
-				f["cmt"] = comment
-			}
-			b.emit(f)
 
 		case "let":
 			hasInstruction = true
@@ -123,21 +111,9 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			if _, err := p.expect(tokEquals); err != nil {
 				return nil, err
 			}
-			numTok, err := p.expect(tokNumber)
-			if err != nil {
+			if err := p.compileVarInit(nameTok, false, b, comment, syms); err != nil {
 				return nil, err
 			}
-			num, _ := strconv.Atoi(numTok.val)
-			syms.vars[nameTok.val] = varInfo{mutable: false}
-			f := map[string]any{
-				"op": "set_number",
-				"2":  map[string]any{"num": num},
-				"3":  nameTok.val,
-			}
-			if comment != "" {
-				f["cmt"] = comment
-			}
-			b.emit(f)
 
 		case "loop":
 			hasInstruction = true
@@ -495,21 +471,38 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		if err != nil {
 			return err
 		}
-		numTok, err := p.expect(tokNumber)
+		rhsTok, err := p.next()
 		if err != nil {
 			return err
 		}
-		num, _ := strconv.Atoi(numTok.val)
-		f := map[string]any{
-			"op": "set_number",
-			"2":  map[string]any{"num": num},
-			"3":  target,
+		if rhsTok.kind == tokNumber {
+			num, _ := strconv.Atoi(rhsTok.val)
+			f := map[string]any{
+				"op": "set_number",
+				"2":  map[string]any{"num": num},
+				"3":  target,
+			}
+			if comment != "" {
+				f["cmt"] = comment
+			}
+			b.emit(f)
+			return nil
 		}
-		if comment != "" {
-			f["cmt"] = comment
+		if rhsTok.kind == tokIdent {
+			fn := p.fns[rhsTok.val]
+			if fn == nil {
+				return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+			}
+			if !fn.hasReturn() {
+				return p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
+			}
+			args, kwArgs, err := p.parseFnCallArgs(fn, rhsTok, syms)
+			if err != nil {
+				return err
+			}
+			return p.expandCall(rhsTok.val, args, kwArgs, target, b, rhsTok.pos, comment)
 		}
-		b.emit(f)
-		return nil
+		return p.errorf(rhsTok.pos, "expected number or function call after '=', got %s", rhsTok.describe())
 	}
 
 	if tok2.kind == tokPlusEquals {
@@ -543,7 +536,18 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		return p.errorf(tok.pos, "unknown statement %q", tok.val)
 	}
 
-	// Parse positional args (rich value types at behavior level)
+	args, kwArgs, err := p.parseFnCallArgs(fn, tok, syms)
+	if err != nil {
+		return err
+	}
+
+	return p.expandCall(tok.val, args, kwArgs, nil, b, tok.pos, comment)
+}
+
+// parseFnCallArgs parses the positional and keyword arguments for a function
+// call at behavior level. nameTok is the function name token (used for error
+// messages). The function definition fn determines argument counts and keywords.
+func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable) ([]any, map[string]any, error) {
 	posCount := fn.positionalCount()
 	args := make([]any, posCount)
 	for i := 0; i < posCount; i++ {
@@ -551,7 +555,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		if i > 0 {
 			sep, err := p.next()
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
 			if sep.kind != tokComma {
 				p.unget(sep)
@@ -559,7 +563,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		}
 		val, err := p.parseArgValue(syms)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		args[i] = val
 	}
@@ -569,39 +573,39 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 	var kwArgs map[string]any
 	peek, err := p.next()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if (peek.kind == tokString || peek.kind == tokNumber) && fn.positionalCount() < len(fn.params) {
-		return p.errorf(peek.pos,
-			"too many positional arguments for %s (remaining parameters are keyword-only)", tok.val)
+		return nil, nil, p.errorf(peek.pos,
+			"too many positional arguments for %s (remaining parameters are keyword-only)", nameTok.val)
 	}
 	if peek.kind == tokComma {
 		kwArgs = map[string]any{}
 		for {
 			kwTok, err := p.expect(tokIdent)
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
 			kw := fn.keywordByName(kwTok.val)
 			if kw == nil {
-				return p.errorf(kwTok.pos, "unknown keyword argument %q", kwTok.val)
+				return nil, nil, p.errorf(kwTok.pos, "unknown keyword argument %q", kwTok.val)
 			}
 			if _, exists := kwArgs[kwTok.val]; exists {
-				return p.errorf(kwTok.pos, "duplicate keyword argument %q", kwTok.val)
+				return nil, nil, p.errorf(kwTok.pos, "duplicate keyword argument %q", kwTok.val)
 			}
 			if _, err := p.expect(tokColon); err != nil {
-				return err
+				return nil, nil, err
 			}
 			val, err := p.parseArgValue(syms)
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
 			kwArgs[kwTok.val] = val
 
 			// Check for another comma
 			next, err := p.next()
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
 			if next.kind != tokComma {
 				p.unget(next)
@@ -612,7 +616,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		p.unget(peek)
 	}
 
-	return p.expandCall(tok.val, args, kwArgs, b, tok.pos, comment)
+	return args, kwArgs, nil
 }
 
 
@@ -924,6 +928,48 @@ func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
 		return p.errorf(pos, "variable %q already declared", name)
 	}
 	return nil
+}
+
+// compileVarInit compiles the right-hand side of a var/let declaration.
+// The '=' has already been consumed. Accepts a number literal or a function call.
+func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, comment string, syms *symbolTable) error {
+	rhsTok, err := p.next()
+	if err != nil {
+		return err
+	}
+
+	if rhsTok.kind == tokNumber {
+		num, _ := strconv.Atoi(rhsTok.val)
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		f := map[string]any{
+			"op": "set_number",
+			"2":  map[string]any{"num": num},
+			"3":  nameTok.val,
+		}
+		if comment != "" {
+			f["cmt"] = comment
+		}
+		b.emit(f)
+		return nil
+	}
+
+	if rhsTok.kind == tokIdent {
+		fn := p.fns[rhsTok.val]
+		if fn == nil {
+			return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+		}
+		if !fn.hasReturn() {
+			return p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
+		}
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		args, kwArgs, err := p.parseFnCallArgs(fn, rhsTok, syms)
+		if err != nil {
+			return err
+		}
+		return p.expandCall(rhsTok.val, args, kwArgs, nameTok.val, b, rhsTok.pos, comment)
+	}
+
+	return p.errorf(rhsTok.pos, "expected number or function call after '=', got %s", rhsTok.describe())
 }
 
 // parseName parses the value of an @name attribute. It handles both the simple

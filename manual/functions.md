@@ -75,6 +75,52 @@ The keyword and variable name can be the same: `timeout timeout`.
 
 All positional parameters must come before keyword parameters.
 
+## Return Values
+
+Some functions produce an output value. Call them using assignment syntax:
+
+```doit
+let me = get_self
+var me = get_self
+me = get_self
+```
+
+The return value is assigned to the variable on the left-hand side. If a
+function with a return value is called as a bare statement (no assignment),
+the return slot is discarded:
+
+```doit
+get_self    # return value discarded
+```
+
+In function bodies, `let` introduces a local name that captures a return value
+for use by subsequent calls. The `return` statement declares which local name
+is the function's return value:
+
+```doit
+fn locate_self() {
+    let me = get_self
+    let coord = get_location me
+    return coord
+}
+```
+
+### Defining return values with `@1`
+
+Instruction-based functions mark output slots with `@1` to indicate they
+produce a return value:
+
+```doit
+fn get_self() {
+    instruction "get_self" { 0: @1 }
+}
+```
+
+The `@1` marker tells the compiler that this instruction slot is the first
+return value. At the call site, `@1` is replaced with the assignment target
+(e.g., the variable name from `let me = get_self`), or with an empty slot
+if the return is discarded.
+
 ## Defining Functions
 
 Define a function with `fn`:
@@ -87,6 +133,25 @@ fn my_notify(txt) {
 
 Parameters are passed by name. In the body, parameters can be used as arguments
 to other function calls.
+
+### The `return` statement
+
+User-defined functions use `return` to declare which local name is the
+function's return value:
+
+```doit
+fn locate_self() {
+    let me = get_self
+    let coord = get_location me
+    return coord
+}
+```
+
+The `return` statement is a compile-time binding, not a runtime instruction.
+It tells the compiler that the named local maps to the caller's return target.
+This means instructions that write to the returned name write directly into
+the caller's destination with no copies. At call sites, the caller provides
+the return target via assignment syntax (`let loc = locate_self`).
 
 ### Private Functions
 

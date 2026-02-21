@@ -50,6 +50,7 @@ var Keywords = map[string]bool{
 	"loop":        true,
 	"null":        true,
 	"private":     true,
+	"return":      true,
 	"var":         true,
 	"while":       true,
 }

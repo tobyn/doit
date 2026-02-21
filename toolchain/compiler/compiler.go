@@ -32,6 +32,11 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string) (*codec.
 	return p.parseFile()
 }
 
+// TestParseStdlibFile is a test helper that parses a stdlib source string.
+func TestParseStdlibFile(src string) error {
+	return parseStdlibFile(src, map[string]*fnDef{})
+}
+
 // --- Shared types ---
 
 type paramDef struct {
@@ -41,6 +46,7 @@ type paramDef struct {
 
 type fnDef struct {
 	params []paramDef
+	ret    []string       // return identifiers from return statement
 	frame  map[string]any // instruction-based (stdlib)
 	body   []fnBodyCall   // call-based (user-defined)
 }
@@ -76,6 +82,25 @@ func (f *fnDef) keywordByName(keyword string) *paramDef {
 		}
 	}
 	return nil
+}
+
+// returnSlot marks an instruction output slot as a return value.
+// The int is the 1-based return index (@1 = first return value).
+type returnSlot int
+
+// hasReturn reports whether the function produces a return value.
+// This is true if the function has a return statement (user-defined fns)
+// or if its instruction frame contains a returnSlot (@1 marker).
+func (f *fnDef) hasReturn() bool {
+	if len(f.ret) > 0 {
+		return true
+	}
+	for _, v := range f.frame {
+		if _, ok := v.(returnSlot); ok {
+			return true
+		}
+	}
+	return false
 }
 
 type fnBodyArg struct {
@@ -119,6 +144,7 @@ type fnBodyCall struct {
 	name    string
 	args    []fnBodyArg          // positional args
 	kwArgs  map[string]fnBodyArg // keyword -> value
+	retArg  *fnBodyArg           // return value target (nil = no return)
 	comment string               // #! doc comment
 }
 

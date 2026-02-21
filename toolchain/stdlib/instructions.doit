@@ -591,11 +591,11 @@ fn get_item_info(item, result) {
 # Gets the location of a seen unit.
 #   unit [in] - unit to get coordinates of
 #   coord [out] - coordinate of unit
-fn get_location(unit, coord) {
+fn get_location(unit) {
     # frame: {"op": "get_location", "0": unit [in], "1": coord [out]}
     instruction "get_location" {
         0: unit
-        1: coord
+        1: @1
     }
 }
 
@@ -666,10 +666,10 @@ fn get_season() {
 
 # Gets the unit running the behavior.
 #   result [out]
-fn get_self(result) {
+fn get_self() {
     # frame: {"op": "get_self", "0": result [out]}
     instruction "get_self" {
-        0: result
+        0: @1
     }
 }
 

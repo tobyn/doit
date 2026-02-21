@@ -1,0 +1,12 @@
+{
+    "0": {
+        "op": "get_self",
+        "0": "me"
+    },
+    "1": {
+        "op": "notify",
+        "0": "me",
+        "txt": "Got self"
+    },
+    "name": "Let Fn Return"
+}

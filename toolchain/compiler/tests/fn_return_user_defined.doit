@@ -1,0 +1,12 @@
+# AI-generated test
+fn locate_self() {
+    let me = get_self
+    let coord = get_location me
+    return coord
+}
+
+behavior fn_return_user_defined {
+    @name "Fn Return User Defined"
+    let loc = locate_self
+    notify "Location", value: loc
+}

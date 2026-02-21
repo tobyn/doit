@@ -1,0 +1,6 @@
+# AI-generated test
+behavior fn_return_discard {
+    @name "Fn Return Discard"
+    get_self
+    notify "Done"
+}

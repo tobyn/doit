@@ -208,15 +208,28 @@ Declare an immutable variable with `let`:
 let x = 5
 ```
 
-Both `var` and `let` emit a `set_number` instruction and map to a behavior
-variable register. The difference is that `let` prevents reassignment — the
-compiler errors on `=`, `+=`, or `++` targeting a `let` variable.
+The right-hand side of `var` and `let` can be a number literal or a function
+call that has a return value:
+
+```doit
+let me = get_self
+var loc = get_location me
+```
+
+When initialized with a number, a `set_number` instruction is emitted. When
+initialized with a function call, the function's return value is assigned to
+the variable. The difference between `var` and `let` is that `let` prevents
+reassignment — the compiler errors on `=`, `+=`, or `++` targeting a `let`
+variable.
 
 Assign a new value with `=`:
 
 ```doit
 x = 2
+x = get_self
 ```
+
+The right-hand side of `=` can also be a function call with a return value.
 
 Compound assignment and increment are also supported:
 

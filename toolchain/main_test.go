@@ -467,6 +467,106 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("let_fn_no_return", func(t *testing.T) {
+		src := `behavior a { let x = notify }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no return value") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("let_fn_unknown", func(t *testing.T) {
+		src := `behavior a { let x = nonexistent }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("let_fn_string_rhs", func(t *testing.T) {
+		src := `behavior a { let x = "hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number or function call") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("var_fn_no_return", func(t *testing.T) {
+		src := `behavior a { var x = notify }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no return value") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("assign_fn_no_return", func(t *testing.T) {
+		src := `behavior a { var x = 5; x = notify }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no return value") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("let_fn_return_immutable", func(t *testing.T) {
+		src := `behavior a { let me = get_self; me = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("let_fn_body_no_return", func(t *testing.T) {
+		src := "fn bad() { let x = notify }\nbehavior a { bad }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no return value") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("let_fn_body_unknown", func(t *testing.T) {
+		src := "fn bad() { let x = nonexistent }\nbehavior a { bad }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("return_slot_at2", func(t *testing.T) {
+		// @2 is not yet supported — test via stdlib file parsing
+		stdlibSrc := "fn bad() { instruction \"test\" { 0: @2 } }"
+		err := compiler.TestParseStdlibFile(stdlibSrc)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "only @1 is supported") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestCodec(t *testing.T) {

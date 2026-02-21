@@ -1,0 +1,6 @@
+# AI-generated test
+behavior let_fn_return {
+    @name "Let Fn Return"
+    let me = get_self
+    notify "Got self", value: me
+}

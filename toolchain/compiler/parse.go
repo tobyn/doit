@@ -288,6 +288,7 @@ func (p *parser) parseUserFn() error {
 	}
 
 	var body []fnBodyCall
+	var ret []string
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -301,79 +302,61 @@ func (p *parser) parseUserFn() error {
 		}
 		comment := p.docComment
 
+		// Handle return statement: return ident
+		if tok.val == "return" {
+			retTok, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			ret = []string{retTok.val}
+			continue
+		}
+
+		// Handle let statements in fn bodies: let varName = fnCall args...
+		if tok.val == "let" {
+			varTok, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			if _, err := p.expect(tokEquals); err != nil {
+				return err
+			}
+			calleeTok, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			callee := p.fns[calleeTok.val]
+			if callee == nil {
+				return p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+			}
+			if !callee.hasReturn() {
+				return p.errorf(calleeTok.pos, "function %q has no return value", calleeTok.val)
+			}
+			call, err := p.parseFnBodyCall(callee, calleeTok)
+			if err != nil {
+				return err
+			}
+			retArg := fnBodyArg{isIdent: true, val: varTok.val}
+			call.retArg = &retArg
+			call.comment = comment
+			body = append(body, call)
+			continue
+		}
+
 		callee := p.fns[tok.val]
 		if callee == nil {
 			return p.errorf(tok.pos, "unknown function %q", tok.val)
 		}
 
-		posCount := callee.positionalCount()
-		args := make([]fnBodyArg, posCount)
-		for i := 0; i < posCount; i++ {
-			arg, err := p.parseFnBodyArgValue()
-			if err != nil {
-				return err
-			}
-			args[i] = arg
-		}
-
-		// Parse optional keyword args: , keyword: value
-		// First check for extra positional args that should be keyword args.
-		var kwArgs map[string]fnBodyArg
-		peek, err := p.next()
+		call, err := p.parseFnBodyCall(callee, tok)
 		if err != nil {
 			return err
 		}
-		if (peek.kind == tokString || peek.kind == tokIdent) && callee.positionalCount() < len(callee.params) {
-			// Could be an extra positional arg — but in fn bodies, identifiers
-			// are also valid as the start of the next statement. Only flag
-			// strings, which are unambiguously an argument.
-			if peek.kind == tokString {
-				return p.errorf(peek.pos,
-					"too many positional arguments for %s (remaining parameters are keyword-only)", tok.val)
-			}
-			// For identifiers, push back and let the next iteration handle it.
-			p.unget(peek)
-		} else if peek.kind == tokComma {
-			kwArgs = map[string]fnBodyArg{}
-			for {
-				kwTok, err := p.expect(tokIdent)
-				if err != nil {
-					return err
-				}
-				kw := callee.keywordByName(kwTok.val)
-				if kw == nil {
-					return p.errorf(kwTok.pos, "unknown keyword argument %q", kwTok.val)
-				}
-				if _, exists := kwArgs[kwTok.val]; exists {
-					return p.errorf(kwTok.pos, "duplicate keyword argument %q", kwTok.val)
-				}
-				if _, err := p.expect(tokColon); err != nil {
-					return err
-				}
-				val, err := p.parseFnBodyArgValue()
-				if err != nil {
-					return err
-				}
-				kwArgs[kwTok.val] = val
-
-				// Check for another comma
-				next, err := p.next()
-				if err != nil {
-					return err
-				}
-				if next.kind != tokComma {
-					p.unget(next)
-					break
-				}
-			}
-		} else {
-			p.unget(peek)
-		}
-
-		body = append(body, fnBodyCall{name: tok.val, args: args, kwArgs: kwArgs, comment: comment})
+		call.comment = comment
+		body = append(body, call)
 	}
 
-	p.fns[nameTok.val] = &fnDef{params: params, body: body}
+	p.fns[nameTok.val] = &fnDef{params: params, ret: ret, body: body}
 	return nil
 }
 
@@ -411,6 +394,71 @@ func (p *parser) parseFnBodyArgValue() (fnBodyArg, error) {
 	default:
 		return fnBodyArg{}, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
 	}
+}
+
+// parseFnBodyCall parses the positional and keyword arguments for a function
+// call in a fn body. Returns a fnBodyCall with name and args/kwArgs populated
+// (but not comment or retArg — the caller sets those).
+func (p *parser) parseFnBodyCall(callee *fnDef, calleeTok token) (fnBodyCall, error) {
+	posCount := callee.positionalCount()
+	args := make([]fnBodyArg, posCount)
+	for i := 0; i < posCount; i++ {
+		arg, err := p.parseFnBodyArgValue()
+		if err != nil {
+			return fnBodyCall{}, err
+		}
+		args[i] = arg
+	}
+
+	// Parse optional keyword args: , keyword: value
+	var kwArgs map[string]fnBodyArg
+	peek, err := p.next()
+	if err != nil {
+		return fnBodyCall{}, err
+	}
+	if (peek.kind == tokString || peek.kind == tokIdent) && callee.positionalCount() < len(callee.params) {
+		if peek.kind == tokString {
+			return fnBodyCall{}, p.errorf(peek.pos,
+				"too many positional arguments for %s (remaining parameters are keyword-only)", calleeTok.val)
+		}
+		p.unget(peek)
+	} else if peek.kind == tokComma {
+		kwArgs = map[string]fnBodyArg{}
+		for {
+			kwTok, err := p.expect(tokIdent)
+			if err != nil {
+				return fnBodyCall{}, err
+			}
+			kw := callee.keywordByName(kwTok.val)
+			if kw == nil {
+				return fnBodyCall{}, p.errorf(kwTok.pos, "unknown keyword argument %q", kwTok.val)
+			}
+			if _, exists := kwArgs[kwTok.val]; exists {
+				return fnBodyCall{}, p.errorf(kwTok.pos, "duplicate keyword argument %q", kwTok.val)
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return fnBodyCall{}, err
+			}
+			val, err := p.parseFnBodyArgValue()
+			if err != nil {
+				return fnBodyCall{}, err
+			}
+			kwArgs[kwTok.val] = val
+
+			next, err := p.next()
+			if err != nil {
+				return fnBodyCall{}, err
+			}
+			if next.kind != tokComma {
+				p.unget(next)
+				break
+			}
+		}
+	} else {
+		p.unget(peek)
+	}
+
+	return fnBodyCall{name: calleeTok.val, args: args, kwArgs: kwArgs}, nil
 }
 
 func (p *parser) skipBraceBlock() error {
@@ -487,8 +535,18 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 		switch valTok.kind {
 		case tokString, tokIdent:
 			frame[key] = valTok.val
+		case tokAt:
+			numTok, err := p.expect(tokNumber)
+			if err != nil {
+				return nil, err
+			}
+			n, _ := strconv.Atoi(numTok.val)
+			if n != 1 {
+				return nil, p.errorf(numTok.pos, "only @1 is supported (single return value)")
+			}
+			frame[key] = returnSlot(n)
 		default:
-			return nil, p.errorf(valTok.pos, "expected string or identifier, got %s", valTok.describe())
+			return nil, p.errorf(valTok.pos, "expected string, identifier, or @N, got %s", valTok.describe())
 		}
 	}
 	return frame, nil
@@ -507,7 +565,7 @@ func resolveBodyArg(arg fnBodyArg, paramMap map[string]any) any {
 	return arg.val // string literal
 }
 
-func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, b *frameBuilder, pos int, comment string) error {
+func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVal any, b *frameBuilder, pos int, comment string) error {
 	fn := p.fns[name]
 	if fn == nil {
 		return p.errorf(pos, "unknown statement %q", name)
@@ -526,6 +584,14 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, b *f
 		}
 	}
 
+	if len(fn.ret) > 0 {
+		if retVal != nil {
+			paramMap[fn.ret[0]] = retVal
+		} else {
+			paramMap[fn.ret[0]] = false
+		}
+	}
+
 	if fn.frame != nil {
 		kwVars := fn.keywordVarNames()
 		instr := make(map[string]any, len(fn.frame))
@@ -534,6 +600,14 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, b *f
 			nativeKey := k
 			if n, err := strconv.Atoi(k); err == nil {
 				nativeKey = strconv.Itoa(n + 1)
+			}
+			if _, ok := v.(returnSlot); ok {
+				if retVal != nil {
+					instr[nativeKey] = retVal
+				} else {
+					instr[nativeKey] = false
+				}
+				continue
 			}
 			if s, ok := v.(string); ok {
 				if arg, ok := paramMap[s]; ok {
@@ -562,11 +636,15 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, b *f
 		for kw, arg := range call.kwArgs {
 			resolvedKwArgs[kw] = resolveBodyArg(arg, paramMap)
 		}
+		var resolvedRet any
+		if call.retArg != nil {
+			resolvedRet = resolveBodyArg(*call.retArg, paramMap)
+		}
 		callComment := call.comment
 		if callComment == "" {
 			callComment = comment
 		}
-		if err := p.expandCall(call.name, resolvedArgs, resolvedKwArgs, b, pos, callComment); err != nil {
+		if err := p.expandCall(call.name, resolvedArgs, resolvedKwArgs, resolvedRet, b, pos, callComment); err != nil {
 			return err
 		}
 	}
