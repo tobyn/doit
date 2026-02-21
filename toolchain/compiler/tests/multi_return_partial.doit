@@ -1,0 +1,8 @@
+# AI-generated test
+behavior multi_return_partial {
+    @name "Multi Return Partial"
+    let me = get_self
+    let coord = get_location me
+    let x = separate_coordinate coord
+    notify "Done", value: x
+}

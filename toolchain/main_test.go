@@ -572,14 +572,43 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("return_slot_at2", func(t *testing.T) {
-		// @2 is not yet supported — test via stdlib file parsing
+	t.Run("return_slot_at0", func(t *testing.T) {
+		stdlibSrc := "fn bad() { instruction \"test\" { 0: @0 } }"
+		err := compiler.TestParseStdlibFile(stdlibSrc)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "@N return index must be >= 1") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("return_slot_multiple", func(t *testing.T) {
+		stdlibSrc := "fn multi() { return instruction \"test\" { 0: @1  1: @2 } }"
+		err := compiler.TestParseStdlibFile(stdlibSrc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("return_slot_gap", func(t *testing.T) {
+		stdlibSrc := "fn bad() { instruction \"test\" { 0: @1  1: @3 } }"
+		err := compiler.TestParseStdlibFile(stdlibSrc)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "missing @2") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("return_slot_no_at1", func(t *testing.T) {
 		stdlibSrc := "fn bad() { instruction \"test\" { 0: @2 } }"
 		err := compiler.TestParseStdlibFile(stdlibSrc)
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "only @1 is supported") {
+		if !strings.Contains(err.Error(), "missing @1") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -661,6 +690,61 @@ func TestCompileErrors(t *testing.T) {
 		frame := obj.Value.(map[string]any)["1"].(map[string]any)
 		if frame["cmt"] != "plain comment" {
 			t.Fatalf("expected cmt %q, got %v", "plain comment", frame["cmt"])
+		}
+	})
+
+	t.Run("multi_return_too_many_bindings", func(t *testing.T) {
+		src := "behavior a {\n  let me = get_self\n  let coord = get_location me\n  let x, y, z = separate_coordinate coord\n}"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many bindings") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("multi_return_no_return_fn", func(t *testing.T) {
+		src := `behavior a { let x, y = notify "Hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no return value") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("underscore_as_var_name", func(t *testing.T) {
+		src := `behavior a { var _ = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'_' cannot be used as a variable name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("underscore_as_let_name", func(t *testing.T) {
+		src := `behavior a { let _ = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'_' cannot be used as a variable name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("multi_return_fn_body_too_many", func(t *testing.T) {
+		src := "fn bad() {\n  let me = get_self\n  let coord = get_location me\n  let x, y, z = separate_coordinate coord\n  return x\n}\nbehavior a { bad }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many bindings") {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }

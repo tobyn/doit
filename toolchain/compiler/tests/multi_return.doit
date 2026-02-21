@@ -1,0 +1,8 @@
+# AI-generated test
+behavior multi_return {
+    @name "Multi Return"
+    let me = get_self
+    let coord = get_location me
+    let x, y = separate_coordinate coord
+    notify "Done", value: x
+}

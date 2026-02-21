@@ -1,0 +1,8 @@
+# AI-generated test
+behavior multi_return_discard {
+    @name "Multi Return Discard"
+    let me = get_self
+    let coord = get_location me
+    let _, y = separate_coordinate coord
+    notify "Done", value: y
+}

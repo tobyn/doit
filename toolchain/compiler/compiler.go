@@ -67,7 +67,7 @@ type paramDef struct {
 
 type fnDef struct {
 	params []paramDef
-	ret    string         // return parameter name (empty = no return)
+	rets   []string       // return names (nil = no return)
 	frame  map[string]any // instruction-based (stdlib)
 	body   []fnBodyCall   // call-based (user-defined)
 }
@@ -109,20 +109,25 @@ func (f *fnDef) keywordByName(keyword string) *paramDef {
 // The int is the 1-based return index (@1 = first return value).
 type returnSlot int
 
-// hasReturn reports whether the function produces a return value.
-// This is true if the function has a named return parameter, a return
-// statement (user-defined fns), or if its instruction frame contains
-// a returnSlot (@1 marker).
-func (f *fnDef) hasReturn() bool {
-	if f.ret != "" {
-		return true
-	}
-	for _, v := range f.frame {
-		if _, ok := v.(returnSlot); ok {
-			return true
+// returnCount returns the number of return values the function produces.
+// For instruction-based functions, this is the count of returnSlot markers.
+// For body-based functions, this is len(rets).
+func (f *fnDef) returnCount() int {
+	if f.frame != nil {
+		count := 0
+		for _, v := range f.frame {
+			if _, ok := v.(returnSlot); ok {
+				count++
+			}
 		}
+		return count
 	}
-	return false
+	return len(f.rets)
+}
+
+// hasReturn reports whether the function produces at least one return value.
+func (f *fnDef) hasReturn() bool {
+	return f.returnCount() > 0
 }
 
 type fnBodyArg struct {
@@ -166,7 +171,7 @@ type fnBodyCall struct {
 	name    string
 	args    []fnBodyArg          // positional args
 	kwArgs  map[string]fnBodyArg // keyword -> value
-	retArg  *fnBodyArg           // return value target (nil = no return)
+	retArgs []fnBodyArg           // return value targets (nil = no return)
 	comment string               // #! doc comment
 }
 

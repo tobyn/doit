@@ -106,25 +106,34 @@ the compiled instruction. The `paramDef` type tracks each parameter's name
 and keyword (empty for positional). Helper methods on `fnDef` support
 keyword lookup and positional counting.
 
-**Return values**: Functions can produce return values. The `return`
-statement in a function body declares which local name is the function's
-return value:
+**Return values**: Functions can produce one or more return values.
+
+The `return` statement in a function body declares which local names are
+the function's return values. Single return:
 `fn locate_self() { let me = get_self; let coord = get_location me; return coord }`.
-The return identifier is stored in `fnDef.ret` (a `string`; empty = no
-return). In `expandCall`, `fn.ret` is added to `paramMap` with `retVal`
-as its value, so body calls that reference the returned name write
-directly into the caller's return target with no copies. The `return`
-statement is a compile-time binding — it does not emit a runtime
+Multi-value return uses comma-separated items:
+`fn get_xy(coord) { let x, y = separate_coordinate coord; return x, y }`.
+Return items can be identifiers, number literals, or `null`. Literals are
+desugared into synthetic body calls (`set_number` for numbers, `set_reg`
+for null) with `@retK` synthetic names that can't collide with user
+identifiers. Return names are stored in `fnDef.rets` (a `[]string`;
+nil/empty = no return). `returnCount()` returns `len(rets)` for body-based
+functions. In `expandCall`, each `fn.rets[i]` is added to `paramMap` with
+`retVals[i]` as its value, so body calls that reference the returned names
+write directly into the caller's return targets with no copies. The
+`return` statement is a compile-time binding — it does not emit a runtime
 instruction.
 
-The `@1` syntax inside an `instruction` block marks an output slot as
-the first return value:
-`fn get_self() { return instruction "get_self" { 0: @1 } }`. The `@1` is
-stored in the instruction frame as a `returnSlot(1)` value. During
-`expandCall`, `returnSlot` values are replaced with `retVal` (or `false`
-if discarded). Only `@1` is supported (single return); `@2`+ will be used
-for multiple returns in the future. The `returnSlot` type is defined in
-compiler.go.
+The `@N` syntax inside an `instruction` block marks output slots as
+return values:
+`fn get_self() { return instruction "get_self" { 0: @1 } }`. Each `@N` is
+stored in the instruction frame as a `returnSlot(N)` value. The `@N`
+values must form a contiguous sequence starting from `@1` — gaps (e.g.,
+`@1` and `@3` with no `@2`) are compile errors. `returnCount()` for
+instruction-based functions counts `returnSlot` values in the frame.
+During `expandCall`, `returnSlot(N)` values are replaced with `retVals[N-1]`
+(or `false` if the caller provides fewer bindings or discards that
+position). The `returnSlot` type is defined in compiler.go.
 
 In stdlib files, `return instruction` is the preferred form for functions
 with output slots. The `return` keyword is syntactic — `parseStdlibFile`
@@ -132,22 +141,46 @@ simply skips it before parsing the `instruction` block. The `@1` in the
 frame is what drives `hasReturn()`. Plain `instruction` (without `return`)
 remains valid for functions with no output slots.
 
-The `fnDef.hasReturn()` method checks both mechanisms: `ret != ""` OR
-the frame contains a `returnSlot`. All call-site error checks ("has no
-return value") use `hasReturn()`.
+The `fnDef.hasReturn()` method delegates to `returnCount() > 0`, which
+checks both mechanisms (rets for body-based, returnSlot count for
+instruction-based). All call-site error checks ("has no return value")
+use `hasReturn()`.
 
-At call sites, functions with returns can be called via assignment syntax
-(`let x = get_self`, `var x = get_self`, `x = get_self`). When called as
-a bare statement (no assignment), `expandCall` receives `nil` for `retVal`
-and substitutes `false` (null/empty slot). The `retVal any` parameter on
-`expandCall` carries the return target through the call chain.
+**Single-return call sites**: Functions with returns can be called via
+assignment syntax (`let x = get_self`, `var x = get_self`, `x = get_self`).
+When called as a bare statement (no assignment), `expandCall` receives
+`nil` for `retVals` and substitutes `false` for all return slots.
 
-In function bodies, `let` introduces a local name that captures a return
-value: `let me = get_self`. This appends a `fnBodyCall` with `retArg` set
-to `&fnBodyArg{isIdent: true, val: varName}`. During expansion,
-`resolveBodyArg` resolves the `retArg` through `paramMap` and passes it as
-`retVal` to the recursive `expandCall`. No `var` in fn bodies — mutability
-is a behavior-level concept.
+**Multi-return call sites (binding lists)**: Destructuring syntax captures
+multiple return values: `let x, y = separate_coordinate coord`. Binding
+lists support mixed modifiers:
+`var a, b, _, let c, var d = my_fn args`. Rules:
+- `let`/`var` set the active modifier (sticky for subsequent bare idents)
+- `_` discards that return position (does not change active modifier)
+- Bare idents with an active modifier declare new variables
+- Bare idents with no active modifier assign to existing variables
+- Binding lists must start with `_`, `let`, or `var` (bare-ident-first
+  like `a, b = fn` is not supported due to parsing ambiguity)
+- **Prefix matching**: binding count must be <= `returnCount()`; extra
+  returns are silently discarded. `let x = fn_with_3_returns` captures
+  the first return only.
+- `_` as a standalone variable name (`var _ = 5`, `let _ = 5`) is a
+  compile error.
+
+The `compileMultiReturn` helper in codegen.go handles behavior-level
+binding list parsing. It builds a `retVals []any` slice (name strings for
+new bindings, resolved targets for existing-var assignments, `false` for
+`_`) and passes it to `expandCall`. The `retVals []any` parameter on
+`expandCall` carries return targets through the call chain.
+
+**fn body multi-return**: In function bodies, `let` supports multi-return
+binding with `_` discards: `let x, y = separate_coordinate coord` and
+`let _, y = separate_coordinate coord`. No modifier switching — all names
+are `let` locals. Each binding becomes a `fnBodyArg` in `fnBodyCall.retArgs`
+(name idents or `{literal: false}` for discards). During expansion,
+`resolveBodyArg` resolves each retArg through `paramMap` and passes the
+result slice as `retVals` to the recursive `expandCall`. No `var` in fn
+bodies — mutability is a behavior-level concept.
 
 The `parseFnCallArgs` helper (codegen.go) extracts positional + keyword arg
 parsing into a reusable method shared by bare function calls, `let`/`var`

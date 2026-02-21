@@ -23,6 +23,11 @@ works. After implementing a feature or making a design change, update the
 relevant rules files to reflect the new state. This keeps future sessions
 accurate — they rely on these files rather than re-exploring the codebase.
 
+During long sessions, write important design decisions and intermediate
+conclusions to rules files promptly rather than waiting until the end.
+Context from earlier in the conversation may be compressed, so anything
+worth remembering should be persisted to files before it's needed later.
+
 ## Architecture
 
 - **`toolchain/`** — The doit language's Go-based toolchain implementation

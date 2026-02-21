@@ -296,7 +296,7 @@ func (p *parser) parseUserFn() error {
 	}
 
 	var body []fnBodyCall
-	var ret string
+	var rets []string
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -310,24 +310,135 @@ func (p *parser) parseUserFn() error {
 		}
 		comment := p.docComment
 
-		// Handle return statement: return ident
+		// Handle return statement: return item (',' item)*
+		// Items can be identifiers, number literals, or null.
+		// Literals are desugared into synthetic body calls.
 		if tok.val == "return" {
-			retTok, err := p.expect(tokIdent)
-			if err != nil {
-				return err
+			rets = nil
+			retIdx := 0
+			for {
+				retTok, err := p.next()
+				if err != nil {
+					return err
+				}
+				switch retTok.kind {
+				case tokIdent:
+					if retTok.val == "null" {
+						retIdx++
+						synthName := "@ret" + strconv.Itoa(retIdx)
+						body = append(body, fnBodyCall{
+							name:    "set_reg",
+							args:    []fnBodyArg{{literal: false}},
+							retArgs: []fnBodyArg{{isIdent: true, val: synthName}},
+						})
+						rets = append(rets, synthName)
+					} else {
+						rets = append(rets, retTok.val)
+					}
+				case tokNumber:
+					retIdx++
+					synthName := "@ret" + strconv.Itoa(retIdx)
+					num, _ := strconv.Atoi(retTok.val)
+					body = append(body, fnBodyCall{
+						name:    "set_number",
+						args:    []fnBodyArg{{literal: false}, {literal: map[string]any{"num": num}}},
+						retArgs: []fnBodyArg{{isIdent: true, val: synthName}},
+					})
+					rets = append(rets, synthName)
+				default:
+					return p.errorf(retTok.pos, "expected identifier, number, or null in return list, got %s", retTok.describe())
+				}
+				// Check for comma (more items) or end of list
+				sep, err := p.next()
+				if err != nil {
+					return err
+				}
+				if sep.kind != tokComma {
+					p.unget(sep)
+					break
+				}
 			}
-			ret = retTok.val
 			continue
 		}
 
-		// Handle let statements in fn bodies: let varName = fnCall args...
+		// Handle let statements in fn bodies:
+		//   let varName = fnCall args...
+		//   let a, b, _ = fnCall args...   (multi-return)
 		if tok.val == "let" {
 			varTok, err := p.expect(tokIdent)
 			if err != nil {
 				return err
 			}
-			if _, err := p.expect(tokEquals); err != nil {
+			// Peek for comma (multi-return) vs equals (single return)
+			sep, err := p.next()
+			if err != nil {
 				return err
+			}
+			if sep.kind == tokComma {
+				// Multi-return: let a, b, _ = fnCall args...
+				type binding struct {
+					name    string // "" for discard (_)
+					discard bool
+				}
+				bindings := []binding{{name: varTok.val}}
+				for {
+					nameTok, err := p.next()
+					if err != nil {
+						return err
+					}
+					if nameTok.kind != tokIdent {
+						return p.errorf(nameTok.pos, "expected identifier or '_' in binding list, got %s", nameTok.describe())
+					}
+					if nameTok.val == "_" {
+						bindings = append(bindings, binding{discard: true})
+					} else {
+						bindings = append(bindings, binding{name: nameTok.val})
+					}
+					next, err := p.next()
+					if err != nil {
+						return err
+					}
+					if next.kind == tokEquals {
+						break
+					}
+					if next.kind != tokComma {
+						return p.errorf(next.pos, "expected ',' or '=' in binding list, got %s", next.describe())
+					}
+				}
+				calleeTok, err := p.expect(tokIdent)
+				if err != nil {
+					return err
+				}
+				callee := p.fns[calleeTok.val]
+				if callee == nil {
+					return p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+				}
+				if !callee.hasReturn() {
+					return p.errorf(calleeTok.pos, "function %q has no return value", calleeTok.val)
+				}
+				if len(bindings) > callee.returnCount() {
+					return p.errorf(calleeTok.pos, "too many bindings (%d) for function %q which returns %d values", len(bindings), calleeTok.val, callee.returnCount())
+				}
+				call, err := p.parseFnBodyCall(callee, calleeTok)
+				if err != nil {
+					return err
+				}
+				retArgs := make([]fnBodyArg, len(bindings))
+				for i, b := range bindings {
+					if b.discard {
+						retArgs[i] = fnBodyArg{literal: false}
+					} else {
+						retArgs[i] = fnBodyArg{isIdent: true, val: b.name}
+					}
+				}
+				call.retArgs = retArgs
+				call.comment = comment
+				body = append(body, call)
+				continue
+			}
+			// Single return: let varName = fnCall args...
+			if sep.kind != tokEquals {
+				return p.errorf(sep.pos, "expected ',' or '=' after let identifier, got %s", sep.describe())
 			}
 			calleeTok, err := p.expect(tokIdent)
 			if err != nil {
@@ -344,8 +455,7 @@ func (p *parser) parseUserFn() error {
 			if err != nil {
 				return err
 			}
-			retArg := fnBodyArg{isIdent: true, val: varTok.val}
-			call.retArg = &retArg
+			call.retArgs = []fnBodyArg{{isIdent: true, val: varTok.val}}
 			call.comment = comment
 			body = append(body, call)
 			continue
@@ -364,7 +474,7 @@ func (p *parser) parseUserFn() error {
 		body = append(body, call)
 	}
 
-	p.fns[nameTok.val] = &fnDef{params: params, ret: ret, body: body}
+	p.fns[nameTok.val] = &fnDef{params: params, rets: rets, body: body}
 	return nil
 }
 
@@ -549,14 +659,33 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 				return nil, err
 			}
 			n, _ := strconv.Atoi(numTok.val)
-			if n != 1 {
-				return nil, p.errorf(numTok.pos, "only @1 is supported (single return value)")
+			if n < 1 {
+				return nil, p.errorf(numTok.pos, "@N return index must be >= 1, got @%d", n)
 			}
 			frame[key] = returnSlot(n)
 		default:
 			return nil, p.errorf(valTok.pos, "expected string, identifier, or @N, got %s", valTok.describe())
 		}
 	}
+
+	// Validate that @N return slots form a contiguous sequence from @1.
+	var maxSlot int
+	slots := map[int]bool{}
+	for _, v := range frame {
+		if rs, ok := v.(returnSlot); ok {
+			n := int(rs)
+			slots[n] = true
+			if n > maxSlot {
+				maxSlot = n
+			}
+		}
+	}
+	for i := 1; i <= maxSlot; i++ {
+		if !slots[i] {
+			return nil, p.errorf(opTok.pos, "instruction %q has @%d but is missing @%d — return slots must be a contiguous sequence from @1", opTok.val, maxSlot, i)
+		}
+	}
+
 	return frame, nil
 }
 
@@ -573,7 +702,7 @@ func resolveBodyArg(arg fnBodyArg, paramMap map[string]any) any {
 	return arg.val // string literal
 }
 
-func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVal any, b *frameBuilder, pos int, comment string) error {
+func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string) error {
 	fn := p.fns[name]
 	if fn == nil {
 		return p.errorf(pos, "unknown statement %q", name)
@@ -592,11 +721,11 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		}
 	}
 
-	if fn.ret != "" {
-		if retVal != nil {
-			paramMap[fn.ret] = retVal
+	for i, retName := range fn.rets {
+		if retVals != nil && i < len(retVals) {
+			paramMap[retName] = retVals[i]
 		} else {
-			paramMap[fn.ret] = false
+			paramMap[retName] = false
 		}
 	}
 
@@ -609,9 +738,10 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 			if n, err := strconv.Atoi(k); err == nil {
 				nativeKey = strconv.Itoa(n + 1)
 			}
-			if _, ok := v.(returnSlot); ok {
-				if retVal != nil {
-					instr[nativeKey] = retVal
+			if rs, ok := v.(returnSlot); ok {
+				idx := int(rs) - 1
+				if retVals != nil && idx < len(retVals) {
+					instr[nativeKey] = retVals[idx]
 				} else {
 					instr[nativeKey] = false
 				}
@@ -642,15 +772,18 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		for kw, arg := range call.kwArgs {
 			resolvedKwArgs[kw] = resolveBodyArg(arg, paramMap)
 		}
-		var resolvedRet any
-		if call.retArg != nil {
-			resolvedRet = resolveBodyArg(*call.retArg, paramMap)
+		var resolvedRets []any
+		if len(call.retArgs) > 0 {
+			resolvedRets = make([]any, len(call.retArgs))
+			for i, arg := range call.retArgs {
+				resolvedRets[i] = resolveBodyArg(arg, paramMap)
+			}
 		}
 		callComment := call.comment
 		if callComment == "" {
 			callComment = comment
 		}
-		if err := p.expandCall(call.name, resolvedArgs, resolvedKwArgs, resolvedRet, b, pos, callComment); err != nil {
+		if err := p.expandCall(call.name, resolvedArgs, resolvedKwArgs, resolvedRets, b, pos, callComment); err != nil {
 			return err
 		}
 	}

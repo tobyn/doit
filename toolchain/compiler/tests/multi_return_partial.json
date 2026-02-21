@@ -1,0 +1,23 @@
+{
+    "0": {
+        "op": "get_self",
+        "0": "me"
+    },
+    "1": {
+        "op": "get_location",
+        "0": "me",
+        "1": "coord"
+    },
+    "2": {
+        "op": "separate_coordinate",
+        "0": "coord",
+        "1": "x",
+        "2": false
+    },
+    "3": {
+        "op": "notify",
+        "0": "x",
+        "txt": "Done"
+    },
+    "name": "Multi Return Partial"
+}

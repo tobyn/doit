@@ -87,14 +87,37 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			if err != nil {
 				return nil, err
 			}
-			if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(tokEquals); err != nil {
-				return nil, err
-			}
-			if err := p.compileVarInit(nameTok, true, b, comment, syms); err != nil {
-				return nil, err
+			if nameTok.val == "_" {
+				// var _, ... = fn → multi-return with first discard
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind != tokComma {
+					return nil, p.errorf(nameTok.pos, "'_' cannot be used as a variable name")
+				}
+				if err := p.compileMultiReturn(nameTok, true, true, b, comment, syms); err != nil {
+					return nil, err
+				}
+			} else {
+				if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
+					return nil, err
+				}
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind == tokComma {
+					if err := p.compileMultiReturn(nameTok, true, false, b, comment, syms); err != nil {
+						return nil, err
+					}
+				} else if sep.kind == tokEquals {
+					if err := p.compileVarInit(nameTok, true, b, comment, syms); err != nil {
+						return nil, err
+					}
+				} else {
+					return nil, p.errorf(sep.pos, "expected ',' or '=' after var identifier, got %s", sep.describe())
+				}
 			}
 
 		case "let":
@@ -103,14 +126,70 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			if err != nil {
 				return nil, err
 			}
-			if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
+			if nameTok.val == "_" {
+				// let _, ... = fn → multi-return with first discard
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind != tokComma {
+					return nil, p.errorf(nameTok.pos, "'_' cannot be used as a variable name")
+				}
+				if err := p.compileMultiReturn(nameTok, false, true, b, comment, syms); err != nil {
+					return nil, err
+				}
+			} else {
+				if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
+					return nil, err
+				}
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind == tokComma {
+					if err := p.compileMultiReturn(nameTok, false, false, b, comment, syms); err != nil {
+						return nil, err
+					}
+				} else if sep.kind == tokEquals {
+					if err := p.compileVarInit(nameTok, false, b, comment, syms); err != nil {
+						return nil, err
+					}
+				} else {
+					return nil, p.errorf(sep.pos, "expected ',' or '=' after let identifier, got %s", sep.describe())
+				}
+			}
+
+		case "_":
+			hasInstruction = true
+			// _ starts a binding list: _, let a, var b = fn args
+			// or just _ = fn args (discard all returns, equivalent to bare call)
+			sep, err := p.next()
+			if err != nil {
 				return nil, err
 			}
-			if _, err := p.expect(tokEquals); err != nil {
-				return nil, err
-			}
-			if err := p.compileVarInit(nameTok, false, b, comment, syms); err != nil {
-				return nil, err
+			if sep.kind == tokComma {
+				if err := p.compileMultiReturn(tok, false, true, b, comment, syms); err != nil {
+					return nil, err
+				}
+			} else if sep.kind == tokEquals {
+				// _ = fn args → bare call, discard returns
+				calleeTok, err := p.expect(tokIdent)
+				if err != nil {
+					return nil, err
+				}
+				fn := p.fns[calleeTok.val]
+				if fn == nil {
+					return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+				}
+				args, kwArgs, err := p.parseFnCallArgs(fn, calleeTok, syms)
+				if err != nil {
+					return nil, err
+				}
+				if err := p.expandCall(calleeTok.val, args, kwArgs, nil, b, calleeTok.pos, comment); err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
 			}
 
 		case "loop":
@@ -490,7 +569,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			if err != nil {
 				return err
 			}
-			return p.expandCall(rhsTok.val, args, kwArgs, target, b, rhsTok.pos, comment)
+			return p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment)
 		}
 		return p.errorf(rhsTok.pos, "expected number or function call after '=', got %s", rhsTok.describe())
 	}
@@ -950,10 +1029,185 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 		if err != nil {
 			return err
 		}
-		return p.expandCall(rhsTok.val, args, kwArgs, nameTok.val, b, rhsTok.pos, comment)
+		return p.expandCall(rhsTok.val, args, kwArgs, []any{nameTok.val}, b, rhsTok.pos, comment)
 	}
 
 	return p.errorf(rhsTok.pos, "expected number or function call after '=', got %s", rhsTok.describe())
+}
+
+// compileMultiReturn compiles a multi-return binding list.
+// The first binding (firstTok) and the comma after it have already been consumed.
+// If firstDiscard is true, the first binding is a discard (_).
+// Otherwise, firstTok is a name with the given firstMutable mutability.
+//
+// Parsing continues with: binding (',' binding)* '=' fnCall args
+// binding ::= '_' | 'let' ident | 'var' ident | ident
+//
+// Modifiers (let/var) are sticky — bare idents inherit the active modifier.
+// '_' does not change the active modifier. Bare idents with no active modifier
+// assign to existing variables.
+func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard bool, b *frameBuilder, comment string, syms *symbolTable) error {
+	type multiBinding struct {
+		name    string // variable name, or "" for discard
+		discard bool
+		newVar  bool // true if this declares a new variable
+		mutable bool // only meaningful if newVar
+		pos     int  // token position for error reporting
+	}
+
+	var bindings []multiBinding
+	if firstDiscard {
+		bindings = append(bindings, multiBinding{discard: true, pos: firstTok.pos})
+	} else {
+		bindings = append(bindings, multiBinding{
+			name:    firstTok.val,
+			newVar:  true,
+			mutable: firstMutable,
+			pos:     firstTok.pos,
+		})
+	}
+
+	// Track the active modifier: -1 = none, 0 = let (immutable), 1 = var (mutable)
+	activeModifier := -1
+	if !firstDiscard {
+		if firstMutable {
+			activeModifier = 1
+		} else {
+			activeModifier = 0
+		}
+	}
+
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return err
+		}
+
+		if tok.kind == tokEquals {
+			break
+		}
+
+		if tok.kind != tokIdent {
+			return p.errorf(tok.pos, "expected identifier, '_', 'let', 'var', or '=' in binding list, got %s", tok.describe())
+		}
+
+		switch tok.val {
+		case "_":
+			bindings = append(bindings, multiBinding{discard: true, pos: tok.pos})
+			// _ does not change active modifier
+		case "let":
+			activeModifier = 0
+			nameTok, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			bindings = append(bindings, multiBinding{
+				name:    nameTok.val,
+				newVar:  true,
+				mutable: false,
+				pos:     nameTok.pos,
+			})
+		case "var":
+			activeModifier = 1
+			nameTok, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			bindings = append(bindings, multiBinding{
+				name:    nameTok.val,
+				newVar:  true,
+				mutable: true,
+				pos:     nameTok.pos,
+			})
+		default:
+			// Bare identifier
+			if activeModifier >= 0 {
+				// Sticky modifier: new variable with inherited mutability
+				bindings = append(bindings, multiBinding{
+					name:    tok.val,
+					newVar:  true,
+					mutable: activeModifier == 1,
+					pos:     tok.pos,
+				})
+			} else {
+				// No active modifier: assign to existing variable
+				bindings = append(bindings, multiBinding{
+					name: tok.val,
+					pos:  tok.pos,
+				})
+			}
+		}
+
+		// Expect comma or equals after each binding
+		sep, err := p.next()
+		if err != nil {
+			return err
+		}
+		if sep.kind == tokEquals {
+			break
+		}
+		if sep.kind != tokComma {
+			return p.errorf(sep.pos, "expected ',' or '=' in binding list, got %s", sep.describe())
+		}
+	}
+
+	// Parse the function call on the RHS
+	calleeTok, err := p.expect(tokIdent)
+	if err != nil {
+		return err
+	}
+	fn := p.fns[calleeTok.val]
+	if fn == nil {
+		return p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+	}
+	if !fn.hasReturn() {
+		return p.errorf(calleeTok.pos, "function %q has no return value", calleeTok.val)
+	}
+	if len(bindings) > fn.returnCount() {
+		return p.errorf(calleeTok.pos, "too many bindings (%d) for function %q which returns %d values", len(bindings), calleeTok.val, fn.returnCount())
+	}
+
+	// Validate and register new bindings
+	for _, bind := range bindings {
+		if bind.discard {
+			continue
+		}
+		if bind.newVar {
+			if err := p.checkVarName(bind.name, syms, bind.pos); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Build retVals slice
+	retVals := make([]any, len(bindings))
+	for i, bind := range bindings {
+		if bind.discard {
+			retVals[i] = false
+		} else if bind.newVar {
+			retVals[i] = bind.name
+		} else {
+			// Existing variable assignment
+			target, err := p.resolveAssignTarget(bind.name, syms, bind.pos)
+			if err != nil {
+				return err
+			}
+			retVals[i] = target
+		}
+	}
+
+	// Register new variables in symbol table after validation
+	for _, bind := range bindings {
+		if bind.newVar {
+			syms.vars[bind.name] = varInfo{mutable: bind.mutable}
+		}
+	}
+
+	args, kwArgs, err := p.parseFnCallArgs(fn, calleeTok, syms)
+	if err != nil {
+		return err
+	}
+	return p.expandCall(calleeTok.val, args, kwArgs, retVals, b, calleeTok.pos, comment)
 }
 
 // parseName parses the value of an @name attribute. It handles both the simple

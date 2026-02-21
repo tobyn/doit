@@ -1,0 +1,13 @@
+# AI-generated test
+fn locate_self() {
+    let me = get_self
+    let coord = get_location me
+    let x, y = separate_coordinate coord
+    return x, y
+}
+
+behavior multi_return_fn {
+    @name "Multi Return Fn"
+    let a, b = locate_self
+    notify "Done", value: a
+}
