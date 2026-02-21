@@ -15,10 +15,18 @@ the `*.doit` files in the `toolchain/stdlib/` directory.
 
 `instructions.doit` wraps Desynced's built-in game instructions as doit functions using the
 `instruction` intrinsic. Each function corresponds to an instruction defined in `instructions.lua`.
-Functions with empty bodies (`fn foo() {}`) are stubs — they are parsed but skipped until their
-`instruction` body is implemented. Functions with implemented instruction bodies include:
-`notify`, `get_self`, `get_location`, `separate_coordinate`, `combine_coordinate`,
-`set_reg`, `set_number`, `add`, `sub`, `domove`, `lock`, `unlock`, `wait`.
+Functions fall into three categories:
+
+- **Implemented** — contain an `instruction` or `return instruction` body. Functions
+  with output slots use `return instruction` and mark the primary output with `@1`.
+  Optional inputs and secondary outputs use keyword parameters. All non-control-flow
+  instructions are implemented (~102 functions).
+- **Control-flow stubs** — empty bodies with a `# control flow:` comment. These have
+  `[exec]` branch slots, are loop iterators, terminal instructions, or jump/label
+  pairs. They require compiler-level control flow support to implement (~70 functions).
+- **Not-implementable stubs** — empty bodies with a `# not implementable:` comment.
+  These have dynamic parameters (`call`), require UI selection (`produce`), or use
+  non-standard field types (`set_logistics_options`).
 
 Each function body contains a `# frame:` comment showing the inferred JSON structure of the
 compiled instruction. These were derived from `instructions.lua` by mapping:

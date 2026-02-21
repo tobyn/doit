@@ -584,6 +584,25 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("return_instruction_syntax", func(t *testing.T) {
+		stdlibSrc := "fn my_get() { return instruction \"get_self\" { 0: @1 } }"
+		err := compiler.TestParseStdlibFile(stdlibSrc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("return_without_instruction", func(t *testing.T) {
+		stdlibSrc := "fn bad() { return foo }"
+		err := compiler.TestParseStdlibFile(stdlibSrc)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected 'instruction'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("localized_doc_comment_with_locale", func(t *testing.T) {
 		src := "behavior a {\n#! (en) English comment\n#! (ja) 日本語コメント\nnotify \"Hello\"\n}"
 		obj, err := compiler.CompileString(src, stdlib, "", "ja")

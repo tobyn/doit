@@ -119,8 +119,16 @@ func parseStdlibFile(src string, fns map[string]*fnDef) error {
 			continue
 		}
 
+		// Support both "instruction ..." and "return instruction ..."
+		if tok.kind == tokIdent && tok.val == "return" {
+			tok, err = p.next()
+			if err != nil {
+				return err
+			}
+		}
+
 		if tok.kind != tokIdent || tok.val != "instruction" {
-			return p.errorf(tok.pos, "expected 'instruction' or '}', got %s", tok.describe())
+			return p.errorf(tok.pos, "expected 'instruction', 'return', or '}', got %s", tok.describe())
 		}
 
 		frame, err := p.parseInstruction()

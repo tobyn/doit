@@ -1,6 +1,6 @@
 # AI-generated test
 behavior number_args {
     @name "Number Args"
-    add x, 10, x
+    x = add x, 10
     wait 5
 }

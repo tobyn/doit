@@ -5,5 +5,5 @@ behavior param_basic {
     @param inout storage "Storage"
 
     domove $target
-    set_reg $storage, $store
+    $store = set_reg $storage
 }

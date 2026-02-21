@@ -19,8 +19,9 @@ output format.
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types, `Keywords` map, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized `#!` comments
-- **`compiler/parse.go`** — Stdlib parsing, file-level parsing, function definitions,
-  call expansion with `[]any`/`map[string]any` argument types
+- **`compiler/parse.go`** — Stdlib parsing (with `return instruction` support),
+  file-level parsing, function definitions, call expansion with
+  `[]any`/`map[string]any` argument types
 - **`compiler/codegen.go`** — Behavior body compilation: param/let/var declarations,
   symbol table tracking, rich argument parsing, assignment target resolution,
   loops, if/else, deferred body emission, `matchLocale` shared BCP 47 matching helper
@@ -118,11 +119,18 @@ instruction.
 
 The `@1` syntax inside an `instruction` block marks an output slot as
 the first return value:
-`fn get_self() { instruction "get_self" { 0: @1 } }`. The `@1` is stored
-in the instruction frame as a `returnSlot(1)` value. During `expandCall`,
-`returnSlot` values are replaced with `retVal` (or `false` if discarded).
-Only `@1` is supported (single return); `@2`+ will be used for multiple
-returns in the future. The `returnSlot` type is defined in compiler.go.
+`fn get_self() { return instruction "get_self" { 0: @1 } }`. The `@1` is
+stored in the instruction frame as a `returnSlot(1)` value. During
+`expandCall`, `returnSlot` values are replaced with `retVal` (or `false`
+if discarded). Only `@1` is supported (single return); `@2`+ will be used
+for multiple returns in the future. The `returnSlot` type is defined in
+compiler.go.
+
+In stdlib files, `return instruction` is the preferred form for functions
+with output slots. The `return` keyword is syntactic — `parseStdlibFile`
+simply skips it before parsing the `instruction` block. The `@1` in the
+frame is what drives `hasReturn()`. Plain `instruction` (without `return`)
+remains valid for functions with no output slots.
 
 The `fnDef.hasReturn()` method checks both mechanisms: `ret != ""` OR
 the frame contains a `returnSlot`. All call-site error checks ("has no
