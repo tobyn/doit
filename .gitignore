@@ -6,3 +6,4 @@
 
 # Claude Code stuff
 /.claude/**/*.local.json
+/.claude/plans/

@@ -42,6 +42,21 @@ coordinates apply component-wise (X to X, Y to Y).
 Several instructions exist for splitting register values into their
 constituent parts (value and number) and combining parts back together.
 
+There is no string type in the VM. Strings exist only as compile-time
+constants baked into instruction fields (e.g., the text argument to
+`notify`). There is no way to store a string in a register or
+dynamically construct strings at runtime. This means any string
+processing (such as localization) must be resolved at compile time.
+
+More generally, language-level types do not necessarily map 1:1 to VM
+registers. A type might map directly to a single register (like a
+number), require multiple registers with compiler-managed metadata
+(like a range represented as start + end registers with the compiler
+tracking inclusive vs half-open), or have no runtime representation
+at all (like strings, which are compile-time constants). The compiler
+bridges the gap between the language's type system and the VM's flat
+register model.
+
 In the compiled JSON, typed values are represented as objects:
 
 - **Item, Component, Technology, Informational Value**:

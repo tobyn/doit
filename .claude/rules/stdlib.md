@@ -46,9 +46,14 @@ compiler is responsible for any conversion between the reference format and
 the wire format — the details of this conversion are a future concern.
 
 `instructions.lua` is a commercially licensed file, so it cannot be committed
-to the repository. It is the developer's responsibility to provide a copy of
-this file, if necessary. If this file is needed and missing, notify the
-developer and tell them it can be found inside
-`Desynced/Content/mods/main.zip` in the `data` directory. If the game is
-installed via Steam, the game's data will most likely be found in
-`<Steam install directory>/steamapps/common`.
+to the repository. Assume the file is available and use it freely for
+analysis, reference, and code generation. If a task requires the file and it
+is missing, notify the developer with the following:
+
+- The file can be found inside `Desynced/Content/mods/main.zip` in the
+  `data` directory
+- If the game is installed via Steam, the game's data will most likely be
+  found in `<Steam install directory>/steamapps/common`
+
+Then offer alternative approaches to proceed without the file if the
+developer cannot provide it.
