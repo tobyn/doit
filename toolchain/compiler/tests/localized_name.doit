@@ -1,6 +1,6 @@
 # AI-generated test
 behavior localized_name {
-    @name {
+    @name localize {
         en_US "Localized Name"
         ja "ローカライズされた名前"
     }

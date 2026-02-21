@@ -391,6 +391,13 @@ func (p *parser) parseFnBodyArgValue() (fnBodyArg, error) {
 		num, _ := strconv.Atoi(tok.val)
 		return fnBodyArg{literal: map[string]any{"num": num}}, nil
 	case tokIdent:
+		if tok.val == "localize" {
+			resolved, err := p.parseLocalize()
+			if err != nil {
+				return fnBodyArg{}, err
+			}
+			return fnBodyArg{val: resolved}, nil
+		}
 		if tok.val == "null" {
 			return fnBodyArg{literal: false}, nil
 		}

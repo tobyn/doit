@@ -22,6 +22,7 @@ Function arguments accept several value types:
 | Identifier | `target` | Variable, parameter, or function parameter |
 | Unit register | `$store` | Unit register reference |
 | `null` | `null` | Empty value |
+| `localize { ... }` | `localize { en "Hi" ja "こんにちは" }` | Locale-aware string |
 
 ```doit
 var x = 5

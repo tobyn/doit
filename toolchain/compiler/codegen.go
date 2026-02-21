@@ -439,6 +439,13 @@ func (p *parser) parseArgValue(syms *symbolTable) (any, error) {
 		num, _ := strconv.Atoi(tok.val)
 		return map[string]any{"num": num}, nil
 	case tokIdent:
+		if tok.val == "localize" {
+			resolved, err := p.parseLocalize()
+			if err != nil {
+				return nil, err
+			}
+			return resolved, nil
+		}
 		if tok.val == "null" {
 			return false, nil
 		}
@@ -886,8 +893,8 @@ func (p *parser) parseParamAttr(syms *symbolTable, pos int) error {
 	}
 	if peek.kind == tokString {
 		displayName = peek.val
-	} else if peek.kind == tokLBrace {
-		resolved, err := p.resolveLocalizedName()
+	} else if peek.kind == tokIdent && peek.val == "localize" {
+		resolved, err := p.parseLocalize()
 		if err != nil {
 			return err
 		}
@@ -920,7 +927,7 @@ func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
 }
 
 // parseName parses the value of an @name attribute. It handles both the simple
-// string form and the localized block form.
+// string form and the localize { ... } form.
 func (p *parser) parseName() (string, error) {
 	tok, err := p.next()
 	if err != nil {
@@ -929,15 +936,23 @@ func (p *parser) parseName() (string, error) {
 	if tok.kind == tokString {
 		return tok.val, nil
 	}
-	if tok.kind == tokLBrace {
-		return p.resolveLocalizedName()
+	if tok.kind == tokIdent && tok.val == "localize" {
+		return p.parseLocalize()
 	}
-	return "", p.errorf(tok.pos, "expected string or '{' after @name, got %s", tok.describe())
+	return "", p.errorf(tok.pos, "expected string or 'localize' after @name, got %s", tok.describe())
 }
 
-// resolveLocalizedName parses locale/string pairs until '}' and returns the
+// parseLocalize expects '{' then parses locale/string pairs via resolveLocalize.
+func (p *parser) parseLocalize() (string, error) {
+	if _, err := p.expect(tokLBrace); err != nil {
+		return "", err
+	}
+	return p.resolveLocalize()
+}
+
+// resolveLocalize parses locale/string pairs until '}' and returns the
 // best match for p.locale. If p.locale is empty, the first entry is used.
-func (p *parser) resolveLocalizedName() (string, error) {
+func (p *parser) resolveLocalize() (string, error) {
 	type entry struct {
 		locale string
 		name   string
@@ -966,7 +981,7 @@ func (p *parser) resolveLocalizedName() (string, error) {
 	}
 
 	if len(entries) == 0 {
-		return "", fmt.Errorf("empty @name block")
+		return "", fmt.Errorf("empty localize block")
 	}
 
 	if p.locale == "" {

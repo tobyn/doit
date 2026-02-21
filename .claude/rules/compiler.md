@@ -40,8 +40,8 @@ exported `Keywords` map lists all reserved keywords for use by editor tooling.
 Brace-delimited blocks fall into two categories. **Statement blocks** (behavior
 bodies, function bodies, if/else/while/loop bodies) all contain a sequence of
 statements and can be parsed uniformly. **Structured data blocks** (the
-`instruction` intrinsic and the `@name`/`@param` localized blocks) each
-have their own parsing rules and semantics.
+`instruction` intrinsic and `localize { ... }` blocks) each have their own
+parsing rules and semantics.
 
 **Statement termination** (not yet implemented): The language is line-oriented.
 Statements terminate at end-of-line by default, with three exceptions:
@@ -68,14 +68,17 @@ recursively up the call stack.
 Behavior IDs can be bareword identifiers or quoted strings. The `@name` attribute sets the display
 name (at most once per behavior); if omitted, the behavior ID is used as the default name. The
 `@param` attribute declares behavior parameters (see "Behavior parameters" below). Both `@name`
-and `@param` support a localized block form (`@name { en_US "English" ja "日本語" }`) that
-selects the best match for the compiler's locale setting using `golang.org/x/text/language`.
+and `@param` accept the `localize` intrinsic for localized strings
+(`@name localize { en_US "English" ja "日本語" }`), which selects the best match for the
+compiler's locale setting using `golang.org/x/text/language`. The `localize` intrinsic is a
+compile-time string construct usable anywhere a string argument is expected (e.g., function
+call arguments).
 
 The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library, a
 `behaviorID string` that selects which behavior to compile, and a `locale string` (BCP 47 tag) for
-resolving localized `@name` blocks. When `behaviorID` is empty and the source contains a
+resolving `localize` blocks. When `behaviorID` is empty and the source contains a
 single behavior, it is auto-selected. When the source contains multiple behaviors,
-`behaviorID` must name one of them. When `locale` is empty, localized `@name` blocks use
+`behaviorID` must name one of them. When `locale` is empty, `localize` blocks use
 their first entry. The compiler parses stdlib function definitions first, then compiles
 user source. Stdlib functions that contain an `instruction` intrinsic are inlined at call
 sites — the compiler substitutes arguments into the instruction template fields.
@@ -99,11 +102,12 @@ declarations (immutable). Unit registers (`$signal`, `$visual`, `$store`,
 threaded through all compilation functions via a `syms *symbolTable`
 parameter.
 
-**Rich argument types**: At behavior level, function arguments accept five
+**Rich argument types**: At behavior level, function arguments accept six
 value types: string literals (`"hello"` → string), number literals
 (`42` → `map[string]any{"num": 42}`), `null` (`false`), `$`-prefixed
 references (unit register negative ints or parameter 1-based indices),
-and bare identifiers (variable name strings). `$name` resolution order:
+bare identifiers (variable name strings), and `localize { ... }` blocks
+(resolved to a string at compile time). `$name` resolution order:
 unit register → parameter. The same resolution applies to assignment
 targets (`=`, `+=`, `++`), with an immutability check for `let` variables.
 
@@ -117,7 +121,7 @@ to flow through to instruction template substitution.
 **Behavior parameters**: Declared with the `@param` attribute before any
 instructions: `@param <direction> <name> <display>` where direction is
 `in`, `out`, or `inout`. The display name can be a string literal or a
-localized block (same as `@name`). Each parameter gets a 1-based index in
+`localize { ... }` block (same as `@name`). Each parameter gets a 1-based index in
 declaration order. References use the `$name` syntax (same prefix as unit
 registers). Resolution order: unit registers first, then parameters.
 Duplicate parameter names and conflicts with built-in unit register names

@@ -33,10 +33,10 @@ behavior patrol {
 }
 ```
 
-For localized names, use the block form with locale codes:
+For localized names, use `localize`:
 
 ```doit
-@name {
+@name localize {
     en_US "US English name"
     ja    "日本語の名前"
 }
@@ -175,11 +175,11 @@ The syntax is `@param <direction> <name> <display>`:
 - **Direction**: `in` (read-only input), `out` (write-only output), or
   `inout` (read/write)
 - **Name**: the identifier used to reference this parameter as `$name`
-- **Display**: a string literal or a localized block (same as `@name`)
+- **Display**: a string literal or `localize { ... }` (same as `@name`)
 
 ```doit
 @param in target "Target"
-@param inout gang_id {
+@param inout gang_id localize {
     en "Gang ID"
     ja "ギャングID"
 }
@@ -317,5 +317,37 @@ loop {
     }
 
     i += 1
+}
+```
+
+## Localization
+
+The `localize` construct provides locale-aware strings at compile time. It
+can be used anywhere a string is expected — `@name`, `@param` display names,
+and function arguments:
+
+```doit
+localize {
+    en_US "English text"
+    ja    "日本語テキスト"
+}
+```
+
+Each entry is a locale identifier followed by a string literal. The compiler
+selects the best match for the active locale (set via `-l`). If no match is
+found, the first entry is used. If no locale is set, the first entry is
+always used.
+
+Examples:
+
+```doit
+@name localize {
+    en_US "My Behavior"
+    ja    "マイビヘイビア"
+}
+
+notify localize {
+    en "Hello!"
+    ja "こんにちは！"
 }
 ```

@@ -1,0 +1,8 @@
+# AI-generated test
+behavior localize_notify {
+    @name "Localize Notify"
+    notify localize {
+        en_US "Hello"
+        ja "こんにちは"
+    }
+}

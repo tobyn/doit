@@ -46,6 +46,7 @@ var Keywords = map[string]bool{
 	"if":          true,
 	"instruction": true,
 	"let":         true,
+	"localize":    true,
 	"loop":        true,
 	"null":        true,
 	"private":     true,
