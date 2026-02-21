@@ -620,9 +620,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 			}
 			instr[nativeKey] = v
 		}
-		if comment != "" {
-			instr["cmt"] = comment
-		}
+		setComment(instr, comment)
 		b.emit(instr)
 		return nil
 	}

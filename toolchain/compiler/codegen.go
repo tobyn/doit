@@ -78,9 +78,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			if err != nil {
 				return nil, err
 			}
-			if comment != "" {
-				instr["cmt"] = comment
-			}
+			setComment(instr, comment)
 			b.emit(instr)
 
 		case "var":
@@ -311,20 +309,18 @@ func (p *parser) compileIfBreak(b *frameBuilder, comment string) (int, error) {
 	}
 
 	f := map[string]any{
-		"op": "check_number",
-		"3":  lhsTok.val,
-		"4":  map[string]any{"num": rhsNum},
+		"op":        "check_number",
+		checkValue:  lhsTok.val,
+		checkTarget: map[string]any{"num": rhsNum},
 	}
-	if comment != "" {
-		f["cmt"] = comment
-	}
+	setComment(f, comment)
 	checkFrame := b.emit(f)
 
 	// Reserve the next frame for the break target (filled by caller).
 	b.emit(nil)
 
 	// Set if_smaller to skip past break target to the next loop body frame.
-	f["2"] = frameRef(b.pos())
+	f[checkSmaller] = frameRef(b.pos())
 
 	return checkFrame, nil
 }
@@ -348,13 +344,11 @@ func (p *parser) compileWhile(b *frameBuilder, comment string, syms *symbolTable
 
 	// Emit check_number: equal and smaller fall through to body.
 	check := map[string]any{
-		"op": "check_number",
-		"3":  varTok.val,
-		"4":  map[string]any{"num": limitNum},
+		"op":        "check_number",
+		checkValue:  varTok.val,
+		checkTarget: map[string]any{"num": limitNum},
 	}
-	if comment != "" {
-		check["cmt"] = comment
-	}
+	setComment(check, comment)
 	checkFrame := b.emit(check)
 
 	// Compile body.
@@ -374,7 +368,7 @@ func (p *parser) compileWhile(b *frameBuilder, comment string, syms *symbolTable
 	lastBody["next"] = frameRef(checkFrame)
 
 	// Patch check's if_larger to exit to the continuation.
-	check["1"] = frameRef(b.pos())
+	check[checkLarger] = frameRef(b.pos())
 
 	return nil
 }
@@ -459,9 +453,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			"2":  map[string]any{"num": 1},
 			"3":  target,
 		}
-		if comment != "" {
-			f["cmt"] = comment
-		}
+		setComment(f, comment)
 		b.emit(f)
 		return nil
 	}
@@ -482,9 +474,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 				"2":  map[string]any{"num": num},
 				"3":  target,
 			}
-			if comment != "" {
-				f["cmt"] = comment
-			}
+			setComment(f, comment)
 			b.emit(f)
 			return nil
 		}
@@ -521,9 +511,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			"2":  map[string]any{"num": num},
 			"3":  target,
 		}
-		if comment != "" {
-			f["cmt"] = comment
-		}
+		setComment(f, comment)
 		b.emit(f)
 		return nil
 	}
@@ -666,13 +654,11 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 	rhsNum, _ := strconv.Atoi(rhsTok.val)
 
 	check := map[string]any{
-		"op": "check_number",
-		"3":  lhsTok.val,
-		"4":  map[string]any{"num": rhsNum},
+		"op":        "check_number",
+		checkValue:  lhsTok.val,
+		checkTarget: map[string]any{"num": rhsNum},
 	}
-	if comment != "" {
-		check["cmt"] = comment
-	}
+	setComment(check, comment)
 	checkFrame := b.emit(check)
 
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -689,7 +675,7 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 		*deferred = append(*deferred, deferredBody{
 			frames:     bodyFrames,
 			checkFrame: checkFrame,
-			slot:       "2",
+			slot:       checkSmaller,
 		})
 
 	case tokGreaterEquals:
@@ -713,7 +699,7 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 			*deferred = append(*deferred, deferredBody{
 				frames:     elseFrames,
 				checkFrame: checkFrame,
-				slot:       "2",
+				slot:       checkSmaller,
 			})
 		} else {
 			p.unget(tok)
@@ -742,7 +728,7 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 		*deferred = append(*deferred, deferredBody{
 			frames:     bodyFrames,
 			checkFrame: checkFrame,
-			slot:       "1",
+			slot:       checkLarger,
 		})
 
 	default:
@@ -784,9 +770,9 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody, sy
 		var slot string
 		switch opTok.kind {
 		case tokGreater:
-			slot = "1"
+			slot = checkLarger
 		case tokLess:
-			slot = "2"
+			slot = checkSmaller
 		default:
 			return p.errorf(opTok.pos, "unsupported else-if operator %s", opTok.describe())
 		}
@@ -812,10 +798,10 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody, sy
 		if tok2.kind == tokIdent && tok2.val == "else" {
 			// Determine the remaining slot
 			var elseSlot string
-			if slot == "1" {
-				elseSlot = "2"
+			if slot == checkLarger {
+				elseSlot = checkSmaller
 			} else {
-				elseSlot = "1"
+				elseSlot = checkLarger
 			}
 			if _, err := p.expect(tokLBrace); err != nil {
 				return err
@@ -846,12 +832,12 @@ func (p *parser) compileElseClauses(checkFrame int, deferred *[]deferredBody, sy
 		*deferred = append(*deferred, deferredBody{
 			frames:     elseFrames,
 			checkFrame: checkFrame,
-			slot:       "1",
+			slot:       checkLarger,
 		})
 		*deferred = append(*deferred, deferredBody{
 			frames:     elseFrames,
 			checkFrame: checkFrame,
-			slot:       "2",
+			slot:       checkSmaller,
 		})
 	}
 
@@ -946,9 +932,7 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 			"2":  map[string]any{"num": num},
 			"3":  nameTok.val,
 		}
-		if comment != "" {
-			f["cmt"] = comment
-		}
+		setComment(f, comment)
 		b.emit(f)
 		return nil
 	}

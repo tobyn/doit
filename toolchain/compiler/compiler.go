@@ -42,6 +42,22 @@ func TestParseLocalePrefix(line string) (locale, rest string, ok bool) {
 	return parseLocalePrefix(line)
 }
 
+// --- check_number instruction slots (1-based wire format) ---
+
+const (
+	checkLarger  = "1" // exec branch: value > target
+	checkSmaller = "2" // exec branch: value < target
+	checkValue   = "3" // input: value to compare
+	checkTarget  = "4" // input: comparison target
+)
+
+// setComment sets the "cmt" field on a frame if comment is non-empty.
+func setComment(frame map[string]any, comment string) {
+	if comment != "" {
+		frame["cmt"] = comment
+	}
+}
+
 // --- Shared types ---
 
 type paramDef struct {
@@ -157,7 +173,7 @@ type fnBodyCall struct {
 type deferredBody struct {
 	frames       []map[string]any
 	checkFrame   int    // index of the check_number frame to patch
-	slot         string // "1" (if_larger) or "2" (if_smaller)
+	slot         string // checkLarger or checkSmaller
 	continuation int    // frame index of the statement after the if block
 }
 
@@ -180,8 +196,6 @@ func (b *frameBuilder) emit(f map[string]any) int {
 	b.cursor++
 	return idx
 }
-
-func (b *frameBuilder) len() int { return len(b.frames) }
 
 func (b *frameBuilder) pos() int { return b.cursor }
 

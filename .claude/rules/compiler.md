@@ -13,7 +13,9 @@ output format.
 
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
   (`fnDef`, `fnBodyArg`, `symbolTable`, `unitRegisters`),
-  and `frameBuilder`/`frameRef` abstraction for frame management
+  `frameBuilder`/`frameRef` abstraction for frame management,
+  `check_number` slot constants (`checkLarger`, `checkSmaller`, `checkValue`,
+  `checkTarget`), and the `setComment` helper for setting `"cmt"` on frames
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types, `Keywords` map, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized `#!` comments
