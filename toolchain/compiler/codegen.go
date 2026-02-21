@@ -996,6 +996,22 @@ func (p *parser) parseLocalize() (string, error) {
 	return p.resolveLocalize()
 }
 
+// matchLocale returns the index of the best-matching locale from locales
+// for the given desired locale. If desired is empty, returns 0.
+func matchLocale(desired string, locales []string) int {
+	if desired == "" {
+		return 0
+	}
+	tags := make([]language.Tag, len(locales))
+	for i, l := range locales {
+		tags[i] = language.Make(strings.ReplaceAll(l, "_", "-"))
+	}
+	d := language.Make(strings.ReplaceAll(desired, "_", "-"))
+	matcher := language.NewMatcher(tags)
+	_, idx, _ := matcher.Match(d)
+	return idx
+}
+
 // resolveLocalize parses locale/string pairs until '}' and returns the
 // best match for p.locale. If p.locale is empty, the first entry is used.
 func (p *parser) resolveLocalize() (string, error) {
@@ -1030,17 +1046,10 @@ func (p *parser) resolveLocalize() (string, error) {
 		return "", fmt.Errorf("empty localize block")
 	}
 
-	if p.locale == "" {
-		return entries[0].name, nil
-	}
-
-	tags := make([]language.Tag, len(entries))
+	locales := make([]string, len(entries))
 	for i, e := range entries {
-		tags[i] = language.Make(strings.ReplaceAll(e.locale, "_", "-"))
+		locales[i] = e.locale
 	}
-
-	desired := language.Make(strings.ReplaceAll(p.locale, "_", "-"))
-	matcher := language.NewMatcher(tags)
-	_, idx, _ := matcher.Match(desired)
+	idx := matchLocale(p.locale, locales)
 	return entries[idx].name, nil
 }

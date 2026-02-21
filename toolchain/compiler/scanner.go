@@ -56,11 +56,12 @@ var Keywords = map[string]bool{
 }
 
 type scanner struct {
-	src            string
-	pos            int
-	ungot          *token
-	docComment     string // accumulated #! lines before the current token
-	ungotComment   string // saved docComment for ungotten token
+	src          string
+	pos          int
+	ungot        *token
+	docComment   string // accumulated #! lines before the current token
+	ungotComment string // saved docComment for ungotten token
+	locale       string // BCP 47 locale tag; empty = use first entry
 }
 
 type parser struct {
@@ -68,7 +69,6 @@ type parser struct {
 	fns         map[string]*fnDef
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
-	locale      string   // BCP 47 locale tag; empty = use first entry
 }
 
 func (s *scanner) errorf(pos int, format string, args ...any) error {
@@ -84,8 +84,34 @@ func (s *scanner) errorf(pos int, format string, args ...any) error {
 	return fmt.Errorf("%d:%d: %s", line, col, fmt.Sprintf(format, args...))
 }
 
+// parseLocalePrefix checks if line starts with a (locale) prefix.
+// Returns the locale code, the remaining text, and whether a prefix was found.
+func parseLocalePrefix(line string) (locale, rest string, ok bool) {
+	if !strings.HasPrefix(line, "(") {
+		return "", "", false
+	}
+	idx := strings.IndexByte(line, ')')
+	if idx < 0 {
+		return "", "", false
+	}
+	locale = strings.TrimSpace(line[1:idx])
+	if locale == "" {
+		return "", "", false
+	}
+	for _, c := range locale {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return "", "", false
+		}
+	}
+	rest = strings.TrimSpace(line[idx+1:])
+	return locale, rest, true
+}
+
 func (s *scanner) skipWhitespaceAndComments() {
 	s.docComment = ""
+	var docLines []string
+
 	for s.pos < len(s.src) {
 		c := s.src[s.pos]
 		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ';' {
@@ -96,12 +122,7 @@ func (s *scanner) skipWhitespaceAndComments() {
 			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
 				s.pos++
 			}
-			line := strings.TrimSpace(s.src[start:s.pos])
-			if s.docComment != "" {
-				s.docComment += " " + line
-			} else {
-				s.docComment = line
-			}
+			docLines = append(docLines, strings.TrimSpace(s.src[start:s.pos]))
 		} else if c == '#' {
 			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
 				s.pos++
@@ -110,6 +131,44 @@ func (s *scanner) skipWhitespaceAndComments() {
 			break
 		}
 	}
+
+	if len(docLines) == 0 {
+		return
+	}
+
+	if loc, rest, ok := parseLocalePrefix(docLines[0]); ok {
+		s.docComment = s.resolveLocalizedDocComment(loc, rest, docLines[1:])
+	} else {
+		s.docComment = strings.Join(docLines, " ")
+	}
+}
+
+func (s *scanner) resolveLocalizedDocComment(firstLocale, firstText string, remaining []string) string {
+	type entry struct {
+		locale string
+		text   string
+	}
+	entries := []entry{{firstLocale, firstText}}
+
+	for _, line := range remaining {
+		if loc, rest, ok := parseLocalePrefix(line); ok {
+			entries = append(entries, entry{loc, rest})
+		} else {
+			last := &entries[len(entries)-1]
+			if last.text != "" {
+				last.text += " " + line
+			} else {
+				last.text = line
+			}
+		}
+	}
+
+	locales := make([]string, len(entries))
+	for i, e := range entries {
+		locales[i] = e.locale
+	}
+	idx := matchLocale(s.locale, locales)
+	return entries[idx].text
 }
 
 func (s *scanner) unget(tok token) {

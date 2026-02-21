@@ -152,6 +152,40 @@ greet
 In this example, the first `notify` gets `"Says hello"` (its own), and the
 second gets `"Greeting sequence"` (inherited from the call site).
 
+#### Localized doc comments
+
+Doc comments can carry locale-specific text using a `(locale)` prefix. The
+compiler selects the best match for the active locale (set via `-l`), using
+the same BCP 47 matching logic as `localize` blocks:
+
+```doit
+#! (en) Move to the target
+#! (ja) ターゲットに移動
+move_to target
+```
+
+The first `#!` line in a group determines the mode. If it starts with a
+`(locale)` prefix, the entire group is localized. Otherwise, it's a plain
+doc comment (preserving existing behavior).
+
+Continuation lines without a `(locale)` prefix append to the previous
+locale's text with a space:
+
+```doit
+#! (en) line one
+#! continued on next line
+#! (ja) 日本語テキスト
+notify "Hello"
+```
+
+With locale `en`, this produces `"line one continued on next line"`.
+
+The locale prefix pattern is `(` followed by identifier characters (letters,
+digits, `_`, `-`) and `)`. The same locale codes accepted by `localize`
+blocks work here (e.g., `en`, `en_US`, `ja`, `zh-Hans`). If no locale is
+set, the first entry is used. If no match is found, the best BCP 47 match
+is selected (falling back to the first entry).
+
 ## Parameters
 
 Parameters are behavior-level registers declared with the `@param` attribute.

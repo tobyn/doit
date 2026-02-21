@@ -1,0 +1,7 @@
+# AI-generated test
+# locale: ja
+behavior doc_comment_localized {
+    #! (en) Hello notification
+    #! (ja) 通知メッセージ
+    notify "Hello"
+}

@@ -1,0 +1,8 @@
+# AI-generated test
+# locale: en
+behavior doc_comment_localized_multiline {
+    #! (en) line one
+    #! continued on next line
+    #! (ja) 日本語テキスト
+    notify "Hello"
+}

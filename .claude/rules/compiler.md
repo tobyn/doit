@@ -14,13 +14,14 @@ output format.
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
   (`fnDef`, `fnBodyArg`, `symbolTable`, `unitRegisters`),
   and `frameBuilder`/`frameRef` abstraction for frame management
-- **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`), token types,
-  `Keywords` map, `$`-prefix scanning, error formatting
+- **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
+  field), token types, `Keywords` map, `$`-prefix scanning, error formatting,
+  `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized `#!` comments
 - **`compiler/parse.go`** — Stdlib parsing, file-level parsing, function definitions,
   call expansion with `[]any`/`map[string]any` argument types
 - **`compiler/codegen.go`** — Behavior body compilation: param/let/var declarations,
   symbol table tracking, rich argument parsing, assignment target resolution,
-  loops, if/else, deferred body emission
+  loops, if/else, deferred body emission, `matchLocale` shared BCP 47 matching helper
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled
   output)
 
@@ -63,7 +64,15 @@ the first token of each statement, then passes it through compilation. For
 instruction-based stdlib calls, the comment is set as `"cmt"` on the
 emitted frame. For user-defined function calls, each body call uses its
 own `#!` comment if present, otherwise inherits the caller's comment,
-recursively up the call stack.
+recursively up the call stack. Doc comments support localized text via a
+`(locale)` prefix on each `#!` line (e.g., `#! (en) English text`). The
+first line's presence of a prefix determines the mode: if present, all
+lines are parsed as localized entries; otherwise, they are joined as plain
+text. Continuation lines without a prefix append to the previous locale's
+text. The `resolveLocalizedDocComment` method on `scanner` handles this,
+using the shared `matchLocale` helper for BCP 47 matching. The
+`parseLocalePrefix` package-level function extracts the locale code from
+a `(locale) text` pattern.
 
 Behavior IDs can be bareword identifiers or quoted strings. The `@name` attribute sets the display
 name (at most once per behavior); if omitted, the behavior ID is used as the default name. The
@@ -204,6 +213,13 @@ should not be modified programmatically. When our implementation's output format
 differs from the reference (e.g., 1-based vs 0-based integer keys), the test
 code bridges the gap via the `refToNative` conversion routine in `main_test.go`
 rather than modifying the test data.
+
+### Locale directive
+
+Test `.doit` files can specify a compilation locale via a `# locale: <tag>`
+comment on the second line (after `# AI-generated test`). The `TestCompile`
+harness reads this directive and passes the locale to the compiler. If
+absent, the locale defaults to `""` (first entry wins).
 
 ### AI-generated tests
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -42,7 +43,22 @@ func TestCompile(t *testing.T) {
 			}
 			defer f.Close()
 
-			encoded, err := Compile(f, stdlib, behaviorID, "")
+			// Check for a "# locale: <tag>" directive on the second line.
+			locale := ""
+			scanner := bufio.NewScanner(f)
+			lineNum := 0
+			for scanner.Scan() && lineNum < 2 {
+				line := scanner.Text()
+				if after, ok := strings.CutPrefix(line, "# locale: "); ok {
+					locale = strings.TrimSpace(after)
+				}
+				lineNum++
+			}
+			if _, err := f.Seek(0, 0); err != nil {
+				t.Fatal(err)
+			}
+
+			encoded, err := Compile(f, stdlib, behaviorID, locale)
 			if err != nil {
 				t.Fatalf("Compile error: %v", err)
 			}
@@ -567,6 +583,101 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("localized_doc_comment_with_locale", func(t *testing.T) {
+		src := "behavior a {\n#! (en) English comment\n#! (ja) 日本語コメント\nnotify \"Hello\"\n}"
+		obj, err := compiler.CompileString(src, stdlib, "", "ja")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		if frame["cmt"] != "日本語コメント" {
+			t.Fatalf("expected cmt %q, got %v", "日本語コメント", frame["cmt"])
+		}
+	})
+
+	t.Run("localized_doc_comment_no_locale", func(t *testing.T) {
+		src := "behavior a {\n#! (en) English comment\n#! (ja) 日本語コメント\nnotify \"Hello\"\n}"
+		obj, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		if frame["cmt"] != "English comment" {
+			t.Fatalf("expected cmt %q, got %v", "English comment", frame["cmt"])
+		}
+	})
+
+	t.Run("localized_doc_comment_fallback", func(t *testing.T) {
+		src := "behavior a {\n#! (en) English comment\n#! (ja) 日本語コメント\nnotify \"Hello\"\n}"
+		obj, err := compiler.CompileString(src, stdlib, "", "fr")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		if frame["cmt"] != "English comment" {
+			t.Fatalf("expected cmt %q, got %v", "English comment", frame["cmt"])
+		}
+	})
+
+	t.Run("localized_doc_comment_multiline_continuation", func(t *testing.T) {
+		src := "behavior a {\n#! (en) line one\n#! continued\n#! (ja) 日本語\nnotify \"Hello\"\n}"
+		obj, err := compiler.CompileString(src, stdlib, "", "en")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		if frame["cmt"] != "line one continued" {
+			t.Fatalf("expected cmt %q, got %v", "line one continued", frame["cmt"])
+		}
+	})
+
+	t.Run("plain_doc_comment_not_affected", func(t *testing.T) {
+		// A plain doc comment (no locale prefix) should work as before
+		src := "behavior a {\n#! plain comment\nnotify \"Hello\"\n}"
+		obj, err := compiler.CompileString(src, stdlib, "", "ja")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		if frame["cmt"] != "plain comment" {
+			t.Fatalf("expected cmt %q, got %v", "plain comment", frame["cmt"])
+		}
+	})
+}
+
+func TestParseLocalePrefix(t *testing.T) {
+	tests := []struct {
+		input      string
+		wantLocale string
+		wantRest   string
+		wantOK     bool
+	}{
+		{"(en) text", "en", "text", true},
+		{"(en_US) text", "en_US", "text", true},
+		{"(zh-Hans) text", "zh-Hans", "text", true},
+		{"plain text", "", "", false},
+		{"(en)", "en", "", true},
+		{"()", "", "", false},
+		{"(123!) bad", "", "", false},
+		{"(en)no space", "en", "no space", true},
+		{"( en ) text", "en", "text", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			locale, rest, ok := compiler.TestParseLocalePrefix(tt.input)
+			if ok != tt.wantOK {
+				t.Fatalf("ok: got %v, want %v", ok, tt.wantOK)
+			}
+			if locale != tt.wantLocale {
+				t.Fatalf("locale: got %q, want %q", locale, tt.wantLocale)
+			}
+			if rest != tt.wantRest {
+				t.Fatalf("rest: got %q, want %q", rest, tt.wantRest)
+			}
+		})
+	}
 }
 
 func TestCodec(t *testing.T) {

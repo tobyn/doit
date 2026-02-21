@@ -28,13 +28,18 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string) (*codec.
 	if err != nil {
 		return nil, fmt.Errorf("stdlib: %w", err)
 	}
-	p := &parser{scanner: scanner{src: src}, fns: fns, target: behaviorID, locale: locale}
+	p := &parser{scanner: scanner{src: src, locale: locale}, fns: fns, target: behaviorID}
 	return p.parseFile()
 }
 
 // TestParseStdlibFile is a test helper that parses a stdlib source string.
 func TestParseStdlibFile(src string) error {
 	return parseStdlibFile(src, map[string]*fnDef{})
+}
+
+// TestParseLocalePrefix is a test helper that exposes parseLocalePrefix.
+func TestParseLocalePrefix(line string) (locale, rest string, ok bool) {
+	return parseLocalePrefix(line)
 }
 
 // --- Shared types ---
