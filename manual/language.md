@@ -256,6 +256,15 @@ the variable. The difference between `var` and `let` is that `let` prevents
 reassignment — the compiler errors on `=`, `+=`, or `++` targeting a `let`
 variable.
 
+Both `var` and `let` allow shadowing — you can redeclare a variable with the
+same name, and the new declaration replaces the previous one:
+
+```doit
+let x = 5
+let x = 10
+var x = 15
+```
+
 Assign a new value with `=`:
 
 ```doit

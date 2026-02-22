@@ -194,6 +194,9 @@ direction, and display names), `var` declarations (mutable), and `let`
 declarations (immutable). Variables can be initialized with a number literal
 (`let x = 5`) or a function call with a return value (`let me = get_self`).
 Assignment (`x = ...`) also supports both number literals and function calls.
+Both `var` and `let` allow shadowing — redeclaring a variable with the same
+name overwrites the previous symbol table entry. The new declaration's
+mutability applies going forward.
 Unit registers (`$signal`, `$visual`, `$store`, `$goto`) are a package-level
 `unitRegisters` map. The symbol table is threaded through all compilation
 functions via a `syms *symbolTable` parameter.

@@ -989,9 +989,6 @@ func (p *parser) parseParamAttr(syms *symbolTable, pos int) error {
 // checkVarName validates that a variable name doesn't conflict with existing
 // declarations.
 func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
-	if _, ok := syms.vars[name]; ok {
-		return p.errorf(pos, "variable %q already declared", name)
-	}
 	return nil
 }
 

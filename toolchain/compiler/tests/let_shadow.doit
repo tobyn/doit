@@ -1,0 +1,20 @@
+# AI-generated test
+behavior let_shadow {
+    @name "Let Shadow"
+    # let shadows let
+    let a = 1
+    let a = 2
+    notify "let-let:", value: a
+    # var shadows let
+    let b = 3
+    var b = 4
+    notify "var-let:", value: b
+    # let shadows var
+    var c = 5
+    let c = 6
+    notify "let-var:", value: c
+    # var shadows var
+    var d = 7
+    var d = 8
+    notify "var-var:", value: d
+}
