@@ -1,0 +1,18 @@
+{
+    "0": {
+        "0": {
+            "id": "metalbar"
+        },
+        "1": {
+            "num": 5
+        },
+        "2": "item",
+        "op": "set_number"
+    },
+    "1": {
+        "0": "item",
+        "op": "notify",
+        "txt": "Items"
+    },
+    "name": "Constructor Fn Body Let"
+}

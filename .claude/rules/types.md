@@ -122,8 +122,8 @@ When both operands are compile-time literals, the result is a compile-time
 literal with the `"num"` field merged in. When either operand is a
 runtime value (variable), the compiler emits a `set_number` instruction.
 
-In function bodies, both sides of `&` must be compile-time values (no
-variables). At behavior level, runtime `&` is supported.
+Runtime `&` is supported both at behavior level and in function bodies.
+In function bodies, runtime `&` emits a synthetic `set_number` body call.
 
 ## Compile-Time vs Runtime
 

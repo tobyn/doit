@@ -248,9 +248,17 @@ directly targeting the declared variable name. In `compileDefaultStatement`
 assignments, the simpler `parseArgValue` path is used.
 
 In function bodies (`fnBodyArg`), numbers, `null`, `$register`, and
-type constructors (compile-time only) are pre-resolved at parse time into
-the `literal` field. The `&` operator in function bodies requires both
-sides to be compile-time. Identifier arguments that refer to function
+compile-time type constructors are pre-resolved at parse time into
+the `literal` field. Runtime constructors (e.g., `Coordinate(x, y)` with
+variable args, `Item("metalbar") & count`) emit synthetic `fnBodyCall`
+entries (like `combine_coordinate` or `set_number`) with `@ctorN`
+synthetic variable names. The `parseFnBodyArgValue` method returns
+`(fnBodyArg, []fnBodyCall, error)` — the middle value carries these
+synthetic setup calls. `parseFnBodyCall` collects all synthetic calls
+from its arguments and prepends them to the main call in its return
+slice. For `let x = Constructor(args)` in fn bodies, the last synthetic
+call's retArg is rewritten to target the declared variable directly,
+avoiding an extra copy. Identifier arguments that refer to function
 parameters are resolved at expansion time via `resolveBodyArg` and the
 `paramMap`. The `expandCall` function uses `[]any`/`map[string]any` for
 args and kwArgs, allowing non-string values to flow through to instruction

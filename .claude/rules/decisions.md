@@ -95,9 +95,12 @@ reads naturally as "metalbar with count 5".
 compile time when all operands are literals, producing inline JSON values
 with no runtime instructions. When any operand is a variable, the
 compiler emits the appropriate stdlib call (`combine_coordinate` for
-`Coordinate`, `set_number` for `&`). Function bodies only support the
-compile-time path — runtime constructors require the `frameBuilder`
-infrastructure that only exists at behavior level.
+`Coordinate`, `set_number` for `&`). This works uniformly at both
+behavior level and in function bodies. At behavior level, runtime
+constructors emit frames via `expandCall` with `frameBuilder`. In fn
+bodies, they emit synthetic `fnBodyCall` entries with `@ctorN` temp
+variable names (using the same `@`-prefix convention as `@retK` return
+desugaring to avoid collisions with user identifiers).
 
 **`parseConstructorForTarget` optimization**: For `let`/`var`
 declarations, the compiler avoids an extra `set_reg` copy by passing the

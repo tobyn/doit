@@ -73,8 +73,7 @@ Value("pentagon") & count      # runtime: emits set_number
 
 When both sides are compile-time literals, the result is a compile-time literal.
 When either side is a variable, the compiler emits a `set_number` instruction.
-
-In function bodies, both sides of `&` must be compile-time values.
+This works in both behavior bodies and function bodies.
 
 ## The Standard Library
 

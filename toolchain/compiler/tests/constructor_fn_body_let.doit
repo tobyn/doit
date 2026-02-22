@@ -1,0 +1,10 @@
+# AI-generated test
+fn show_item(count) {
+    let item = Item("metalbar") & count
+    notify "Items", value: item
+}
+
+behavior constructor_fn_body_let {
+    @name "Constructor Fn Body Let"
+    show_item 5
+}

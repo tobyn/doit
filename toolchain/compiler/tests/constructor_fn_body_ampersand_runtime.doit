@@ -1,0 +1,9 @@
+# AI-generated test
+fn deliver(count) {
+    notify "Items", value: Item("metalbar") & count
+}
+
+behavior constructor_fn_body_ampersand_runtime {
+    @name "Constructor Fn Body Ampersand Runtime"
+    deliver 5
+}

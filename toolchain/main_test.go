@@ -805,27 +805,6 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("fn_body_coordinate_variable_arg", func(t *testing.T) {
-		src := "fn bad(x) { notify \"hi\", value: Coordinate(x, 1) }\nbehavior a { bad 5 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "requires literal arguments") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("fn_body_ampersand_variable", func(t *testing.T) {
-		src := "fn bad(x) { notify \"hi\", value: Item(\"metalbar\") & x }\nbehavior a { bad 5 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "expected number after '&'") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
 }
 
 func TestParseLocalePrefix(t *testing.T) {

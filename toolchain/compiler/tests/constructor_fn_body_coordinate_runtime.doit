@@ -1,0 +1,10 @@
+# AI-generated test
+fn make_coord(x, y) {
+    let pos = Coordinate(x, y)
+    notify "Position", value: pos
+}
+
+behavior constructor_fn_body_coordinate_runtime {
+    @name "Constructor Fn Body Coordinate Runtime"
+    make_coord 3, 7
+}
