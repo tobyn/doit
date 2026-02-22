@@ -1,4 +1,5 @@
 # AI-generated test
+# Coordinate() with literal args resolved at compile time
 behavior coordinate_literal {
     @name "Coordinate Literal"
     let pos = Coordinate(3, 7)

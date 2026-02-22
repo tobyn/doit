@@ -1,4 +1,5 @@
 # AI-generated test
+# Value() constructor with automatic v_ prefix
 behavior value_literal {
     @name "Value Literal"
     notify "Got value", value: Value("pentagon")

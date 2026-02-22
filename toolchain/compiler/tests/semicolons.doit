@@ -1,4 +1,5 @@
 # AI-generated test
+# Multiple statements on one line separated by semicolons
 behavior semicolons {
     @name "Semicolons"
     var i = 0; notify "Hello"; i++

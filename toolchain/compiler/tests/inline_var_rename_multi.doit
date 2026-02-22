@@ -1,4 +1,5 @@
 # AI-generated test
+# Multiple inlinings of the same function get unique variable names
 fn locate_self() {
     let me = get_self
     let coord = get_location me

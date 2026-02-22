@@ -1,3 +1,4 @@
+# Calling a private function defined after the behavior
 behavior function_call {
     @name "Function Call"
     my_notify "Function called!"

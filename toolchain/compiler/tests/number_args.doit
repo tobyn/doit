@@ -1,4 +1,5 @@
 # AI-generated test
+# Number literals as function arguments
 behavior number_args {
     @name "Number Args"
     x = add x, 10

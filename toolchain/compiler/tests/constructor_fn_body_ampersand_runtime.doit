@@ -1,4 +1,5 @@
 # AI-generated test
+# & operator with variable arg in a function body
 fn deliver(count) {
     notify "Items", value: Item("metalbar") & count
 }

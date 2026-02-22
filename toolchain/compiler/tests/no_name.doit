@@ -1,4 +1,5 @@
 # AI-generated test
+# Behavior with no @name defaults to the behavior id
 behavior no_name {
     notify "No name given"
 }

@@ -1,4 +1,5 @@
 # AI-generated test
+# Selecting one behavior from a multi-behavior file with -b
 behavior first {
     @name "First"
     notify "Hello from first"

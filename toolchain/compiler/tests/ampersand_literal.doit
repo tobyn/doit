@@ -1,4 +1,5 @@
 # AI-generated test
+# & operator merges num field at compile time
 behavior ampersand_literal {
     @name "Ampersand Literal"
     let x = Item("metalbar") & 5

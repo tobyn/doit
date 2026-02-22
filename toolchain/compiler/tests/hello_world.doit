@@ -1,3 +1,4 @@
+# Minimal behavior with @name and a single instruction
 behavior hello_world {
     @name "Hello World"
     notify "Hello, World!"

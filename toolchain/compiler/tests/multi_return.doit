@@ -1,4 +1,5 @@
 # AI-generated test
+# Destructuring multiple return values with let
 behavior multi_return {
     @name "Multi Return"
     let me = get_self

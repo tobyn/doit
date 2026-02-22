@@ -1,4 +1,5 @@
 # AI-generated test
+# Basic keyword argument syntax: keyword: value
 behavior keyword_args {
     @name "Keyword Args"
     notify "Hello!", timeout: "10"

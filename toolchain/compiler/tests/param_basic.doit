@@ -1,4 +1,5 @@
 # AI-generated test
+# @param declares behavior parameters with direction and display name
 behavior param_basic {
     @name "Param Basic"
     @param in target "Target"

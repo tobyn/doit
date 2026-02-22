@@ -1,4 +1,5 @@
 # AI-generated test
+# Keyword params in user functions forward to stdlib keyword args
 fn timed_notify(txt, timeout t) {
     notify txt, timeout: t
 }

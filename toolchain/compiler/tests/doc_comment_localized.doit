@@ -1,5 +1,6 @@
 # AI-generated test
 # locale: ja
+# Localized #! comments select text by locale
 behavior doc_comment_localized {
     #! (en) Hello notification
     #! (ja) 通知メッセージ

@@ -1,4 +1,5 @@
 # AI-generated test
+# Item() constructor as a function argument
 behavior item_literal {
     @name "Item Literal"
     notify "Got item", value: Item("metalbar")

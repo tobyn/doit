@@ -1,4 +1,5 @@
 # AI-generated test
+# let captures a function's return value
 behavior let_fn_return {
     @name "Let Fn Return"
     let me = get_self

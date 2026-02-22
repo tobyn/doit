@@ -1,4 +1,5 @@
 # AI-generated test
+# Multiple #! lines are joined with spaces
 behavior doc_comment_multiline {
     #! First line
     #! Second line

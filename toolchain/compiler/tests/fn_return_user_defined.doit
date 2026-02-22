@@ -1,4 +1,5 @@
 # AI-generated test
+# User-defined function with return statement
 fn locate_self() {
     let me = get_self
     let coord = get_location me

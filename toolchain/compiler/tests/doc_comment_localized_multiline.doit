@@ -1,5 +1,6 @@
 # AI-generated test
 # locale: en
+# Continuation lines without a locale prefix append to the previous locale
 behavior doc_comment_localized_multiline {
     #! (en) line one
     #! continued on next line

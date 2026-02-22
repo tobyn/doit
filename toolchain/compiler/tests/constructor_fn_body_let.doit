@@ -1,4 +1,5 @@
 # AI-generated test
+# let with runtime constructor & in a function body
 fn show_item(count) {
     let item = Item("metalbar") & count
     notify "Items", value: item

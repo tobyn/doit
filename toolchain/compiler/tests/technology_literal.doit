@@ -1,4 +1,5 @@
 # AI-generated test
+# Technology() constructor with automatic t_ prefix
 behavior technology_literal {
     @name "Technology Literal"
     notify "Got tech", value: Technology("signals2")

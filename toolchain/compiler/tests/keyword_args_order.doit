@@ -1,4 +1,5 @@
 # AI-generated test
+# Keyword arguments can be provided in any order
 behavior keyword_args_order {
     @name "Keyword Args Order"
     notify "Test", timeout: "5", value: "x"

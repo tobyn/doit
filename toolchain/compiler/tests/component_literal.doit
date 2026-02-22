@@ -1,4 +1,5 @@
 # AI-generated test
+# Component() constructor with automatic c_ prefix
 behavior component_literal {
     @name "Component Literal"
     notify "Got component", value: Component("behavior")

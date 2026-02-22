@@ -1,4 +1,5 @@
 # AI-generated test
+# localize block as a function argument
 behavior localize_notify {
     @name "Localize Notify"
     notify localize {

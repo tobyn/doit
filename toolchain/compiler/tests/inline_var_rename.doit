@@ -1,4 +1,5 @@
 # AI-generated test
+# Internal variables renamed to avoid collisions when inlining
 fn locate_self() {
     let me = get_self
     let coord = get_location me

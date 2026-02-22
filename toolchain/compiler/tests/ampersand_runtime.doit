@@ -1,4 +1,5 @@
 # AI-generated test
+# & operator with variable emits set_number at runtime
 behavior ampersand_runtime {
     @name "Ampersand Runtime"
     var count = 5

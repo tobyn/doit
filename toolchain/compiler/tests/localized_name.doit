@@ -1,4 +1,5 @@
 # AI-generated test
+# @name with localize block for locale-aware behavior names
 behavior localized_name {
     @name localize {
         en_US "Localized Name"

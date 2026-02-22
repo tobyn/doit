@@ -1,4 +1,5 @@
 # AI-generated test
+# null as a function argument compiles to false
 behavior null_value {
     @name "Null Value"
     let x = set_number null, 5

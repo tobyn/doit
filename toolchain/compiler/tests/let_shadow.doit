@@ -1,4 +1,5 @@
 # AI-generated test
+# Variable shadowing: let/var can redeclare the same name
 behavior let_shadow {
     @name "Let Shadow"
     # let shadows let

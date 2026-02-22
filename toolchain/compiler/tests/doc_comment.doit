@@ -1,4 +1,5 @@
 # AI-generated test
+# #! doc comment sets the "cmt" field on the compiled instruction
 behavior doc_comment {
     #! Hello notification
     notify "Hello"

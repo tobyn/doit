@@ -1,4 +1,5 @@
 # AI-generated test
+# Keyword arguments work inside while loop bodies
 behavior keyword_args_in_while {
     @name "Keyword Args In While"
 

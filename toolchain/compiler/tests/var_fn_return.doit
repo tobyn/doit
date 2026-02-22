@@ -1,4 +1,5 @@
 # AI-generated test
+# var captures a function's return value (mutable)
 behavior var_fn_return {
     @name "Var Fn Return"
     var me = get_self

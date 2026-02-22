@@ -1,4 +1,5 @@
 # AI-generated test
+# $register syntax for unit registers (goto, store, signal)
 behavior unit_registers {
     @name "Unit Registers"
     domove $goto

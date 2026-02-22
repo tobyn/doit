@@ -1,4 +1,5 @@
 # AI-generated test
+# Coordinate() with variable args emits combine_coordinate
 behavior coordinate_runtime {
     @name "Coordinate Runtime"
     var x = 3

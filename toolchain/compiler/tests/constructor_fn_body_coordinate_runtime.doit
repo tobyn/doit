@@ -1,4 +1,5 @@
 # AI-generated test
+# Coordinate() with variable args in a function body
 fn make_coord(x, y) {
     let pos = Coordinate(x, y)
     notify "Position", value: pos

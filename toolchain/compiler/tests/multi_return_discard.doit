@@ -1,4 +1,5 @@
 # AI-generated test
+# _ discards a return value position
 behavior multi_return_discard {
     @name "Multi Return Discard"
     let me = get_self

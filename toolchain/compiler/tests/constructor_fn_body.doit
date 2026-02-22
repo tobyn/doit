@@ -1,4 +1,5 @@
 # AI-generated test
+# Compile-time constructor with & in a function body
 fn deliver_metal() {
     notify "Delivering", value: Item("metalbar") & 5
 }

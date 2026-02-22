@@ -1,4 +1,5 @@
 # AI-generated test
+# let declares an immutable variable initialized with a number
 behavior let_variable {
     @name "Let Variable"
     let x = 5

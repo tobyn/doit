@@ -1,4 +1,5 @@
 # AI-generated test
+# Calling a function with a return value as a bare statement discards it
 behavior fn_return_discard {
     @name "Fn Return Discard"
     get_self

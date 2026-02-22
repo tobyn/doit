@@ -1,4 +1,5 @@
 # AI-generated test
+# Binding fewer returns than a function produces (prefix matching)
 behavior multi_return_partial {
     @name "Multi Return Partial"
     let me = get_self
