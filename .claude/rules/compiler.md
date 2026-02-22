@@ -15,7 +15,8 @@ output format.
   (`fnDef`, `fnBodyArg`, `symbolTable`, `unitRegisters`),
   `frameBuilder`/`frameRef` abstraction for frame management,
   `check_number` slot constants (`checkLarger`, `checkSmaller`, `checkValue`,
-  `checkTarget`), and the `setComment` helper for setting `"cmt"` on frames
+  `checkTarget`), the `setComment` helper for setting `"cmt"` on frames,
+  and the `allocUniqueVar` helper for inline variable renaming
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types, `Keywords` map, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized `#!` comments
@@ -188,15 +189,35 @@ declarations, and assignment-from-function-call. Similarly, `parseFnBodyCall`
 (parse.go) extracts fn body call argument parsing shared by regular calls
 and `let` in fn bodies.
 
+**Inline variable renaming**: When a user-defined function is inlined via
+`expandCall`, its internal variables (those not mapped through `paramMap`
+as parameters or return values) could collide with variables already in
+use at the behavior level. The compiler automatically renames colliding
+variables by appending a disambiguating suffix (`_2`, `_3`, etc.).
+
+The mechanism works as a pre-scan in `expandCall`'s body-based expansion
+path. Before iterating over `fn.body`, it scans all `retArgs` with
+`isIdent == true` that are not already in `paramMap` (i.e., internal
+variables, not parameters or return values). For each, it calls
+`allocUniqueVar(name, usedVars)` which returns the original name if
+unused or `name_2`, `name_3`, etc. if there's a collision. The result
+is always added to `paramMap`, so `resolveBodyArg` resolves both output
+slots (retArgs) and input references (args/kwArgs) to the renamed value
+automatically. The `usedVars map[string]bool` on `symbolTable` tracks
+all variable names in use across the behavior; it is threaded through
+`expandCall` and all call sites in codegen.go.
+
 **Symbol table**: During behavior compilation, a `symbolTable` tracks
 `@param` declarations (with `$name` keys mapping to 1-based indices,
-direction, and display names), `var` declarations (mutable), and `let`
-declarations (immutable). Variables can be initialized with a number literal
-(`let x = 5`) or a function call with a return value (`let me = get_self`).
-Assignment (`x = ...`) also supports both number literals and function calls.
-Both `var` and `let` allow shadowing — redeclaring a variable with the same
-name overwrites the previous symbol table entry. The new declaration's
-mutability applies going forward.
+direction, and display names), `var` declarations (mutable), `let`
+declarations (immutable), and `usedVars` (all variable names in use, for
+inline rename collision detection). Variables can be initialized with a
+number literal (`let x = 5`) or a function call with a return value
+(`let me = get_self`). Assignment (`x = ...`) also supports both number
+literals and function calls. Both `var` and `let` allow shadowing —
+redeclaring a variable with the same name overwrites the previous symbol
+table entry. The new declaration's mutability applies going forward.
+Every `let`/`var` declaration also registers the name in `usedVars`.
 Unit registers (`$signal`, `$visual`, `$store`, `$goto`) are a package-level
 `unitRegisters` map. The symbol table is threaded through all compilation
 functions via a `syms *symbolTable` parameter.

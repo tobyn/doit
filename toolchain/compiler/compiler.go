@@ -158,12 +158,30 @@ type symbolTable struct {
 	params   []paramInfo
 	paramMap map[string]int     // "$name" → 1-based index
 	vars     map[string]varInfo // declared variables
+	usedVars map[string]bool    // all variable names in use (for inline rename)
 }
 
 func newSymbolTable() *symbolTable {
 	return &symbolTable{
 		paramMap: map[string]int{},
 		vars:     map[string]varInfo{},
+		usedVars: map[string]bool{},
+	}
+}
+
+// allocUniqueVar returns name if it's not in usedVars, otherwise name_2, name_3, etc.
+// The chosen name is added to usedVars.
+func allocUniqueVar(name string, usedVars map[string]bool) string {
+	if !usedVars[name] {
+		usedVars[name] = true
+		return name
+	}
+	for i := 2; ; i++ {
+		candidate := name + "_" + strconv.Itoa(i)
+		if !usedVars[candidate] {
+			usedVars[candidate] = true
+			return candidate
+		}
 	}
 }
 

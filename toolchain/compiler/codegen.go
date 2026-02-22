@@ -185,7 +185,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				if err != nil {
 					return nil, err
 				}
-				if err := p.expandCall(calleeTok.val, args, kwArgs, nil, b, calleeTok.pos, comment); err != nil {
+				if err := p.expandCall(calleeTok.val, args, kwArgs, nil, b, calleeTok.pos, comment, syms.usedVars); err != nil {
 					return nil, err
 				}
 			} else {
@@ -569,7 +569,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			if err != nil {
 				return err
 			}
-			return p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment)
+			return p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment, syms.usedVars)
 		}
 		return p.errorf(rhsTok.pos, "expected number or function call after '=', got %s", rhsTok.describe())
 	}
@@ -608,7 +608,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		return err
 	}
 
-	return p.expandCall(tok.val, args, kwArgs, nil, b, tok.pos, comment)
+	return p.expandCall(tok.val, args, kwArgs, nil, b, tok.pos, comment, syms.usedVars)
 }
 
 // parseFnCallArgs parses the positional and keyword arguments for a function
@@ -1003,6 +1003,7 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 	if rhsTok.kind == tokNumber {
 		num, _ := strconv.Atoi(rhsTok.val)
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
 		f := map[string]any{
 			"op": "set_number",
 			"2":  map[string]any{"num": num},
@@ -1022,11 +1023,12 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 			return p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
 		}
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
 		args, kwArgs, err := p.parseFnCallArgs(fn, rhsTok, syms)
 		if err != nil {
 			return err
 		}
-		return p.expandCall(rhsTok.val, args, kwArgs, []any{nameTok.val}, b, rhsTok.pos, comment)
+		return p.expandCall(rhsTok.val, args, kwArgs, []any{nameTok.val}, b, rhsTok.pos, comment, syms.usedVars)
 	}
 
 	return p.errorf(rhsTok.pos, "expected number or function call after '=', got %s", rhsTok.describe())
@@ -1197,6 +1199,7 @@ func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard b
 	for _, bind := range bindings {
 		if bind.newVar {
 			syms.vars[bind.name] = varInfo{mutable: bind.mutable}
+			syms.usedVars[bind.name] = true
 		}
 	}
 
@@ -1204,7 +1207,7 @@ func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard b
 	if err != nil {
 		return err
 	}
-	return p.expandCall(calleeTok.val, args, kwArgs, retVals, b, calleeTok.pos, comment)
+	return p.expandCall(calleeTok.val, args, kwArgs, retVals, b, calleeTok.pos, comment, syms.usedVars)
 }
 
 // parseName parses the value of an @name attribute. It handles both the simple

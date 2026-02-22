@@ -1,0 +1,13 @@
+# AI-generated test
+fn locate_self() {
+    let me = get_self
+    let coord = get_location me
+    return coord
+}
+
+behavior inline_var_rename_multi {
+    @name "Inline Var Rename Multi"
+    let a = locate_self
+    let b = locate_self
+    notify "Done", value: a
+}

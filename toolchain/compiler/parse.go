@@ -702,7 +702,7 @@ func resolveBodyArg(arg fnBodyArg, paramMap map[string]any) any {
 	return arg.val // string literal
 }
 
-func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string) error {
+func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool) error {
 	fn := p.fns[name]
 	if fn == nil {
 		return p.errorf(pos, "unknown statement %q", name)
@@ -763,6 +763,18 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		return nil
 	}
 
+	// Pre-scan: collect internal variables and rename collisions.
+	for _, call := range fn.body {
+		for _, arg := range call.retArgs {
+			if arg.isIdent {
+				if _, mapped := paramMap[arg.val]; !mapped {
+					uniqueName := allocUniqueVar(arg.val, usedVars)
+					paramMap[arg.val] = uniqueName
+				}
+			}
+		}
+	}
+
 	for _, call := range fn.body {
 		resolvedArgs := make([]any, len(call.args))
 		for i, arg := range call.args {
@@ -783,7 +795,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		if callComment == "" {
 			callComment = comment
 		}
-		if err := p.expandCall(call.name, resolvedArgs, resolvedKwArgs, resolvedRets, b, pos, callComment); err != nil {
+		if err := p.expandCall(call.name, resolvedArgs, resolvedKwArgs, resolvedRets, b, pos, callComment, usedVars); err != nil {
 			return err
 		}
 	}
