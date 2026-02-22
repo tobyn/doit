@@ -1,0 +1,9 @@
+# AI-generated test
+# let captures an inline instruction's return value
+behavior instruction_let {
+    @name "Instruction Let"
+    let me = instruction "get_self" {
+        0: @1
+    }
+    notify "Got self", value: me
+}

@@ -10,6 +10,69 @@ import (
 	"golang.org/x/text/language"
 )
 
+// frameHasReturnSlot reports whether a raw instruction frame contains any @N
+// return slot markers.
+func frameHasReturnSlot(frame map[string]any) bool {
+	for _, v := range frame {
+		if _, ok := v.(returnSlot); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// frameReturnCount returns the number of return slots (@N markers) in a raw
+// instruction frame.
+func frameReturnCount(frame map[string]any) int {
+	count := 0
+	for _, v := range frame {
+		if _, ok := v.(returnSlot); ok {
+			count++
+		}
+	}
+	return count
+}
+
+// resolveInstructionFrame converts a raw instruction frame (0-based reference
+// keys) into a native-format frame (1-based keys) with parameter and return
+// slot substitutions applied. retVals provides return targets (indexed by
+// returnSlot(N)-1), paramMap substitutes string values, kwVars identifies
+// keyword param variables to omit when absent, and comment sets the "cmt"
+// field. Any of retVals, paramMap, kwVars may be nil.
+func resolveInstructionFrame(frame map[string]any, retVals []any, paramMap map[string]any, kwVars map[string]bool, comment string) map[string]any {
+	instr := make(map[string]any, len(frame))
+	for k, v := range frame {
+		// Convert 0-based reference keys to 1-based native keys.
+		nativeKey := k
+		if n, err := strconv.Atoi(k); err == nil {
+			nativeKey = strconv.Itoa(n + 1)
+		}
+		if rs, ok := v.(returnSlot); ok {
+			idx := int(rs) - 1
+			if retVals != nil && idx < len(retVals) {
+				instr[nativeKey] = retVals[idx]
+			} else {
+				instr[nativeKey] = false
+			}
+			continue
+		}
+		if s, ok := v.(string); ok {
+			if paramMap != nil {
+				if arg, ok := paramMap[s]; ok {
+					instr[nativeKey] = arg
+					continue
+				}
+			}
+			if kwVars != nil && kwVars[s] {
+				continue // omit absent keyword param
+			}
+		}
+		instr[nativeKey] = v
+	}
+	setComment(instr, comment)
+	return instr
+}
+
 func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
@@ -74,12 +137,12 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		switch tok.val {
 		case "instruction":
 			hasInstruction = true
-			instr, err := p.parseInstruction()
+			rawFrame, err := p.parseInstruction()
 			if err != nil {
 				return nil, err
 			}
-			setComment(instr, comment)
-			b.emit(instr)
+			resolved := resolveInstructionFrame(rawFrame, nil, nil, nil, comment)
+			b.emit(resolved)
 
 		case "var":
 			hasInstruction = true
@@ -844,6 +907,15 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			b.emit(f)
 			return nil
 		}
+		if rhsTok.kind == tokIdent && rhsTok.val == "instruction" {
+			rawFrame, err := p.parseInstruction()
+			if err != nil {
+				return err
+			}
+			resolved := resolveInstructionFrame(rawFrame, []any{target}, nil, nil, comment)
+			b.emit(resolved)
+			return nil
+		}
 		if rhsTok.kind == tokIdent {
 			fn := p.fns[rhsTok.val]
 			if fn == nil {
@@ -858,7 +930,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			}
 			return p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment, syms.usedVars)
 		}
-		return p.errorf(rhsTok.pos, "expected number, function call, or constructor after '=', got %s", rhsTok.describe())
+		return p.errorf(rhsTok.pos, "expected number, function call, constructor, or instruction after '=', got %s", rhsTok.describe())
 	}
 
 	if tok2.kind == tokPlusEquals {
@@ -1337,6 +1409,21 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 		return nil
 	}
 
+	if rhsTok.kind == tokIdent && rhsTok.val == "instruction" {
+		rawFrame, err := p.parseInstruction()
+		if err != nil {
+			return err
+		}
+		if !frameHasReturnSlot(rawFrame) {
+			return p.errorf(rhsTok.pos, "instruction has no return slots (@N); cannot assign its result")
+		}
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
+		resolved := resolveInstructionFrame(rawFrame, []any{nameTok.val}, nil, nil, comment)
+		b.emit(resolved)
+		return nil
+	}
+
 	if rhsTok.kind == tokIdent {
 		fn := p.fns[rhsTok.val]
 		if fn == nil {
@@ -1473,11 +1560,62 @@ func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard b
 		}
 	}
 
-	// Parse the function call on the RHS
+	// Parse the RHS: function call or instruction
 	calleeTok, err := p.expect(tokIdent)
 	if err != nil {
 		return err
 	}
+
+	if calleeTok.val == "instruction" {
+		rawFrame, err := p.parseInstruction()
+		if err != nil {
+			return err
+		}
+		retCount := frameReturnCount(rawFrame)
+		if retCount == 0 {
+			return p.errorf(calleeTok.pos, "instruction has no return slots (@N); cannot assign its result")
+		}
+		if len(bindings) > retCount {
+			return p.errorf(calleeTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
+		}
+		// Validate and register new bindings
+		for _, bind := range bindings {
+			if bind.discard {
+				continue
+			}
+			if bind.newVar {
+				if err := p.checkVarName(bind.name, syms, bind.pos); err != nil {
+					return err
+				}
+			}
+		}
+		// Build retVals slice
+		retVals := make([]any, len(bindings))
+		for i, bind := range bindings {
+			if bind.discard {
+				retVals[i] = false
+			} else if bind.newVar {
+				retVals[i] = bind.name
+			} else {
+				target, err := p.resolveAssignTarget(bind.name, syms, bind.pos)
+				if err != nil {
+					return err
+				}
+				retVals[i] = target
+			}
+		}
+		// Register new variables
+		for _, bind := range bindings {
+			if bind.newVar {
+				syms.vars[bind.name] = varInfo{mutable: bind.mutable}
+				syms.usedVars[bind.name] = true
+			}
+		}
+		resolved := resolveInstructionFrame(rawFrame, retVals, nil, nil, comment)
+		b.emit(resolved)
+		return nil
+	}
+
 	fn := p.fns[calleeTok.val]
 	if fn == nil {
 		return p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)

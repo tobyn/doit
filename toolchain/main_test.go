@@ -621,13 +621,11 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("return_without_instruction", func(t *testing.T) {
-		stdlibSrc := "fn bad() { return foo }"
+	t.Run("return_variable_in_stdlib", func(t *testing.T) {
+		// After unification, return <ident> is valid fn body syntax
+		stdlibSrc := "fn wrapper() { return foo }"
 		err := compiler.TestParseStdlibFile(stdlibSrc)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "expected 'instruction'") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -801,6 +799,50 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "type constructor") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("instruction_let_no_return_slot", func(t *testing.T) {
+		src := "behavior a { let x = instruction \"test\" { 0: foo } }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "no return slots") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("instruction_multi_return_too_many_bindings", func(t *testing.T) {
+		src := "behavior a { let x, y = instruction \"test\" { 0: @1 } }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many bindings") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("instruction_fn_body_let_no_return_slot", func(t *testing.T) {
+		src := "fn bad() { let x = instruction \"test\" { 0: foo } }\nbehavior a { bad }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "no return slots") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("instruction_fn_body_multi_return_too_many", func(t *testing.T) {
+		src := "fn bad() { let x, y = instruction \"test\" { 0: @1 } }\nbehavior a { bad }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many bindings") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

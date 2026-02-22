@@ -1,0 +1,13 @@
+# AI-generated test
+# Multi-return destructuring with inline instruction
+behavior instruction_multi_return {
+    @name "Instruction Multi Return"
+    let me = get_self
+    let coord = get_location me
+    let x, y = instruction "separate_coordinate" {
+        0: coord
+        1: @1
+        2: @2
+    }
+    notify "Done", value: x
+}

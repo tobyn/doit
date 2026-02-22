@@ -243,13 +243,15 @@ let x = 5
 ```
 
 The right-hand side of `var` and `let` can be a number literal, a function
-call that has a return value, or a type constructor expression:
+call that has a return value, a type constructor expression, or an
+[`instruction`](instruction.md) expression:
 
 ```doit
 let me = get_self
 var loc = get_location me
 let item = Item("metalbar") & 5
 let pos = Coordinate(3, 7)
+let me = instruction "get_self" { 0: @1 }
 ```
 
 When initialized with a number, a `set_number` instruction is emitted. When
@@ -257,6 +259,8 @@ initialized with a function call, the function's return value is assigned to
 the variable. When initialized with a type constructor, a `set_reg` instruction
 is emitted for compile-time values, or the appropriate runtime instructions
 are emitted (e.g., `combine_coordinate` for `Coordinate` with variables).
+When initialized with an `instruction` expression, the instruction is emitted
+directly with the variable as the `@1` output target.
 
 The difference between `var` and `let` is that `let` prevents reassignment —
 the compiler errors on `=`, `+=`, or `++` targeting a `let` variable.
@@ -279,7 +283,8 @@ x = Item("metalbar") & 5
 ```
 
 The right-hand side of `=` can be a number literal, a function call with a
-return value, or a type constructor expression.
+return value, a type constructor expression, or an
+[`instruction`](instruction.md) expression.
 
 Compound assignment and increment are also supported:
 

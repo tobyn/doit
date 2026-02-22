@@ -1,0 +1,13 @@
+# AI-generated test
+# User function with return instruction in body
+fn my_get_self() {
+    return instruction "get_self" {
+        0: @1
+    }
+}
+
+behavior instruction_fn_body_return {
+    @name "Instruction Fn Body Return"
+    let me = my_get_self
+    notify "Got self", value: me
+}

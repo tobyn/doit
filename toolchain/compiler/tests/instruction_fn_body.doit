@@ -1,0 +1,12 @@
+# AI-generated test
+# User function with inline instruction in body
+fn my_notify(txt) {
+    instruction "notify" {
+        txt: txt
+    }
+}
+
+behavior instruction_fn_body {
+    @name "Instruction Fn Body"
+    my_notify "Hello"
+}

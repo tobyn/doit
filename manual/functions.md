@@ -190,5 +190,8 @@ private fn my_notify(txt) {
 
 ## The `instruction` Intrinsic
 
-Functions can use the [`instruction` intrinsic](instruction.md) to emit
-arbitrary game instructions directly.
+The [`instruction` intrinsic](instruction.md) emits arbitrary game
+instructions directly. It works as a general expression — in behavior bodies,
+in `let`/`var` declarations and assignments, and inside function bodies. The
+standard library uses `return instruction` to wrap game instructions as
+functions.

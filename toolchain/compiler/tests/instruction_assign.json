@@ -1,0 +1,16 @@
+{
+    "0": {
+        "op": "get_self",
+        "0": "me"
+    },
+    "1": {
+        "op": "get_self",
+        "0": "me"
+    },
+    "2": {
+        "op": "notify",
+        "0": "me",
+        "txt": "Got self"
+    },
+    "name": "Instruction Assign"
+}

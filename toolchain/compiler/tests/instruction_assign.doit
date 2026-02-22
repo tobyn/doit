@@ -1,0 +1,10 @@
+# AI-generated test
+# Assignment from inline instruction
+behavior instruction_assign {
+    @name "Instruction Assign"
+    var me = get_self
+    me = instruction "get_self" {
+        0: @1
+    }
+    notify "Got self", value: me
+}

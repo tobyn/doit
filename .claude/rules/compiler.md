@@ -12,22 +12,26 @@ output format.
 ## Architecture
 
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
-  (`fnDef`, `fnBodyArg`, `symbolTable`, `unitRegisters`),
-  `frameBuilder`/`frameRef` abstraction for frame management,
-  `check_number` slot constants (`checkLarger`, `checkSmaller`, `checkValue`,
-  `checkTarget`), the `setComment` helper for setting `"cmt"` on frames,
-  and the `allocUniqueVar` helper for inline variable renaming
+  (`fnDef`, `fnBodyArg`, `fnBodyCall` with `frame` field, `symbolTable`,
+  `unitRegisters`), `frameBuilder`/`frameRef` abstraction for frame
+  management, `check_number` slot constants (`checkLarger`, `checkSmaller`,
+  `checkValue`, `checkTarget`), the `setComment` helper for setting `"cmt"`
+  on frames, and the `allocUniqueVar` helper for inline variable renaming
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types (including `tokAmpersand` for `&`), `Keywords` map
   (includes type constructor names), `isConstructor` helper, `$`-prefix
   scanning, error formatting, `parseLocalePrefix` helper,
   `resolveLocalizedDocComment` for localized `#!` comments
-- **`compiler/parse.go`** — Stdlib parsing (with `return instruction` support),
-  file-level parsing, function definitions, call expansion with
-  `[]any`/`map[string]any` argument types
+- **`compiler/parse.go`** — Stdlib parsing (delegates to `parseUserFn`),
+  file-level parsing, function definitions with `instruction` support,
+  call expansion with `[]any`/`map[string]any` argument types, inline
+  frame expansion for `fnBodyCall.frame`
 - **`compiler/codegen.go`** — Behavior body compilation: param/let/var declarations,
   symbol table tracking, rich argument parsing, assignment target resolution,
-  loops, if/else, deferred body emission, `matchLocale` shared BCP 47 matching helper
+  `resolveInstructionFrame` helper for 0→1 key conversion and slot substitution,
+  `frameHasReturnSlot`/`frameReturnCount` helpers, `instruction` as expression
+  in let/var/assign/multi-return, loops, if/else, deferred body emission,
+  `matchLocale` shared BCP 47 matching helper
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled
   output)
 
@@ -98,7 +102,12 @@ their first entry. The compiler parses stdlib function definitions first, then c
 user source. Stdlib functions that contain an `instruction` intrinsic are inlined at call
 sites — the compiler substitutes arguments into the instruction template fields.
 Numeric keys in instruction templates are converted from 0-based (reference
-format) to 1-based (native wire format) during expansion.
+format) to 1-based (native wire format) during expansion by `resolveInstructionFrame`.
+Stdlib parsing is unified: `parseStdlibFile` delegates to `parseUserFn`, which handles
+`instruction`, `return instruction`, empty bodies, and call-based bodies uniformly.
+Pure instruction wrappers (functions whose body is a single `instruction` block with
+only param/ret references) are automatically promoted to `fnDef.frame` for the fast
+direct-frame expansion path.
 
 **Function parameters** support keyword arguments with the `keyword varname`
 syntax in parameter lists (e.g., `fn notify(txt, value v, timeout t)`).
@@ -138,11 +147,26 @@ During `expandCall`, `returnSlot(N)` values are replaced with `retVals[N-1]`
 (or `false` if the caller provides fewer bindings or discards that
 position). The `returnSlot` type is defined in compiler.go.
 
+**`instruction` as general expression**: The `instruction` intrinsic works
+everywhere — not just in stdlib function definitions. It can be used as:
+- Bare statement: `instruction "op" { ... }` (behavior level and fn bodies)
+- Single-return: `let x = instruction "op" { 0: @1 }` (behavior level and fn bodies)
+- Multi-return: `let x, y = instruction "op" { 0: @1, 1: @2 }` (behavior level and fn bodies)
+- Assignment: `x = instruction "op" { 0: @1 }` (behavior level)
+- `return instruction`: `return instruction "op" { 0: @1 }` (fn bodies)
+
+At behavior level, `instruction` expressions go through `resolveInstructionFrame`
+which handles 0→1 key conversion and `@N` slot substitution. In fn bodies,
+`instruction` blocks are stored as `fnBodyCall` entries with the `frame` field
+set (a `map[string]any`). During `expandCall`, these inline frames are resolved
+through `resolveInstructionFrame` with `paramMap` substitution.
+
 In stdlib files, `return instruction` is the preferred form for functions
-with output slots. The `return` keyword is syntactic — `parseStdlibFile`
-simply skips it before parsing the `instruction` block. The `@1` in the
-frame is what drives `hasReturn()`. Plain `instruction` (without `return`)
-remains valid for functions with no output slots.
+with output slots. The `@1` in the frame is what drives `hasReturn()`.
+Plain `instruction` (without `return`) remains valid for functions with no
+output slots. Stdlib parsing now uses `parseUserFn`, so all fn body syntax
+(including function calls, constructors, and `instruction`) is available
+in stdlib files.
 
 The `fnDef.hasReturn()` method delegates to `returnCount() > 0`, which
 checks both mechanisms (rets for body-based, returnSlot count for
@@ -214,9 +238,10 @@ all variable names in use across the behavior; it is threaded through
 direction, and display names), `var` declarations (mutable), `let`
 declarations (immutable), and `usedVars` (all variable names in use, for
 inline rename collision detection). Variables can be initialized with a
-number literal (`let x = 5`) or a function call with a return value
-(`let me = get_self`). Assignment (`x = ...`) also supports both number
-literals and function calls. Both `var` and `let` allow shadowing —
+number literal (`let x = 5`), a function call with a return value
+(`let me = get_self`), or an inline instruction
+(`let me = instruction "get_self" { 0: @1 }`). Assignment (`x = ...`)
+also supports number literals, function calls, and inline instructions. Both `var` and `let` allow shadowing —
 redeclaring a variable with the same name overwrites the previous symbol
 table entry. The new declaration's mutability applies going forward.
 Every `let`/`var` declaration also registers the name in `usedVars`.

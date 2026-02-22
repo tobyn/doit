@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 	"io/fs"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -81,7 +82,7 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 }
 
 func parseStdlibFile(src string, fns map[string]*fnDef) error {
-	p := &parser{scanner: scanner{src: src}}
+	p := &parser{scanner: scanner{src: src}, fns: fns}
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -93,56 +94,8 @@ func parseStdlibFile(src string, fns map[string]*fnDef) error {
 		if tok.kind != tokIdent || tok.val != "fn" {
 			return p.errorf(tok.pos, "expected 'fn', got %s", tok.describe())
 		}
-
-		nameTok, err := p.expect(tokIdent)
-		if err != nil {
+		if err := p.parseUserFn(); err != nil {
 			return err
-		}
-
-		params, err := p.parseParamList()
-		if err != nil {
-			return err
-		}
-
-		if _, err := p.expect(tokLBrace); err != nil {
-			return err
-		}
-
-		// Parse body — look for an instruction statement or empty body
-		tok, err = p.next()
-		if err != nil {
-			return err
-		}
-
-		if tok.kind == tokRBrace {
-			// Empty body — skip this function
-			continue
-		}
-
-		// Support both "instruction ..." and "return instruction ..."
-		if tok.kind == tokIdent && tok.val == "return" {
-			tok, err = p.next()
-			if err != nil {
-				return err
-			}
-		}
-
-		if tok.kind != tokIdent || tok.val != "instruction" {
-			return p.errorf(tok.pos, "expected 'instruction', 'return', or '}', got %s", tok.describe())
-		}
-
-		frame, err := p.parseInstruction()
-		if err != nil {
-			return err
-		}
-
-		if _, err := p.expect(tokRBrace); err != nil {
-			return err
-		}
-
-		fns[nameTok.val] = &fnDef{
-			params: params,
-			frame:  frame,
 		}
 	}
 }
@@ -311,10 +264,55 @@ func (p *parser) parseUserFn() error {
 		}
 		comment := p.docComment
 
-		// Handle return statement: return item (',' item)*
+		// Handle bare instruction statement in fn body
+		if tok.val == "instruction" {
+			frame, err := p.parseInstruction()
+			if err != nil {
+				return err
+			}
+			body = append(body, fnBodyCall{frame: frame, comment: comment})
+			continue
+		}
+
+		// Handle return statement: return instruction OR return item (',' item)*
 		// Items can be identifiers, number literals, or null.
 		// Literals are desugared into synthetic body calls.
 		if tok.val == "return" {
+			retPeek, err := p.next()
+			if err != nil {
+				return err
+			}
+			if retPeek.kind == tokIdent && retPeek.val == "instruction" {
+				frame, err := p.parseInstruction()
+				if err != nil {
+					return err
+				}
+				// Extract @N return slots and create synthetic ret names
+				maxSlot := 0
+				for _, v := range frame {
+					if rs, ok := v.(returnSlot); ok {
+						if int(rs) > maxSlot {
+							maxSlot = int(rs)
+						}
+					}
+				}
+				rets = nil
+				modifiedFrame := maps.Clone(frame)
+				for i := 1; i <= maxSlot; i++ {
+					synthName := "@ret" + strconv.Itoa(i)
+					rets = append(rets, synthName)
+				}
+				// Replace returnSlot values with synth names in frame
+				for k, v := range modifiedFrame {
+					if rs, ok := v.(returnSlot); ok {
+						modifiedFrame[k] = "@ret" + strconv.Itoa(int(rs))
+					}
+				}
+				body = append(body, fnBodyCall{frame: modifiedFrame, comment: comment})
+				continue
+			}
+			p.unget(retPeek)
+
 			rets = nil
 			retIdx := 0
 			for {
@@ -411,6 +409,36 @@ func (p *parser) parseUserFn() error {
 				if err != nil {
 					return err
 				}
+				if calleeTok.val == "instruction" {
+					frame, err := p.parseInstruction()
+					if err != nil {
+						return err
+					}
+					retCount := frameReturnCount(frame)
+					if retCount == 0 {
+						return p.errorf(calleeTok.pos, "instruction has no return slots (@N); cannot assign its result")
+					}
+					if len(bindings) > retCount {
+						return p.errorf(calleeTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
+					}
+					modifiedFrame := maps.Clone(frame)
+					for k, v := range modifiedFrame {
+						if rs, ok := v.(returnSlot); ok {
+							idx := int(rs) - 1
+							if idx < len(bindings) {
+								if bindings[idx].discard {
+									modifiedFrame[k] = "@discard"
+								} else {
+									modifiedFrame[k] = bindings[idx].name
+								}
+							} else {
+								modifiedFrame[k] = "@discard"
+							}
+						}
+					}
+					body = append(body, fnBodyCall{frame: modifiedFrame, comment: comment})
+					continue
+				}
 				callee := p.fns[calleeTok.val]
 				if callee == nil {
 					return p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
@@ -446,6 +474,27 @@ func (p *parser) parseUserFn() error {
 			if err != nil {
 				return err
 			}
+
+			// Check for instruction RHS
+			if rhsTok.val == "instruction" {
+				frame, err := p.parseInstruction()
+				if err != nil {
+					return err
+				}
+				if !frameHasReturnSlot(frame) {
+					return p.errorf(rhsTok.pos, "instruction has no return slots (@N); cannot assign its result")
+				}
+				// Replace returnSlot(1) with varTok.val in frame
+				modifiedFrame := maps.Clone(frame)
+				for k, v := range modifiedFrame {
+					if rs, ok := v.(returnSlot); ok && int(rs) == 1 {
+						modifiedFrame[k] = varTok.val
+					}
+				}
+				body = append(body, fnBodyCall{frame: modifiedFrame, comment: comment})
+				continue
+			}
+
 
 			// Check for constructor RHS
 			if isConstructor(rhsTok.val) {
@@ -520,6 +569,65 @@ func (p *parser) parseUserFn() error {
 		calls[len(calls)-1].comment = comment
 		body = append(body, calls...)
 	}
+
+	// Pure-instruction optimization: if the function body is a single
+	// instruction frame, promote it to fnDef.frame for the fast direct-frame
+	// expansion path. This makes stdlib functions parsed through parseUserFn
+	// get the same efficient expansion as the old dedicated parseStdlibFile.
+	if len(body) == 1 && body[0].frame != nil {
+		frame := body[0].frame
+		canPromote := true
+		// Check that all string values are either the op, param names, or ret names
+		opVal, _ := frame["op"].(string)
+		for _, v := range frame {
+			s, ok := v.(string)
+			if !ok {
+				continue
+			}
+			if s == opVal {
+				continue
+			}
+			isParam := false
+			for _, pd := range params {
+				if pd.name == s {
+					isParam = true
+					break
+				}
+			}
+			if isParam {
+				continue
+			}
+			isRet := false
+			for _, r := range rets {
+				if r == s {
+					isRet = true
+					break
+				}
+			}
+			if isRet {
+				continue
+			}
+			canPromote = false
+			break
+		}
+		if canPromote {
+			// Rebuild frame with returnSlots replacing ret names
+			promoted := maps.Clone(frame)
+			for k, v := range promoted {
+				if s, ok := v.(string); ok {
+					for i, r := range rets {
+						if s == r {
+							promoted[k] = returnSlot(i + 1)
+							break
+						}
+					}
+				}
+			}
+			p.fns[nameTok.val] = &fnDef{params: params, frame: promoted}
+			return nil
+		}
+	}
+
 
 	p.fns[nameTok.val] = &fnDef{params: params, rets: rets, body: body}
 	return nil
@@ -955,35 +1063,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 	}
 
 	if fn.frame != nil {
-		kwVars := fn.keywordVarNames()
-		instr := make(map[string]any, len(fn.frame))
-		for k, v := range fn.frame {
-			// Convert 0-based reference keys to 1-based native keys.
-			nativeKey := k
-			if n, err := strconv.Atoi(k); err == nil {
-				nativeKey = strconv.Itoa(n + 1)
-			}
-			if rs, ok := v.(returnSlot); ok {
-				idx := int(rs) - 1
-				if retVals != nil && idx < len(retVals) {
-					instr[nativeKey] = retVals[idx]
-				} else {
-					instr[nativeKey] = false
-				}
-				continue
-			}
-			if s, ok := v.(string); ok {
-				if arg, ok := paramMap[s]; ok {
-					instr[nativeKey] = arg
-					continue
-				}
-				if kwVars[s] {
-					continue // omit absent keyword param
-				}
-			}
-			instr[nativeKey] = v
-		}
-		setComment(instr, comment)
+		instr := resolveInstructionFrame(fn.frame, retVals, paramMap, fn.keywordVarNames(), comment)
 		b.emit(instr)
 		return nil
 	}
@@ -1001,6 +1081,15 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 	}
 
 	for _, call := range fn.body {
+		if call.frame != nil {
+			callComment := call.comment
+			if callComment == "" {
+				callComment = comment
+			}
+			resolved := resolveInstructionFrame(call.frame, nil, paramMap, nil, callComment)
+			b.emit(resolved)
+			continue
+		}
 		resolvedArgs := make([]any, len(call.args))
 		for i, arg := range call.args {
 			resolvedArgs[i] = resolveBodyArg(arg, paramMap)

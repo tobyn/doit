@@ -189,8 +189,9 @@ type fnBodyCall struct {
 	name    string
 	args    []fnBodyArg          // positional args
 	kwArgs  map[string]fnBodyArg // keyword -> value
-	retArgs []fnBodyArg           // return value targets (nil = no return)
+	retArgs []fnBodyArg          // return value targets (nil = no return)
 	comment string               // #! doc comment
+	frame   map[string]any       // non-nil for inline instruction blocks
 }
 
 type deferredBody struct {
