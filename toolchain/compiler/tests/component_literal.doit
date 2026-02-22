@@ -1,0 +1,5 @@
+# AI-generated test
+behavior component_literal {
+    @name "Component Literal"
+    notify "Got component", value: Component("behavior")
+}

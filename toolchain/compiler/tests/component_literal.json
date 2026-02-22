@@ -1,0 +1,10 @@
+{
+    "0": {
+        "0": {
+            "id": "c_behavior"
+        },
+        "op": "notify",
+        "txt": "Got component"
+    },
+    "name": "Component Literal"
+}

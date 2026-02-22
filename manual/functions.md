@@ -23,6 +23,8 @@ Function arguments accept several value types:
 | Unit register | `$store` | Unit register reference |
 | `null` | `null` | Empty value |
 | `localize { ... }` | `localize { en "Hi" ja "こんにちは" }` | Locale-aware string |
+| Type constructor | `Item("metalbar")` | Typed game value (see below) |
+| `&` operator | `Item("metalbar") & 5` | Value with numeric component |
 
 ```doit
 var x = 5
@@ -30,10 +32,49 @@ set_number x, 10, x
 domove $goto
 set_number null, 5, x
 add x, 10, x
+notify "Items", value: Item("metalbar") & 5
 ```
 
 Unit register and parameter references use the `$` prefix (e.g., `$store`,
 `$my_param`). Bare identifiers resolve as variable names.
+
+### Type constructors
+
+Type constructors create typed game values. Five constructors are available:
+
+| Constructor | Example | Compiled value |
+|-------------|---------|----------------|
+| `Item("id")` | `Item("metalbar")` | `{"id": "metalbar"}` |
+| `Component("id")` | `Component("behavior")` | `{"id": "c_behavior"}` |
+| `Technology("id")` | `Technology("signals2")` | `{"id": "t_signals2"}` |
+| `Value("id")` | `Value("pentagon")` | `{"id": "v_pentagon"}` |
+| `Coordinate(x, y)` | `Coordinate(3, 7)` | `{"coord": {"x": 3, "y": 7}}` |
+
+`Component`, `Technology`, and `Value` automatically add their namespace prefix
+(`c_`, `t_`, `v_`) — use the short id without the prefix.
+
+`Coordinate` accepts number literals or variables. With literals, the coordinate
+is resolved at compile time. With variables, the compiler emits a
+`combine_coordinate` instruction at runtime.
+
+Constructor names are reserved — they cannot be used as variable or function
+names.
+
+### The `&` operator
+
+The `&` operator attaches a numeric component to a typed value, creating the
+composite (typed_value, number) that every VM register holds:
+
+```doit
+Item("metalbar") & 5          # item with count 5
+Coordinate(1, 2) & 3          # coordinate with number 3
+Value("pentagon") & count      # runtime: emits set_number
+```
+
+When both sides are compile-time literals, the result is a compile-time literal.
+When either side is a variable, the compiler emits a `set_number` instruction.
+
+In function bodies, both sides of `&` must be compile-time values.
 
 ## The Standard Library
 

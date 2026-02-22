@@ -512,7 +512,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number or function call") {
+		if !strings.Contains(err.Error(), "expected number") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -744,6 +744,85 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "too many bindings") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("constructor_missing_lparen", func(t *testing.T) {
+		src := `behavior a { notify "hi", value: Item "metalbar" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected '(' after Item") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("coordinate_wrong_arg_count", func(t *testing.T) {
+		src := `behavior a { notify "hi", value: Coordinate(1) }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		// Coordinate expects 2 args; providing 1 means the comma is missing
+		if !strings.Contains(err.Error(), "unexpected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("item_non_string_arg", func(t *testing.T) {
+		src := `behavior a { notify "hi", value: Item(42) }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected string argument") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("item_wrong_arg_count", func(t *testing.T) {
+		src := `behavior a { notify "hi", value: Item("a", "b") }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		// Item expects 1 string then ')'; the comma triggers an error
+		if !strings.Contains(err.Error(), "unexpected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("constructor_as_variable_name", func(t *testing.T) {
+		src := `behavior a { let Item = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "type constructor") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_coordinate_variable_arg", func(t *testing.T) {
+		src := "fn bad(x) { notify \"hi\", value: Coordinate(x, 1) }\nbehavior a { bad 5 }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "requires literal arguments") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_ampersand_variable", func(t *testing.T) {
+		src := "fn bad(x) { notify \"hi\", value: Item(\"metalbar\") & x }\nbehavior a { bad 5 }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number after '&'") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

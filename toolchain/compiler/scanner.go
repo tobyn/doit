@@ -29,6 +29,7 @@ const (
 	tokGreater
 	tokGreaterEquals
 	tokAt
+	tokAmpersand
 )
 
 type token struct {
@@ -53,6 +54,21 @@ var Keywords = map[string]bool{
 	"return":      true,
 	"var":         true,
 	"while":       true,
+	// Type constructors
+	"Coordinate": true,
+	"Component":  true,
+	"Item":       true,
+	"Technology": true,
+	"Value":      true,
+}
+
+// isConstructor reports whether an identifier is a type constructor name.
+func isConstructor(name string) bool {
+	switch name {
+	case "Coordinate", "Item", "Component", "Technology", "Value":
+		return true
+	}
+	return false
 }
 
 type scanner struct {
@@ -238,6 +254,9 @@ func (s *scanner) next() (token, error) {
 	case c == '@':
 		s.pos++
 		return token{tokAt, "@", start}, nil
+	case c == '&':
+		s.pos++
+		return token{tokAmpersand, "&", start}, nil
 	case c == '$':
 		s.pos++
 		if s.pos >= len(s.src) || !isIdentStart(s.src[s.pos]) {
@@ -366,6 +385,8 @@ func (t token) describe() string {
 		return "'>='"
 	case tokAt:
 		return "'@'"
+	case tokAmpersand:
+		return "'&'"
 	}
 	return t.val
 }

@@ -1,0 +1,10 @@
+{
+    "0": {
+        "0": {
+            "id": "metalbar"
+        },
+        "op": "notify",
+        "txt": "Got item"
+    },
+    "name": "Item Literal"
+}

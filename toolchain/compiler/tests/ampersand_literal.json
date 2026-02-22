@@ -1,0 +1,16 @@
+{
+    "0": {
+        "0": {
+            "id": "metalbar",
+            "num": 5
+        },
+        "1": "x",
+        "op": "set_reg"
+    },
+    "1": {
+        "0": "x",
+        "op": "notify",
+        "txt": "Items"
+    },
+    "name": "Ampersand Literal"
+}

@@ -1,0 +1,6 @@
+# AI-generated test
+behavior ampersand_runtime {
+    @name "Ampersand Runtime"
+    var count = 5
+    notify "Items", value: Item("metalbar") & count
+}

@@ -1,0 +1,5 @@
+# AI-generated test
+behavior value_literal {
+    @name "Value Literal"
+    notify "Got value", value: Value("pentagon")
+}

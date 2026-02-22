@@ -18,8 +18,10 @@ output format.
   `checkTarget`), the `setComment` helper for setting `"cmt"` on frames,
   and the `allocUniqueVar` helper for inline variable renaming
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
-  field), token types, `Keywords` map, `$`-prefix scanning, error formatting,
-  `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized `#!` comments
+  field), token types (including `tokAmpersand` for `&`), `Keywords` map
+  (includes type constructor names), `isConstructor` helper, `$`-prefix
+  scanning, error formatting, `parseLocalePrefix` helper,
+  `resolveLocalizedDocComment` for localized `#!` comments
 - **`compiler/parse.go`** — Stdlib parsing (with `return instruction` support),
   file-level parsing, function definitions, call expansion with
   `[]any`/`map[string]any` argument types
@@ -222,21 +224,37 @@ Unit registers (`$signal`, `$visual`, `$store`, `$goto`) are a package-level
 `unitRegisters` map. The symbol table is threaded through all compilation
 functions via a `syms *symbolTable` parameter.
 
-**Rich argument types**: At behavior level, function arguments accept six
-value types: string literals (`"hello"` → string), number literals
+**Rich argument types**: At behavior level, function arguments accept
+string literals (`"hello"` → string), number literals
 (`42` → `map[string]any{"num": 42}`), `null` (`false`), `$`-prefixed
 references (unit register negative ints or parameter 1-based indices),
-bare identifiers (variable name strings), and `localize { ... }` blocks
-(resolved to a string at compile time). `$name` resolution order:
+bare identifiers (variable name strings), `localize { ... }` blocks
+(resolved to a string at compile time), type constructors
+(`Item("metalbar")`, `Component("behavior")`, `Technology("signals2")`,
+`Value("pentagon")`, `Coordinate(x, y)`), and the `&` operator for
+attaching numeric components. `$name` resolution order:
 unit register → parameter. The same resolution applies to assignment
 targets (`=`, `+=`, `++`), with an immutability check for `let` variables.
 
-In function bodies (`fnBodyArg`), numbers, `null`, and `$register` are
-pre-resolved at parse time into the `literal` field. Identifier arguments
-that refer to function parameters are resolved at expansion time via
-`resolveBodyArg` and the `paramMap`. The `expandCall` function uses
-`[]any`/`map[string]any` for args and kwArgs, allowing non-string values
-to flow through to instruction template substitution.
+**Type constructors**: `Item`, `Component`, `Technology`, `Value` take a
+single string argument. `Component` prefixes `c_`, `Technology` prefixes
+`t_`, `Value` prefixes `v_`. `Coordinate` takes two arguments that can be
+literals (compile-time) or variables (emits `combine_coordinate` at
+runtime). Constructor names are reserved keywords via `isConstructor()`.
+The `&` operator follows a constructor or value and merges a `"num"` field
+(compile-time) or emits `set_number` (runtime). For `let`/`var`
+declarations, `parseConstructorForTarget` avoids extra `set_reg` copies by
+directly targeting the declared variable name. In `compileDefaultStatement`
+assignments, the simpler `parseArgValue` path is used.
+
+In function bodies (`fnBodyArg`), numbers, `null`, `$register`, and
+type constructors (compile-time only) are pre-resolved at parse time into
+the `literal` field. The `&` operator in function bodies requires both
+sides to be compile-time. Identifier arguments that refer to function
+parameters are resolved at expansion time via `resolveBodyArg` and the
+`paramMap`. The `expandCall` function uses `[]any`/`map[string]any` for
+args and kwArgs, allowing non-string values to flow through to instruction
+template substitution.
 
 **Behavior parameters**: Declared with the `@param` attribute before any
 instructions: `@param <direction> <name> <display>` where direction is

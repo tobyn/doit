@@ -1,0 +1,6 @@
+# AI-generated test
+behavior ampersand_literal {
+    @name "Ampersand Literal"
+    let x = Item("metalbar") & 5
+    notify "Items", value: x
+}

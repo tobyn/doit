@@ -479,39 +479,166 @@ func (p *parser) parseUserFn() error {
 }
 
 // parseFnBodyArgValue parses a single argument value in a function body call.
-// Accepts strings, identifiers, numbers, null, and $register references.
+// Accepts strings, identifiers, numbers, null, $register references,
+// type constructors (compile-time only), and the & operator.
 func (p *parser) parseFnBodyArgValue() (fnBodyArg, error) {
 	tok, err := p.next()
 	if err != nil {
 		return fnBodyArg{}, err
 	}
+	var base fnBodyArg
 	switch tok.kind {
 	case tokString:
-		return fnBodyArg{val: tok.val}, nil
+		base = fnBodyArg{val: tok.val}
 	case tokNumber:
 		num, _ := strconv.Atoi(tok.val)
-		return fnBodyArg{literal: map[string]any{"num": num}}, nil
+		base = fnBodyArg{literal: map[string]any{"num": num}}
 	case tokIdent:
 		if tok.val == "localize" {
 			resolved, err := p.parseLocalize()
 			if err != nil {
 				return fnBodyArg{}, err
 			}
-			return fnBodyArg{val: resolved}, nil
-		}
-		if tok.val == "null" {
-			return fnBodyArg{literal: false}, nil
-		}
-		if strings.HasPrefix(tok.val, "$") {
-			if reg, ok := unitRegisters[tok.val]; ok {
-				return fnBodyArg{literal: reg}, nil
+			base = fnBodyArg{val: resolved}
+		} else if tok.val == "null" {
+			base = fnBodyArg{literal: false}
+		} else if isConstructor(tok.val) {
+			lit, err := p.parseFnBodyConstructor(tok)
+			if err != nil {
+				return fnBodyArg{}, err
 			}
-			return fnBodyArg{}, p.errorf(tok.pos, "unknown unit register %q", tok.val)
+			base = fnBodyArg{literal: lit}
+		} else if strings.HasPrefix(tok.val, "$") {
+			if reg, ok := unitRegisters[tok.val]; ok {
+				base = fnBodyArg{literal: reg}
+			} else {
+				return fnBodyArg{}, p.errorf(tok.pos, "unknown unit register %q", tok.val)
+			}
+		} else {
+			base = fnBodyArg{isIdent: true, val: tok.val}
 		}
-		return fnBodyArg{isIdent: true, val: tok.val}, nil
 	default:
 		return fnBodyArg{}, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
 	}
+
+	// Check for & operator
+	peek, err := p.next()
+	if err != nil {
+		return fnBodyArg{}, err
+	}
+	if peek.kind == tokAmpersand {
+		return p.parseFnBodyAmpersand(base, tok.pos)
+	}
+	p.unget(peek)
+	return base, nil
+}
+
+// parseFnBodyConstructor parses a type constructor in a function body.
+// Only compile-time (literal) args are allowed.
+func (p *parser) parseFnBodyConstructor(nameTok token) (any, error) {
+	if _, err := p.expect(tokLParen); err != nil {
+		return nil, p.errorf(nameTok.pos, "expected '(' after %s", nameTok.val)
+	}
+
+	switch nameTok.val {
+	case "Item":
+		return p.parseFnBodySimpleConstructor("", nameTok.pos)
+	case "Component":
+		return p.parseFnBodySimpleConstructor("c_", nameTok.pos)
+	case "Technology":
+		return p.parseFnBodySimpleConstructor("t_", nameTok.pos)
+	case "Value":
+		return p.parseFnBodySimpleConstructor("v_", nameTok.pos)
+	case "Coordinate":
+		return p.parseFnBodyCoordinateConstructor(nameTok.pos)
+	}
+	return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
+}
+
+// parseFnBodySimpleConstructor parses Item/Component/Technology/Value("id") in fn bodies.
+func (p *parser) parseFnBodySimpleConstructor(prefix string, pos int) (any, error) {
+	argTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if argTok.kind != tokString {
+		return nil, p.errorf(argTok.pos, "expected string argument, got %s", argTok.describe())
+	}
+	if _, err := p.expect(tokRParen); err != nil {
+		return nil, err
+	}
+	return map[string]any{"id": prefix + argTok.val}, nil
+}
+
+// parseFnBodyCoordinateConstructor parses Coordinate(x, y) in fn bodies.
+// Both args must be numeric literals.
+func (p *parser) parseFnBodyCoordinateConstructor(pos int) (any, error) {
+	xTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if xTok.kind != tokNumber {
+		if xTok.kind == tokIdent && !isConstructor(xTok.val) {
+			return nil, p.errorf(xTok.pos, "Coordinate() in function bodies requires literal arguments, got variable %q", xTok.val)
+		}
+		return nil, p.errorf(xTok.pos, "expected number, got %s", xTok.describe())
+	}
+	x, _ := strconv.Atoi(xTok.val)
+
+	if _, err := p.expect(tokComma); err != nil {
+		return nil, err
+	}
+
+	yTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if yTok.kind != tokNumber {
+		if yTok.kind == tokIdent && !isConstructor(yTok.val) {
+			return nil, p.errorf(yTok.pos, "Coordinate() in function bodies requires literal arguments, got variable %q", yTok.val)
+		}
+		return nil, p.errorf(yTok.pos, "expected number, got %s", yTok.describe())
+	}
+	y, _ := strconv.Atoi(yTok.val)
+
+	if _, err := p.expect(tokRParen); err != nil {
+		return nil, err
+	}
+	return map[string]any{"coord": map[string]any{"x": x, "y": y}}, nil
+}
+
+// parseFnBodyAmpersand handles & in function bodies. Both sides must be compile-time.
+func (p *parser) parseFnBodyAmpersand(base fnBodyArg, basePos int) (fnBodyArg, error) {
+	rhsTok, err := p.next()
+	if err != nil {
+		return fnBodyArg{}, err
+	}
+
+	if base.isIdent {
+		return fnBodyArg{}, p.errorf(basePos, "'&' in function bodies requires compile-time values, got variable %q", base.val)
+	}
+	if base.literal == nil {
+		// string literal — not meaningful for &
+		return fnBodyArg{}, p.errorf(basePos, "string literal cannot be left side of '&'")
+	}
+
+	// Parse RHS — must be a number literal
+	if rhsTok.kind != tokNumber {
+		return fnBodyArg{}, p.errorf(rhsTok.pos, "expected number after '&', got %s", rhsTok.describe())
+	}
+	num, _ := strconv.Atoi(rhsTok.val)
+
+	baseMap, ok := base.literal.(map[string]any)
+	if !ok {
+		return fnBodyArg{}, p.errorf(basePos, "cannot use '&' with this value")
+	}
+
+	result := make(map[string]any, len(baseMap)+1)
+	for k, v := range baseMap {
+		result[k] = v
+	}
+	result["num"] = num
+	return fnBodyArg{literal: result}, nil
 }
 
 // parseFnBodyCall parses the positional and keyword arguments for a function

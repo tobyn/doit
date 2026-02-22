@@ -1,0 +1,9 @@
+# AI-generated test
+fn deliver_metal() {
+    notify "Delivering", value: Item("metalbar") & 5
+}
+
+behavior constructor_fn_body {
+    @name "Constructor Fn Body"
+    deliver_metal
+}

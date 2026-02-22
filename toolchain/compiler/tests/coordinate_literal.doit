@@ -1,0 +1,6 @@
+# AI-generated test
+behavior coordinate_literal {
+    @name "Coordinate Literal"
+    let pos = Coordinate(3, 7)
+    notify "Position", value: pos
+}

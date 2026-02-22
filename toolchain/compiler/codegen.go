@@ -181,7 +181,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				if fn == nil {
 					return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
 				}
-				args, kwArgs, err := p.parseFnCallArgs(fn, calleeTok, syms)
+				args, kwArgs, err := p.parseFnCallArgs(fn, calleeTok, syms, b, comment)
 				if err != nil {
 					return nil, err
 				}
@@ -475,42 +475,303 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int) (a
 }
 
 // parseArgValue parses a single argument value at behavior level.
-// Accepts strings, numbers, null, $register, param names, and variable names.
-func (p *parser) parseArgValue(syms *symbolTable) (any, error) {
+// Accepts strings, numbers, null, $register, param names, variable names,
+// type constructors (Item, Component, Technology, Value, Coordinate),
+// and the & operator for attaching numeric components.
+// The b and comment params are needed for runtime constructors that emit frames.
+func (p *parser) parseArgValue(syms *symbolTable, b *frameBuilder, comment string) (any, error) {
 	tok, err := p.next()
 	if err != nil {
 		return nil, err
 	}
+	var base any
 	switch tok.kind {
 	case tokString:
-		return tok.val, nil
+		base = tok.val
 	case tokNumber:
 		num, _ := strconv.Atoi(tok.val)
-		return map[string]any{"num": num}, nil
+		base = map[string]any{"num": num}
 	case tokIdent:
 		if tok.val == "localize" {
 			resolved, err := p.parseLocalize()
 			if err != nil {
 				return nil, err
 			}
-			return resolved, nil
-		}
-		if tok.val == "null" {
-			return false, nil
-		}
-		if strings.HasPrefix(tok.val, "$") {
+			base = resolved
+		} else if tok.val == "null" {
+			base = false
+		} else if isConstructor(tok.val) {
+			val, err := p.parseConstructor(tok, syms, b, comment)
+			if err != nil {
+				return nil, err
+			}
+			base = val
+		} else if strings.HasPrefix(tok.val, "$") {
 			if reg, ok := unitRegisters[tok.val]; ok {
-				return reg, nil
+				base = reg
+			} else if idx, ok := syms.paramMap[tok.val]; ok {
+				base = idx
+			} else {
+				return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
 			}
-			if idx, ok := syms.paramMap[tok.val]; ok {
-				return idx, nil
-			}
-			return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
+		} else {
+			base = tok.val // variable name
 		}
-		return tok.val, nil // variable name
 	default:
 		return nil, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
 	}
+
+	// Check for & operator
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek.kind == tokAmpersand {
+		return p.parseAmpersand(base, tok.pos, syms, b, comment)
+	}
+	p.unget(peek)
+	return base, nil
+}
+
+// parseConstructor parses a type constructor call: Name(args).
+func (p *parser) parseConstructor(nameTok token, syms *symbolTable, b *frameBuilder, comment string) (any, error) {
+	if _, err := p.expect(tokLParen); err != nil {
+		return nil, p.errorf(nameTok.pos, "expected '(' after %s", nameTok.val)
+	}
+
+	switch nameTok.val {
+	case "Item":
+		return p.parseSimpleConstructor("", nameTok.pos)
+	case "Component":
+		return p.parseSimpleConstructor("c_", nameTok.pos)
+	case "Technology":
+		return p.parseSimpleConstructor("t_", nameTok.pos)
+	case "Value":
+		return p.parseSimpleConstructor("v_", nameTok.pos)
+	case "Coordinate":
+		return p.parseCoordinateConstructor(nameTok.pos, syms, b, comment)
+	}
+	return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
+}
+
+// parseSimpleConstructor parses Item/Component/Technology/Value("id").
+// The '(' has already been consumed. prefix is prepended to the id.
+func (p *parser) parseSimpleConstructor(prefix string, pos int) (any, error) {
+	argTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if argTok.kind != tokString {
+		return nil, p.errorf(argTok.pos, "expected string argument, got %s", argTok.describe())
+	}
+	// Expect closing paren
+	if _, err := p.expect(tokRParen); err != nil {
+		return nil, err
+	}
+	return map[string]any{"id": prefix + argTok.val}, nil
+}
+
+// parseCoordinateConstructor parses Coordinate(x, y).
+// The '(' has already been consumed.
+func (p *parser) parseCoordinateConstructor(pos int, syms *symbolTable, b *frameBuilder, comment string) (any, error) {
+	xVal, err := p.parseArgValue(syms, b, comment)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(tokComma); err != nil {
+		return nil, err
+	}
+	yVal, err := p.parseArgValue(syms, b, comment)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(tokRParen); err != nil {
+		return nil, err
+	}
+
+	// Check if both are compile-time numeric literals
+	xMap, xIsMap := xVal.(map[string]any)
+	yMap, yIsMap := yVal.(map[string]any)
+	if xIsMap && yIsMap {
+		xNum, xHasNum := xMap["num"]
+		yNum, yHasNum := yMap["num"]
+		if xHasNum && yHasNum && len(xMap) == 1 && len(yMap) == 1 {
+			return map[string]any{
+				"coord": map[string]any{"x": xNum, "y": yNum},
+			}, nil
+		}
+	}
+
+	// Runtime: emit combine_coordinate via expandCall
+	tmpVar := allocUniqueVar("@coord", syms.usedVars)
+	if err := p.expandCall("combine_coordinate", []any{xVal, yVal}, nil, []any{tmpVar}, b, pos, comment, syms.usedVars); err != nil {
+		return nil, err
+	}
+	return tmpVar, nil
+}
+
+// parseAmpersand handles the & operator after a base value.
+// Merges a numeric component into the base value (compile-time)
+// or emits set_number (runtime).
+func (p *parser) parseAmpersand(base any, basePos int, syms *symbolTable, b *frameBuilder, comment string) (any, error) {
+	rhs, err := p.parseArgValue(syms, b, comment)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if both are compile-time values
+	baseMap, baseIsMap := base.(map[string]any)
+	rhsMap, rhsIsMap := rhs.(map[string]any)
+	if baseIsMap && rhsIsMap {
+		rhsNum, rhsHasNum := rhsMap["num"]
+		if rhsHasNum && len(rhsMap) == 1 {
+			// Merge "num" into base map
+			result := make(map[string]any, len(baseMap)+1)
+			for k, v := range baseMap {
+				result[k] = v
+			}
+			result["num"] = rhsNum
+			return result, nil
+		}
+	}
+
+	// Runtime: emit set_number via expandCall
+	tmpVar := allocUniqueVar("@amp", syms.usedVars)
+	if err := p.expandCall("set_number", []any{base, rhs}, nil, []any{tmpVar}, b, basePos, comment, syms.usedVars); err != nil {
+		return nil, err
+	}
+	return tmpVar, nil
+}
+
+// parseConstructorForTarget parses a constructor expression when the output
+// target variable is known. For compile-time constructors, returns the literal
+// map (caller emits set_reg). For runtime constructors, emits frames directly
+// targeting the variable and returns nil.
+func (p *parser) parseConstructorForTarget(target string, syms *symbolTable, b *frameBuilder, comment string) (any, error) {
+	ctorTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(tokLParen); err != nil {
+		return nil, p.errorf(ctorTok.pos, "expected '(' after %s", ctorTok.val)
+	}
+
+	var base any
+	switch ctorTok.val {
+	case "Item":
+		lit, err := p.parseSimpleConstructor("", ctorTok.pos)
+		if err != nil {
+			return nil, err
+		}
+		base = lit
+	case "Component":
+		lit, err := p.parseSimpleConstructor("c_", ctorTok.pos)
+		if err != nil {
+			return nil, err
+		}
+		base = lit
+	case "Technology":
+		lit, err := p.parseSimpleConstructor("t_", ctorTok.pos)
+		if err != nil {
+			return nil, err
+		}
+		base = lit
+	case "Value":
+		lit, err := p.parseSimpleConstructor("v_", ctorTok.pos)
+		if err != nil {
+			return nil, err
+		}
+		base = lit
+	case "Coordinate":
+		xVal, err := p.parseArgValue(syms, b, comment)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokComma); err != nil {
+			return nil, err
+		}
+		yVal, err := p.parseArgValue(syms, b, comment)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		xMap, xIsMap := xVal.(map[string]any)
+		yMap, yIsMap := yVal.(map[string]any)
+		if xIsMap && yIsMap {
+			xNum, xHasNum := xMap["num"]
+			yNum, yHasNum := yMap["num"]
+			if xHasNum && yHasNum && len(xMap) == 1 && len(yMap) == 1 {
+				base = map[string]any{"coord": map[string]any{"x": xNum, "y": yNum}}
+				break
+			}
+		}
+		// Runtime: emit combine_coordinate directly into target
+		if err := p.expandCall("combine_coordinate", []any{xVal, yVal}, nil, []any{target}, b, ctorTok.pos, comment, syms.usedVars); err != nil {
+			return nil, err
+		}
+		// Check for & operator
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokAmpersand {
+			rhs, err := p.parseArgValue(syms, b, comment)
+			if err != nil {
+				return nil, err
+			}
+			if err := p.expandCall("set_number", []any{target, rhs}, nil, []any{target}, b, ctorTok.pos, comment, syms.usedVars); err != nil {
+				return nil, err
+			}
+		} else {
+			p.unget(peek)
+		}
+		return nil, nil // frames already emitted
+	default:
+		return nil, p.errorf(ctorTok.pos, "unknown constructor %q", ctorTok.val)
+	}
+
+	// For non-Coordinate constructors, check for & operator
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek.kind == tokAmpersand {
+		rhsTok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if rhsTok.kind == tokNumber {
+			num, _ := strconv.Atoi(rhsTok.val)
+			baseMap := base.(map[string]any)
+			result := make(map[string]any, len(baseMap)+1)
+			for k, v := range baseMap {
+				result[k] = v
+			}
+			result["num"] = num
+			return result, nil
+		}
+		// Runtime &: emit set_reg for base, then set_number
+		p.unget(rhsTok)
+		rhs, err := p.parseArgValue(syms, b, comment)
+		if err != nil {
+			return nil, err
+		}
+		f := map[string]any{
+			"op": "set_reg",
+			"1":  base,
+			"2":  target,
+		}
+		setComment(f, comment)
+		b.emit(f)
+		if err := p.expandCall("set_number", []any{target, rhs}, nil, []any{target}, b, ctorTok.pos, comment, syms.usedVars); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	p.unget(peek)
+	return base, nil // compile-time literal
 }
 
 // compileDefaultStatement compiles a function call or compound assignment.
@@ -557,6 +818,32 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			b.emit(f)
 			return nil
 		}
+		if rhsTok.kind == tokIdent && isConstructor(rhsTok.val) {
+			p.unget(rhsTok)
+			val, err := p.parseArgValue(syms, b, comment)
+			if err != nil {
+				return err
+			}
+			if m, ok := val.(map[string]any); ok {
+				f := map[string]any{
+					"op": "set_reg",
+					"1":  m,
+					"2":  target,
+				}
+				setComment(f, comment)
+				b.emit(f)
+				return nil
+			}
+			// Runtime constructor already emitted frames; copy to target
+			f := map[string]any{
+				"op": "set_reg",
+				"1":  val,
+				"2":  target,
+			}
+			setComment(f, comment)
+			b.emit(f)
+			return nil
+		}
 		if rhsTok.kind == tokIdent {
 			fn := p.fns[rhsTok.val]
 			if fn == nil {
@@ -565,13 +852,13 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			if !fn.hasReturn() {
 				return p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
 			}
-			args, kwArgs, err := p.parseFnCallArgs(fn, rhsTok, syms)
+			args, kwArgs, err := p.parseFnCallArgs(fn, rhsTok, syms, b, comment)
 			if err != nil {
 				return err
 			}
 			return p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment, syms.usedVars)
 		}
-		return p.errorf(rhsTok.pos, "expected number or function call after '=', got %s", rhsTok.describe())
+		return p.errorf(rhsTok.pos, "expected number, function call, or constructor after '=', got %s", rhsTok.describe())
 	}
 
 	if tok2.kind == tokPlusEquals {
@@ -603,7 +890,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		return p.errorf(tok.pos, "unknown statement %q", tok.val)
 	}
 
-	args, kwArgs, err := p.parseFnCallArgs(fn, tok, syms)
+	args, kwArgs, err := p.parseFnCallArgs(fn, tok, syms, b, comment)
 	if err != nil {
 		return err
 	}
@@ -614,7 +901,8 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 // parseFnCallArgs parses the positional and keyword arguments for a function
 // call at behavior level. nameTok is the function name token (used for error
 // messages). The function definition fn determines argument counts and keywords.
-func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable) ([]any, map[string]any, error) {
+// b and comment are threaded through for runtime constructors that emit frames.
+func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable, b *frameBuilder, comment string) ([]any, map[string]any, error) {
 	posCount := fn.positionalCount()
 	args := make([]any, posCount)
 	for i := 0; i < posCount; i++ {
@@ -628,7 +916,7 @@ func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable) ([
 				p.unget(sep)
 			}
 		}
-		val, err := p.parseArgValue(syms)
+		val, err := p.parseArgValue(syms, b, comment)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -663,7 +951,7 @@ func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable) ([
 			if _, err := p.expect(tokColon); err != nil {
 				return nil, nil, err
 			}
-			val, err := p.parseArgValue(syms)
+			val, err := p.parseArgValue(syms, b, comment)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -987,13 +1275,17 @@ func (p *parser) parseParamAttr(syms *symbolTable, pos int) error {
 }
 
 // checkVarName validates that a variable name doesn't conflict with existing
-// declarations.
+// declarations or reserved names.
 func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
+	if isConstructor(name) {
+		return p.errorf(pos, "%q is a type constructor and cannot be used as a variable name", name)
+	}
 	return nil
 }
 
 // compileVarInit compiles the right-hand side of a var/let declaration.
-// The '=' has already been consumed. Accepts a number literal or a function call.
+// The '=' has already been consumed. Accepts a number literal, a function call,
+// or a type constructor (with optional & operator).
 func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, comment string, syms *symbolTable) error {
 	rhsTok, err := p.next()
 	if err != nil {
@@ -1002,6 +1294,15 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 
 	if rhsTok.kind == tokNumber {
 		num, _ := strconv.Atoi(rhsTok.val)
+		// Check for & after number
+		peek, err := p.next()
+		if err != nil {
+			return err
+		}
+		if peek.kind == tokAmpersand {
+			return p.errorf(peek.pos, "number literal cannot be left side of '&' (use a type constructor)")
+		}
+		p.unget(peek)
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
 		syms.usedVars[nameTok.val] = true
 		f := map[string]any{
@@ -1011,6 +1312,28 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 		}
 		setComment(f, comment)
 		b.emit(f)
+		return nil
+	}
+
+	if rhsTok.kind == tokIdent && isConstructor(rhsTok.val) {
+		p.unget(rhsTok)
+		val, err := p.parseConstructorForTarget(nameTok.val, syms, b, comment)
+		if err != nil {
+			return err
+		}
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
+		if val != nil {
+			// Compile-time literal: emit set_reg
+			f := map[string]any{
+				"op": "set_reg",
+				"1":  val,
+				"2":  nameTok.val,
+			}
+			setComment(f, comment)
+			b.emit(f)
+		}
+		// If val is nil, runtime frames already emitted targeting nameTok.val
 		return nil
 	}
 
@@ -1024,14 +1347,14 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 		}
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
 		syms.usedVars[nameTok.val] = true
-		args, kwArgs, err := p.parseFnCallArgs(fn, rhsTok, syms)
+		args, kwArgs, err := p.parseFnCallArgs(fn, rhsTok, syms, b, comment)
 		if err != nil {
 			return err
 		}
 		return p.expandCall(rhsTok.val, args, kwArgs, []any{nameTok.val}, b, rhsTok.pos, comment, syms.usedVars)
 	}
 
-	return p.errorf(rhsTok.pos, "expected number or function call after '=', got %s", rhsTok.describe())
+	return p.errorf(rhsTok.pos, "expected number, function call, or constructor after '=', got %s", rhsTok.describe())
 }
 
 // compileMultiReturn compiles a multi-return binding list.
@@ -1203,7 +1526,7 @@ func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard b
 		}
 	}
 
-	args, kwArgs, err := p.parseFnCallArgs(fn, calleeTok, syms)
+	args, kwArgs, err := p.parseFnCallArgs(fn, calleeTok, syms, b, comment)
 	if err != nil {
 		return err
 	}

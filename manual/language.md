@@ -242,19 +242,24 @@ Declare an immutable variable with `let`:
 let x = 5
 ```
 
-The right-hand side of `var` and `let` can be a number literal or a function
-call that has a return value:
+The right-hand side of `var` and `let` can be a number literal, a function
+call that has a return value, or a type constructor expression:
 
 ```doit
 let me = get_self
 var loc = get_location me
+let item = Item("metalbar") & 5
+let pos = Coordinate(3, 7)
 ```
 
 When initialized with a number, a `set_number` instruction is emitted. When
 initialized with a function call, the function's return value is assigned to
-the variable. The difference between `var` and `let` is that `let` prevents
-reassignment — the compiler errors on `=`, `+=`, or `++` targeting a `let`
-variable.
+the variable. When initialized with a type constructor, a `set_reg` instruction
+is emitted for compile-time values, or the appropriate runtime instructions
+are emitted (e.g., `combine_coordinate` for `Coordinate` with variables).
+
+The difference between `var` and `let` is that `let` prevents reassignment —
+the compiler errors on `=`, `+=`, or `++` targeting a `let` variable.
 
 Both `var` and `let` allow shadowing — you can redeclare a variable with the
 same name, and the new declaration replaces the previous one:
@@ -270,9 +275,11 @@ Assign a new value with `=`:
 ```doit
 x = 2
 x = get_self
+x = Item("metalbar") & 5
 ```
 
-The right-hand side of `=` can also be a function call with a return value.
+The right-hand side of `=` can be a number literal, a function call with a
+return value, or a type constructor expression.
 
 Compound assignment and increment are also supported:
 

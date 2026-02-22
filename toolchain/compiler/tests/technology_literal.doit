@@ -1,0 +1,5 @@
+# AI-generated test
+behavior technology_literal {
+    @name "Technology Literal"
+    notify "Got tech", value: Technology("signals2")
+}

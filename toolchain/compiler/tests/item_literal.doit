@@ -1,0 +1,5 @@
+# AI-generated test
+behavior item_literal {
+    @name "Item Literal"
+    notify "Got item", value: Item("metalbar")
+}

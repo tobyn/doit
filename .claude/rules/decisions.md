@@ -72,6 +72,41 @@ variables. Binding lists must start with `_`, `let`, or `var`
 comma-separated identifiers, number literals, or `null`. Literals are
 desugared into synthetic body calls with `@retK` names.
 
+## Type literal constructors and `&`
+
+**Constructor syntax over factory functions**: Type constructors use
+capitalized names with parentheses (`Item("metalbar")`) rather than
+lower-case factory functions (`item("metalbar")`). The capitalized
+convention distinguishes type construction from function calls and
+reserves the lowercase namespace for future use.
+
+**Namespace prefixes hidden**: `Component`, `Technology`, and `Value`
+automatically prepend `c_`, `t_`, `v_` to the user-supplied id. Users
+write the short name without the game's namespace prefix. This is less
+error-prone and matches how players think about these types.
+
+**`&` as a binary operator**: The `&` operator was chosen for attaching
+numeric components because it's visually distinct from arithmetic and
+connotes "combining" two things. It mirrors the VM's register composite
+model: every register holds (typed_value, number). `Item("metalbar") & 5`
+reads naturally as "metalbar with count 5".
+
+**Compile-time vs runtime paths**: Constructors and `&` are resolved at
+compile time when all operands are literals, producing inline JSON values
+with no runtime instructions. When any operand is a variable, the
+compiler emits the appropriate stdlib call (`combine_coordinate` for
+`Coordinate`, `set_number` for `&`). Function bodies only support the
+compile-time path — runtime constructors require the `frameBuilder`
+infrastructure that only exists at behavior level.
+
+**`parseConstructorForTarget` optimization**: For `let`/`var`
+declarations, the compiler avoids an extra `set_reg` copy by passing the
+declared variable name directly as the output target for runtime
+constructor instructions. The general-purpose `parseArgValue` path
+(used in function call arguments and assignments) allocates a temporary
+variable instead, which is simpler but produces one extra frame for
+runtime cases.
+
 ## Control flow stubs
 
 Control-flow instructions (branches, loops, terminals, jump/label) are

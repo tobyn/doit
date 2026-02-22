@@ -1,0 +1,8 @@
+# AI-generated test
+behavior coordinate_runtime {
+    @name "Coordinate Runtime"
+    var x = 3
+    var y = 7
+    let pos = Coordinate(x, y)
+    notify "Position", value: pos
+}

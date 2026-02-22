@@ -1,0 +1,18 @@
+{
+    "0": {
+        "0": {
+            "coord": {
+                "x": 3,
+                "y": 7
+            }
+        },
+        "1": "pos",
+        "op": "set_reg"
+    },
+    "1": {
+        "0": "pos",
+        "op": "notify",
+        "txt": "Position"
+    },
+    "name": "Coordinate Literal"
+}

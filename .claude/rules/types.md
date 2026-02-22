@@ -22,27 +22,37 @@ value is one of the six game types below, or empty (for a pure number).
   Literal syntax: `42`
 
 - **Item** — A game item (e.g., metal bar, circuit board).
+  Constructor syntax: `Item("metalbar")` → `{"id": "metalbar"}`.
 
 - **Unit** — A reference to a game entity (mobile robot or building).
+  No constructor syntax. Values produced by instructions at runtime.
 
 - **Component** — An equippable component (e.g., behavior controller).
+  Constructor syntax: `Component("behavior")` → `{"id": "c_behavior"}`.
+  The `c_` prefix is added automatically.
 
 - **Technology** — A research technology.
+  Constructor syntax: `Technology("signals2")` → `{"id": "t_signals2"}`.
+  The `t_` prefix is added automatically.
 
 - **Informational Value** — A special game value used for signaling and
-  display.
+  display. Constructor syntax: `Value("pentagon")` →
+  `{"id": "v_pentagon"}`. The `v_` prefix is added automatically.
 
 - **Coordinate** — A 2D position in the game world. Math on coordinates
-  is component-wise (X to X, Y to Y).
+  is component-wise (X to X, Y to Y). Constructor syntax:
+  `Coordinate(3, 7)` → `{"coord": {"x": 3, "y": 7}}`. With literal
+  arguments, resolved at compile time. With variable arguments, emits
+  `combine_coordinate` at runtime.
 
 All register types can be stored in variables, parameters, and unit
 registers, and passed through register slots in instructions. The VM is
 dynamically typed within registers — any register can hold any register
 type.
 
-Item, Unit, Component, Technology, Informational Value, and Coordinate
-have no literal syntax yet. Values of these types are produced by
-instructions at runtime.
+Constructor names (`Item`, `Component`, `Technology`, `Value`,
+`Coordinate`) are reserved keywords and cannot be used as variable or
+function names.
 
 Whether the compiler should track specific register subtypes (e.g.,
 distinguish Item from Unit) or treat all register values as a single
@@ -98,6 +108,23 @@ The numeric component is accessible via instructions like `get_number`.
 This composite nature doesn't change the type list — it's a property of
 how the VM stores register values.
 
+### The `&` Operator
+
+The `&` binary operator attaches a numeric component to a register value:
+
+```
+Item("metalbar") & 5        // {"id": "metalbar", "num": 5}
+Coordinate(1, 2) & 3        // {"coord": {"x": 1, "y": 2}, "num": 3}
+Value("pentagon") & count    // runtime: emits set_number
+```
+
+When both operands are compile-time literals, the result is a compile-time
+literal with the `"num"` field merged in. When either operand is a
+runtime value (variable), the compiler emits a `set_number` instruction.
+
+In function bodies, both sides of `&` must be compile-time values (no
+variables). At behavior level, runtime `&` is supported.
+
 ## Compile-Time vs Runtime
 
 From the programmer's perspective, all types are uniform — you work
@@ -109,6 +136,9 @@ distinction is a compiler implementation concern:
 - **Null** is compatible with both contexts
 - **Number literals** in function arguments can be baked directly into
   instruction slots as literal values without going through a register
+- **Type constructors** with all-literal arguments produce compile-time
+  values baked into instruction slots; with variable arguments, they
+  emit runtime instructions
 
 The compiler must track enough type information to know how to handle
 each value at each use point, but the programmer doesn't need to think

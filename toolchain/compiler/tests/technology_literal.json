@@ -1,0 +1,10 @@
+{
+    "0": {
+        "0": {
+            "id": "t_signals2"
+        },
+        "op": "notify",
+        "txt": "Got tech"
+    },
+    "name": "Technology Literal"
+}
