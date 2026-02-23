@@ -228,6 +228,11 @@ Parameter names are referenced with the `$` prefix (e.g., `$target`) and
 can be used as function arguments and assignment targets. The parameter name
 must not conflict with a built-in unit register or another parameter.
 
+The direction keywords `in`, `out`, and `inout` are reserved and cannot be
+used as variable or parameter names. When calling a function with `out` or
+`inout` parameters, the call site must annotate the argument with the matching
+direction keyword — see [Direction annotations](functions.md#direction-annotations).
+
 ## Variables
 
 Declare a mutable variable with `var` and an initial numeric value:

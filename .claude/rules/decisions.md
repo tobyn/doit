@@ -110,6 +110,31 @@ constructor instructions. The general-purpose `parseArgValue` path
 variable instead, which is simpler but produces one extra frame for
 runtime cases.
 
+## Instruction metadata limitations
+
+The compiler cannot assume that all instructions are defined in the
+standard library. Desynced supports user mods that add custom
+instructions. The `instruction` intrinsic exists partly to support
+these modded instructions — users can emit arbitrary instruction frames
+without a stdlib wrapper. This means the compiler cannot rely on stdlib
+metadata (like input/output slot direction) for enforcement that needs
+to cover all instructions. Any analysis that requires per-slot knowledge
+(e.g., which slots are written to) would miss inline `instruction`
+blocks for modded opcodes.
+
+## Bare instruction direction checking
+
+Direction enforcement does not apply to bare `instruction` blocks in fn
+bodies. The compiler cannot distinguish input from output slots in an
+arbitrary instruction frame — the slot numbering is opaque (the same
+limitation described in "Instruction metadata limitations" above). This
+means a function like `fn writer(out x) { instruction "notify" { txt: x } }`
+reads an `out` parameter without error. Direction checks are only applied
+to function calls (where parameter metadata is available), not to raw
+instruction emissions. This is an acceptable trade-off: `instruction` is
+a low-level escape hatch, and users who reach for it accept responsibility
+for correct slot usage.
+
 ## Control flow stubs
 
 Control-flow instructions (branches, loops, terminals, jump/label) are
@@ -130,3 +155,29 @@ breaking tests. Frame numbering is not semantically meaningful.
 JS codec's 0-based key format and are not modified programmatically. The
 `refToNative` conversion in the test harness bridges to our 1-based
 native format.
+
+## Call-site direction annotations
+
+**Mandatory annotation for out/inout**: Call sites must annotate `out`
+and `inout` arguments explicitly to match the parameter's direction.
+`fn my_fn(out foo, inout my_kw kw)` must be called as
+`my_fn out x, inout my_kw: y`. This makes argument direction visible at
+the call site without looking up the function definition.
+
+**`in` is the default**: No annotation is needed for `in` parameters
+(the common case), but explicit `in` is accepted for clarity:
+`my_fn in x` is equivalent to `my_fn x` when the parameter is `in`.
+
+**Annotation must match exactly**: An annotation that doesn't match the
+parameter's effective direction is a compile error. `out` on an `in`
+parameter, `in` on an `out` parameter, etc. are all rejected.
+
+**Direction keywords are fully reserved**: `in`, `out`, and `inout`
+cannot be used as variable names or parameter names. This avoids parsing
+ambiguity — when the parser sees `out` before an argument value, it
+always means a direction annotation.
+
+**Uniform enforcement**: The same annotation rules apply at both behavior
+level (`parseFnCallArgs`) and in fn bodies (`parseFnBodyCall`), for both
+positional and keyword arguments. The shared `checkCallAnnotation` helper
+validates the annotation against the parameter definition.

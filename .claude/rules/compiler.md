@@ -13,21 +13,30 @@ output format.
 
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
   (`fnDef`, `fnBodyArg`, `fnBodyCall` with `frame` field, `symbolTable`,
-  `unitRegisters`), `frameBuilder`/`frameRef` abstraction for frame
-  management, `check_number` slot constants (`checkLarger`, `checkSmaller`,
-  `checkValue`, `checkTarget`), the `setComment` helper for setting `"cmt"`
-  on frames, and the `allocUniqueVar` helper for inline variable renaming
+  `unitRegisters`), `paramDef` (with `direction` field, `effectiveDirection()`)
+  and `paramInfo` (with `direction` field) types, direction compatibility
+  via `canPass(paramDir, argDir)`, `frameBuilder`/`frameRef` abstraction
+  for frame management, `check_number` slot constants (`checkLarger`,
+  `checkSmaller`, `checkValue`, `checkTarget`), the `setComment` helper
+  for setting `"cmt"` on frames, and the `allocUniqueVar` helper for
+  inline variable renaming
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types (including `tokAmpersand` for `&`), `Keywords` map
-  (includes type constructor names), `isConstructor` helper, `$`-prefix
-  scanning, error formatting, `parseLocalePrefix` helper,
-  `resolveLocalizedDocComment` for localized `#!` comments
+  (includes type constructor names and direction keywords), `isConstructor`
+  helper, `isDirection` helper, `$`-prefix scanning, error formatting,
+  `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
+  `#!` comments
 - **`compiler/parse.go`** — Stdlib parsing (delegates to `parseUserFn`),
   file-level parsing, function definitions with `instruction` support,
   call expansion with `[]any`/`map[string]any` argument types, inline
-  frame expansion for `fnBodyCall.frame`
+  frame expansion for `fnBodyCall.frame`, fn body direction enforcement
+  (`fnBodyArgDir`, `checkFnBodyCallDirections`,
+  `checkFnBodyInstructionDirections`)
 - **`compiler/codegen.go`** — Behavior body compilation: param/let/var declarations,
-  symbol table tracking, rich argument parsing, assignment target resolution,
+  symbol table tracking, rich argument parsing, assignment target resolution
+  (with direction checks in `resolveAssignTarget`), direction enforcement
+  (`argDirection`, `checkReadable`, `checkCallDirections`,
+  `checkInstructionDirections`, `checkCallAnnotation`),
   `resolveInstructionFrame` helper for 0→1 key conversion and slot substitution,
   `frameHasReturnSlot`/`frameReturnCount` helpers, `instruction` as expression
   in let/var/assign/multi-return, loops, if/else, deferred body emission,
@@ -116,7 +125,50 @@ keyword args follow positional args after a comma: `notify "Hello!", timeout: "1
 Keyword args are optional — omitting one omits the corresponding field from
 the compiled instruction. The `paramDef` type tracks each parameter's name
 and keyword (empty for positional). Helper methods on `fnDef` support
-keyword lookup and positional counting.
+keyword lookup and positional counting. The `positionalParam(i)` method
+returns the i-th positional parameter (0-based), skipping keyword params.
+
+**Parameter direction** annotations (`in`, `out`, `inout`) are declared in
+parameter lists: `fn writer(out target)`. Direction defaults to `in` when
+omitted. Direction keywords (`in`, `out`, `inout`) are fully reserved —
+they cannot be used as variable or parameter names (`checkVarName` rejects
+them).
+
+**Call-site direction annotations**: Call sites must annotate `out` and
+`inout` arguments to match the callee's parameter direction. For example,
+`fn writer(out target)` must be called as `writer out z`. Explicit `in`
+is accepted but not required. Mismatched or missing annotations are compile
+errors. Both `parseFnCallArgs` (behavior level) and `parseFnBodyCall`
+(fn body) peek for a direction keyword before each positional argument
+and before each keyword name. The shared `checkCallAnnotation` helper
+validates the annotation against the parameter's `effectiveDirection()`.
+For keyword arguments, the direction annotation precedes the keyword name:
+`my_fn 1, out kw: z`.
+
+**Direction enforcement** has two layers. First, **annotation validation**
+(`checkCallAnnotation`) checks that call sites provide the correct direction
+keyword — `out`/`inout` arguments must be explicitly annotated, `in` is
+implicit. Second, **compatibility checking** (`checkCallDirections` at
+behavior level, `checkFnBodyCallDirections` in fn bodies) verifies that the
+argument's inherent direction is compatible with the parameter's direction
+using `canPass(paramDir, argDir)`. The `canPass` function enforces: `in`
+params accept `in`/`inout` args, `out` params accept `out`/`inout` args,
+`inout` params accept only `inout` args.
+
+Argument directions are determined by `argDirection` (behavior level) and
+`fnBodyArgDir` (fn bodies). At behavior level, `argDirection` looks up the
+argument in the symbol table: `let` variables and `in` parameters are `in`,
+`var` variables and `inout` parameters are `inout`, `out` parameters are
+`out`. In fn bodies, `fnBodyArgDir` maps function parameter directions
+through to the body-level calls.
+
+Bare `instruction` blocks in fn bodies do **not** check parameter directions.
+The compiler cannot distinguish input from output slots in arbitrary
+instruction frames (see "Instruction metadata limitations" in decisions.md).
+Functions that are pure instruction wrappers get promoted to `fnDef.frame`
+for fast expansion, which also bypasses fn body direction checks. Direction
+enforcement for these functions happens at the call site when the wrapper
+is called as a regular function.
 
 **Return values**: Functions can produce one or more return values.
 

@@ -31,6 +31,10 @@ func parseStdlib(stdlib fs.FS) (map[string]*fnDef, error) {
 	return fns, nil
 }
 
+func isDirection(val string) bool {
+	return val == "in" || val == "out" || val == "inout"
+}
+
 func (p *parser) parseParamList() ([]paramDef, error) {
 	if _, err := p.expect(tokLParen); err != nil {
 		return nil, err
@@ -58,6 +62,16 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			return nil, p.errorf(tok.pos, "expected parameter name, got %s", tok.describe())
 		}
 
+		// Check for direction annotation (in, out, inout)
+		direction := ""
+		if isDirection(tok.val) {
+			direction = tok.val
+			tok, err = p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		// Peek: if next is an identifier, this is a keyword param
 		peek, err := p.next()
 		if err != nil {
@@ -67,7 +81,7 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			// keyword param: tok is keyword, peek is variable name
 			seenKeyword = true
 			params = append(params, paramDef{
-				name: peek.val, keyword: tok.val,
+				name: peek.val, keyword: tok.val, direction: direction,
 			})
 		} else {
 			// positional param
@@ -75,7 +89,7 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			if seenKeyword {
 				return nil, p.errorf(tok.pos, "positional parameter after keyword parameter")
 			}
-			params = append(params, paramDef{name: tok.val})
+			params = append(params, paramDef{name: tok.val, direction: direction})
 		}
 	}
 	return params, nil
@@ -247,6 +261,13 @@ func (p *parser) parseUserFn() error {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return err
 	}
+
+	// Build direction maps for enforcement in fn body
+	paramDirs := map[string]string{} // param name -> effective direction
+	for _, pd := range params {
+		paramDirs[pd.name] = pd.effectiveDirection()
+	}
+	letVars := map[string]bool{} // tracks let-declared locals in fn body
 
 	var body []fnBodyCall
 	var rets []string
@@ -421,7 +442,10 @@ func (p *parser) parseUserFn() error {
 					if len(bindings) > retCount {
 						return p.errorf(calleeTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
 					}
-					modifiedFrame := maps.Clone(frame)
+					if err := p.checkFnBodyInstructionDirections(frame, paramDirs, calleeTok.pos); err != nil {
+					return err
+				}
+				modifiedFrame := maps.Clone(frame)
 					for k, v := range modifiedFrame {
 						if rs, ok := v.(returnSlot); ok {
 							idx := int(rs) - 1
@@ -434,6 +458,11 @@ func (p *parser) parseUserFn() error {
 							} else {
 								modifiedFrame[k] = "@discard"
 							}
+						}
+					}
+					for _, bind := range bindings {
+						if !bind.discard {
+							letVars[bind.name] = true
 						}
 					}
 					body = append(body, fnBodyCall{frame: modifiedFrame, comment: comment})
@@ -449,7 +478,7 @@ func (p *parser) parseUserFn() error {
 				if len(bindings) > callee.returnCount() {
 					return p.errorf(calleeTok.pos, "too many bindings (%d) for function %q which returns %d values", len(bindings), calleeTok.val, callee.returnCount())
 				}
-				calls, err := p.parseFnBodyCall(callee, calleeTok, &synthIdx)
+				calls, err := p.parseFnBodyCall(callee, calleeTok, &synthIdx, paramDirs, letVars)
 				if err != nil {
 					return err
 				}
@@ -463,6 +492,11 @@ func (p *parser) parseUserFn() error {
 				}
 				calls[len(calls)-1].retArgs = retArgs
 				calls[len(calls)-1].comment = comment
+				for _, bind := range bindings {
+					if !bind.discard {
+						letVars[bind.name] = true
+					}
+				}
 				body = append(body, calls...)
 				continue
 			}
@@ -491,6 +525,7 @@ func (p *parser) parseUserFn() error {
 						modifiedFrame[k] = varTok.val
 					}
 				}
+				letVars[varTok.val] = true
 				body = append(body, fnBodyCall{frame: modifiedFrame, comment: comment})
 				continue
 			}
@@ -537,6 +572,7 @@ func (p *parser) parseUserFn() error {
 						comment: comment,
 					})
 				}
+				letVars[varTok.val] = true
 				continue
 			}
 
@@ -547,12 +583,13 @@ func (p *parser) parseUserFn() error {
 			if !callee.hasReturn() {
 				return p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
 			}
-			calls, err := p.parseFnBodyCall(callee, rhsTok, &synthIdx)
+			calls, err := p.parseFnBodyCall(callee, rhsTok, &synthIdx, paramDirs, letVars)
 			if err != nil {
 				return err
 			}
 			calls[len(calls)-1].retArgs = []fnBodyArg{{isIdent: true, val: varTok.val}}
 			calls[len(calls)-1].comment = comment
+			letVars[varTok.val] = true
 			body = append(body, calls...)
 			continue
 		}
@@ -562,7 +599,7 @@ func (p *parser) parseUserFn() error {
 			return p.errorf(tok.pos, "unknown function %q", tok.val)
 		}
 
-		calls, err := p.parseFnBodyCall(callee, tok, &synthIdx)
+		calls, err := p.parseFnBodyCall(callee, tok, &synthIdx, paramDirs, letVars)
 		if err != nil {
 			return err
 		}
@@ -842,15 +879,92 @@ func (p *parser) parseFnBodyAmpersand(base fnBodyArg, basePos int, synthIdx *int
 	return fnBodyArg{isIdent: true, val: synthName}, allCalls, nil
 }
 
+// fnBodyArgDir determines the effective direction of a function body argument.
+func fnBodyArgDir(arg fnBodyArg, paramDirs map[string]string, letVars map[string]bool) string {
+	if !arg.isIdent {
+		return "in" // literal
+	}
+	if dir, ok := paramDirs[arg.val]; ok {
+		return dir
+	}
+	if letVars[arg.val] {
+		return "in"
+	}
+	return "inout"
+}
+
+// checkFnBodyCallDirections checks direction compatibility for each argument
+// at a function call site within a fn body.
+func (p *parser) checkFnBodyCallDirections(callee *fnDef, calleeName string, args []fnBodyArg, kwArgs map[string]fnBodyArg, paramDirs map[string]string, letVars map[string]bool, pos int) error {
+	posIdx := 0
+	for _, pd := range callee.params {
+		calleeDir := pd.effectiveDirection()
+		if pd.keyword == "" {
+			if posIdx < len(args) {
+				aDir := fnBodyArgDir(args[posIdx], paramDirs, letVars)
+				if !canPass(calleeDir, aDir) {
+					return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
+						aDir, calleeDir, pd.name, calleeName)
+				}
+			}
+			posIdx++
+		} else if kwArgs != nil {
+			if val, ok := kwArgs[pd.keyword]; ok {
+				aDir := fnBodyArgDir(val, paramDirs, letVars)
+				if !canPass(calleeDir, aDir) {
+					return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
+						aDir, calleeDir, pd.name, calleeName)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// checkFnBodyInstructionDirections verifies that non-@N slots in an instruction
+// frame within a fn body don't read from out-only parameters.
+func (p *parser) checkFnBodyInstructionDirections(frame map[string]any, paramDirs map[string]string, pos int) error {
+	for _, v := range frame {
+		if _, ok := v.(returnSlot); ok {
+			continue
+		}
+		if name, ok := v.(string); ok {
+			if dir, ok := paramDirs[name]; ok && dir == "out" {
+				return p.errorf(pos, "cannot read from output parameter %q in instruction input slot", name)
+			}
+		}
+	}
+	return nil
+}
+
 // parseFnBodyCall parses the positional and keyword arguments for a function
 // call in a fn body. Returns the main call plus any synthetic setup calls
 // needed for runtime constructors/&. The caller sets comment and retArgs on
 // the last call (the main one).
-func (p *parser) parseFnBodyCall(callee *fnDef, calleeTok token, synthIdx *int) ([]fnBodyCall, error) {
+func (p *parser) parseFnBodyCall(callee *fnDef, calleeTok token, synthIdx *int, paramDirs map[string]string, letVars map[string]bool) ([]fnBodyCall, error) {
 	posCount := callee.positionalCount()
 	args := make([]fnBodyArg, posCount)
 	var synthCalls []fnBodyCall
 	for i := 0; i < posCount; i++ {
+		// Peek for direction annotation (in, out, inout)
+		dirTok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		annotation := ""
+		annotationPos := dirTok.pos
+		if dirTok.kind == tokIdent && isDirection(dirTok.val) {
+			annotation = dirTok.val
+		} else {
+			p.unget(dirTok)
+			annotationPos = dirTok.pos
+		}
+
+		pd := callee.positionalParam(i)
+		if err := p.checkCallAnnotation(annotation, pd, calleeTok.val, annotationPos); err != nil {
+			return nil, err
+		}
+
 		arg, calls, err := p.parseFnBodyArgValue(synthIdx)
 		if err != nil {
 			return nil, err
@@ -874,16 +988,30 @@ func (p *parser) parseFnBodyCall(callee *fnDef, calleeTok token, synthIdx *int) 
 	} else if peek.kind == tokComma {
 		kwArgs = map[string]fnBodyArg{}
 		for {
-			kwTok, err := p.expect(tokIdent)
+			// Read the first ident — could be a direction annotation or keyword name
+			dirOrKw, err := p.expect(tokIdent)
 			if err != nil {
 				return nil, err
 			}
-			kw := callee.keywordByName(kwTok.val)
-			if kw == nil {
-				return nil, p.errorf(kwTok.pos, "unknown keyword argument %q", kwTok.val)
+			annotation := ""
+			annotationPos := dirOrKw.pos
+			if isDirection(dirOrKw.val) {
+				annotation = dirOrKw.val
+				dirOrKw, err = p.expect(tokIdent)
+				if err != nil {
+					return nil, err
+				}
 			}
-			if _, exists := kwArgs[kwTok.val]; exists {
-				return nil, p.errorf(kwTok.pos, "duplicate keyword argument %q", kwTok.val)
+
+			kw := callee.keywordByName(dirOrKw.val)
+			if kw == nil {
+				return nil, p.errorf(dirOrKw.pos, "unknown keyword argument %q", dirOrKw.val)
+			}
+			if _, exists := kwArgs[dirOrKw.val]; exists {
+				return nil, p.errorf(dirOrKw.pos, "duplicate keyword argument %q", dirOrKw.val)
+			}
+			if err := p.checkCallAnnotation(annotation, kw, calleeTok.val, annotationPos); err != nil {
+				return nil, err
 			}
 			if _, err := p.expect(tokColon); err != nil {
 				return nil, err
@@ -892,7 +1020,7 @@ func (p *parser) parseFnBodyCall(callee *fnDef, calleeTok token, synthIdx *int) 
 			if err != nil {
 				return nil, err
 			}
-			kwArgs[kwTok.val] = val
+			kwArgs[dirOrKw.val] = val
 			synthCalls = append(synthCalls, calls...)
 
 			next, err := p.next()
@@ -906,6 +1034,10 @@ func (p *parser) parseFnBodyCall(callee *fnDef, calleeTok token, synthIdx *int) 
 		}
 	} else {
 		p.unget(peek)
+	}
+
+	if err := p.checkFnBodyCallDirections(callee, calleeTok.val, args, kwArgs, paramDirs, letVars, calleeTok.pos); err != nil {
+		return nil, err
 	}
 
 	result := append(synthCalls, fnBodyCall{name: calleeTok.val, args: args, kwArgs: kwArgs})

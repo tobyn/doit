@@ -61,8 +61,32 @@ func setComment(frame map[string]any, comment string) {
 // --- Shared types ---
 
 type paramDef struct {
-	name    string // variable name used in the function body
-	keyword string // "" for positional, keyword name for keyword params
+	name      string // variable name used in the function body
+	keyword   string // "" for positional, keyword name for keyword params
+	direction string // "" or "in", "out", "inout"; "" defaults to "in"
+}
+
+// effectiveDirection returns the direction of the parameter, defaulting to "in".
+func (p *paramDef) effectiveDirection() string {
+	if p.direction == "" {
+		return "in"
+	}
+	return p.direction
+}
+
+// canPass checks if a value with direction argDir can be passed to a param
+// with direction paramDir. For example, an "in" argument cannot be passed to
+// an "out" parameter because the callee would write through it.
+func canPass(paramDir, argDir string) bool {
+	switch paramDir {
+	case "in", "":
+		return argDir != "out"
+	case "out":
+		return argDir != "in" && argDir != ""
+	case "inout":
+		return argDir == "inout"
+	}
+	return false
 }
 
 type fnDef struct {
@@ -81,6 +105,20 @@ func (f *fnDef) positionalCount() int {
 		}
 	}
 	return n
+}
+
+// positionalParam returns a pointer to the i-th positional parameter (0-based).
+func (f *fnDef) positionalParam(i int) *paramDef {
+	n := 0
+	for j := range f.params {
+		if f.params[j].keyword == "" {
+			if n == i {
+				return &f.params[j]
+			}
+			n++
+		}
+	}
+	return nil
 }
 
 // keywordVarNames returns the set of variable names that belong to

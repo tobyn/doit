@@ -100,6 +100,44 @@ notify "Hello!"
 Keyword arguments can be provided in any order and are optional — omitting one
 omits the corresponding field from the compiled instruction.
 
+### Direction annotations
+
+When a function parameter is declared `out` or `inout`, the call site must
+annotate the argument with the matching direction keyword. This makes the
+direction visible at the call site without looking up the function definition:
+
+```doit
+fn writer(out target) {
+    instruction "get_self" { 0: target }
+}
+
+var z = 5
+writer out z        # 'out' annotation required
+```
+
+For keyword arguments, the direction annotation precedes the keyword name:
+
+```doit
+fn my_fn(x, out kw result) {
+    instruction "get_self" { 0: x  1: result }
+}
+
+var z = 5
+my_fn 1, out kw: z  # 'out' before the keyword name
+```
+
+`in` is the default — no annotation is needed for `in` parameters, but
+explicit `in` is accepted for clarity:
+
+```doit
+fn reader(x) { notify x }
+
+reader in 5          # explicit 'in' accepted
+reader 5             # same — 'in' is implicit
+```
+
+A missing or mismatched annotation is a compile error.
+
 ### Defining keyword parameters
 
 In a function definition, keyword parameters are written as `keyword varname`
@@ -157,6 +195,30 @@ fn my_notify(txt) {
 
 Parameters are passed by name. In the body, parameters can be used as arguments
 to other function calls.
+
+### Parameter directions
+
+Function parameters can be annotated with a direction: `in` (default), `out`,
+or `inout`. The direction precedes the parameter name:
+
+```doit
+fn writer(out target) {
+    instruction "get_self" { 0: target }
+}
+
+fn updater(inout value) {
+    instruction "add" { 0: value  1: value  2: value }
+}
+
+fn reader(x) {           # defaults to 'in'
+    notify x
+}
+```
+
+Direction annotations serve the same purpose as `@param` directions on
+behavior parameters — they constrain how the callee uses the argument and
+how the caller must annotate it. `in`, `out`, and `inout` are reserved
+keywords and cannot be used as variable or parameter names.
 
 ### The `return` statement
 

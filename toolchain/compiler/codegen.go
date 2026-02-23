@@ -73,6 +73,115 @@ func resolveInstructionFrame(frame map[string]any, retVals []any, paramMap map[s
 	return instr
 }
 
+// argDirection determines the effective direction of a resolved argument value
+// at behavior level.
+func argDirection(val any, syms *symbolTable) string {
+	switch v := val.(type) {
+	case int:
+		if v < 0 {
+			return "inout" // unit register
+		}
+		if v >= 1 && v <= len(syms.params) {
+			dir := syms.params[v-1].direction
+			if dir == "" {
+				return "in"
+			}
+			return dir
+		}
+		return "inout"
+	case string:
+		if vi, ok := syms.vars[v]; ok {
+			if !vi.mutable {
+				return "in"
+			}
+			return "inout"
+		}
+		return "inout"
+	default:
+		return "in" // literals, maps, false
+	}
+}
+
+// checkReadable verifies that a $param name can be read (i.e., is not out-only).
+func (p *parser) checkReadable(name string, syms *symbolTable, pos int) error {
+	if !strings.HasPrefix(name, "$") {
+		return nil
+	}
+	if _, ok := unitRegisters[name]; ok {
+		return nil // unit registers always readable
+	}
+	if idx, ok := syms.paramMap[name]; ok {
+		if syms.params[idx-1].direction == "out" {
+			return p.errorf(pos, "cannot read from output parameter %s", name)
+		}
+	}
+	return nil
+}
+
+// checkCallDirections checks direction compatibility for each argument at a
+// function call site.
+func (p *parser) checkCallDirections(fn *fnDef, fnName string, args []any, kwArgs map[string]any, syms *symbolTable, pos int) error {
+	posIdx := 0
+	for _, pd := range fn.params {
+		paramDir := pd.effectiveDirection()
+		var argVal any
+		if pd.keyword == "" {
+			if posIdx < len(args) {
+				argVal = args[posIdx]
+			}
+			posIdx++
+		} else if kwArgs != nil {
+			argVal = kwArgs[pd.keyword]
+		}
+		if argVal == nil {
+			continue
+		}
+		aDir := argDirection(argVal, syms)
+		if !canPass(paramDir, aDir) {
+			return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
+				aDir, paramDir, pd.name, fnName)
+		}
+	}
+	return nil
+}
+
+// checkInstructionDirections verifies that non-@N slots in an instruction
+// frame don't read from out-only parameters.
+func (p *parser) checkInstructionDirections(frame map[string]any, syms *symbolTable, pos int) error {
+	for _, v := range frame {
+		if _, ok := v.(returnSlot); ok {
+			continue
+		}
+		if name, ok := v.(string); ok {
+			if err := p.checkReadable(name, syms, pos); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkCallAnnotation validates a call-site direction annotation against a
+// parameter definition. annotation is "" (no annotation), "in", "out", or
+// "inout". If the parameter is out or inout, the annotation must be present
+// and match. If the parameter is in, an explicit "in" is accepted but no
+// annotation is required.
+func (p *parser) checkCallAnnotation(annotation string, pd *paramDef, fnName string, pos int) error {
+	expected := pd.effectiveDirection()
+	if annotation == "" {
+		if expected == "out" || expected == "inout" {
+			return p.errorf(pos, "missing '%s' annotation for argument to %s parameter %q of %s",
+				expected, expected, pd.name, fnName)
+		}
+		return nil
+	}
+	if annotation != expected {
+		return p.errorf(pos, "argument has '%s' annotation but parameter %q of %s is '%s'",
+			annotation, pd.name, fnName, expected)
+	}
+	return nil
+}
+
 func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
@@ -139,6 +248,9 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			hasInstruction = true
 			rawFrame, err := p.parseInstruction()
 			if err != nil {
+				return nil, err
+			}
+			if err := p.checkInstructionDirections(rawFrame, syms, tok.pos); err != nil {
 				return nil, err
 			}
 			resolved := resolveInstructionFrame(rawFrame, nil, nil, nil, comment)
@@ -397,7 +509,7 @@ func (p *parser) compileLoop(b *frameBuilder, syms *symbolTable) (int, error) {
 
 		switch tok.val {
 		case "if":
-			cf, err := p.compileIfBreak(b, comment)
+			cf, err := p.compileIfBreak(b, comment, syms)
 			if err != nil {
 				return -1, err
 			}
@@ -422,9 +534,12 @@ func (p *parser) compileLoop(b *frameBuilder, syms *symbolTable) (int, error) {
 // compileIfBreak compiles `if lhs >= rhs { break }` inside a loop body.
 // It emits a check_number instruction and reserves the next frame for the
 // break target. Returns the check frame index.
-func (p *parser) compileIfBreak(b *frameBuilder, comment string) (int, error) {
+func (p *parser) compileIfBreak(b *frameBuilder, comment string, syms *symbolTable) (int, error) {
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
+		return -1, err
+	}
+	if err := p.checkReadable(lhsTok.val, syms, lhsTok.pos); err != nil {
 		return -1, err
 	}
 	if _, err := p.expect(tokGreaterEquals); err != nil {
@@ -475,6 +590,9 @@ func (p *parser) compileWhile(b *frameBuilder, comment string, syms *symbolTable
 	if err != nil {
 		return err
 	}
+	if err := p.checkReadable(varTok.val, syms, varTok.pos); err != nil {
+		return err
+	}
 	if _, err := p.expect(tokLessEquals); err != nil {
 		return err
 	}
@@ -517,8 +635,9 @@ func (p *parser) compileWhile(b *frameBuilder, comment string, syms *symbolTable
 
 // resolveAssignTarget resolves an assignment target identifier through the
 // symbol table: $register → unit register int, param → index, else → variable name.
-// Returns an error if the target is an immutable let variable.
-func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int) (any, error) {
+// Returns an error if the target is an immutable let variable or a parameter
+// with incompatible direction. compound indicates a read+write operation (++, +=).
+func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, compound bool) (any, error) {
 	if vi, ok := syms.vars[name]; ok {
 		if !vi.mutable {
 			return nil, p.errorf(pos, "cannot assign to immutable variable %q", name)
@@ -530,6 +649,13 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int) (a
 			return reg, nil
 		}
 		if idx, ok := syms.paramMap[name]; ok {
+			dir := syms.params[idx-1].direction
+			if dir == "in" {
+				return nil, p.errorf(pos, "cannot assign to input parameter %s", name)
+			}
+			if compound && dir == "out" {
+				return nil, p.errorf(pos, "cannot read from output parameter %s", name)
+			}
 			return idx, nil
 		}
 		return nil, p.errorf(pos, "unknown register %q", name)
@@ -846,7 +972,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 	}
 
 	if tok2.kind == tokPlusPlus {
-		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos)
+		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos, true)
 		if err != nil {
 			return err
 		}
@@ -862,7 +988,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 	}
 
 	if tok2.kind == tokEquals {
-		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos)
+		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos, false)
 		if err != nil {
 			return err
 		}
@@ -912,6 +1038,9 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			if err != nil {
 				return err
 			}
+			if err := p.checkInstructionDirections(rawFrame, syms, rhsTok.pos); err != nil {
+				return err
+			}
 			resolved := resolveInstructionFrame(rawFrame, []any{target}, nil, nil, comment)
 			b.emit(resolved)
 			return nil
@@ -928,13 +1057,16 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			if err != nil {
 				return err
 			}
+			if err := p.checkCallDirections(fn, rhsTok.val, args, kwArgs, syms, rhsTok.pos); err != nil {
+				return err
+			}
 			return p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment, syms.usedVars)
 		}
 		return p.errorf(rhsTok.pos, "expected number, function call, constructor, or instruction after '=', got %s", rhsTok.describe())
 	}
 
 	if tok2.kind == tokPlusEquals {
-		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos)
+		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos, true)
 		if err != nil {
 			return err
 		}
@@ -966,6 +1098,9 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 	if err != nil {
 		return err
 	}
+	if err := p.checkCallDirections(fn, tok.val, args, kwArgs, syms, tok.pos); err != nil {
+		return err
+	}
 
 	return p.expandCall(tok.val, args, kwArgs, nil, b, tok.pos, comment, syms.usedVars)
 }
@@ -988,6 +1123,26 @@ func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable, b 
 				p.unget(sep)
 			}
 		}
+
+		// Peek for direction annotation (in, out, inout)
+		dirTok, err := p.next()
+		if err != nil {
+			return nil, nil, err
+		}
+		annotation := ""
+		annotationPos := dirTok.pos
+		if dirTok.kind == tokIdent && isDirection(dirTok.val) {
+			annotation = dirTok.val
+		} else {
+			p.unget(dirTok)
+			annotationPos = dirTok.pos
+		}
+
+		pd := fn.positionalParam(i)
+		if err := p.checkCallAnnotation(annotation, pd, nameTok.val, annotationPos); err != nil {
+			return nil, nil, err
+		}
+
 		val, err := p.parseArgValue(syms, b, comment)
 		if err != nil {
 			return nil, nil, err
@@ -1009,16 +1164,30 @@ func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable, b 
 	if peek.kind == tokComma {
 		kwArgs = map[string]any{}
 		for {
-			kwTok, err := p.expect(tokIdent)
+			// Read the first ident — could be a direction annotation or keyword name
+			dirOrKw, err := p.expect(tokIdent)
 			if err != nil {
 				return nil, nil, err
 			}
-			kw := fn.keywordByName(kwTok.val)
-			if kw == nil {
-				return nil, nil, p.errorf(kwTok.pos, "unknown keyword argument %q", kwTok.val)
+			annotation := ""
+			annotationPos := dirOrKw.pos
+			if isDirection(dirOrKw.val) {
+				annotation = dirOrKw.val
+				dirOrKw, err = p.expect(tokIdent)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-			if _, exists := kwArgs[kwTok.val]; exists {
-				return nil, nil, p.errorf(kwTok.pos, "duplicate keyword argument %q", kwTok.val)
+
+			kw := fn.keywordByName(dirOrKw.val)
+			if kw == nil {
+				return nil, nil, p.errorf(dirOrKw.pos, "unknown keyword argument %q", dirOrKw.val)
+			}
+			if _, exists := kwArgs[dirOrKw.val]; exists {
+				return nil, nil, p.errorf(dirOrKw.pos, "duplicate keyword argument %q", dirOrKw.val)
+			}
+			if err := p.checkCallAnnotation(annotation, kw, nameTok.val, annotationPos); err != nil {
+				return nil, nil, err
 			}
 			if _, err := p.expect(tokColon); err != nil {
 				return nil, nil, err
@@ -1027,7 +1196,7 @@ func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable, b 
 			if err != nil {
 				return nil, nil, err
 			}
-			kwArgs[kwTok.val] = val
+			kwArgs[dirOrKw.val] = val
 
 			// Check for another comma
 			next, err := p.next()
@@ -1080,6 +1249,9 @@ func (p *parser) compileBody(syms *symbolTable) ([]map[string]any, error) {
 func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, comment string, syms *symbolTable) error {
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
+		return err
+	}
+	if err := p.checkReadable(lhsTok.val, syms, lhsTok.pos); err != nil {
 		return err
 	}
 	opTok, err := p.next()
@@ -1352,6 +1524,9 @@ func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
 	if isConstructor(name) {
 		return p.errorf(pos, "%q is a type constructor and cannot be used as a variable name", name)
 	}
+	if isDirection(name) {
+		return p.errorf(pos, "%q is a reserved keyword and cannot be used as a variable name", name)
+	}
 	return nil
 }
 
@@ -1417,6 +1592,9 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 		if !frameHasReturnSlot(rawFrame) {
 			return p.errorf(rhsTok.pos, "instruction has no return slots (@N); cannot assign its result")
 		}
+		if err := p.checkInstructionDirections(rawFrame, syms, rhsTok.pos); err != nil {
+			return err
+		}
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
 		syms.usedVars[nameTok.val] = true
 		resolved := resolveInstructionFrame(rawFrame, []any{nameTok.val}, nil, nil, comment)
@@ -1436,6 +1614,9 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 		syms.usedVars[nameTok.val] = true
 		args, kwArgs, err := p.parseFnCallArgs(fn, rhsTok, syms, b, comment)
 		if err != nil {
+			return err
+		}
+		if err := p.checkCallDirections(fn, rhsTok.val, args, kwArgs, syms, rhsTok.pos); err != nil {
 			return err
 		}
 		return p.expandCall(rhsTok.val, args, kwArgs, []any{nameTok.val}, b, rhsTok.pos, comment, syms.usedVars)
@@ -1571,6 +1752,9 @@ func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard b
 		if err != nil {
 			return err
 		}
+		if err := p.checkInstructionDirections(rawFrame, syms, calleeTok.pos); err != nil {
+			return err
+		}
 		retCount := frameReturnCount(rawFrame)
 		if retCount == 0 {
 			return p.errorf(calleeTok.pos, "instruction has no return slots (@N); cannot assign its result")
@@ -1597,7 +1781,7 @@ func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard b
 			} else if bind.newVar {
 				retVals[i] = bind.name
 			} else {
-				target, err := p.resolveAssignTarget(bind.name, syms, bind.pos)
+				target, err := p.resolveAssignTarget(bind.name, syms, bind.pos, false)
 				if err != nil {
 					return err
 				}
@@ -1648,7 +1832,7 @@ func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard b
 			retVals[i] = bind.name
 		} else {
 			// Existing variable assignment
-			target, err := p.resolveAssignTarget(bind.name, syms, bind.pos)
+			target, err := p.resolveAssignTarget(bind.name, syms, bind.pos, false)
 			if err != nil {
 				return err
 			}
@@ -1666,6 +1850,9 @@ func (p *parser) compileMultiReturn(firstTok token, firstMutable, firstDiscard b
 
 	args, kwArgs, err := p.parseFnCallArgs(fn, calleeTok, syms, b, comment)
 	if err != nil {
+		return err
+	}
+	if err := p.checkCallDirections(fn, calleeTok.val, args, kwArgs, syms, calleeTok.pos); err != nil {
 		return err
 	}
 	return p.expandCall(calleeTok.val, args, kwArgs, retVals, b, calleeTok.pos, comment, syms.usedVars)
