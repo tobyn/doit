@@ -80,26 +80,23 @@ Exceptions to end-of-line termination:
 1. If a statement ends in a brace-delimited block, it extends to the closing
    `}`. For `if` statements, `else if` and `else` clauses continue the
    statement regardless of whether they appear on the same line as the `}`.
-2. If a statement is a parenthesized function call, it extends to the closing
-   `)`, even across multiple lines.
-3. If a statement is an unparenthesized function call and the line ends in a
-   comma, the statement continues onto the next line.
+2. If a function call's line ends in a comma, the statement continues onto
+   the next line.
 
 ## Function Calls
 
-Functions can be called with or without parentheses:
+Functions are called without parentheses:
 
 ```doit
 notify "Hello"
-notify("Hello")
 ```
 
-Both forms are equivalent. The preferred style for statement-level calls is
-without parentheses. Parenthesized calls are useful for argument grouping in
-more complex expressions.
+> **Not yet implemented:** Parenthesized calls (`notify("Hello")`) are planned
+> but not yet supported by the compiler. Currently, only the unparenthesized
+> form works.
 
-For unparenthesized calls, a trailing comma continues the argument list onto
-the next line:
+For calls with multiple arguments, a trailing comma continues the argument
+list onto the next line:
 
 ```doit
 my_function "arg1",

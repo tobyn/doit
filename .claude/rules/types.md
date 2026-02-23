@@ -11,11 +11,13 @@ These types can be stored in VM registers at runtime. Every register
 holds a composite of a typed value and a number (integer). The typed
 value is one of the six game types below, or empty (for a pure number).
 
-- **Boolean** — True or false. Literal syntax: `true`, `false`. In the
-  VM, booleans are represented as the numbers `1` and `0`. Boolean is a
-  logically distinct type from Number — future type checking will not
-  allow using `1`/`0` in place of `true`/`false` or vice versa. The
-  compiler currently treats them as plain numbers with no enforcement.
+- **Boolean** — True or false. In the VM, booleans are represented as
+  the numbers `1` and `0`. Boolean is a logically distinct type from
+  Number — future type checking will not allow using `1`/`0` in place
+  of `true`/`false` or vice versa. Literal syntax (`true`, `false`) is
+  not yet implemented — currently use `1` and `0` directly. Neither
+  `true` nor `false` is in the `Keywords` map; writing them in source
+  code resolves as a variable name reference, not a boolean literal.
 
 - **Number** — An integer. No floating point. In the VM, this is a
   register with no typed value and a nonzero numeric component.
