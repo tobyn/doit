@@ -291,6 +291,9 @@ func (p *parser) parseUserFn() error {
 			if err != nil {
 				return err
 			}
+			if err := p.checkFnBodyInstructionDirections(frame, paramDirs, tok.pos); err != nil {
+				return err
+			}
 			body = append(body, fnBodyCall{frame: frame, comment: comment})
 			continue
 		}
@@ -306,6 +309,9 @@ func (p *parser) parseUserFn() error {
 			if retPeek.kind == tokIdent && retPeek.val == "instruction" {
 				frame, err := p.parseInstruction()
 				if err != nil {
+					return err
+				}
+				if err := p.checkFnBodyInstructionDirections(frame, paramDirs, retPeek.pos); err != nil {
 					return err
 				}
 				// Extract @N return slots and create synthetic ret names
@@ -513,6 +519,9 @@ func (p *parser) parseUserFn() error {
 			if rhsTok.val == "instruction" {
 				frame, err := p.parseInstruction()
 				if err != nil {
+					return err
+				}
+				if err := p.checkFnBodyInstructionDirections(frame, paramDirs, rhsTok.pos); err != nil {
 					return err
 				}
 				if !frameHasReturnSlot(frame) {

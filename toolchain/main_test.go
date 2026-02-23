@@ -894,7 +894,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("param_in_to_out_fn", func(t *testing.T) {
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nbehavior a { @param in x \"X\"; writer out $x }"
+		src := "fn writer(out target) { let target = get_self }\nbehavior a { @param in x \"X\"; writer out $x }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -927,7 +927,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("fn_in_param_to_out", func(t *testing.T) {
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nfn caller(x) { writer out x }\nbehavior a { caller 5 }"
+		src := "fn writer(out target) { let target = get_self }\nfn caller(x) { writer out x }\nbehavior a { caller 5 }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -949,12 +949,24 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("let_to_out_param", func(t *testing.T) {
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nbehavior a { let x = 5; writer out x }"
+		src := "fn writer(out target) { let target = get_self }\nbehavior a { let x = 5; writer out x }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "cannot pass in parameter to out parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_out_param_in_instruction_input", func(t *testing.T) {
+		// out param used in non-@N instruction slot (treated as input read)
+		src := "fn bad(out x) { instruction \"notify\" { txt: x } }\nbehavior a { var z = 5; bad out z }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot read from output parameter") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -999,8 +1011,8 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("fn_out_param_ok", func(t *testing.T) {
-		// out param in fn: callee writes to it, which is fine with a var argument + out annotation
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nbehavior a { var z = 5; writer out z }"
+		// out param in fn: callee writes to it via let binding, fine with a var argument + out annotation
+		src := "fn writer(out target) { let target = get_self }\nbehavior a { var z = 5; writer out z }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1032,7 +1044,7 @@ func TestCompileErrors(t *testing.T) {
 	// --- Call-site direction annotation enforcement ---
 
 	t.Run("missing_out_annotation", func(t *testing.T) {
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nbehavior a { var z = 5; writer z }"
+		src := "fn writer(out target) { let target = get_self }\nbehavior a { var z = 5; writer z }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -1065,7 +1077,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("wrong_annotation_in_for_out", func(t *testing.T) {
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nbehavior a { var z = 5; writer in z }"
+		src := "fn writer(out target) { let target = get_self }\nbehavior a { var z = 5; writer in z }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -1076,7 +1088,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("missing_out_annotation_keyword", func(t *testing.T) {
-		src := "fn my_fn(x, out kw result) { instruction \"get_self\" { 0: x  1: result } }\nbehavior a { var z = 5; my_fn 1, kw: z }"
+		src := "fn my_fn(x, out kw result) { let result = get_self }\nbehavior a { var z = 5; my_fn 1, kw: z }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -1087,7 +1099,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("missing_out_annotation_fn_body", func(t *testing.T) {
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nfn caller(x) { writer x }\nbehavior a { caller 5 }"
+		src := "fn writer(out target) { let target = get_self }\nfn caller(x) { writer x }\nbehavior a { caller 5 }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -1100,7 +1112,7 @@ func TestCompileErrors(t *testing.T) {
 	// Call-site annotation positive tests
 
 	t.Run("out_annotation_ok", func(t *testing.T) {
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nbehavior a { var z = 5; writer out z }"
+		src := "fn writer(out target) { let target = get_self }\nbehavior a { var z = 5; writer out z }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1125,7 +1137,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("fn_body_out_annotation_ok", func(t *testing.T) {
-		src := "fn writer(out target) { instruction \"get_self\" { 0: target } }\nfn caller(inout x) { writer out x }\nbehavior a { var z = 5; caller inout z }"
+		src := "fn writer(out target) { let target = get_self }\nfn caller(inout x) { writer out x }\nbehavior a { var z = 5; caller inout z }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1133,7 +1145,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("keyword_out_annotation_ok", func(t *testing.T) {
-		src := "fn my_fn(x, out kw result) { instruction \"get_self\" { 0: x  1: result } }\nbehavior a { var z = 5; my_fn 1, out kw: z }"
+		src := "fn my_fn(x, out kw result) { let result = get_self }\nbehavior a { var z = 5; my_fn 1, out kw: z }"
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

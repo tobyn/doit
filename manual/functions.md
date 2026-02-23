@@ -108,7 +108,7 @@ direction visible at the call site without looking up the function definition:
 
 ```doit
 fn writer(out target) {
-    instruction "get_self" { 0: target }
+    let target = get_self
 }
 
 var z = 5
@@ -119,7 +119,7 @@ For keyword arguments, the direction annotation precedes the keyword name:
 
 ```doit
 fn my_fn(x, out kw result) {
-    instruction "get_self" { 0: x  1: result }
+    let result = get_location x
 }
 
 var z = 5
@@ -203,7 +203,7 @@ or `inout`. The direction precedes the parameter name:
 
 ```doit
 fn writer(out target) {
-    instruction "get_self" { 0: target }
+    let target = get_self
 }
 
 fn updater(inout value) {
@@ -219,6 +219,10 @@ Direction annotations serve the same purpose as `@param` directions on
 behavior parameters — they constrain how the callee uses the argument and
 how the caller must annotate it. `in`, `out`, and `inout` are reserved
 keywords and cannot be used as variable or parameter names.
+
+In `instruction` blocks, non-`@N` slots are treated as inputs and `@N` slots
+as outputs. An `out` parameter cannot appear in a non-`@N` slot (that would
+read it). `inout` parameters can appear in either position.
 
 ### The `return` statement
 

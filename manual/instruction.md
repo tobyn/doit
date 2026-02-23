@@ -117,6 +117,30 @@ fn locate_self() {
 }
 ```
 
+## Direction Enforcement
+
+Inside function bodies, the compiler enforces parameter direction constraints
+in `instruction` blocks using the `@N` convention:
+
+- **`@N` slots** are outputs — the instruction writes to them
+- **All other slots** are inputs — the instruction reads from them
+
+An `out` parameter cannot appear in a non-`@N` slot, because that would
+read a write-only value:
+
+```doit
+fn bad(out x) {
+    instruction "notify" { txt: x }    # error: reads out parameter
+}
+
+fn good(out target) {
+    let target = get_self              # ok: writes via return binding
+}
+```
+
+`inout` parameters can appear in either position since they allow both
+reading and writing.
+
 ## Field Reference Format
 
 Field keys in the instruction block use the reference codec's 0-based format

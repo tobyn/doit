@@ -162,13 +162,15 @@ argument in the symbol table: `let` variables and `in` parameters are `in`,
 `out`. In fn bodies, `fnBodyArgDir` maps function parameter directions
 through to the body-level calls.
 
-Bare `instruction` blocks in fn bodies do **not** check parameter directions.
-The compiler cannot distinguish input from output slots in arbitrary
-instruction frames (see "Instruction metadata limitations" in decisions.md).
-Functions that are pure instruction wrappers get promoted to `fnDef.frame`
-for fast expansion, which also bypasses fn body direction checks. Direction
-enforcement for these functions happens at the call site when the wrapper
-is called as a regular function.
+In fn body `instruction` blocks, direction enforcement uses the `@N`
+convention: non-`@N` slots are inputs (reads), `@N` slots are outputs
+(writes). `checkFnBodyInstructionDirections` verifies that `out` parameters
+don't appear in non-`@N` positions. This check runs for all four instruction
+paths in fn bodies: bare `instruction`, `return instruction`, `let =
+instruction` (single and multi-return). Functions that are pure instruction
+wrappers get promoted to `fnDef.frame` for fast expansion, which bypasses
+fn body direction checks. Direction enforcement for these functions happens
+at the call site when the wrapper is called as a regular function.
 
 **Return values**: Functions can produce one or more return values.
 

@@ -118,22 +118,25 @@ instructions. The `instruction` intrinsic exists partly to support
 these modded instructions — users can emit arbitrary instruction frames
 without a stdlib wrapper. This means the compiler cannot rely on stdlib
 metadata (like input/output slot direction) for enforcement that needs
-to cover all instructions. Any analysis that requires per-slot knowledge
-(e.g., which slots are written to) would miss inline `instruction`
-blocks for modded opcodes.
+to cover all instructions.
 
-## Bare instruction direction checking
+However, direction enforcement in fn body `instruction` blocks uses
+the `@N` convention to distinguish inputs from outputs without needing
+per-instruction metadata (see "Instruction direction checking via `@N`
+convention" below). This works because the programmer explicitly marks
+output slots with `@N` — the compiler doesn't need to know which slots
+the instruction natively writes to.
 
-Direction enforcement does not apply to bare `instruction` blocks in fn
-bodies. The compiler cannot distinguish input from output slots in an
-arbitrary instruction frame — the slot numbering is opaque (the same
-limitation described in "Instruction metadata limitations" above). This
-means a function like `fn writer(out x) { instruction "notify" { txt: x } }`
-reads an `out` parameter without error. Direction checks are only applied
-to function calls (where parameter metadata is available), not to raw
-instruction emissions. This is an acceptable trade-off: `instruction` is
-a low-level escape hatch, and users who reach for it accept responsibility
-for correct slot usage.
+## Instruction direction checking via `@N` convention
+
+In fn body `instruction` blocks, the compiler distinguishes inputs from
+outputs using the `@N` marker convention: `@N` slots are outputs (the
+instruction writes to them), and all other slots are inputs (the
+instruction reads from them). This allows direction enforcement without
+knowing the instruction's slot metadata. An `out` parameter in a non-`@N`
+slot is an error — it would be read as an input, violating the `out`
+contract. `inout` parameters are fine in input positions since they
+permit reading.
 
 ## Control flow stubs
 
