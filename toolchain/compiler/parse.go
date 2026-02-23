@@ -1195,11 +1195,22 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		}
 	}
 
+	// Detect return/parameter name collisions. When a return name is also
+	// a parameter name (e.g., `fn foo(x) { return x }`), we must not
+	// overwrite the parameter mapping. Instead, track the collision and
+	// emit a set_reg copy after body expansion.
+	type retCopy struct{ from, to any }
+	var retCopies []retCopy
+
 	for i, retName := range fn.rets {
+		target := any(false)
 		if retVals != nil && i < len(retVals) {
-			paramMap[retName] = retVals[i]
+			target = retVals[i]
+		}
+		if _, collision := paramMap[retName]; collision {
+			retCopies = append(retCopies, retCopy{paramMap[retName], target})
 		} else {
-			paramMap[retName] = false
+			paramMap[retName] = target
 		}
 	}
 
@@ -1254,5 +1265,13 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 			return err
 		}
 	}
+
+	// Emit set_reg frames for return/parameter collisions.
+	for _, rc := range retCopies {
+		f := map[string]any{"op": "set_reg", "1": rc.from, "2": rc.to}
+		setComment(f, comment)
+		b.emit(f)
+	}
+
 	return nil
 }

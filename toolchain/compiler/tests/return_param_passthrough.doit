@@ -1,0 +1,12 @@
+# AI-generated test
+# Function that returns its own parameter (return/param name collision)
+fn passthrough(x) {
+    return x
+}
+
+behavior return_param_passthrough {
+    @name "Return Param Passthrough"
+    var v = 5
+    let r = passthrough v
+    notify "Done", value: r
+}

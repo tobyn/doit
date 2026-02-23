@@ -1,0 +1,13 @@
+# AI-generated test
+# Function that reads a parameter in its body and also returns it
+fn use_and_return(x) {
+    notify x
+    return x
+}
+
+behavior return_param_with_body_read {
+    @name "Return Param With Body Read"
+    var v = 5
+    let r = use_and_return v
+    notify "Done", value: r
+}

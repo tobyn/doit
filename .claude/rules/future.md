@@ -40,23 +40,6 @@ cannot be nested (e.g., `while x <= 5 { if y >= 3 { ... } }` fails).
 `compileBody` to handle the same statement keywords as
 `parseBehaviorBody`, or extract a shared dispatch function.
 
-### Missing `frameHasReturnSlot` check on assignment (F5)
-
-`x = instruction "op" { ... }` does not check whether the instruction
-has any `@N` return slots. If it doesn't, the assignment silently has
-no effect. The `let x = instruction` and multi-return paths both have
-this check. Fix: add the check to the assignment path in
-`compileDefaultStatement`.
-
-### Return/parameter name collision in `expandCall` (F10)
-
-If a `return` statement references a parameter name (e.g.,
-`fn example(x) { ... return x }`), the return mapping in `expandCall`
-overwrites the parameter mapping. Body calls that read the parameter
-would instead read the caller's return target. Fix: detect the
-collision and either error or handle it deliberately (the "return the
-input" semantics are useful but need intentional implementation).
-
 ### Boolean literals (F2)
 
 `true`/`false` are documented in `types.md` as planned syntax but are

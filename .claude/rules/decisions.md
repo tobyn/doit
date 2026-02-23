@@ -138,6 +138,17 @@ slot is an error — it would be read as an input, violating the `out`
 contract. `inout` parameters are fine in input positions since they
 permit reading.
 
+## Return/parameter name collision handling
+
+When a function's `return` statement references a parameter name (e.g.,
+`fn foo(x) { return x }`), `expandCall` detects the collision and
+handles it without overwriting the parameter mapping. The parameter
+mapping is preserved so body calls can read the original input value.
+After all body calls are expanded, a `set_reg` frame is emitted to
+copy the parameter value to the caller's return target. This means
+`fn foo(x) { return x }` called as `let r = foo v` emits exactly one
+`set_reg v r` — no extra instructions for non-colliding cases.
+
 ## Control flow stubs
 
 Control-flow instructions (branches, loops, terminals, jump/label) are

@@ -1038,6 +1038,9 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			if err != nil {
 				return err
 			}
+			if !frameHasReturnSlot(rawFrame) {
+				return p.errorf(rhsTok.pos, "instruction has no return slots (@N); cannot assign its result")
+			}
 			if err := p.checkInstructionDirections(rawFrame, syms, rhsTok.pos); err != nil {
 				return err
 			}
@@ -1524,7 +1527,7 @@ func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
 	if isConstructor(name) {
 		return p.errorf(pos, "%q is a type constructor and cannot be used as a variable name", name)
 	}
-	if isDirection(name) {
+	if Keywords[name] {
 		return p.errorf(pos, "%q is a reserved keyword and cannot be used as a variable name", name)
 	}
 	return nil

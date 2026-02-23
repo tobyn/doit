@@ -1,0 +1,22 @@
+{
+    "0": {
+        "1": {"num": 5},
+        "2": "v",
+        "op": "set_number"
+    },
+    "1": {
+        "op": "notify",
+        "txt": "v"
+    },
+    "2": {
+        "0": "v",
+        "1": "r",
+        "op": "set_reg"
+    },
+    "3": {
+        "0": "r",
+        "op": "notify",
+        "txt": "Done"
+    },
+    "name": "Return Param With Body Read"
+}

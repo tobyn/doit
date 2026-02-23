@@ -1152,6 +1152,39 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("keyword_as_var_name_null", func(t *testing.T) {
+		src := `behavior a { var null = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("keyword_as_var_name_return", func(t *testing.T) {
+		src := `behavior a { var return = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("instruction_assign_no_return_slot", func(t *testing.T) {
+		src := `behavior a { var x = 5; x = instruction "test" { 0: x } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "no return slots") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("direction_keyword_as_var_name", func(t *testing.T) {
 		src := `behavior a { let out = 5 }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
