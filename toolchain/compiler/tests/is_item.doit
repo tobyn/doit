@@ -1,0 +1,8 @@
+# AI-generated test
+# 'is' type check operator with Item type
+behavior is_item {
+    @name "Is Item"
+    @param in x "X"
+    let a = $x is Item
+    notify "done"
+}

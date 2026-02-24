@@ -1,0 +1,43 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 10},
+        "2": "y"
+    },
+    "1": {
+        "op": "value_type",
+        "0": 1,
+        "1": 4,
+        "2": 3,
+        "3": 4,
+        "4": 4,
+        "5": 4,
+        "6": 4,
+        "next": 4
+    },
+    "2": {
+        "op": "check_number",
+        "0": 5,
+        "1": 4,
+        "2": "y",
+        "3": {"num": 5}
+    },
+    "3": {
+        "op": "set_reg",
+        "0": false,
+        "1": "a",
+        "next": 6
+    },
+    "4": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "a"
+    },
+    "5": {
+        "op": "notify",
+        "txt": "done"
+    },
+    "name": "Is Mixed Chain",
+    "parameters": [false],
+    "pnames": ["X"]
+}

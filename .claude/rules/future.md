@@ -26,17 +26,16 @@ strings are compile-time-only types baked into instructions, the
 not currently handle `(` after a function name. See F13 in
 `analysis-findings.md`.
 
-## Extended comparison expressions
+## Extended comparison and type check expressions
 
-`>`, `<`, `>=`, `<=`, `==`, and `!=` work as expressions at behavior
-level, with `&&`/`||` chaining. `==` and `!=` use `compare_register`
-(full register equality); the others use `check_number` (numeric
-comparison). Mixing the two instruction types in `&&`/`||` chains is
-a compile error. Natural extensions:
+`>`, `<`, `>=`, `<=`, `==`, `!=`, and `is` work as expressions at
+behavior level, with `&&`/`||` chaining. Different expression types
+(numeric comparisons, equality comparisons, and type checks) can be
+freely mixed in the same chain. Natural extensions:
 
-- **fn body comparison expressions**: Requires branching in the flat
-  `fnBodyCall` list, which only supports linear sequences today.
-  This also blocks fn body `&&`/`||` support.
+- **fn body comparison/type check expressions**: Requires branching in
+  the flat `fnBodyCall` list, which only supports linear sequences
+  today. This also blocks fn body `&&`/`||` and `is` support.
 - **Comparison in function arguments**: `notify (a > 5)` — needs
   parenthesized expressions to disambiguate from `notify a, ...`.
 - **Number literal LHS**: `let x = 5 > b` — the `tokNumber` path in
@@ -51,10 +50,10 @@ a compile error. Natural extensions:
 - **Parenthesized sub-expressions**: `let x = (a > 1 || b < 2) && c > 3`
   would enable arbitrary nesting. Requires the parser to handle `(`
   in expression context.
-- **Mixed numeric/equality chains**: `a > 5 && b == c` requires
-  emitting both `check_number` and `compare_register` frames in the
-  same chain, with compatible branch routing to shared false/true
-  frames.
+- **`is Number`**: `value_type` cannot distinguish numbers from null
+  (both fall through to "No Match"), so `is Number` is not available.
+  Could potentially be implemented with `check_number` against itself
+  (nonzero = number), but the null/0 ambiguity remains.
 
 ## Known blocking issues (from audit)
 

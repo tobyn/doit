@@ -1290,17 +1290,6 @@ func TestCompileErrors(t *testing.T) {
 
 	// --- Equality operator errors ---
 
-	t.Run("equality_mixed_chain", func(t *testing.T) {
-		src := `behavior a { var a = 5; var b = 3; let r = a > 5 && b == 3 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "cannot mix numeric comparisons") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("equality_string_rhs", func(t *testing.T) {
 		src := `behavior a { var a = 5; let r = a != "hello" }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
@@ -1319,6 +1308,30 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "unexpected character") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// --- Type check (is) operator errors ---
+
+	t.Run("is_unknown_type", func(t *testing.T) {
+		src := `behavior a { let me = get_self; let a = me is Foo }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown type") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("is_missing_type", func(t *testing.T) {
+		src := `behavior a { let me = get_self; let a = me is }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected type name after 'is'") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

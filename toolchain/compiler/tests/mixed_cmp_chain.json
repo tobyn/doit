@@ -1,0 +1,43 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 5},
+        "2": "a"
+    },
+    "1": {
+        "op": "set_number",
+        "1": {"num": 3},
+        "2": "b"
+    },
+    "2": {
+        "op": "check_number",
+        "0": 4,
+        "1": 5,
+        "2": "a",
+        "3": {"num": 5},
+        "next": 5
+    },
+    "3": {
+        "op": "compare_register",
+        "0": 5,
+        "1": "b",
+        "2": {"num": 3},
+        "next": 6
+    },
+    "4": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 7
+    },
+    "5": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "6": {
+        "op": "notify",
+        "txt": "done"
+    },
+    "name": "Mixed Cmp Chain"
+}

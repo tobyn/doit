@@ -1,0 +1,9 @@
+# AI-generated test
+# mixed chain: 'is' type check with numeric comparison in &&
+behavior is_mixed_chain {
+    @name "Is Mixed Chain"
+    @param in x "X"
+    var y = 10
+    let a = $x is Unit && y > 5
+    notify "done"
+}

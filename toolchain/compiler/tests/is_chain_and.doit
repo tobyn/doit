@@ -1,0 +1,9 @@
+# AI-generated test
+# 'is' type check with && chaining
+behavior is_chain_and {
+    @name "Is Chain And"
+    @param in x "X"
+    @param in y "Y"
+    let a = $x is Unit && $y is Item
+    notify "done"
+}

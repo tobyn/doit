@@ -1095,17 +1095,85 @@ func isEqualityOp(kind tokenKind) bool {
 	return kind == tokDoubleEquals || kind == tokNotEquals
 }
 
+// isTypeCheckOp reports whether the token kind is the 'is' type check operator.
+func isTypeCheckOp(kind tokenKind) bool {
+	return kind == tokIs
+}
+
+// parseIsRHS consumes the next token and validates it as a type name for the
+// 'is' operator. Returns the wire-format slot string for value_type.
+func (p *parser) parseIsRHS() (string, error) {
+	tok, err := p.next()
+	if err != nil {
+		return "", err
+	}
+	if tok.kind != tokIdent {
+		return "", p.errorf(tok.pos, "expected type name after 'is', got %s", tok.describe())
+	}
+	slot, ok := typeCheckSlot(tok.val)
+	if !ok {
+		return "", p.errorf(tok.pos, "unknown type %q in 'is' expression; expected Item, Unit, Component, Technology, Value, or Coordinate", tok.val)
+	}
+	return slot, nil
+}
+
+// emitTypeCheck emits a 3-frame value_type + set_reg + set_reg pattern that
+// produces a boolean value (1 for true, false/empty for false) in target.
+//
+//	Frame N:   value_type (matching type branch → true, all others → false)
+//	Frame N+1: set_reg false → target, next → N+3 (false case)
+//	Frame N+2: set_reg 1 → target (true case, falls through)
+func (p *parser) emitTypeCheck(lhs, target any, typeSlot string, b *frameBuilder, comment string) {
+	falsePos := b.pos() + 1
+	truePos := b.pos() + 2
+	afterPos := b.pos() + 3
+
+	check := map[string]any{
+		"op":           "value_type",
+		valueTypeInput: lhs,
+	}
+	// Route matching type to true, all others + "next" to false.
+	for _, slot := range allTypeSlots {
+		if slot == typeSlot {
+			check[slot] = frameRef(truePos)
+		} else {
+			check[slot] = frameRef(falsePos)
+		}
+	}
+	check["next"] = frameRef(falsePos)
+	setComment(check, comment)
+
+	b.emit(check)
+
+	// False frame
+	b.emit(map[string]any{
+		"op":   "set_reg",
+		"1":    false,
+		"2":    target,
+		"next": frameRef(afterPos),
+	})
+
+	// True frame
+	b.emit(map[string]any{
+		"op": "set_reg",
+		"1":  map[string]any{"num": 1},
+		"2":  target,
+	})
+}
+
 // comparisonTerm holds the parsed components of a single comparison expression.
+// For comparison ops (>, <, etc.), rhs is any (resolved operand).
+// For the 'is' type check op, rhs is a string (the wire-format slot key).
 type comparisonTerm struct {
-	op  tokenKind // tokGreater, tokLess, tokGreaterEquals, tokLessEquals, tokDoubleEquals, or tokNotEquals
+	op  tokenKind // tokGreater, tokLess, tokGreaterEquals, tokLessEquals, tokDoubleEquals, tokNotEquals, or tokIs
 	lhs any
 	rhs any
 }
 
-// parseAndEmitBooleanExpr checks whether a comparison expression is followed by
-// && or ||. If not, it delegates to emitComparison. If so, it collects all
-// chained comparisons and calls emitChainedBoolExpr. Mixed && and || in the
-// same expression is a compile error.
+// parseAndEmitBooleanExpr checks whether a boolean expression is followed by
+// && or ||. If not, it delegates to emitComparison or emitTypeCheck. If so, it
+// collects all chained terms and calls emitChainedBoolExpr. Mixed && and || in
+// the same expression is a compile error.
 func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *frameBuilder, comment string, syms *symbolTable) error {
 	peek, err := p.next()
 	if err != nil {
@@ -1113,7 +1181,11 @@ func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *
 	}
 	if peek.kind != tokDoubleAmpersand && peek.kind != tokDoublePipe {
 		p.unget(peek)
-		p.emitComparison(op, lhs, rhs, target, b, comment)
+		if isTypeCheckOp(op) {
+			p.emitTypeCheck(lhs, target, rhs.(string), b, comment)
+		} else {
+			p.emitComparison(op, lhs, rhs, target, b, comment)
+		}
 		return nil
 	}
 
@@ -1121,7 +1193,7 @@ func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *
 	terms := []comparisonTerm{{op: op, lhs: lhs, rhs: rhs}}
 
 	for {
-		// Parse next comparison: ident >|< (number|ident)
+		// Parse next term: ident (comparison_op rhs | 'is' TypeName)
 		lhsTok, err := p.next()
 		if err != nil {
 			return err
@@ -1137,14 +1209,21 @@ func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *
 		if err != nil {
 			return err
 		}
-		if !isComparisonOp(cmpTok.kind) {
-			return p.errorf(cmpTok.pos, "expected comparison operator (>, <, >=, <=, ==, !=) after identifier")
+		if cmpTok.kind == tokIdent && cmpTok.val == "is" {
+			slot, err := p.parseIsRHS()
+			if err != nil {
+				return err
+			}
+			terms = append(terms, comparisonTerm{op: tokIs, lhs: nextLhs, rhs: slot})
+		} else if isComparisonOp(cmpTok.kind) {
+			nextRhs, err := p.parseComparisonRHS(syms)
+			if err != nil {
+				return err
+			}
+			terms = append(terms, comparisonTerm{op: cmpTok.kind, lhs: nextLhs, rhs: nextRhs})
+		} else {
+			return p.errorf(cmpTok.pos, "expected comparison operator (>, <, >=, <=, ==, !=) or 'is' after identifier")
 		}
-		nextRhs, err := p.parseComparisonRHS(syms)
-		if err != nil {
-			return err
-		}
-		terms = append(terms, comparisonTerm{op: cmpTok.kind, lhs: nextLhs, rhs: nextRhs})
 
 		// Check for another chained operator
 		next, err := p.next()
@@ -1160,27 +1239,12 @@ func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *
 		}
 	}
 
-	// Check for mixed instruction types: equality (==, !=) uses compare_register,
-	// numeric (>, <, >=, <=) uses check_number. Mixing is not supported in chains.
-	hasEquality := false
-	hasNumeric := false
-	for _, term := range terms {
-		if isEqualityOp(term.op) {
-			hasEquality = true
-		} else {
-			hasNumeric = true
-		}
-	}
-	if hasEquality && hasNumeric {
-		return p.errorf(peek.pos, "cannot mix numeric comparisons (>, <, >=, <=) with equality operators (==, !=) in the same expression")
-	}
-
 	p.emitChainedBoolExpr(terms, chainOp, target, b, comment)
 	return nil
 }
 
-// emitChainedBoolExpr emits the N+2 frame pattern for a chain of comparisons
-// connected by && or ||.
+// emitChainedBoolExpr emits the N+2 frame pattern for a chain of boolean
+// terms (comparisons and/or type checks) connected by && or ||.
 func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, target any, b *frameBuilder, comment string) {
 	n := len(terms)
 	// Positions: check frames at base..base+n-1, false at base+n, true at base+n+1
@@ -1195,7 +1259,47 @@ func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, 
 
 		var check map[string]any
 
-		if isEqualityOp(term.op) {
+		if isTypeCheckOp(term.op) {
+			// value_type: 6-way type branch + "next" no-match
+			typeSlot := term.rhs.(string)
+			check = map[string]any{
+				"op":           "value_type",
+				valueTypeInput: term.lhs,
+			}
+			if chainOp == tokDoubleAmpersand {
+				// &&: matching type -> next check (or true for last), all others -> false
+				for _, slot := range allTypeSlots {
+					if slot == typeSlot {
+						if isLast {
+							check[slot] = frameRef(truePos)
+						} else {
+							check[slot] = nextCheck
+						}
+					} else {
+						check[slot] = frameRef(falsePos)
+					}
+				}
+				check["next"] = frameRef(falsePos)
+			} else {
+				// ||: matching type -> true, all others -> next check (or false for last)
+				for _, slot := range allTypeSlots {
+					if slot == typeSlot {
+						check[slot] = frameRef(truePos)
+					} else {
+						if isLast {
+							check[slot] = frameRef(falsePos)
+						} else {
+							check[slot] = nextCheck
+						}
+					}
+				}
+				if isLast {
+					check["next"] = frameRef(falsePos)
+				} else {
+					check["next"] = nextCheck
+				}
+			}
+		} else if isEqualityOp(term.op) {
 			// compare_register: 2-way branch (Different / Equal via "next")
 			check = map[string]any{
 				"op":             "compare_register",
@@ -1456,7 +1560,7 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		if rhsTok.kind == tokIdent {
 			fn := p.fns[rhsTok.val]
 			if fn == nil {
-				// Check for comparison expression: ident >/</>=/<= expr
+				// Check for comparison or type check expression
 				peek, err := p.next()
 				if err != nil {
 					return err
@@ -1471,6 +1575,17 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 						return err
 					}
 					return p.parseAndEmitBooleanExpr(peek.kind, lhs, rhs, target, b, comment, syms)
+				}
+				if peek.kind == tokIdent && peek.val == "is" {
+					lhs, err := p.resolveComparisonOperand(rhsTok, syms)
+					if err != nil {
+						return err
+					}
+					slot, err := p.parseIsRHS()
+					if err != nil {
+						return err
+					}
+					return p.parseAndEmitBooleanExpr(tokIs, lhs, slot, target, b, comment, syms)
 				}
 				p.unget(peek)
 				return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
@@ -2031,7 +2146,7 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 	if rhsTok.kind == tokIdent {
 		fn := p.fns[rhsTok.val]
 		if fn == nil {
-			// Check for comparison expression: ident >/</>=/<= expr
+			// Check for comparison or type check expression
 			peek, err := p.next()
 			if err != nil {
 				return err
@@ -2048,6 +2163,19 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 				syms.vars[nameTok.val] = varInfo{mutable: mutable}
 				syms.usedVars[nameTok.val] = true
 				return p.parseAndEmitBooleanExpr(peek.kind, lhs, rhs, nameTok.val, b, comment, syms)
+			}
+			if peek.kind == tokIdent && peek.val == "is" {
+				lhs, err := p.resolveComparisonOperand(rhsTok, syms)
+				if err != nil {
+					return err
+				}
+				slot, err := p.parseIsRHS()
+				if err != nil {
+					return err
+				}
+				syms.vars[nameTok.val] = varInfo{mutable: mutable}
+				syms.usedVars[nameTok.val] = true
+				return p.parseAndEmitBooleanExpr(tokIs, lhs, slot, nameTok.val, b, comment, syms)
 			}
 			p.unget(peek)
 			return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)

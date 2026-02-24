@@ -33,6 +33,7 @@ const (
 	tokDoubleAmpersand
 	tokDoublePipe
 	tokNotEquals
+	tokIs // internal-only: represents the 'is' operator in comparisonTerm.op
 )
 
 type token struct {
@@ -59,6 +60,7 @@ var Keywords = map[string]bool{
 	"private":     true,
 	"return":      true,
 	"var":         true,
+	"is":          true,
 	"while":       true,
 	// Type constructors
 	"Coordinate": true,
@@ -408,6 +410,8 @@ func (t token) describe() string {
 		return "'||'"
 	case tokNotEquals:
 		return "'!='"
+	case tokIs:
+		return "'is'"
 	}
 	return t.val
 }

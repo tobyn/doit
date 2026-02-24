@@ -1,0 +1,9 @@
+# AI-generated test
+# mixed numeric and equality operators in && chain
+behavior mixed_cmp_chain {
+    @name "Mixed Cmp Chain"
+    var a = 5
+    var b = 3
+    let r = a > 5 && b == 3
+    notify "done"
+}

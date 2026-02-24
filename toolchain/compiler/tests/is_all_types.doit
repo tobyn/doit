@@ -1,0 +1,13 @@
+# AI-generated test
+# 'is' type check operator with all 6 types
+behavior is_all_types {
+    @name "Is All Types"
+    @param in x "X"
+    let a = $x is Item
+    let b = $x is Unit
+    let c = $x is Component
+    let d = $x is Technology
+    let e = $x is Value
+    let f = $x is Coordinate
+    notify "done"
+}

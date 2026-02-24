@@ -246,7 +246,8 @@ let x = 5
 
 The right-hand side of `var` and `let` can be a number literal, a function
 call that has a return value, a type constructor expression, a
-[comparison expression](#comparison-expressions), or an
+[comparison expression](#comparison-expressions), a
+[type check expression](#type-check-expressions), or an
 [`instruction`](instruction.md) expression:
 
 ```doit
@@ -257,6 +258,7 @@ let pos = Coordinate(3, 7)
 let is_big = count > 10
 let in_range = count > 0 && count < 100
 let same = a == b
+let is_unit = me is Unit
 let me = instruction "get_self" { 0: @1 }
 ```
 
@@ -265,10 +267,10 @@ initialized with a function call, the function's return value is assigned to
 the variable. When initialized with a type constructor, a `set_reg` instruction
 is emitted for compile-time values, or the appropriate runtime instructions
 are emitted (e.g., `combine_coordinate` for `Coordinate` with variables).
-When initialized with a comparison expression (optionally chained with `&&`
-or `||`), a `check_number` or `compare_register` + `set_reg` pattern is
-emitted that assigns 1 (true) or empty (false) to the variable. When
-initialized with an
+When initialized with a comparison or type check expression (optionally chained
+with `&&` or `||`), a `check_number`, `compare_register`, or `value_type` +
+`set_reg` pattern is emitted that assigns 1 (true) or empty (false) to the
+variable. When initialized with an
 `instruction` expression, the instruction is emitted directly with the
 variable as the `@1` output target.
 
@@ -292,11 +294,13 @@ x = get_self
 x = Item("metalbar") & 5
 x = a > b
 x = a == b
+x = me is Unit
 ```
 
 The right-hand side of `=` can be a number literal, a function call with a
 return value, a type constructor expression, a
-[comparison expression](#comparison-expressions), or an
+[comparison expression](#comparison-expressions), a
+[type check expression](#type-check-expressions), or an
 [`instruction`](instruction.md) expression.
 
 Compound assignment and increment are also supported:
@@ -362,7 +366,7 @@ if a == 1 {
 }
 ```
 
-### Comparison Operators
+### Comparison and Type Check Operators
 
 - `==` — equal
 - `!=` — not equal
@@ -370,6 +374,7 @@ if a == 1 {
 - `<=` — less than or equal
 - `>` — greater than
 - `>=` — greater than or equal
+- `is` — type check (e.g., `x is Unit`)
 
 ### Comparison Expressions
 
@@ -405,9 +410,44 @@ typed value and numeric component (using the `compare_register`
 instruction). This means `==` and `!=` can distinguish between different
 item types, coordinates, etc., not just numbers.
 
+#### Type Check Expressions
+
+The `is` operator checks whether a value is a specific data type,
+producing 1 for true or empty (0) for false:
+
+```doit
+let me = get_self
+let is_unit = me is Unit
+let is_item = $input is Item
+```
+
+The left operand must be a variable or register. The right operand is
+one of the six game data types:
+
+| Type name     | Checks for    |
+|---------------|---------------|
+| `Item`        | Game items    |
+| `Unit`        | Game entities |
+| `Component`   | Components    |
+| `Technology`  | Technologies  |
+| `Value`       | Info values   |
+| `Coordinate`  | Coordinates   |
+
+`Number` is not supported — the underlying `value_type` instruction
+cannot distinguish numbers from empty/null values.
+
+Type checks work in `let`/`var` initialization and assignment:
+
+```doit
+let a = x is Unit       # let init
+var b = x is Item        # var init
+b = x is Coordinate      # assignment
+```
+
 #### Logical operators (`&&`, `||`)
 
-Multiple comparisons can be chained with `&&` (and) or `||` (or):
+Multiple comparisons and type checks can be chained with `&&` (and) or
+`||` (or):
 
 ```doit
 let in_range = x > 0 && x < 100
@@ -423,27 +463,27 @@ let ok = a > 1 && b < 10 && c > 0
 let any_match = a == b || c == d || e == f
 ```
 
-Each sub-expression must be a comparison (`variable op operand`). Mixing
-`&&` and `||` in the same expression is not allowed:
+Each sub-expression must be a comparison (`variable op operand`) or a
+type check (`variable is Type`). Different expression types can be
+freely mixed in the same chain:
+
+```doit
+let ok = x is Unit && y > 5
+let match = a == b || x is Item
+```
+
+Mixing `&&` and `||` in the same expression is not allowed:
 
 ```doit
 # ERROR: cannot mix '&&' and '||' in the same expression
 let bad = a > 1 && b < 5 || c > 3
 ```
 
-Numeric comparisons (`>`, `<`, `>=`, `<=`) and equality comparisons (`==`,
-`!=`) cannot be mixed in the same chain because they use different
-underlying instructions:
-
-```doit
-# ERROR: cannot mix numeric comparisons with equality operators
-let bad = a > 5 && b == c
-```
-
-> **Not yet supported:** Comparison expressions in function bodies; mixed
-> `&&`/`||` with parenthesized sub-expressions; number literals on the left
-> side (use `let x = b < 5` instead of `let x = 5 > b`); constructor values
-> on the right side (`a == Item("metalbar")`).
+> **Not yet supported:** Comparison and type check expressions in function
+> bodies; mixed `&&`/`||` with parenthesized sub-expressions; number
+> literals on the left side (use `let x = b < 5` instead of
+> `let x = 5 > b`); constructor values on the right side
+> (`a == Item("metalbar")`); `is Number` (cannot distinguish from null).
 
 ### `while`
 

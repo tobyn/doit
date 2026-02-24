@@ -54,7 +54,17 @@ type.
 
 Constructor names (`Item`, `Component`, `Technology`, `Value`,
 `Coordinate`) are reserved keywords and cannot be used as variable or
-function names.
+function names. `Unit` is also a reserved keyword — it has no
+constructor (units are produced by instructions at runtime) but is
+valid as a type operand in `is` expressions.
+
+### Runtime type checking (`is`)
+
+The `is` operator checks whether a register value matches one of the
+six game data types: `x is Item`, `x is Unit`, `x is Component`,
+`x is Technology`, `x is Value`, `x is Coordinate`. It produces 1
+(true) or empty (false). `is Number` is not supported — `value_type`
+cannot distinguish numbers from null.
 
 Whether the compiler should track specific register subtypes (e.g.,
 distinguish Item from Unit) or treat all register values as a single

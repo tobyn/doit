@@ -196,22 +196,60 @@ flat `fnBodyCall` list); comparison in function call arguments (parsing
 ambiguity); number literal LHS (`5 > b` — use `b < 5` instead);
 constructor RHS (`a == Item("metalbar")`).
 
+## Type check operator (`is`)
+
+`is` checks whether a value matches one of the six game data types. It
+compiles to a 3-frame `value_type` + `set_reg` + `set_reg` pattern,
+following the same boolean expression convention as comparison operators.
+
+**Syntax**: `let a = b is Unit`. The LHS is a variable or parameter
+(resolved via `resolveComparisonOperand`). The RHS is one of the six
+type constructor keywords: `Item`, `Unit`, `Component`, `Technology`,
+`Value`, `Coordinate`.
+
+**Compiled output** (3 frames):
+```
+Frame N:   value_type { input: LHS, matching_type → true, all_others → false, "next" → false }
+Frame N+1: set_reg false → target, next → N+3
+Frame N+2: set_reg 1 → target
+```
+
+The `value_type` instruction has 6 branch slots (one per type) plus
+`"next"` (no-match/empty). For a given type check, the matching type's
+slot points to the true frame; all 5 other type slots and "next" point
+to the false frame.
+
+**`tokIs` as internal token**: `is` is a keyword in the scanner but
+does not produce a distinct token kind during scanning — it scans as
+`tokIdent` with val `"is"`. The `tokIs` token kind exists only as an
+internal marker in `comparisonTerm.op` to identify type check terms
+in boolean expression chains.
+
+**`Number` not supported**: `value_type` cannot distinguish numbers
+from null (both fall through to "No Match"), so `is Number` is not
+available.
+
+**Supported contexts**: Same as comparison operators — `let`/`var` init
+and assignment RHS at behavior level. Works in `&&`/`||` chains.
+
+**Deferred**: fn body `is` expressions; `is` in function arguments.
+
 ## Logical operators (`&&` and `||`)
 
-`&&` and `||` chain multiple comparison expressions into a single
-boolean value. Each sub-expression must be a comparison
-(`ident >|<|>=|<=|==|!= number|ident|null`). Same-operator chaining is
-supported (`a > b && c < d && e > f`). Mixing `&&` and `||` in the
-same expression is a compile error. Mixing numeric comparisons
-(`>`, `<`, `>=`, `<=`) with equality operators (`==`, `!=`) in the same
-chain is also a compile error (they use different instructions:
-`check_number` vs `compare_register`). Mixing `==` and `!=` in the
-same chain is fine (both use `compare_register`).
+`&&` and `||` chain multiple boolean sub-expressions into a single
+boolean value. Each sub-expression can be a comparison
+(`ident >|<|>=|<=|==|!= number|ident|null`) or a type check
+(`ident is TypeName`). Same-operator chaining is supported
+(`a > b && c < d && e > f`). Mixing `&&` and `||` in the same
+expression is a compile error. Different sub-expression types
+(numeric comparisons, equality comparisons, and type checks) can
+be freely mixed in the same chain — each term emits its own
+independent check frame.
 
-**`&&` frame pattern** (N comparisons → N+2 frames):
+**`&&` frame pattern** (N terms → N+2 frames):
 
 ```
-Frames 0..N-1: check_number or compare_register for each comparison
+Frames 0..N-1: check_number, compare_register, or value_type per term
 
   For check_number (>, <, >=, <=):
   - true branch  → next check (or true frame for last)
@@ -224,14 +262,18 @@ Frames 0..N-1: check_number or compare_register for each comparison
   - == : Different → false, Equal → next check (or true for last)
   - != : Different → next check (or true for last), Equal → false
 
+  For value_type (is):
+  - matching type → next check (or true for last)
+  - all other types + "next" → false
+
 Frame N:   set_reg false → target, next → N+2
 Frame N+1: set_reg 1 → target (falls through)
 ```
 
-**`||` frame pattern** (N comparisons → N+2 frames):
+**`||` frame pattern** (N terms → N+2 frames):
 
 ```
-Frames 0..N-1: check_number or compare_register for each comparison
+Frames 0..N-1: check_number, compare_register, or value_type per term
 
   For check_number (>, <, >=, <=):
   - true branch  → shared true frame
@@ -243,6 +285,10 @@ Frames 0..N-1: check_number or compare_register for each comparison
   For compare_register (==, !=):
   - == : Equal → true, Different → next check (or false for last)
   - != : Different → true, Equal → next check (or false for last)
+
+  For value_type (is):
+  - matching type → true
+  - all other types + "next" → next check (or false for last)
 
 Frame N:   set_reg false → target, next → N+2
 Frame N+1: set_reg 1 → target (falls through)
@@ -258,7 +304,7 @@ and assignment RHS at behavior level.
 
 **Deferred**: Mixed `&&`/`||` with precedence and parenthesized
 sub-expressions; fn body logical expressions; logical expressions in
-function call arguments.
+function call arguments; fn body `is` expressions.
 
 ## Control flow stubs
 

@@ -1,0 +1,9 @@
+# AI-generated test
+# 'is' type check in assignment context
+behavior is_assign {
+    @name "Is Assign"
+    let me = get_self
+    var a = 0
+    a = me is Unit
+    notify "done"
+}

@@ -59,6 +59,44 @@ const (
 	compareRegValue2    = "3" // input: value_2
 )
 
+// --- value_type instruction slots (1-based wire format) ---
+
+const (
+	valueTypeInput = "1" // input: value to check
+	valueTypeItem  = "2" // exec branch: Item
+	valueTypeUnit  = "3" // exec branch: Unit
+	valueTypeComp  = "4" // exec branch: Component
+	valueTypeTech  = "5" // exec branch: Tech
+	valueTypeValue = "6" // exec branch: Value
+	valueTypeCoord = "7" // exec branch: Coord
+)
+
+// allTypeSlots lists the 6 type branch slot keys for value_type.
+var allTypeSlots = []string{
+	valueTypeItem, valueTypeUnit, valueTypeComp,
+	valueTypeTech, valueTypeValue, valueTypeCoord,
+}
+
+// typeCheckSlot maps a constructor keyword name to the corresponding
+// value_type wire-format branch slot key.
+func typeCheckSlot(name string) (string, bool) {
+	switch name {
+	case "Item":
+		return valueTypeItem, true
+	case "Unit":
+		return valueTypeUnit, true
+	case "Component":
+		return valueTypeComp, true
+	case "Technology":
+		return valueTypeTech, true
+	case "Value":
+		return valueTypeValue, true
+	case "Coordinate":
+		return valueTypeCoord, true
+	}
+	return "", false
+}
+
 // setComment sets the "cmt" field on a frame if comment is non-empty.
 func setComment(frame map[string]any, comment string) {
 	if comment != "" {

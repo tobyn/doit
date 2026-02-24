@@ -1,0 +1,8 @@
+# AI-generated test
+# 'is' type check operator with Unit type
+behavior is_unit {
+    @name "Is Unit"
+    let me = get_self
+    let a = me is Unit
+    notify "done"
+}

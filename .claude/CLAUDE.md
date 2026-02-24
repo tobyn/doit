@@ -16,6 +16,20 @@ the language helps guide its evolution. If something isn't supported by the
 language or doesn't seem to work correctly, ask the developer for help or
 permission to fall back to raw JSON.
 
+## Completing Changes
+
+Every implementation task has three parts — treat them as a single unit
+of work, not separate steps the developer must request:
+
+1. **Code** — the implementation itself
+2. **Manual** — update `manual/` docs so users can discover and use the
+   feature (new syntax, new operators, changed behavior, etc.)
+3. **Project memory** — update `.claude/rules/` files so future sessions
+   have accurate context (decisions.md, compiler.md, future.md, etc.)
+
+All three must be done before considering the task complete. Do not wait
+for the developer to ask for docs or memory updates.
+
 ## Project Memory
 
 The `.claude/rules/` files are the source of truth for how the codebase

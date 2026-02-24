@@ -1,0 +1,31 @@
+{
+    "0": {
+        "op": "value_type",
+        "0": 1,
+        "1": 3,
+        "2": 2,
+        "3": 2,
+        "4": 2,
+        "5": 2,
+        "6": 2,
+        "next": 2
+    },
+    "1": {
+        "op": "set_reg",
+        "0": false,
+        "1": "a",
+        "next": 4
+    },
+    "2": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "a"
+    },
+    "3": {
+        "op": "notify",
+        "txt": "done"
+    },
+    "name": "Is Item",
+    "parameters": [false],
+    "pnames": ["X"]
+}
