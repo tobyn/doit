@@ -1,0 +1,48 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 5},
+        "2": "a"
+    },
+    "1": {
+        "op": "set_number",
+        "1": {"num": 3},
+        "2": "b"
+    },
+    "2": {
+        "op": "set_number",
+        "1": {"num": 0},
+        "2": "r"
+    },
+    "3": {
+        "op": "check_number",
+        "0": 5,
+        "1": 6,
+        "2": "a",
+        "3": {"num": 2},
+        "next": 6
+    },
+    "4": {
+        "op": "check_number",
+        "0": 6,
+        "1": 7,
+        "2": "b",
+        "3": {"num": 10}
+    },
+    "5": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 8
+    },
+    "6": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "7": {
+        "op": "notify",
+        "txt": "done"
+    },
+    "name": "Logical And Assign"
+}

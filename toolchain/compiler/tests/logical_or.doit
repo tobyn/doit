@@ -1,0 +1,9 @@
+# AI-generated test
+# || logical operator in let init
+behavior logical_or {
+    @name "Logical Or"
+    var a = 5
+    var b = 3
+    let r = a > 10 || b < 5
+    notify "done"
+}

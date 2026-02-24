@@ -28,7 +28,8 @@ not currently handle `(` after a function name. See F13 in
 
 ## Extended comparison expressions
 
-`>` and `<` work as expressions at behavior level. Natural extensions:
+`>` and `<` work as expressions at behavior level, with `&&`/`||`
+chaining. Natural extensions:
 
 - **`>=`, `<=`, `==` as expressions**: Same 3-frame pattern with different
   branch mappings. `>=` maps larger+equal to true; `<=` maps
@@ -36,11 +37,19 @@ not currently handle `(` after a function name. See F13 in
   both go to false).
 - **fn body comparison expressions**: Requires branching in the flat
   `fnBodyCall` list, which only supports linear sequences today.
+  This also blocks fn body `&&`/`||` support.
 - **Comparison in function arguments**: `notify (a > 5)` — needs
   parenthesized expressions to disambiguate from `notify a, ...`.
 - **Number literal LHS**: `let x = 5 > b` — the `tokNumber` path in
   `compileVarInit` is consumed before checking for a comparison
   operator. Workaround: `let x = b < 5`.
+- **Mixed `&&`/`||` precedence**: `a > 1 && b < 5 || c > 3` is
+  currently a compile error. Supporting this requires either
+  operator precedence (`&&` binds tighter than `||`) or parenthesized
+  sub-expressions (`(a > 1 && b < 5) || c > 3`), or both.
+- **Parenthesized sub-expressions**: `let x = (a > 1 || b < 2) && c > 3`
+  would enable arbitrary nesting. Requires the parser to handle `(`
+  in expression context.
 
 ## Known blocking issues (from audit)
 

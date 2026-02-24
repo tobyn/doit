@@ -30,6 +30,8 @@ const (
 	tokGreaterEquals
 	tokAt
 	tokAmpersand
+	tokDoubleAmpersand
+	tokDoublePipe
 )
 
 type token struct {
@@ -257,9 +259,15 @@ func (s *scanner) next() (token, error) {
 	case c == '@':
 		s.pos++
 		return token{tokAt, "@", start}, nil
+	case c == '&' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '&':
+		s.pos += 2
+		return token{tokDoubleAmpersand, "&&", start}, nil
 	case c == '&':
 		s.pos++
 		return token{tokAmpersand, "&", start}, nil
+	case c == '|' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '|':
+		s.pos += 2
+		return token{tokDoublePipe, "||", start}, nil
 	case c == '$':
 		s.pos++
 		if s.pos >= len(s.src) || !isIdentStart(s.src[s.pos]) {
@@ -390,6 +398,10 @@ func (t token) describe() string {
 		return "'@'"
 	case tokAmpersand:
 		return "'&'"
+	case tokDoubleAmpersand:
+		return "'&&'"
+	case tokDoublePipe:
+		return "'||'"
 	}
 	return t.val
 }

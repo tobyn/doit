@@ -255,6 +255,7 @@ var loc = get_location me
 let item = Item("metalbar") & 5
 let pos = Coordinate(3, 7)
 let is_big = count > 10
+let in_range = count > 0 && count < 100
 let me = instruction "get_self" { 0: @1 }
 ```
 
@@ -263,10 +264,11 @@ initialized with a function call, the function's return value is assigned to
 the variable. When initialized with a type constructor, a `set_reg` instruction
 is emitted for compile-time values, or the appropriate runtime instructions
 are emitted (e.g., `combine_coordinate` for `Coordinate` with variables).
-When initialized with a comparison expression, a `check_number` + `set_reg`
-pattern is emitted that assigns 1 (true) or empty (false) to the variable.
-When initialized with an `instruction` expression, the instruction is emitted
-directly with the variable as the `@1` output target.
+When initialized with a comparison expression (optionally chained with `&&`
+or `||`), a `check_number` + `set_reg` pattern is emitted that assigns 1
+(true) or empty (false) to the variable. When initialized with an
+`instruction` expression, the instruction is emitted directly with the
+variable as the `@1` output target.
 
 The difference between `var` and `let` is that `let` prevents reassignment —
 the compiler errors on `=`, `+=`, or `++` targeting a `let` variable.
@@ -386,9 +388,35 @@ let gt_var = x > y         # compare with variable
 let lt_param = x < $input  # compare with parameter
 ```
 
+#### Logical operators (`&&`, `||`)
+
+Multiple comparisons can be chained with `&&` (and) or `||` (or):
+
+```doit
+let in_range = x > 0 && x < 100
+let extreme = x > 90 || x < 10
+```
+
+`&&` produces 1 only if **all** comparisons are true. `||` produces 1 if
+**any** comparison is true. Chains of three or more are supported:
+
+```doit
+let ok = a > 1 && b < 10 && c > 0
+```
+
+Each sub-expression must be a comparison (`variable > operand` or
+`variable < operand`). Mixing `&&` and `||` in the same expression is not
+allowed:
+
+```doit
+# ERROR: cannot mix '&&' and '||' in the same expression
+let bad = a > 1 && b < 5 || c > 3
+```
+
 > **Not yet supported:** `>=`, `<=`, and `==` as expressions; comparison
-> expressions in function bodies; number literals on the left side (use
-> `let x = b < 5` instead of `let x = 5 > b`).
+> expressions in function bodies; mixed `&&`/`||` with parenthesized
+> sub-expressions; number literals on the left side (use `let x = b < 5`
+> instead of `let x = 5 > b`).
 
 ### `while`
 

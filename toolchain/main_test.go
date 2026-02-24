@@ -1242,6 +1242,52 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	// --- Logical operator errors ---
+
+	t.Run("logical_mixed_operators", func(t *testing.T) {
+		src := `behavior a { var x = 5; var y = 3; var z = 1; let r = x > 2 && y < 10 || z > 0 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot mix") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("logical_missing_comparison", func(t *testing.T) {
+		src := `behavior a { var x = 5; let r = x > 2 && 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected identifier") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("logical_missing_operator", func(t *testing.T) {
+		src := `behavior a { var x = 5; var y = 3; let r = x > 2 && y }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected '>' or '<'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("logical_out_param_second", func(t *testing.T) {
+		src := `behavior a { @param out x "X"; var a = 5; let r = a > 2 && $x < 10 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot read from output parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

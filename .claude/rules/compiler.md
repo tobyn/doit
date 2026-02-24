@@ -23,7 +23,8 @@ output format.
   for setting `"cmt"` on frames, and the `allocUniqueVar` helper for
   inline variable renaming
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
-  field), token types (including `tokAmpersand` for `&`), `Keywords` map
+  field), token types (including `tokAmpersand` for `&`,
+  `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`), `Keywords` map
   (includes type constructor names and direction keywords), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
@@ -43,6 +44,8 @@ output format.
   `frameHasReturnSlot`/`frameReturnCount` helpers, `instruction` as expression
   in let/var/assign/multi-return, comparison expression helpers
   (`emitComparison`, `resolveComparisonOperand`, `parseComparisonRHS`),
+  logical operator helpers (`parseAndEmitBooleanExpr`,
+  `emitChainedBoolExpr`, `comparisonTerm`),
   loops, if/else, deferred body emission,
   `matchLocale` shared BCP 47 matching helper
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled
@@ -374,7 +377,14 @@ before reporting "unknown function". The helpers `emitComparison`,
 and operand validation. Comparison expressions inside `compileBody`
 (if/while bodies) use `frameRef` values, which are rebased via
 `rebaseFrameRefs` when the body frames are transplanted into the parent
-`frameBuilder`.
+`frameBuilder`. The `&&` and `||` operators chain multiple comparisons
+into a single boolean expression: `let r = a > 2 && b < 10`. After
+parsing the first comparison, `parseAndEmitBooleanExpr` peeks for
+`&&`/`||`; if absent, it delegates to `emitComparison`; if present,
+it collects additional `comparisonTerm`s and calls `emitChainedBoolExpr`
+which emits an N+2 frame pattern (N check_number frames + false/true
+set_reg frames). Same-operator chaining is supported; mixing `&&` and
+`||` in the same expression is a compile error.
 
 **`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
 values shifted by an offset. Non-destructive (creates copies) to handle the

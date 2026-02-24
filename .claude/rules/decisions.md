@@ -173,6 +173,50 @@ expressions (requires branching in flat `fnBodyCall` list); comparison
 in function call arguments (parsing ambiguity); number literal LHS
 (`5 > b` — use `b < 5` instead).
 
+## Logical operators (`&&` and `||`)
+
+`&&` and `||` chain multiple comparison expressions into a single
+boolean value. Each sub-expression must be a comparison
+(`ident >|< number|ident`). Same-operator chaining is supported
+(`a > b && c < d && e > f`). Mixing `&&` and `||` in the same
+expression is a compile error.
+
+**`&&` frame pattern** (N comparisons → N+2 frames):
+
+```
+Frames 0..N-1: check_number for each comparison
+  - true branch  → next check (or true frame for last)
+  - false branch → shared false frame
+  - equal        → false frame (explicit "next" on intermediates;
+                   natural fall-through on last)
+Frame N:   set_reg false → target, next → N+2
+Frame N+1: set_reg 1 → target (falls through)
+```
+
+**`||` frame pattern** (N comparisons → N+2 frames):
+
+```
+Frames 0..N-1: check_number for each comparison
+  - true branch  → shared true frame
+  - false branch → next check (or false frame for last)
+  - equal        → next check on intermediates (natural fall-through);
+                   false frame on last (natural fall-through)
+Frame N:   set_reg false → target, next → N+2
+Frame N+1: set_reg 1 → target (falls through)
+```
+
+**Single comparison fallback**: When no `&&`/`||` follows the first
+comparison, `parseAndEmitBooleanExpr` delegates to `emitComparison`
+for the existing 3-frame pattern. This keeps single comparisons
+unchanged.
+
+**Supported contexts**: Same as single comparisons — `let`/`var` init
+and assignment RHS at behavior level.
+
+**Deferred**: Mixed `&&`/`||` with precedence and parenthesized
+sub-expressions; fn body logical expressions; logical expressions in
+function call arguments.
+
 ## Control flow stubs
 
 Control-flow instructions (branches, loops, terminals, jump/label) are

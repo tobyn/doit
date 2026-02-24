@@ -1,0 +1,10 @@
+# AI-generated test
+# 3-way && chain
+behavior logical_chain {
+    @name "Logical Chain"
+    var a = 5
+    var b = 3
+    var c = 7
+    let r = a > 2 && b < 10 && c > 4
+    notify "done"
+}
