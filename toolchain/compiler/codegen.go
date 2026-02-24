@@ -444,7 +444,8 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		for i := range deferred {
 			d := &deferred[i]
 			bodyFrame := b.pos()
-			for _, f := range d.frames {
+			rebased := rebaseFrameRefs(d.frames, bodyFrame)
+			for _, f := range rebased {
 				b.emit(f)
 			}
 			// Set "next" on the body's last frame.
@@ -619,7 +620,8 @@ func (p *parser) compileWhile(b *frameBuilder, comment string, syms *symbolTable
 	if err != nil {
 		return err
 	}
-	for _, f := range bodyFrames {
+	rebased := rebaseFrameRefs(bodyFrames, b.pos())
+	for _, f := range rebased {
 		b.emit(f)
 	}
 
@@ -963,6 +965,88 @@ func (p *parser) parseConstructorForTarget(target string, syms *symbolTable, b *
 	return base, nil // compile-time literal
 }
 
+// resolveComparisonOperand validates an identifier token as a comparison
+// operand (readable, not out-only) and resolves it: $register → unit register
+// int or param index, otherwise → variable name string.
+func (p *parser) resolveComparisonOperand(tok token, syms *symbolTable) (any, error) {
+	if err := p.checkReadable(tok.val, syms, tok.pos); err != nil {
+		return nil, err
+	}
+	if strings.HasPrefix(tok.val, "$") {
+		if reg, ok := unitRegisters[tok.val]; ok {
+			return reg, nil
+		}
+		if idx, ok := syms.paramMap[tok.val]; ok {
+			return idx, nil
+		}
+		return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
+	}
+	return tok.val, nil
+}
+
+// parseComparisonRHS parses the right-hand operand of a comparison expression.
+// Accepts a number literal (→ {"num": N}) or an identifier (→ resolved operand).
+func (p *parser) parseComparisonRHS(syms *symbolTable) (any, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	switch tok.kind {
+	case tokNumber:
+		num, _ := strconv.Atoi(tok.val)
+		return map[string]any{"num": num}, nil
+	case tokIdent:
+		return p.resolveComparisonOperand(tok, syms)
+	default:
+		return nil, p.errorf(tok.pos, "expected number or variable after comparison operator, got %s", tok.describe())
+	}
+}
+
+// emitComparison emits a 3-frame check_number + set_reg pattern that produces
+// a boolean value (1 for true, false/empty for false) in target.
+//
+//	Frame N:   check_number (branch to true or false)
+//	Frame N+1: set_reg false → target, next → N+3 (false case)
+//	Frame N+2: set_reg 1 → target (true case, falls through)
+func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuilder, comment string) {
+	falsePos := b.pos() + 1
+	truePos := b.pos() + 2
+	afterPos := b.pos() + 3
+
+	check := map[string]any{
+		"op":        "check_number",
+		checkValue:  lhs,
+		checkTarget: rhs,
+	}
+	setComment(check, comment)
+
+	switch op {
+	case tokGreater:
+		check[checkLarger] = frameRef(truePos)
+		check[checkSmaller] = frameRef(falsePos)
+	case tokLess:
+		check[checkLarger] = frameRef(falsePos)
+		check[checkSmaller] = frameRef(truePos)
+	}
+
+	b.emit(check)
+
+	// False frame: equal and the non-matching branch fall through here.
+	b.emit(map[string]any{
+		"op":   "set_reg",
+		"1":    false,
+		"2":    target,
+		"next": frameRef(afterPos),
+	})
+
+	// True frame: the matching branch jumps here, then falls through.
+	b.emit(map[string]any{
+		"op": "set_reg",
+		"1":  map[string]any{"num": 1},
+		"2":  target,
+	})
+}
+
 // compileDefaultStatement compiles a function call or compound assignment.
 func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment string, syms *symbolTable) error {
 	// Peek to distinguish function call from compound assignment
@@ -1051,6 +1135,24 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		if rhsTok.kind == tokIdent {
 			fn := p.fns[rhsTok.val]
 			if fn == nil {
+				// Check for comparison expression: ident > expr or ident < expr
+				peek, err := p.next()
+				if err != nil {
+					return err
+				}
+				if peek.kind == tokGreater || peek.kind == tokLess {
+					lhs, err := p.resolveComparisonOperand(rhsTok, syms)
+					if err != nil {
+						return err
+					}
+					rhs, err := p.parseComparisonRHS(syms)
+					if err != nil {
+						return err
+					}
+					p.emitComparison(peek.kind, lhs, rhs, target, b, comment)
+					return nil
+				}
+				p.unget(peek)
 				return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
 			}
 			if !fn.hasReturn() {
@@ -1294,7 +1396,8 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 
 	case tokGreaterEquals:
 		// a >= N: body when larger or equal. Inline (both fall through).
-		for _, f := range bodyFrames {
+		rebased := rebaseFrameRefs(bodyFrames, b.pos())
+		for _, f := range rebased {
 			b.emit(f)
 		}
 		// Parse optional else
@@ -1321,7 +1424,8 @@ func (p *parser) compileIfStmt(b *frameBuilder, deferred *[]deferredBody, commen
 
 	case tokDoubleEquals:
 		// a == N: body when equal. Inline (falls through).
-		for _, f := range bodyFrames {
+		rebased := rebaseFrameRefs(bodyFrames, b.pos())
+		for _, f := range rebased {
 			b.emit(f)
 		}
 		// Parse else if / else
@@ -1608,6 +1712,26 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 	if rhsTok.kind == tokIdent {
 		fn := p.fns[rhsTok.val]
 		if fn == nil {
+			// Check for comparison expression: ident > expr or ident < expr
+			peek, err := p.next()
+			if err != nil {
+				return err
+			}
+			if peek.kind == tokGreater || peek.kind == tokLess {
+				lhs, err := p.resolveComparisonOperand(rhsTok, syms)
+				if err != nil {
+					return err
+				}
+				rhs, err := p.parseComparisonRHS(syms)
+				if err != nil {
+					return err
+				}
+				syms.vars[nameTok.val] = varInfo{mutable: mutable}
+				syms.usedVars[nameTok.val] = true
+				p.emitComparison(peek.kind, lhs, rhs, nameTok.val, b, comment)
+				return nil
+			}
+			p.unget(peek)
 			return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
 		}
 		if !fn.hasReturn() {

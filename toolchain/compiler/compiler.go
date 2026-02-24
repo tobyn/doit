@@ -267,6 +267,25 @@ func (b *frameBuilder) get(idx int) map[string]any {
 	return b.frames[idx]
 }
 
+// rebaseFrameRefs returns a copy of frames with all frameRef values shifted
+// by offset. Needed when body frames (compiled with a local frameBuilder
+// starting at 0) are transplanted into a parent builder at a non-zero position.
+func rebaseFrameRefs(frames []map[string]any, offset int) []map[string]any {
+	result := make([]map[string]any, len(frames))
+	for i, f := range frames {
+		newFrame := make(map[string]any, len(f))
+		for k, v := range f {
+			if ref, ok := v.(frameRef); ok {
+				newFrame[k] = frameRef(int(ref) + offset)
+			} else {
+				newFrame[k] = v
+			}
+		}
+		result[i] = newFrame
+	}
+	return result
+}
+
 // finalize writes 1-based frame entries into value, converting
 // any frameRef values to 1-based integers.
 func (b *frameBuilder) finalize(value map[string]any) {

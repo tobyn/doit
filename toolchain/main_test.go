@@ -1196,6 +1196,52 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	// --- Comparison expression errors ---
+
+	t.Run("comparison_string_rhs", func(t *testing.T) {
+		src := `behavior a { var x = 5; let r = x > "hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number or variable after comparison operator") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("comparison_out_param_lhs", func(t *testing.T) {
+		src := `behavior a { @param out x "X"; let r = $x > 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot read from output parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("comparison_assign_string_rhs", func(t *testing.T) {
+		src := `behavior a { var x = 5; var r = 0; r = x > "hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number or variable after comparison operator") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("comparison_out_param_rhs", func(t *testing.T) {
+		src := `behavior a { @param out x "X"; var a = 5; let r = a > $x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot read from output parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

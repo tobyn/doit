@@ -245,7 +245,8 @@ let x = 5
 ```
 
 The right-hand side of `var` and `let` can be a number literal, a function
-call that has a return value, a type constructor expression, or an
+call that has a return value, a type constructor expression, a
+[comparison expression](#comparison-expressions), or an
 [`instruction`](instruction.md) expression:
 
 ```doit
@@ -253,6 +254,7 @@ let me = get_self
 var loc = get_location me
 let item = Item("metalbar") & 5
 let pos = Coordinate(3, 7)
+let is_big = count > 10
 let me = instruction "get_self" { 0: @1 }
 ```
 
@@ -261,6 +263,8 @@ initialized with a function call, the function's return value is assigned to
 the variable. When initialized with a type constructor, a `set_reg` instruction
 is emitted for compile-time values, or the appropriate runtime instructions
 are emitted (e.g., `combine_coordinate` for `Coordinate` with variables).
+When initialized with a comparison expression, a `check_number` + `set_reg`
+pattern is emitted that assigns 1 (true) or empty (false) to the variable.
 When initialized with an `instruction` expression, the instruction is emitted
 directly with the variable as the `@1` output target.
 
@@ -282,10 +286,12 @@ Assign a new value with `=`:
 x = 2
 x = get_self
 x = Item("metalbar") & 5
+x = a > b
 ```
 
 The right-hand side of `=` can be a number literal, a function call with a
-return value, a type constructor expression, or an
+return value, a type constructor expression, a
+[comparison expression](#comparison-expressions), or an
 [`instruction`](instruction.md) expression.
 
 Compound assignment and increment are also supported:
@@ -358,6 +364,31 @@ if a == 1 {
 - `<=` — less than or equal
 - `>` — greater than
 - `>=` — greater than or equal
+
+### Comparison Expressions
+
+The `>` and `<` operators can also be used as expressions that produce a
+boolean value — 1 for true, or empty (0) for false:
+
+```doit
+let is_big = count > 10
+let is_small = count < 3
+var result = a > b
+result = a < b
+```
+
+The left operand must be a variable or register. The right operand can be a
+number literal or a variable:
+
+```doit
+let gt_num = x > 5        # compare with number
+let gt_var = x > y         # compare with variable
+let lt_param = x < $input  # compare with parameter
+```
+
+> **Not yet supported:** `>=`, `<=`, and `==` as expressions; comparison
+> expressions in function bodies; number literals on the left side (use
+> `let x = b < 5` instead of `let x = 5 > b`).
 
 ### `while`
 

@@ -26,6 +26,22 @@ strings are compile-time-only types baked into instructions, the
 not currently handle `(` after a function name. See F13 in
 `analysis-findings.md`.
 
+## Extended comparison expressions
+
+`>` and `<` work as expressions at behavior level. Natural extensions:
+
+- **`>=`, `<=`, `==` as expressions**: Same 3-frame pattern with different
+  branch mappings. `>=` maps larger+equal to true; `<=` maps
+  smaller+equal to true; `==` maps equal to true (larger and smaller
+  both go to false).
+- **fn body comparison expressions**: Requires branching in the flat
+  `fnBodyCall` list, which only supports linear sequences today.
+- **Comparison in function arguments**: `notify (a > 5)` — needs
+  parenthesized expressions to disambiguate from `notify a, ...`.
+- **Number literal LHS**: `let x = 5 > b` — the `tokNumber` path in
+  `compileVarInit` is consumed before checking for a comparison
+  operator. Workaround: `let x = b < 5`.
+
 ## Known blocking issues (from audit)
 
 These are known compiler bugs identified in `analysis-findings.md` that

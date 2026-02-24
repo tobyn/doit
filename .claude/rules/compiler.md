@@ -16,7 +16,9 @@ output format.
   `unitRegisters`), `paramDef` (with `direction` field, `effectiveDirection()`)
   and `paramInfo` (with `direction` field) types, direction compatibility
   via `canPass(paramDir, argDir)`, `frameBuilder`/`frameRef` abstraction
-  for frame management, `check_number` slot constants (`checkLarger`,
+  for frame management, `rebaseFrameRefs` for shifting `frameRef` values
+  when transplanting body frames into a parent builder,
+  `check_number` slot constants (`checkLarger`,
   `checkSmaller`, `checkValue`, `checkTarget`), the `setComment` helper
   for setting `"cmt"` on frames, and the `allocUniqueVar` helper for
   inline variable renaming
@@ -39,7 +41,9 @@ output format.
   `checkInstructionDirections`, `checkCallAnnotation`),
   `resolveInstructionFrame` helper for 0→1 key conversion and slot substitution,
   `frameHasReturnSlot`/`frameReturnCount` helpers, `instruction` as expression
-  in let/var/assign/multi-return, loops, if/else, deferred body emission,
+  in let/var/assign/multi-return, comparison expression helpers
+  (`emitComparison`, `resolveComparisonOperand`, `parseComparisonRHS`),
+  loops, if/else, deferred body emission,
   `matchLocale` shared BCP 47 matching helper
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled
   output)
@@ -358,6 +362,26 @@ strings) in the behavior JSON. Maximum 10 parameters.
 arguments are optional. This preserves backward compatibility with
 string-only args (which are unambiguous without commas) while supporting
 the natural `set_reg x, $store` style with mixed types.
+
+**Comparison expressions**: `>` and `<` work as boolean expression operators
+in `let`/`var` init and assignment RHS at behavior level. Syntax:
+`let result = a > b`, `x = a < 5`. The compiler emits a 3-frame
+`check_number` + `set_reg` pattern (see decisions.md for the frame layout).
+Parsing is integrated into `compileVarInit` and `compileDefaultStatement`:
+when the RHS ident is not a known function, the parser peeks for `>`/`<`
+before reporting "unknown function". The helpers `emitComparison`,
+`resolveComparisonOperand`, and `parseComparisonRHS` handle the emission
+and operand validation. Comparison expressions inside `compileBody`
+(if/while bodies) use `frameRef` values, which are rebased via
+`rebaseFrameRefs` when the body frames are transplanted into the parent
+`frameBuilder`.
+
+**`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
+values shifted by an offset. Non-destructive (creates copies) to handle the
+shared-frames case in `compileElseClauses` where `== else` shares
+`elseFrames` between two deferred body entries. Called at all four body
+transplant sites: `compileWhile`, `compileIfStmt` `>=` inline,
+`compileIfStmt` `==` inline, and `parseBehaviorBody` deferred body loop.
 
 ## Test Case Format
 

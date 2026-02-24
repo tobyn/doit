@@ -1,0 +1,12 @@
+# AI-generated test
+# > and < as boolean expression operators in let/var init and assignment
+behavior comparison_expr {
+    @name "Comparison Expr"
+    var a = 5
+    var b = 3
+    let gt = a > 2
+    let lt = a < b
+    var r = b > 1
+    r = b < a
+    notify "done"
+}

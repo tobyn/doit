@@ -149,6 +149,30 @@ copy the parameter value to the caller's return target. This means
 `fn foo(x) { return x }` called as `let r = foo v` emits exactly one
 `set_reg v r` — no extra instructions for non-colliding cases.
 
+## Comparison expression operators
+
+`>` and `<` work as boolean expression operators that produce a value
+(1 for true, `false`/empty for false). They compile to a 3-frame pattern:
+
+```
+Frame N:   check_number { value, target, branch slots }
+Frame N+1: set_reg { false → target, next: →N+3 }   (false case)
+Frame N+2: set_reg { 1 → target }                    (true case)
+```
+
+For `>`: checkLarger → true (N+2), checkSmaller → false (N+1), equal
+falls through to false (N+1). For `<`: checkSmaller → true (N+2),
+checkLarger → false (N+1), equal falls through to false (N+1).
+
+**Supported contexts**: `let`/`var` init and assignment RHS at behavior
+level. Both number literals and variable identifiers are valid as the
+RHS operand.
+
+**Deferred**: `>=`, `<=`, `==` as expressions; fn body comparison
+expressions (requires branching in flat `fnBodyCall` list); comparison
+in function call arguments (parsing ambiguity); number literal LHS
+(`5 > b` — use `b < 5` instead).
+
 ## Control flow stubs
 
 Control-flow instructions (branches, loops, terminals, jump/label) are
