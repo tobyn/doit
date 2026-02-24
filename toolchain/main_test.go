@@ -1272,7 +1272,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected '>' or '<'") {
+		if !strings.Contains(err.Error(), "expected comparison operator") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

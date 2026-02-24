@@ -1,0 +1,9 @@
+# AI-generated test
+# || with >= and <= operators
+behavior logical_or_gte_lte {
+    @name "Logical Or GTE LTE"
+    var a = 5
+    var b = 3
+    let r = a >= 10 || b <= 5
+    notify "done"
+}

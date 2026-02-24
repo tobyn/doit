@@ -1027,11 +1027,21 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 	case tokLess:
 		check[checkLarger] = frameRef(falsePos)
 		check[checkSmaller] = frameRef(truePos)
+	case tokGreaterEquals:
+		check[checkLarger] = frameRef(truePos)
+		check[checkSmaller] = frameRef(falsePos)
+		check["next"] = frameRef(truePos)
+	case tokLessEquals:
+		check[checkLarger] = frameRef(falsePos)
+		check[checkSmaller] = frameRef(truePos)
+		check["next"] = frameRef(truePos)
 	}
 
 	b.emit(check)
 
-	// False frame: equal and the non-matching branch fall through here.
+	// False frame: the non-matching branch(es) fall through here.
+	// For > and <, equal also falls through here.
+	// For >= and <=, equal jumps to the true frame instead.
 	b.emit(map[string]any{
 		"op":   "set_reg",
 		"1":    false,
@@ -1047,9 +1057,15 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 	})
 }
 
+// isComparisonOp reports whether the token kind is a comparison operator
+// (>, <, >=, <=).
+func isComparisonOp(kind tokenKind) bool {
+	return kind == tokGreater || kind == tokLess || kind == tokGreaterEquals || kind == tokLessEquals
+}
+
 // comparisonTerm holds the parsed components of a single comparison expression.
 type comparisonTerm struct {
-	op  tokenKind // tokGreater or tokLess
+	op  tokenKind // tokGreater, tokLess, tokGreaterEquals, or tokLessEquals
 	lhs any
 	rhs any
 }
@@ -1089,8 +1105,8 @@ func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *
 		if err != nil {
 			return err
 		}
-		if cmpTok.kind != tokGreater && cmpTok.kind != tokLess {
-			return p.errorf(cmpTok.pos, "expected '>' or '<' after identifier")
+		if !isComparisonOp(cmpTok.kind) {
+			return p.errorf(cmpTok.pos, "expected comparison operator (>, <, >=, <=) after identifier")
 		}
 		nextRhs, err := p.parseComparisonRHS(syms)
 		if err != nil {
@@ -1142,7 +1158,7 @@ func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, 
 		if chainOp == tokDoubleAmpersand {
 			// &&: true branch -> next check (or true frame for last)
 			//     false branch -> shared false frame
-			//     equal -> false frame
+			//     equal -> depends on operator (false for >/< , true for >=/<= )
 			switch term.op {
 			case tokGreater:
 				if isLast {
@@ -1151,6 +1167,10 @@ func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, 
 					check[checkLarger] = nextCheck
 				}
 				check[checkSmaller] = frameRef(falsePos)
+				// Equal falls through to false (natural on last, explicit on intermediates).
+				if !isLast {
+					check["next"] = frameRef(falsePos)
+				}
 			case tokLess:
 				if isLast {
 					check[checkSmaller] = frameRef(truePos)
@@ -1158,19 +1178,41 @@ func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, 
 					check[checkSmaller] = nextCheck
 				}
 				check[checkLarger] = frameRef(falsePos)
+				// Equal falls through to false (natural on last, explicit on intermediates).
+				if !isLast {
+					check["next"] = frameRef(falsePos)
+				}
+			case tokGreaterEquals:
+				if isLast {
+					check[checkLarger] = frameRef(truePos)
+				} else {
+					check[checkLarger] = nextCheck
+				}
+				check[checkSmaller] = frameRef(falsePos)
+				// Equal -> true: next check on intermediates, true frame on last.
+				if isLast {
+					check["next"] = frameRef(truePos)
+				} else {
+					check["next"] = nextCheck
+				}
+			case tokLessEquals:
+				if isLast {
+					check[checkSmaller] = frameRef(truePos)
+				} else {
+					check[checkSmaller] = nextCheck
+				}
+				check[checkLarger] = frameRef(falsePos)
+				// Equal -> true: next check on intermediates, true frame on last.
+				if isLast {
+					check["next"] = frameRef(truePos)
+				} else {
+					check["next"] = nextCheck
+				}
 			}
-			// For intermediate checks, equal falls through to the next frame.
-			// If that's another check, it naturally chains. But we need equal
-			// to go to false, so set "next" explicitly.
-			if !isLast {
-				check["next"] = frameRef(falsePos)
-			}
-			// For last check, equal falls through to false frame (natural).
 		} else {
 			// ||: true branch -> shared true frame
 			//     false branch -> next check (or false frame for last)
-			//     equal -> next check on intermediates (natural fall-through);
-			//              false frame on last (natural fall-through)
+			//     equal -> depends on operator
 			switch term.op {
 			case tokGreater:
 				check[checkLarger] = frameRef(truePos)
@@ -1179,6 +1221,7 @@ func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, 
 				} else {
 					check[checkSmaller] = nextCheck
 				}
+				// Equal falls through naturally (to next check or false frame).
 			case tokLess:
 				check[checkSmaller] = frameRef(truePos)
 				if isLast {
@@ -1186,9 +1229,26 @@ func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, 
 				} else {
 					check[checkLarger] = nextCheck
 				}
+				// Equal falls through naturally (to next check or false frame).
+			case tokGreaterEquals:
+				check[checkLarger] = frameRef(truePos)
+				if isLast {
+					check[checkSmaller] = frameRef(falsePos)
+				} else {
+					check[checkSmaller] = nextCheck
+				}
+				// Equal -> true.
+				check["next"] = frameRef(truePos)
+			case tokLessEquals:
+				check[checkSmaller] = frameRef(truePos)
+				if isLast {
+					check[checkLarger] = frameRef(falsePos)
+				} else {
+					check[checkLarger] = nextCheck
+				}
+				// Equal -> true.
+				check["next"] = frameRef(truePos)
 			}
-			// For intermediates, equal falls through to the next check (natural).
-			// For last, equal falls through to false frame (natural).
 		}
 
 		b.emit(check)
@@ -1298,12 +1358,12 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		if rhsTok.kind == tokIdent {
 			fn := p.fns[rhsTok.val]
 			if fn == nil {
-				// Check for comparison expression: ident > expr or ident < expr
+				// Check for comparison expression: ident >/</>=/<= expr
 				peek, err := p.next()
 				if err != nil {
 					return err
 				}
-				if peek.kind == tokGreater || peek.kind == tokLess {
+				if isComparisonOp(peek.kind) {
 					lhs, err := p.resolveComparisonOperand(rhsTok, syms)
 					if err != nil {
 						return err
@@ -1874,12 +1934,12 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 	if rhsTok.kind == tokIdent {
 		fn := p.fns[rhsTok.val]
 		if fn == nil {
-			// Check for comparison expression: ident > expr or ident < expr
+			// Check for comparison expression: ident >/</>=/<= expr
 			peek, err := p.next()
 			if err != nil {
 				return err
 			}
-			if peek.kind == tokGreater || peek.kind == tokLess {
+			if isComparisonOp(peek.kind) {
 				lhs, err := p.resolveComparisonOperand(rhsTok, syms)
 				if err != nil {
 					return err

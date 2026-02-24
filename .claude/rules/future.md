@@ -28,13 +28,12 @@ not currently handle `(` after a function name. See F13 in
 
 ## Extended comparison expressions
 
-`>` and `<` work as expressions at behavior level, with `&&`/`||`
-chaining. Natural extensions:
+`>`, `<`, `>=`, and `<=` work as expressions at behavior level, with
+`&&`/`||` chaining. Natural extensions:
 
-- **`>=`, `<=`, `==` as expressions**: Same 3-frame pattern with different
-  branch mappings. `>=` maps larger+equal to true; `<=` maps
-  smaller+equal to true; `==` maps equal to true (larger and smaller
-  both go to false).
+- **`==` as expression**: Same 3-frame pattern with different branch
+  mappings. `==` maps equal to true (larger and smaller both go to
+  false).
 - **fn body comparison expressions**: Requires branching in the flat
   `fnBodyCall` list, which only supports linear sequences today.
   This also blocks fn body `&&`/`||` support.

@@ -1,0 +1,12 @@
+# AI-generated test
+# >= and <= as boolean expression operators in let/var init and assignment
+behavior comparison_gte_lte {
+    @name "Comparison GTE LTE"
+    var a = 5
+    var b = 3
+    let gte = a >= 2
+    let lte = a <= b
+    var r = b >= 1
+    r = b <= a
+    notify "done"
+}

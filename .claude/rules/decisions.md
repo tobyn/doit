@@ -151,8 +151,9 @@ copy the parameter value to the caller's return target. This means
 
 ## Comparison expression operators
 
-`>` and `<` work as boolean expression operators that produce a value
-(1 for true, `false`/empty for false). They compile to a 3-frame pattern:
+`>`, `<`, `>=`, and `<=` work as boolean expression operators that produce
+a value (1 for true, `false`/empty for false). They compile to a 3-frame
+pattern:
 
 ```
 Frame N:   check_number { value, target, branch slots }
@@ -164,20 +165,22 @@ For `>`: checkLarger → true (N+2), checkSmaller → false (N+1), equal
 falls through to false (N+1). For `<`: checkSmaller → true (N+2),
 checkLarger → false (N+1), equal falls through to false (N+1).
 
+For `>=`: same as `>` plus `"next"` → true (N+2), routing equal to the
+true frame. For `<=`: same as `<` plus `"next"` → true (N+2).
+
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
 level. Both number literals and variable identifiers are valid as the
 RHS operand.
 
-**Deferred**: `>=`, `<=`, `==` as expressions; fn body comparison
-expressions (requires branching in flat `fnBodyCall` list); comparison
-in function call arguments (parsing ambiguity); number literal LHS
-(`5 > b` — use `b < 5` instead).
+**Deferred**: `==` as expression; fn body comparison expressions (requires
+branching in flat `fnBodyCall` list); comparison in function call arguments
+(parsing ambiguity); number literal LHS (`5 > b` — use `b < 5` instead).
 
 ## Logical operators (`&&` and `||`)
 
 `&&` and `||` chain multiple comparison expressions into a single
 boolean value. Each sub-expression must be a comparison
-(`ident >|< number|ident`). Same-operator chaining is supported
+(`ident >|<|>=|<= number|ident`). Same-operator chaining is supported
 (`a > b && c < d && e > f`). Mixing `&&` and `||` in the same
 expression is a compile error.
 
@@ -187,8 +190,9 @@ expression is a compile error.
 Frames 0..N-1: check_number for each comparison
   - true branch  → next check (or true frame for last)
   - false branch → shared false frame
-  - equal        → false frame (explicit "next" on intermediates;
+  - equal (>/< ) → false frame (explicit "next" on intermediates;
                    natural fall-through on last)
+  - equal (>=/<= ) → next check (or true frame for last)
 Frame N:   set_reg false → target, next → N+2
 Frame N+1: set_reg 1 → target (falls through)
 ```
@@ -199,8 +203,9 @@ Frame N+1: set_reg 1 → target (falls through)
 Frames 0..N-1: check_number for each comparison
   - true branch  → shared true frame
   - false branch → next check (or false frame for last)
-  - equal        → next check on intermediates (natural fall-through);
+  - equal (>/< ) → next check on intermediates (natural fall-through);
                    false frame on last (natural fall-through)
+  - equal (>=/<= ) → shared true frame
 Frame N:   set_reg false → target, next → N+2
 Frame N+1: set_reg 1 → target (falls through)
 ```

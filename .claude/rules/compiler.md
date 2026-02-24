@@ -43,7 +43,8 @@ output format.
   `resolveInstructionFrame` helper for 0→1 key conversion and slot substitution,
   `frameHasReturnSlot`/`frameReturnCount` helpers, `instruction` as expression
   in let/var/assign/multi-return, comparison expression helpers
-  (`emitComparison`, `resolveComparisonOperand`, `parseComparisonRHS`),
+  (`emitComparison`, `resolveComparisonOperand`, `parseComparisonRHS`,
+  `isComparisonOp`),
   logical operator helpers (`parseAndEmitBooleanExpr`,
   `emitChainedBoolExpr`, `comparisonTerm`),
   loops, if/else, deferred body emission,
@@ -366,25 +367,28 @@ arguments are optional. This preserves backward compatibility with
 string-only args (which are unambiguous without commas) while supporting
 the natural `set_reg x, $store` style with mixed types.
 
-**Comparison expressions**: `>` and `<` work as boolean expression operators
-in `let`/`var` init and assignment RHS at behavior level. Syntax:
-`let result = a > b`, `x = a < 5`. The compiler emits a 3-frame
-`check_number` + `set_reg` pattern (see decisions.md for the frame layout).
+**Comparison expressions**: `>`, `<`, `>=`, and `<=` work as boolean
+expression operators in `let`/`var` init and assignment RHS at behavior
+level. Syntax: `let result = a > b`, `x = a < 5`, `let r = a >= 3`.
+The compiler emits a 3-frame `check_number` + `set_reg` pattern (see
+decisions.md for the frame layout). For `>=` and `<=`, the `check_number`
+frame includes an explicit `"next"` routing equal to the true frame.
 Parsing is integrated into `compileVarInit` and `compileDefaultStatement`:
-when the RHS ident is not a known function, the parser peeks for `>`/`<`
-before reporting "unknown function". The helpers `emitComparison`,
-`resolveComparisonOperand`, and `parseComparisonRHS` handle the emission
-and operand validation. Comparison expressions inside `compileBody`
-(if/while bodies) use `frameRef` values, which are rebased via
-`rebaseFrameRefs` when the body frames are transplanted into the parent
-`frameBuilder`. The `&&` and `||` operators chain multiple comparisons
-into a single boolean expression: `let r = a > 2 && b < 10`. After
-parsing the first comparison, `parseAndEmitBooleanExpr` peeks for
-`&&`/`||`; if absent, it delegates to `emitComparison`; if present,
-it collects additional `comparisonTerm`s and calls `emitChainedBoolExpr`
-which emits an N+2 frame pattern (N check_number frames + false/true
-set_reg frames). Same-operator chaining is supported; mixing `&&` and
-`||` in the same expression is a compile error.
+when the RHS ident is not a known function, the parser peeks for a
+comparison operator (via `isComparisonOp`) before reporting "unknown
+function". The helpers `emitComparison`, `resolveComparisonOperand`, and
+`parseComparisonRHS` handle the emission and operand validation.
+Comparison expressions inside `compileBody` (if/while bodies) use
+`frameRef` values, which are rebased via `rebaseFrameRefs` when the body
+frames are transplanted into the parent `frameBuilder`. The `&&` and `||`
+operators chain multiple comparisons into a single boolean expression:
+`let r = a > 2 && b < 10`. After parsing the first comparison,
+`parseAndEmitBooleanExpr` peeks for `&&`/`||`; if absent, it delegates to
+`emitComparison`; if present, it collects additional `comparisonTerm`s and
+calls `emitChainedBoolExpr` which emits an N+2 frame pattern (N
+check_number frames + false/true set_reg frames). All four comparison
+operators are supported in chains. Same-operator chaining is supported;
+mixing `&&` and `||` in the same expression is a compile error.
 
 **`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
 values shifted by an offset. Non-destructive (creates copies) to handle the

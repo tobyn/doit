@@ -1,0 +1,44 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 5},
+        "2": "a"
+    },
+    "1": {
+        "op": "set_number",
+        "1": {"num": 3},
+        "2": "b"
+    },
+    "2": {
+        "op": "check_number",
+        "0": 4,
+        "1": 5,
+        "2": "a",
+        "3": {"num": 2},
+        "next": 4
+    },
+    "3": {
+        "op": "check_number",
+        "0": 5,
+        "1": 6,
+        "2": "b",
+        "3": {"num": 10},
+        "next": 6
+    },
+    "4": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 7
+    },
+    "5": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "6": {
+        "op": "notify",
+        "txt": "done"
+    },
+    "name": "Logical And GTE LTE"
+}
