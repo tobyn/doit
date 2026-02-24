@@ -985,7 +985,8 @@ func (p *parser) resolveComparisonOperand(tok token, syms *symbolTable) (any, er
 }
 
 // parseComparisonRHS parses the right-hand operand of a comparison expression.
-// Accepts a number literal (→ {"num": N}) or an identifier (→ resolved operand).
+// Accepts a number literal (→ {"num": N}), null (→ false), or an identifier
+// (→ resolved operand).
 func (p *parser) parseComparisonRHS(syms *symbolTable) (any, error) {
 	tok, err := p.next()
 	if err != nil {
@@ -996,16 +997,22 @@ func (p *parser) parseComparisonRHS(syms *symbolTable) (any, error) {
 		num, _ := strconv.Atoi(tok.val)
 		return map[string]any{"num": num}, nil
 	case tokIdent:
+		if tok.val == "null" {
+			return false, nil
+		}
 		return p.resolveComparisonOperand(tok, syms)
 	default:
-		return nil, p.errorf(tok.pos, "expected number or variable after comparison operator, got %s", tok.describe())
+		return nil, p.errorf(tok.pos, "expected number, variable, or null after comparison operator, got %s", tok.describe())
 	}
 }
 
-// emitComparison emits a 3-frame check_number + set_reg pattern that produces
-// a boolean value (1 for true, false/empty for false) in target.
+// emitComparison emits a 3-frame pattern that produces a boolean value
+// (1 for true, false/empty for false) in target.
 //
-//	Frame N:   check_number (branch to true or false)
+// For numeric comparisons (>, <, >=, <=): uses check_number (3-way branch).
+// For equality comparisons (==, !=): uses compare_register (2-way branch).
+//
+//	Frame N:   check_number or compare_register (branch to true or false)
 //	Frame N+1: set_reg false → target, next → N+3 (false case)
 //	Frame N+2: set_reg 1 → target (true case, falls through)
 func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuilder, comment string) {
@@ -1013,35 +1020,53 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 	truePos := b.pos() + 2
 	afterPos := b.pos() + 3
 
-	check := map[string]any{
-		"op":        "check_number",
-		checkValue:  lhs,
-		checkTarget: rhs,
+	var check map[string]any
+
+	switch op {
+	case tokDoubleEquals:
+		check = map[string]any{
+			"op":                "compare_register",
+			compareRegValue1:    lhs,
+			compareRegValue2:    rhs,
+			compareRegDifferent: frameRef(falsePos),
+			"next":              frameRef(truePos),
+		}
+	case tokNotEquals:
+		check = map[string]any{
+			"op":                "compare_register",
+			compareRegValue1:    lhs,
+			compareRegValue2:    rhs,
+			compareRegDifferent: frameRef(truePos),
+			// Equal falls through naturally to false (N+1)
+		}
+	default:
+		check = map[string]any{
+			"op":        "check_number",
+			checkValue:  lhs,
+			checkTarget: rhs,
+		}
+		switch op {
+		case tokGreater:
+			check[checkLarger] = frameRef(truePos)
+			check[checkSmaller] = frameRef(falsePos)
+		case tokLess:
+			check[checkLarger] = frameRef(falsePos)
+			check[checkSmaller] = frameRef(truePos)
+		case tokGreaterEquals:
+			check[checkLarger] = frameRef(truePos)
+			check[checkSmaller] = frameRef(falsePos)
+			check["next"] = frameRef(truePos)
+		case tokLessEquals:
+			check[checkLarger] = frameRef(falsePos)
+			check[checkSmaller] = frameRef(truePos)
+			check["next"] = frameRef(truePos)
+		}
 	}
 	setComment(check, comment)
 
-	switch op {
-	case tokGreater:
-		check[checkLarger] = frameRef(truePos)
-		check[checkSmaller] = frameRef(falsePos)
-	case tokLess:
-		check[checkLarger] = frameRef(falsePos)
-		check[checkSmaller] = frameRef(truePos)
-	case tokGreaterEquals:
-		check[checkLarger] = frameRef(truePos)
-		check[checkSmaller] = frameRef(falsePos)
-		check["next"] = frameRef(truePos)
-	case tokLessEquals:
-		check[checkLarger] = frameRef(falsePos)
-		check[checkSmaller] = frameRef(truePos)
-		check["next"] = frameRef(truePos)
-	}
-
 	b.emit(check)
 
-	// False frame: the non-matching branch(es) fall through here.
-	// For > and <, equal also falls through here.
-	// For >= and <=, equal jumps to the true frame instead.
+	// False frame
 	b.emit(map[string]any{
 		"op":   "set_reg",
 		"1":    false,
@@ -1049,7 +1074,7 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 		"next": frameRef(afterPos),
 	})
 
-	// True frame: the matching branch jumps here, then falls through.
+	// True frame
 	b.emit(map[string]any{
 		"op": "set_reg",
 		"1":  map[string]any{"num": 1},
@@ -1058,14 +1083,21 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 }
 
 // isComparisonOp reports whether the token kind is a comparison operator
-// (>, <, >=, <=).
+// (>, <, >=, <=, ==, !=).
 func isComparisonOp(kind tokenKind) bool {
-	return kind == tokGreater || kind == tokLess || kind == tokGreaterEquals || kind == tokLessEquals
+	return kind == tokGreater || kind == tokLess || kind == tokGreaterEquals || kind == tokLessEquals ||
+		kind == tokDoubleEquals || kind == tokNotEquals
+}
+
+// isEqualityOp reports whether the token kind is an equality operator (==, !=).
+// Used to distinguish compare_register ops from check_number ops in chains.
+func isEqualityOp(kind tokenKind) bool {
+	return kind == tokDoubleEquals || kind == tokNotEquals
 }
 
 // comparisonTerm holds the parsed components of a single comparison expression.
 type comparisonTerm struct {
-	op  tokenKind // tokGreater, tokLess, tokGreaterEquals, or tokLessEquals
+	op  tokenKind // tokGreater, tokLess, tokGreaterEquals, tokLessEquals, tokDoubleEquals, or tokNotEquals
 	lhs any
 	rhs any
 }
@@ -1106,7 +1138,7 @@ func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *
 			return err
 		}
 		if !isComparisonOp(cmpTok.kind) {
-			return p.errorf(cmpTok.pos, "expected comparison operator (>, <, >=, <=) after identifier")
+			return p.errorf(cmpTok.pos, "expected comparison operator (>, <, >=, <=, ==, !=) after identifier")
 		}
 		nextRhs, err := p.parseComparisonRHS(syms)
 		if err != nil {
@@ -1128,6 +1160,21 @@ func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *
 		}
 	}
 
+	// Check for mixed instruction types: equality (==, !=) uses compare_register,
+	// numeric (>, <, >=, <=) uses check_number. Mixing is not supported in chains.
+	hasEquality := false
+	hasNumeric := false
+	for _, term := range terms {
+		if isEqualityOp(term.op) {
+			hasEquality = true
+		} else {
+			hasNumeric = true
+		}
+	}
+	if hasEquality && hasNumeric {
+		return p.errorf(peek.pos, "cannot mix numeric comparisons (>, <, >=, <=) with equality operators (==, !=) in the same expression")
+	}
+
 	p.emitChainedBoolExpr(terms, chainOp, target, b, comment)
 	return nil
 }
@@ -1143,114 +1190,165 @@ func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, 
 	afterPos := base + n + 2
 
 	for i, term := range terms {
-		check := map[string]any{
-			"op":        "check_number",
-			checkValue:  term.lhs,
-			checkTarget: term.rhs,
-		}
-		if i == 0 {
-			setComment(check, comment)
-		}
-
 		isLast := i == n-1
 		nextCheck := frameRef(base + i + 1)
 
-		if chainOp == tokDoubleAmpersand {
-			// &&: true branch -> next check (or true frame for last)
-			//     false branch -> shared false frame
-			//     equal -> depends on operator (false for >/< , true for >=/<= )
-			switch term.op {
-			case tokGreater:
-				if isLast {
-					check[checkLarger] = frameRef(truePos)
-				} else {
-					check[checkLarger] = nextCheck
-				}
-				check[checkSmaller] = frameRef(falsePos)
-				// Equal falls through to false (natural on last, explicit on intermediates).
-				if !isLast {
+		var check map[string]any
+
+		if isEqualityOp(term.op) {
+			// compare_register: 2-way branch (Different / Equal via "next")
+			check = map[string]any{
+				"op":             "compare_register",
+				compareRegValue1: term.lhs,
+				compareRegValue2: term.rhs,
+			}
+			if chainOp == tokDoubleAmpersand {
+				switch term.op {
+				case tokDoubleEquals:
+					// &&: equal -> next check (or true for last), different -> false
+					check[compareRegDifferent] = frameRef(falsePos)
+					if isLast {
+						check["next"] = frameRef(truePos)
+					} else {
+						check["next"] = nextCheck
+					}
+				case tokNotEquals:
+					// &&: different -> next check (or true for last), equal -> false
+					if isLast {
+						check[compareRegDifferent] = frameRef(truePos)
+					} else {
+						check[compareRegDifferent] = nextCheck
+					}
 					check["next"] = frameRef(falsePos)
 				}
-			case tokLess:
-				if isLast {
-					check[checkSmaller] = frameRef(truePos)
-				} else {
-					check[checkSmaller] = nextCheck
-				}
-				check[checkLarger] = frameRef(falsePos)
-				// Equal falls through to false (natural on last, explicit on intermediates).
-				if !isLast {
-					check["next"] = frameRef(falsePos)
-				}
-			case tokGreaterEquals:
-				if isLast {
-					check[checkLarger] = frameRef(truePos)
-				} else {
-					check[checkLarger] = nextCheck
-				}
-				check[checkSmaller] = frameRef(falsePos)
-				// Equal -> true: next check on intermediates, true frame on last.
-				if isLast {
+			} else {
+				switch term.op {
+				case tokDoubleEquals:
+					// ||: equal -> true, different -> next check (or false for last)
 					check["next"] = frameRef(truePos)
-				} else {
-					check["next"] = nextCheck
-				}
-			case tokLessEquals:
-				if isLast {
-					check[checkSmaller] = frameRef(truePos)
-				} else {
-					check[checkSmaller] = nextCheck
-				}
-				check[checkLarger] = frameRef(falsePos)
-				// Equal -> true: next check on intermediates, true frame on last.
-				if isLast {
-					check["next"] = frameRef(truePos)
-				} else {
-					check["next"] = nextCheck
+					if isLast {
+						check[compareRegDifferent] = frameRef(falsePos)
+					} else {
+						check[compareRegDifferent] = nextCheck
+					}
+				case tokNotEquals:
+					// ||: different -> true, equal -> next check (or false for last)
+					check[compareRegDifferent] = frameRef(truePos)
+					if isLast {
+						check["next"] = frameRef(falsePos)
+					} else {
+						check["next"] = nextCheck
+					}
 				}
 			}
 		} else {
-			// ||: true branch -> shared true frame
-			//     false branch -> next check (or false frame for last)
-			//     equal -> depends on operator
-			switch term.op {
-			case tokGreater:
-				check[checkLarger] = frameRef(truePos)
-				if isLast {
+			// check_number: 3-way branch (Larger / Smaller / Equal via "next")
+			check = map[string]any{
+				"op":        "check_number",
+				checkValue:  term.lhs,
+				checkTarget: term.rhs,
+			}
+
+			if chainOp == tokDoubleAmpersand {
+				// &&: true branch -> next check (or true frame for last)
+				//     false branch -> shared false frame
+				//     equal -> depends on operator (false for >/< , true for >=/<= )
+				switch term.op {
+				case tokGreater:
+					if isLast {
+						check[checkLarger] = frameRef(truePos)
+					} else {
+						check[checkLarger] = nextCheck
+					}
 					check[checkSmaller] = frameRef(falsePos)
-				} else {
-					check[checkSmaller] = nextCheck
-				}
-				// Equal falls through naturally (to next check or false frame).
-			case tokLess:
-				check[checkSmaller] = frameRef(truePos)
-				if isLast {
+					// Equal falls through to false (natural on last, explicit on intermediates).
+					if !isLast {
+						check["next"] = frameRef(falsePos)
+					}
+				case tokLess:
+					if isLast {
+						check[checkSmaller] = frameRef(truePos)
+					} else {
+						check[checkSmaller] = nextCheck
+					}
 					check[checkLarger] = frameRef(falsePos)
-				} else {
-					check[checkLarger] = nextCheck
-				}
-				// Equal falls through naturally (to next check or false frame).
-			case tokGreaterEquals:
-				check[checkLarger] = frameRef(truePos)
-				if isLast {
+					// Equal falls through to false (natural on last, explicit on intermediates).
+					if !isLast {
+						check["next"] = frameRef(falsePos)
+					}
+				case tokGreaterEquals:
+					if isLast {
+						check[checkLarger] = frameRef(truePos)
+					} else {
+						check[checkLarger] = nextCheck
+					}
 					check[checkSmaller] = frameRef(falsePos)
-				} else {
-					check[checkSmaller] = nextCheck
-				}
-				// Equal -> true.
-				check["next"] = frameRef(truePos)
-			case tokLessEquals:
-				check[checkSmaller] = frameRef(truePos)
-				if isLast {
+					// Equal -> true: next check on intermediates, true frame on last.
+					if isLast {
+						check["next"] = frameRef(truePos)
+					} else {
+						check["next"] = nextCheck
+					}
+				case tokLessEquals:
+					if isLast {
+						check[checkSmaller] = frameRef(truePos)
+					} else {
+						check[checkSmaller] = nextCheck
+					}
 					check[checkLarger] = frameRef(falsePos)
-				} else {
-					check[checkLarger] = nextCheck
+					// Equal -> true: next check on intermediates, true frame on last.
+					if isLast {
+						check["next"] = frameRef(truePos)
+					} else {
+						check["next"] = nextCheck
+					}
 				}
-				// Equal -> true.
-				check["next"] = frameRef(truePos)
+			} else {
+				// ||: true branch -> shared true frame
+				//     false branch -> next check (or false frame for last)
+				//     equal -> depends on operator
+				switch term.op {
+				case tokGreater:
+					check[checkLarger] = frameRef(truePos)
+					if isLast {
+						check[checkSmaller] = frameRef(falsePos)
+					} else {
+						check[checkSmaller] = nextCheck
+					}
+					// Equal falls through naturally (to next check or false frame).
+				case tokLess:
+					check[checkSmaller] = frameRef(truePos)
+					if isLast {
+						check[checkLarger] = frameRef(falsePos)
+					} else {
+						check[checkLarger] = nextCheck
+					}
+					// Equal falls through naturally (to next check or false frame).
+				case tokGreaterEquals:
+					check[checkLarger] = frameRef(truePos)
+					if isLast {
+						check[checkSmaller] = frameRef(falsePos)
+					} else {
+						check[checkSmaller] = nextCheck
+					}
+					// Equal -> true.
+					check["next"] = frameRef(truePos)
+				case tokLessEquals:
+					check[checkSmaller] = frameRef(truePos)
+					if isLast {
+						check[checkLarger] = frameRef(falsePos)
+					} else {
+						check[checkLarger] = nextCheck
+					}
+					// Equal -> true.
+					check["next"] = frameRef(truePos)
+				}
 			}
 		}
 
+		if i == 0 {
+			setComment(check, comment)
+		}
 		b.emit(check)
 	}
 
@@ -1541,7 +1639,6 @@ func (p *parser) parseFnCallArgs(fn *fnDef, nameTok token, syms *symbolTable, b 
 
 	return args, kwArgs, nil
 }
-
 
 // --- If statement compilation ---
 

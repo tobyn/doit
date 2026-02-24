@@ -1,0 +1,47 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 5},
+        "2": "a"
+    },
+    "1": {
+        "op": "set_number",
+        "1": {"num": 3},
+        "2": "b"
+    },
+    "2": {
+        "op": "set_number",
+        "1": {"num": 7},
+        "2": "c"
+    },
+    "3": {
+        "op": "compare_register",
+        "0": 6,
+        "1": "a",
+        "2": "b",
+        "next": 5
+    },
+    "4": {
+        "op": "compare_register",
+        "0": 7,
+        "1": "c",
+        "2": {"num": 2},
+        "next": 6
+    },
+    "5": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 8
+    },
+    "6": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "7": {
+        "op": "notify",
+        "txt": "done"
+    },
+    "name": "Logical And Eq"
+}

@@ -1,0 +1,9 @@
+# AI-generated test
+# == null and != null comparisons
+behavior equality_null {
+    @name "Equality Null"
+    var a = 5
+    let is_null = a == null
+    let not_null = a != null
+    notify "done"
+}

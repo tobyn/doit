@@ -256,6 +256,7 @@ let item = Item("metalbar") & 5
 let pos = Coordinate(3, 7)
 let is_big = count > 10
 let in_range = count > 0 && count < 100
+let same = a == b
 let me = instruction "get_self" { 0: @1 }
 ```
 
@@ -265,8 +266,9 @@ the variable. When initialized with a type constructor, a `set_reg` instruction
 is emitted for compile-time values, or the appropriate runtime instructions
 are emitted (e.g., `combine_coordinate` for `Coordinate` with variables).
 When initialized with a comparison expression (optionally chained with `&&`
-or `||`), a `check_number` + `set_reg` pattern is emitted that assigns 1
-(true) or empty (false) to the variable. When initialized with an
+or `||`), a `check_number` or `compare_register` + `set_reg` pattern is
+emitted that assigns 1 (true) or empty (false) to the variable. When
+initialized with an
 `instruction` expression, the instruction is emitted directly with the
 variable as the `@1` output target.
 
@@ -289,6 +291,7 @@ x = 2
 x = get_self
 x = Item("metalbar") & 5
 x = a > b
+x = a == b
 ```
 
 The right-hand side of `=` can be a number literal, a function call with a
@@ -362,6 +365,7 @@ if a == 1 {
 ### Comparison Operators
 
 - `==` — equal
+- `!=` — not equal
 - `<` — less than
 - `<=` — less than or equal
 - `>` — greater than
@@ -369,24 +373,37 @@ if a == 1 {
 
 ### Comparison Expressions
 
-The `>` and `<` operators can also be used as expressions that produce a
-boolean value — 1 for true, or empty (0) for false:
+Comparison operators can be used as expressions that produce a boolean
+value — 1 for true, or empty (0) for false:
 
 ```doit
 let is_big = count > 10
 let is_small = count < 3
+let at_least = count >= 5
+let at_most = count <= 20
+let same = a == b
+let different = a != b
 var result = a > b
 result = a < b
 ```
 
 The left operand must be a variable or register. The right operand can be a
-number literal or a variable:
+number literal, a variable, or `null`:
 
 ```doit
-let gt_num = x > 5        # compare with number
-let gt_var = x > y         # compare with variable
-let lt_param = x < $input  # compare with parameter
+let gt_num = x > 5         # compare with number
+let gt_var = x > y          # compare with variable
+let lt_param = x < $input   # compare with parameter
+let is_empty = x == null    # compare with null
+let has_value = x != null   # not-null check
 ```
+
+**Numeric vs equality comparisons:** `>`, `<`, `>=`, and `<=` compare only
+the numeric component of register values (using the `check_number`
+instruction). `==` and `!=` compare full register composites — both the
+typed value and numeric component (using the `compare_register`
+instruction). This means `==` and `!=` can distinguish between different
+item types, coordinates, etc., not just numbers.
 
 #### Logical operators (`&&`, `||`)
 
@@ -395,6 +412,7 @@ Multiple comparisons can be chained with `&&` (and) or `||` (or):
 ```doit
 let in_range = x > 0 && x < 100
 let extreme = x > 90 || x < 10
+let both_set = a != null && b != null
 ```
 
 `&&` produces 1 only if **all** comparisons are true. `||` produces 1 if
@@ -402,21 +420,30 @@ let extreme = x > 90 || x < 10
 
 ```doit
 let ok = a > 1 && b < 10 && c > 0
+let any_match = a == b || c == d || e == f
 ```
 
-Each sub-expression must be a comparison (`variable > operand` or
-`variable < operand`). Mixing `&&` and `||` in the same expression is not
-allowed:
+Each sub-expression must be a comparison (`variable op operand`). Mixing
+`&&` and `||` in the same expression is not allowed:
 
 ```doit
 # ERROR: cannot mix '&&' and '||' in the same expression
 let bad = a > 1 && b < 5 || c > 3
 ```
 
-> **Not yet supported:** `>=`, `<=`, and `==` as expressions; comparison
-> expressions in function bodies; mixed `&&`/`||` with parenthesized
-> sub-expressions; number literals on the left side (use `let x = b < 5`
-> instead of `let x = 5 > b`).
+Numeric comparisons (`>`, `<`, `>=`, `<=`) and equality comparisons (`==`,
+`!=`) cannot be mixed in the same chain because they use different
+underlying instructions:
+
+```doit
+# ERROR: cannot mix numeric comparisons with equality operators
+let bad = a > 5 && b == c
+```
+
+> **Not yet supported:** Comparison expressions in function bodies; mixed
+> `&&`/`||` with parenthesized sub-expressions; number literals on the left
+> side (use `let x = b < 5` instead of `let x = 5 > b`); constructor values
+> on the right side (`a == Item("metalbar")`).
 
 ### `while`
 

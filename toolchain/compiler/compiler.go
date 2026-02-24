@@ -51,6 +51,14 @@ const (
 	checkTarget  = "4" // input: comparison target
 )
 
+// --- compare_register instruction slots (1-based wire format) ---
+
+const (
+	compareRegDifferent = "1" // exec branch: If Different
+	compareRegValue1    = "2" // input: value_1
+	compareRegValue2    = "3" // input: value_2
+)
+
 // setComment sets the "cmt" field on a frame if comment is non-empty.
 func setComment(frame map[string]any, comment string) {
 	if comment != "" {

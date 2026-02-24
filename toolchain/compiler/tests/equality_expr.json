@@ -1,0 +1,87 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 5},
+        "2": "a"
+    },
+    "1": {
+        "op": "set_number",
+        "1": {"num": 3},
+        "2": "b"
+    },
+    "2": {
+        "op": "compare_register",
+        "0": 4,
+        "1": "a",
+        "2": "b",
+        "next": 5
+    },
+    "3": {
+        "op": "set_reg",
+        "0": false,
+        "1": "eq",
+        "next": 6
+    },
+    "4": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "eq"
+    },
+    "5": {
+        "op": "compare_register",
+        "0": 8,
+        "1": "a",
+        "2": {"num": 3}
+    },
+    "6": {
+        "op": "set_reg",
+        "0": false,
+        "1": "ne",
+        "next": 9
+    },
+    "7": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "ne"
+    },
+    "8": {
+        "op": "compare_register",
+        "0": 10,
+        "1": "b",
+        "2": {"num": 1},
+        "next": 11
+    },
+    "9": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 12
+    },
+    "10": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "11": {
+        "op": "compare_register",
+        "0": 14,
+        "1": "b",
+        "2": "a"
+    },
+    "12": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 15
+    },
+    "13": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "14": {
+        "op": "notify",
+        "txt": "done"
+    },
+    "name": "Equality Expr"
+}

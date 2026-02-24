@@ -28,12 +28,12 @@ not currently handle `(` after a function name. See F13 in
 
 ## Extended comparison expressions
 
-`>`, `<`, `>=`, and `<=` work as expressions at behavior level, with
-`&&`/`||` chaining. Natural extensions:
+`>`, `<`, `>=`, `<=`, `==`, and `!=` work as expressions at behavior
+level, with `&&`/`||` chaining. `==` and `!=` use `compare_register`
+(full register equality); the others use `check_number` (numeric
+comparison). Mixing the two instruction types in `&&`/`||` chains is
+a compile error. Natural extensions:
 
-- **`==` as expression**: Same 3-frame pattern with different branch
-  mappings. `==` maps equal to true (larger and smaller both go to
-  false).
 - **fn body comparison expressions**: Requires branching in the flat
   `fnBodyCall` list, which only supports linear sequences today.
   This also blocks fn body `&&`/`||` support.
@@ -42,6 +42,8 @@ not currently handle `(` after a function name. See F13 in
 - **Number literal LHS**: `let x = 5 > b` — the `tokNumber` path in
   `compileVarInit` is consumed before checking for a comparison
   operator. Workaround: `let x = b < 5`.
+- **Constructor RHS**: `a == Item("metalbar")` — requires parsing
+  type constructors in comparison RHS position.
 - **Mixed `&&`/`||` precedence**: `a > 1 && b < 5 || c > 3` is
   currently a compile error. Supporting this requires either
   operator precedence (`&&` binds tighter than `||`) or parenthesized
@@ -49,6 +51,10 @@ not currently handle `(` after a function name. See F13 in
 - **Parenthesized sub-expressions**: `let x = (a > 1 || b < 2) && c > 3`
   would enable arbitrary nesting. Requires the parser to handle `(`
   in expression context.
+- **Mixed numeric/equality chains**: `a > 5 && b == c` requires
+  emitting both `check_number` and `compare_register` frames in the
+  same chain, with compatible branch routing to shared false/true
+  frames.
 
 ## Known blocking issues (from audit)
 

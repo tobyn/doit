@@ -1,0 +1,12 @@
+# AI-generated test
+# == and != as boolean expression operators in let/var init and assignment
+behavior equality_expr {
+    @name "Equality Expr"
+    var a = 5
+    var b = 3
+    let eq = a == b
+    let ne = a != 3
+    var r = b == 1
+    r = b != a
+    notify "done"
+}

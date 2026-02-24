@@ -1204,7 +1204,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number or variable after comparison operator") {
+		if !strings.Contains(err.Error(), "expected number, variable, or null after comparison operator") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1226,7 +1226,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number or variable after comparison operator") {
+		if !strings.Contains(err.Error(), "expected number, variable, or null after comparison operator") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1284,6 +1284,41 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "cannot read from output parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// --- Equality operator errors ---
+
+	t.Run("equality_mixed_chain", func(t *testing.T) {
+		src := `behavior a { var a = 5; var b = 3; let r = a > 5 && b == 3 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot mix numeric comparisons") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("equality_string_rhs", func(t *testing.T) {
+		src := `behavior a { var a = 5; let r = a != "hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number, variable, or null after comparison operator") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bang_without_equals", func(t *testing.T) {
+		src := `behavior a { var x = 5; let r = !x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unexpected character") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

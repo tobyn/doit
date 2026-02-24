@@ -1,0 +1,10 @@
+# AI-generated test
+# || chaining with equality operators
+behavior logical_or_eq {
+    @name "Logical Or Eq"
+    var a = 5
+    var b = 3
+    var c = 7
+    let r = a == b || c == 2
+    notify "done"
+}
