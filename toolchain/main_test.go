@@ -1336,6 +1336,28 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("lock_as_variable_name", func(t *testing.T) {
+		src := `behavior a { let lock = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unlock_as_variable_name", func(t *testing.T) {
+		src := `behavior a { let unlock = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

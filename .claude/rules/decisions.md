@@ -306,6 +306,32 @@ and assignment RHS at behavior level.
 sub-expressions; fn body logical expressions; logical expressions in
 function call arguments; fn body `is` expressions.
 
+## Lock/unlock as keywords with compile-time mode tracking
+
+**Keywords, not stdlib functions**: `lock` and `unlock` are language
+keywords, not stdlib function wrappers. They were removed from
+`instructions.doit` and are now handled directly by the compiler. This
+enables compile-time optimization that stdlib functions cannot provide.
+
+**Frame-scanning for mode tracking**: Rather than precomputing mode
+effects on user-defined functions, the behavior-level mode tracker
+scans newly emitted frames after each `default` case statement. Since
+all function calls are inlined via `expandCall`, any lock/unlock inside
+a called function appears as a frame in the main builder. Scanning
+after each statement catches these automatically — no per-function
+metadata needed.
+
+**Redundant elimination**: The compiler tracks an `execMode` (locked,
+unlocked, or unknown) starting at `modeLocked`. A `lock` when already
+locked or `unlock` when already unlocked is simply not emitted. After
+control flow (`if`/`while`/`loop`), mode resets to `modeUnknown`
+(conservative), so subsequent lock/unlock is always emitted.
+
+**Uniform handling**: `lock`/`unlock` work in behavior bodies,
+`compileBody` (if/else bodies), `compileLoop` bodies, and fn bodies
+(as `fnBodyCall` entries with inline frames). In fn bodies, they flow
+through the existing `call.frame != nil` path in `expandCall`.
+
 ## Control flow stubs
 
 Control-flow instructions (branches, loops, terminals, jump/label) are

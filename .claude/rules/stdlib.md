@@ -28,6 +28,11 @@ Functions fall into three categories:
   These have dynamic parameters (`call`), require UI selection (`produce`), or use
   non-standard field types (`set_logistics_options`).
 
+Note: `lock` and `unlock` are **not** in the stdlib. They are language
+keywords handled directly by the compiler with compile-time mode tracking.
+The stdlib still contains `lock_slots` and `unlock_slots` (unrelated
+inventory slot functions).
+
 Each function body contains a `# frame:` comment showing the inferred JSON structure of the
 compiled instruction. These were derived from `instructions.lua` by mapping:
 

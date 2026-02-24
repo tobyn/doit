@@ -1,0 +1,8 @@
+# AI-generated test
+# lock and unlock emit the correct frames
+behavior lock_unlock {
+    unlock
+    notify "Running fast"
+    lock
+    notify "Running slow"
+}

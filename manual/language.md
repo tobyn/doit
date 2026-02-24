@@ -516,6 +516,49 @@ loop {
 }
 ```
 
+## Execution Mode
+
+Behavior controllers start each execution cycle in **locked** mode, running
+one instruction per tick. Use `unlock` to switch to unlocked mode (runs as
+many instructions as possible per tick) and `lock` to switch back:
+
+```doit
+unlock
+notify "Fast"
+lock
+notify "Slow"
+```
+
+`lock` and `unlock` are keywords, not function calls. They can be used in
+behavior bodies, control flow blocks (`if`/`while`/`loop`), and function
+bodies:
+
+```doit
+fn go_fast(txt) {
+    unlock
+    notify txt
+    lock
+}
+
+behavior runner {
+    go_fast "Speedy"
+}
+```
+
+### Redundant mode change elimination
+
+The compiler tracks the current execution mode at compile time and eliminates
+redundant mode changes. Since behaviors always start locked:
+
+- `lock` at the start of a behavior is a no-op (already locked)
+- Two consecutive `unlock` statements emit only one `unlock` frame
+- After control flow (`if`/`while`/`loop`), the mode resets to unknown, so
+  a subsequent `lock` or `unlock` is always emitted
+
+When `lock` or `unlock` appears inside a function that is inlined at the call
+site, the compiler scans the newly emitted frames and updates its mode
+tracking accordingly.
+
 ## Localization
 
 The `localize` construct provides locale-aware strings at compile time. It

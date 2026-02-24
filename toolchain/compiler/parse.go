@@ -285,6 +285,15 @@ func (p *parser) parseUserFn() error {
 		}
 		comment := p.docComment
 
+		// Handle lock/unlock in fn body
+		if tok.val == "lock" || tok.val == "unlock" {
+			body = append(body, fnBodyCall{
+				frame:   map[string]any{"op": tok.val},
+				comment: comment,
+			})
+			continue
+		}
+
 		// Handle bare instruction statement in fn body
 		if tok.val == "instruction" {
 			frame, err := p.parseInstruction()

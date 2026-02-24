@@ -22,10 +22,11 @@ proceed (no successor instruction), the behavior controller restarts
 the behavior from the beginning. The `exit` instruction explicitly
 terminates the behavior without restarting.
 
-Some instructions modify the behavior controller's state rather than
-operating on data. `lock` and `unlock` change the execution mode, and
-this state persists on the controller component — it survives behavior
-restarts. These are side effects on the hardware, not on the program.
+Each execution cycle starts fresh: all variables are reset and the
+controller begins in locked mode. The `unlock` instruction switches to
+unlocked mode for the current execution; `lock` switches back. Both
+are noops if the controller is already in the requested mode. This
+state does not persist — the next execution cycle starts locked again.
 In unlocked mode, executing too many instructions in a single tick
 causes the controller to panic and stop executing (no auto restart).
 

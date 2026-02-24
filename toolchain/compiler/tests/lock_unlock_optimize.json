@@ -1,0 +1,8 @@
+{
+    "0": { "op": "notify", "txt": "Already locked" },
+    "1": { "op": "unlock" },
+    "2": { "op": "notify", "txt": "Still unlocked" },
+    "3": { "op": "lock" },
+    "4": { "op": "notify", "txt": "Still locked" },
+    "name": "lock_unlock_optimize"
+}

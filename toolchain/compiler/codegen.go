@@ -191,6 +191,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	b := &frameBuilder{}
 	syms := newSymbolTable()
 	hasInstruction := false // true after any instruction-emitting statement
+	mode := modeLocked     // execution mode tracking for lock/unlock optimization
 
 	// State for break target patching after a loop
 	breakTargetFrame := -1
@@ -255,6 +256,24 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			}
 			resolved := resolveInstructionFrame(rawFrame, nil, nil, nil, comment)
 			b.emit(resolved)
+
+		case "lock":
+			hasInstruction = true
+			if mode != modeLocked {
+				f := map[string]any{"op": "lock"}
+				setComment(f, comment)
+				b.emit(f)
+				mode = modeLocked
+			}
+
+		case "unlock":
+			hasInstruction = true
+			if mode != modeUnlocked {
+				f := map[string]any{"op": "unlock"}
+				setComment(f, comment)
+				b.emit(f)
+				mode = modeUnlocked
+			}
 
 		case "var":
 			hasInstruction = true
@@ -378,23 +397,37 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				resumeFrame = b.pos()
 				b.seek(breakTargetFrame)
 			}
+			mode = modeUnknown
 
 		case "if":
 			hasInstruction = true
 			if err := p.compileIfStmt(b, &deferred, comment, syms); err != nil {
 				return nil, err
 			}
+			mode = modeUnknown
 
 		case "while":
 			hasInstruction = true
 			if err := p.compileWhile(b, comment, syms); err != nil {
 				return nil, err
 			}
+			mode = modeUnknown
 
 		default:
 			hasInstruction = true
+			framesBefore := b.pos()
 			if err := p.compileDefaultStatement(tok, b, comment, syms); err != nil {
 				return nil, err
+			}
+			for i := framesBefore; i < b.pos(); i++ {
+				if op, ok := b.get(i)["op"].(string); ok {
+					switch op {
+					case "lock":
+						mode = modeLocked
+					case "unlock":
+						mode = modeUnlocked
+					}
+				}
 			}
 		}
 
@@ -515,6 +548,16 @@ func (p *parser) compileLoop(b *frameBuilder, syms *symbolTable) (int, error) {
 				return -1, err
 			}
 			checkFrame = cf
+
+		case "lock":
+			f := map[string]any{"op": "lock"}
+			setComment(f, comment)
+			b.emit(f)
+
+		case "unlock":
+			f := map[string]any{"op": "unlock"}
+			setComment(f, comment)
+			b.emit(f)
 
 		default:
 			if err := p.compileDefaultStatement(tok, b, comment, syms); err != nil {
@@ -1776,8 +1819,19 @@ func (p *parser) compileBody(syms *symbolTable) ([]map[string]any, error) {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
 		comment := p.docComment
-		if err := p.compileDefaultStatement(tok, b, comment, syms); err != nil {
-			return nil, err
+		switch tok.val {
+		case "lock":
+			f := map[string]any{"op": "lock"}
+			setComment(f, comment)
+			b.emit(f)
+		case "unlock":
+			f := map[string]any{"op": "unlock"}
+			setComment(f, comment)
+			b.emit(f)
+		default:
+			if err := p.compileDefaultStatement(tok, b, comment, syms); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return b.frames, nil

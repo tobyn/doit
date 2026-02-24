@@ -285,6 +285,14 @@ type deferredBody struct {
 	continuation int    // frame index of the statement after the if block
 }
 
+type execMode int
+
+const (
+	modeLocked   execMode = iota
+	modeUnlocked
+	modeUnknown
+)
+
 // frameRef marks an integer as a reference to a 0-based index in a
 // frameBuilder's slice. finalize converts these to 1-based wire format indices.
 type frameRef int

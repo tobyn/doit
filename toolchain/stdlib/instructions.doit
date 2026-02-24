@@ -1137,13 +1137,6 @@ fn launch() {
     }
 }
 
-# Run one instruction at a time.
-fn lock() {
-    # frame: {"op": "lock"}
-    instruction "lock" {
-    }
-}
-
 # Fix all storage slots or a specific item slot.
 #   item [in] - item type to fix to the slots
 #   slot_index [in, optional] - individual slot to fix
@@ -1832,13 +1825,6 @@ fn unit_type(unit) {
     # control flow: branches execution
     # frame: {"op": "unit_type", "0": unit [in], "1": "Building" [exec],
     #   "2": "Bot" [exec], "3": "Construction" [exec], "next": "No Unit"}
-}
-
-# Run as many instructions as possible. Use wait instructions to throttle execution.
-fn unlock() {
-    # frame: {"op": "unlock"}
-    instruction "unlock" {
-    }
 }
 
 # Unfix all inventory slots or a specific item slot.

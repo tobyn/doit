@@ -26,19 +26,22 @@ output format.
   `valueTypeUnit`, `valueTypeComp`, `valueTypeTech`, `valueTypeValue`,
   `valueTypeCoord`), `allTypeSlots` (the 6 branch slot keys),
   `typeCheckSlot` helper (maps constructor names to slot keys),
-  the `setComment` helper for setting `"cmt"` on frames, and the
-  `allocUniqueVar` helper for inline variable renaming
+  the `setComment` helper for setting `"cmt"` on frames,
+  `allocUniqueVar` helper for inline variable renaming,
+  `execMode` type with `modeLocked`/`modeUnlocked`/`modeUnknown`
+  constants for compile-time execution mode tracking
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types (including `tokAmpersand` for `&`,
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
   `tokNotEquals` for `!=`, `tokIs` for the internal-only
   `is` type check operator), `Keywords` map (includes `"is"`)
-  (includes type constructor names and direction keywords), `isConstructor`
+  (includes type constructor names, direction keywords, and `lock`/`unlock`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
   `#!` comments
 - **`compiler/parse.go`** — Stdlib parsing (delegates to `parseUserFn`),
   file-level parsing, function definitions with `instruction` support,
+  lock/unlock handling in fn bodies (emitted as `fnBodyCall` with inline frames),
   call expansion with `[]any`/`map[string]any` argument types, inline
   frame expansion for `fnBodyCall.frame`, fn body direction enforcement
   (`fnBodyArgDir`, `checkFnBodyCallDirections`,
@@ -56,6 +59,8 @@ output format.
   type check helpers (`isTypeCheckOp`, `parseIsRHS`, `emitTypeCheck`),
   logical operator helpers (`parseAndEmitBooleanExpr`,
   `emitChainedBoolExpr`, `comparisonTerm`),
+  lock/unlock keyword handling with compile-time mode tracking
+  (in `parseBehaviorBody`, `compileBody`, `compileLoop`),
   loops, if/else, deferred body emission,
   `matchLocale` shared BCP 47 matching helper
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled

@@ -1,0 +1,5 @@
+{
+    "0": { "op": "unlock", "cmt": "Switch to fast mode" },
+    "1": { "op": "notify", "txt": "Fast" },
+    "name": "lock_unlock_comment"
+}
