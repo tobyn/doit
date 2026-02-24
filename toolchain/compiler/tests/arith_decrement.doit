@@ -1,0 +1,7 @@
+# AI-generated test
+# Decrement operator --
+behavior arith_decrement {
+    @name "Arith Decrement"
+    var a = 5
+    a--
+}

@@ -378,3 +378,58 @@ always means a direction annotation.
 level (`parseFnCallArgs`) and in fn bodies (`parseFnBodyCall`), for both
 positional and keyword arguments. The shared `checkCallAnnotation` helper
 validates the annotation against the parameter definition.
+
+## Arithmetic expression operators (+, -, *, /)
+
+`+`, `-`, `*`, `/` are expression operators that compile to the game's
+`add`, `sub`, `mul`, `div` instructions. Each produces a single
+instruction frame — no branching like comparison expressions.
+
+**Syntax**: `let a = b + c`, `x = a - 3`, `let r = 5 + offset`.
+The LHS is a variable, register, or number literal. The RHS is a number
+literal or variable (resolved via `resolveComparisonOperand` for
+readability checking and `$` resolution).
+
+**Single-instruction mapping**: Each operator maps directly to one stdlib
+opcode. `+` → `add`, `-` → `sub`, `*` → `mul`, `/` → `div`. The
+compiler emits the frame directly (not via `expandCall`) since the
+instruction format is uniform: slot 1 = LHS (to/from), slot 2 = RHS
+(num), slot 3 = output target.
+
+**LHS value semantics**: The game's arithmetic instructions preserve the
+typed value from the first operand (slot 0/to/from). The number
+component of the result is the arithmetic operation on both operands'
+number components. This means `Item("metalbar") & 3` plus 2 yields
+`Item("metalbar") & 5`.
+
+**Number literal LHS supported**: Unlike comparison operators (which
+defer number-literal LHS), arithmetic supports `let a = 5 + b` because
+`add(5, b)` is meaningful — it adds b's number to 5.
+
+**Supported contexts**: `let`/`var` init and assignment RHS at behavior
+level. Single operation per expression (no chaining).
+
+**Deferred**: fn body arithmetic expressions; chained operations
+(`a + b + c`); arithmetic in function call arguments.
+
+## Compound assignment operators (+=, -=, *=, /=)
+
+`+=`, `-=`, `*=`, `/=` are compound assignment operators that read from
+the target, apply the arithmetic operation, and write back. They compile
+to a single instruction frame where the target appears in both the input
+and output slots.
+
+**Broadened RHS**: `+=` originally only accepted number literals. All
+four compound operators now accept both number literals and variables
+as the RHS operand (via `parseArithmeticRHS`).
+
+**Unified handler**: `isCompoundAssignOp` and `compoundAssignOpName`
+map all four compound tokens to their opcode. The handler in
+`compileDefaultStatement` uses `parseArithmeticRHS` for the RHS.
+
+## Increment/decrement (++, --)
+
+`++` and `--` are sugar for `+= 1` and `-= 1`. `++` emits `add` with
+`{"num": 1}`, `--` emits `sub` with `{"num": 1}`. Both use
+`resolveAssignTarget` with `compound: true` (reads and writes the
+target).

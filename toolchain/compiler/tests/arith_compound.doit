@@ -1,0 +1,9 @@
+# AI-generated test
+# Compound assignment operators -=, *=, /=
+behavior arith_compound {
+    @name "Arith Compound"
+    var a = 10
+    a -= 1
+    a *= 2
+    a /= 3
+}

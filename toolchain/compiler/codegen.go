@@ -1125,6 +1125,68 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 	})
 }
 
+// isArithmeticOp reports whether the token kind is an arithmetic operator
+// (+, -, *, /).
+func isArithmeticOp(kind tokenKind) bool {
+	return kind == tokPlus || kind == tokMinus || kind == tokStar || kind == tokSlash
+}
+
+// arithmeticOpName maps an arithmetic token kind to the stdlib function
+// opcode name.
+func arithmeticOpName(kind tokenKind) string {
+	switch kind {
+	case tokPlus:
+		return "add"
+	case tokMinus:
+		return "sub"
+	case tokStar:
+		return "mul"
+	case tokSlash:
+		return "div"
+	}
+	return ""
+}
+
+// parseArithmeticRHS parses the right-hand operand of an arithmetic expression.
+// Accepts a number literal (→ {"num": N}) or an identifier (→ resolved operand).
+func (p *parser) parseArithmeticRHS(syms *symbolTable) (any, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	switch tok.kind {
+	case tokNumber:
+		num, _ := strconv.Atoi(tok.val)
+		return map[string]any{"num": num}, nil
+	case tokIdent:
+		return p.resolveComparisonOperand(tok, syms)
+	default:
+		return nil, p.errorf(tok.pos, "expected number or variable after arithmetic operator, got %s", tok.describe())
+	}
+}
+
+// isCompoundAssignOp reports whether the token kind is a compound assignment
+// operator (+=, -=, *=, /=).
+func isCompoundAssignOp(kind tokenKind) bool {
+	return kind == tokPlusEquals || kind == tokMinusEquals || kind == tokStarEquals || kind == tokSlashEquals
+}
+
+// compoundAssignOpName maps a compound assignment token kind to the stdlib
+// function opcode name.
+func compoundAssignOpName(kind tokenKind) string {
+	switch kind {
+	case tokPlusEquals:
+		return "add"
+	case tokMinusEquals:
+		return "sub"
+	case tokStarEquals:
+		return "mul"
+	case tokSlashEquals:
+		return "div"
+	}
+	return ""
+}
+
 // isComparisonOp reports whether the token kind is a comparison operator
 // (>, <, >=, <=, ==, !=).
 func isComparisonOp(kind tokenKind) bool {
@@ -1539,6 +1601,22 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		return nil
 	}
 
+	if tok2.kind == tokMinusMinus {
+		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos, true)
+		if err != nil {
+			return err
+		}
+		f := map[string]any{
+			"op": "sub",
+			"1":  target,
+			"2":  map[string]any{"num": 1},
+			"3":  target,
+		}
+		setComment(f, comment)
+		b.emit(f)
+		return nil
+	}
+
 	if tok2.kind == tokEquals {
 		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos, false)
 		if err != nil {
@@ -1550,6 +1628,27 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		}
 		if rhsTok.kind == tokNumber {
 			num, _ := strconv.Atoi(rhsTok.val)
+			// Check for arithmetic operator after number
+			peek, err := p.next()
+			if err != nil {
+				return err
+			}
+			if isArithmeticOp(peek.kind) {
+				rhs, err := p.parseArithmeticRHS(syms)
+				if err != nil {
+					return err
+				}
+				f := map[string]any{
+					"op": arithmeticOpName(peek.kind),
+					"1":  map[string]any{"num": num},
+					"2":  rhs,
+					"3":  target,
+				}
+				setComment(f, comment)
+				b.emit(f)
+				return nil
+			}
+			p.unget(peek)
 			f := map[string]any{
 				"op": "set_number",
 				"2":  map[string]any{"num": num},
@@ -1630,6 +1729,25 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 					}
 					return p.parseAndEmitBooleanExpr(tokIs, lhs, slot, target, b, comment, syms)
 				}
+				if isArithmeticOp(peek.kind) {
+					lhs, err := p.resolveComparisonOperand(rhsTok, syms)
+					if err != nil {
+						return err
+					}
+					rhs, err := p.parseArithmeticRHS(syms)
+					if err != nil {
+						return err
+					}
+					f := map[string]any{
+						"op": arithmeticOpName(peek.kind),
+						"1":  lhs,
+						"2":  rhs,
+						"3":  target,
+					}
+					setComment(f, comment)
+					b.emit(f)
+					return nil
+				}
 				p.unget(peek)
 				return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
 			}
@@ -1648,20 +1766,19 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		return p.errorf(rhsTok.pos, "expected number, function call, constructor, or instruction after '=', got %s", rhsTok.describe())
 	}
 
-	if tok2.kind == tokPlusEquals {
+	if isCompoundAssignOp(tok2.kind) {
 		target, err := p.resolveAssignTarget(tok.val, syms, tok.pos, true)
 		if err != nil {
 			return err
 		}
-		numTok, err := p.expect(tokNumber)
+		rhs, err := p.parseArithmeticRHS(syms)
 		if err != nil {
 			return err
 		}
-		num, _ := strconv.Atoi(numTok.val)
 		f := map[string]any{
-			"op": "add",
+			"op": compoundAssignOpName(tok2.kind),
 			"1":  target,
-			"2":  map[string]any{"num": num},
+			"2":  rhs,
 			"3":  target,
 		}
 		setComment(f, comment)
@@ -2136,13 +2253,30 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 
 	if rhsTok.kind == tokNumber {
 		num, _ := strconv.Atoi(rhsTok.val)
-		// Check for & after number
+		// Check for & or arithmetic operator after number
 		peek, err := p.next()
 		if err != nil {
 			return err
 		}
 		if peek.kind == tokAmpersand {
 			return p.errorf(peek.pos, "number literal cannot be left side of '&' (use a type constructor)")
+		}
+		if isArithmeticOp(peek.kind) {
+			rhs, err := p.parseArithmeticRHS(syms)
+			if err != nil {
+				return err
+			}
+			syms.vars[nameTok.val] = varInfo{mutable: mutable}
+			syms.usedVars[nameTok.val] = true
+			f := map[string]any{
+				"op": arithmeticOpName(peek.kind),
+				"1":  map[string]any{"num": num},
+				"2":  rhs,
+				"3":  nameTok.val,
+			}
+			setComment(f, comment)
+			b.emit(f)
+			return nil
 		}
 		p.unget(peek)
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
@@ -2230,6 +2364,27 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 				syms.vars[nameTok.val] = varInfo{mutable: mutable}
 				syms.usedVars[nameTok.val] = true
 				return p.parseAndEmitBooleanExpr(tokIs, lhs, slot, nameTok.val, b, comment, syms)
+			}
+			if isArithmeticOp(peek.kind) {
+				lhs, err := p.resolveComparisonOperand(rhsTok, syms)
+				if err != nil {
+					return err
+				}
+				rhs, err := p.parseArithmeticRHS(syms)
+				if err != nil {
+					return err
+				}
+				syms.vars[nameTok.val] = varInfo{mutable: mutable}
+				syms.usedVars[nameTok.val] = true
+				f := map[string]any{
+					"op": arithmeticOpName(peek.kind),
+					"1":  lhs,
+					"2":  rhs,
+					"3":  nameTok.val,
+				}
+				setComment(f, comment)
+				b.emit(f)
+				return nil
 			}
 			p.unget(peek)
 			return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)

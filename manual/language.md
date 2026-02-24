@@ -245,7 +245,8 @@ let x = 5
 ```
 
 The right-hand side of `var` and `let` can be a number literal, a function
-call that has a return value, a type constructor expression, a
+call that has a return value, a type constructor expression, an
+[arithmetic expression](#arithmetic-expressions), a
 [comparison expression](#comparison-expressions), a
 [type check expression](#type-check-expressions), or an
 [`instruction`](instruction.md) expression:
@@ -255,6 +256,7 @@ let me = get_self
 var loc = get_location me
 let item = Item("metalbar") & 5
 let pos = Coordinate(3, 7)
+let sum = a + b
 let is_big = count > 10
 let in_range = count > 0 && count < 100
 let same = a == b
@@ -267,6 +269,8 @@ initialized with a function call, the function's return value is assigned to
 the variable. When initialized with a type constructor, a `set_reg` instruction
 is emitted for compile-time values, or the appropriate runtime instructions
 are emitted (e.g., `combine_coordinate` for `Coordinate` with variables).
+When initialized with an arithmetic expression, the corresponding math
+instruction (`add`, `sub`, `mul`, or `div`) is emitted.
 When initialized with a comparison or type check expression (optionally chained
 with `&&` or `||`), a `check_number`, `compare_register`, or `value_type` +
 `set_reg` pattern is emitted that assigns 1 (true) or empty (false) to the
@@ -275,7 +279,8 @@ variable. When initialized with an
 variable as the `@1` output target.
 
 The difference between `var` and `let` is that `let` prevents reassignment —
-the compiler errors on `=`, `+=`, or `++` targeting a `let` variable.
+the compiler errors on `=`, `+=`, `-=`, `*=`, `/=`, `++`, or `--` targeting
+a `let` variable.
 
 Both `var` and `let` allow shadowing — you can redeclare a variable with the
 same name, and the new declaration replaces the previous one:
@@ -292,23 +297,33 @@ Assign a new value with `=`:
 x = 2
 x = get_self
 x = Item("metalbar") & 5
+x = a + b
 x = a > b
 x = a == b
 x = me is Unit
 ```
 
 The right-hand side of `=` can be a number literal, a function call with a
-return value, a type constructor expression, a
+return value, a type constructor expression, an
+[arithmetic expression](#arithmetic-expressions), a
 [comparison expression](#comparison-expressions), a
 [type check expression](#type-check-expressions), or an
 [`instruction`](instruction.md) expression.
 
-Compound assignment and increment are also supported:
+Compound assignment, increment, and decrement are also supported:
 
 ```doit
 x += 1
+x -= 1
+x *= 2
+x /= 3
+x += y
 x++
+x--
 ```
+
+The right-hand side of `+=`, `-=`, `*=`, `/=` can be a number literal or a
+variable. `++` adds 1, `--` subtracts 1.
 
 Assignment targets can also be unit registers (`$store = 5`) or parameters.
 
@@ -365,6 +380,40 @@ if a == 1 {
     notify "less than one"
 }
 ```
+
+### Arithmetic Expressions
+
+Arithmetic operators produce a value by applying the corresponding game
+instruction:
+
+| Operator | Instruction | Description |
+|----------|-------------|-------------|
+| `+`      | `add`       | Addition    |
+| `-`      | `sub`       | Subtraction |
+| `*`      | `mul`       | Multiplication |
+| `/`      | `div`       | Division    |
+
+The left operand can be a variable, register, or number literal. The right
+operand can be a number literal or a variable:
+
+```doit
+let sum = a + b
+let diff = a - 3
+let product = x * y
+let quotient = x / 2
+let scaled = 5 + offset
+var result = a + b
+result = a - b
+```
+
+Each arithmetic expression compiles to a single instruction frame. The
+result's typed value comes from the left operand, and the number component
+is the arithmetic result of both operands' number components. This means
+`Item("metalbar") & 3` followed by `item + 2` would produce
+`Item("metalbar") & 5` — the item type is preserved.
+
+> **Not yet supported:** Arithmetic expressions in function bodies; chained
+> operations (`a + b + c`); arithmetic in function call arguments.
 
 ### Comparison and Type Check Operators
 

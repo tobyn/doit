@@ -1,0 +1,8 @@
+# AI-generated test
+# Arithmetic * operator in let/var init
+behavior arith_multiply {
+    @name "Arith Multiply"
+    var b = 5
+    var c = 3
+    let a = b * c
+}

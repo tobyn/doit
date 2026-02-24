@@ -33,6 +33,14 @@ const (
 	tokDoubleAmpersand
 	tokDoublePipe
 	tokNotEquals
+	tokPlus
+	tokMinus
+	tokStar
+	tokSlash
+	tokMinusMinus
+	tokMinusEquals
+	tokStarEquals
+	tokSlashEquals
 	tokIs // internal-only: represents the 'is' operator in comparisonTerm.op
 )
 
@@ -249,6 +257,30 @@ func (s *scanner) next() (token, error) {
 	case c == '+' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
 		s.pos += 2
 		return token{tokPlusEquals, "+=", start}, nil
+	case c == '+':
+		s.pos++
+		return token{tokPlus, "+", start}, nil
+	case c == '-' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '-':
+		s.pos += 2
+		return token{tokMinusMinus, "--", start}, nil
+	case c == '-' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
+		s.pos += 2
+		return token{tokMinusEquals, "-=", start}, nil
+	case c == '-':
+		s.pos++
+		return token{tokMinus, "-", start}, nil
+	case c == '*' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
+		s.pos += 2
+		return token{tokStarEquals, "*=", start}, nil
+	case c == '*':
+		s.pos++
+		return token{tokStar, "*", start}, nil
+	case c == '/' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
+		s.pos += 2
+		return token{tokSlashEquals, "/=", start}, nil
+	case c == '/':
+		s.pos++
+		return token{tokSlash, "/", start}, nil
 	case c == '>' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
 		s.pos += 2
 		return token{tokGreaterEquals, ">=", start}, nil
@@ -412,6 +444,22 @@ func (t token) describe() string {
 		return "'||'"
 	case tokNotEquals:
 		return "'!='"
+	case tokPlus:
+		return "'+'"
+	case tokMinus:
+		return "'-'"
+	case tokStar:
+		return "'*'"
+	case tokSlash:
+		return "'/'"
+	case tokMinusMinus:
+		return "'--'"
+	case tokMinusEquals:
+		return "'-='"
+	case tokStarEquals:
+		return "'*='"
+	case tokSlashEquals:
+		return "'/='"
 	case tokIs:
 		return "'is'"
 	}

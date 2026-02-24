@@ -1,0 +1,8 @@
+# AI-generated test
+# Compound assignment with variable RHS (new capability)
+behavior arith_compound_var {
+    @name "Arith Compound Var"
+    var a = 10
+    var b = 3
+    a += b
+}

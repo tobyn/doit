@@ -33,8 +33,11 @@ output format.
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types (including `tokAmpersand` for `&`,
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
-  `tokNotEquals` for `!=`, `tokIs` for the internal-only
-  `is` type check operator), `Keywords` map (includes `"is"`)
+  `tokNotEquals` for `!=`, `tokPlus`/`tokMinus`/`tokStar`/`tokSlash`
+  for arithmetic operators, `tokMinusMinus`/`tokMinusEquals`/
+  `tokStarEquals`/`tokSlashEquals` for compound assignment/decrement,
+  `tokIs` for the internal-only `is` type check operator),
+  `Keywords` map (includes `"is"`)
   (includes type constructor names, direction keywords, and `lock`/`unlock`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
@@ -53,7 +56,10 @@ output format.
   `checkInstructionDirections`, `checkCallAnnotation`),
   `resolveInstructionFrame` helper for 0→1 key conversion and slot substitution,
   `frameHasReturnSlot`/`frameReturnCount` helpers, `instruction` as expression
-  in let/var/assign/multi-return, comparison expression helpers
+  in let/var/assign/multi-return, arithmetic expression helpers
+  (`isArithmeticOp`, `arithmeticOpName`, `parseArithmeticRHS`),
+  compound assignment helpers (`isCompoundAssignOp`, `compoundAssignOpName`),
+  comparison expression helpers
   (`emitComparison`, `resolveComparisonOperand`, `parseComparisonRHS`,
   `isComparisonOp`, `isEqualityOp`),
   type check helpers (`isTypeCheckOp`, `parseIsRHS`, `emitTypeCheck`),
@@ -380,6 +386,15 @@ strings) in the behavior JSON. Maximum 10 parameters.
 arguments are optional. This preserves backward compatibility with
 string-only args (which are unambiguous without commas) while supporting
 the natural `set_reg x, $store` style with mixed types.
+
+**Arithmetic expressions**: `+`, `-`, `*`, `/` work as expression operators
+in `let`/`var` init and assignment RHS at behavior level. Each maps to a
+single instruction: `+` → `add`, `-` → `sub`, `*` → `mul`, `/` → `div`.
+The compiler emits the instruction frame directly. LHS can be a variable,
+register, or number literal. RHS can be a number literal or variable.
+Compound assignment (`+=`, `-=`, `*=`, `/=`) and decrement (`--`) are also
+supported. `+=` was broadened to accept variable RHS (previously
+number-only).
 
 **Comparison expressions**: `>`, `<`, `>=`, `<=`, `==`, and `!=` work as
 boolean expression operators in `let`/`var` init and assignment RHS at

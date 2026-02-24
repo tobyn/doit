@@ -1,0 +1,8 @@
+# AI-generated test
+# Arithmetic / operator in let/var init
+behavior arith_divide {
+    @name "Arith Divide"
+    var b = 10
+    var c = 2
+    let a = b / c
+}

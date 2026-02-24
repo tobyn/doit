@@ -1358,6 +1358,50 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("arith_string_rhs", func(t *testing.T) {
+		src := `behavior a { var b = 5; let a = b + "hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number or variable after arithmetic operator") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("arith_out_param_lhs", func(t *testing.T) {
+		src := `behavior a { @param out x "X"; let r = $x + 1 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot read from output parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("arith_let_compound_assign", func(t *testing.T) {
+		src := `behavior a { let x = 5; x -= 1 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("arith_let_decrement", func(t *testing.T) {
+		src := `behavior a { let x = 5; x-- }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

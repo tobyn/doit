@@ -55,6 +55,21 @@ freely mixed in the same chain. Natural extensions:
   Could potentially be implemented with `check_number` against itself
   (nonzero = number), but the null/0 ambiguity remains.
 
+## Extended arithmetic expressions
+
+`+`, `-`, `*`, `/` work as single-operation expressions at behavior level.
+Natural extensions:
+
+- **fn body arithmetic expressions**: Requires emitting instruction frames
+  in the flat `fnBodyCall` list. Same constraint as fn body comparisons.
+- **Chained operations**: `a + b + c` — currently only single operations
+  are supported. Chaining would require either left-to-right evaluation
+  with temporaries or a proper expression parser with precedence.
+- **Arithmetic in function arguments**: `notify (a + 5)` — needs
+  parenthesized expressions to disambiguate.
+- **Modulo operator**: `%` → `modulo` instruction. The instruction exists
+  in the stdlib but has no operator syntax yet.
+
 ## Known blocking issues (from audit)
 
 These are known compiler bugs identified in `analysis-findings.md` that

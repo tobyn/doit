@@ -1,0 +1,7 @@
+# AI-generated test
+# Arithmetic with number literal RHS
+behavior arith_number_rhs {
+    @name "Arith Number RHS"
+    var b = 5
+    let a = b + 3
+}
