@@ -1,0 +1,9 @@
+# AI-generated test
+# Parenthesized arithmetic: let a = (b + c) * d
+behavior arith_parens {
+    @name "Arith Parens"
+    var b = 2
+    var c = 3
+    var d = 4
+    let a = (b + c) * d
+}

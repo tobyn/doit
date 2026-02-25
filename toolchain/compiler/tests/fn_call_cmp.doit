@@ -1,0 +1,14 @@
+# AI-generated test
+# Function result compared: let a = get_number x > 5
+fn get_number(v) {
+    return instruction "get_number" {
+        0: v
+        2: @1
+    }
+}
+
+behavior fn_call_cmp {
+    @name "Fn Call Cmp"
+    var x = 10
+    let a = get_number x > 5
+}

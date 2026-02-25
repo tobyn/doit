@@ -711,8 +711,10 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, co
 // parseArgValue parses a single argument value at behavior level.
 // Accepts strings, numbers, null, $register, param names, variable names,
 // type constructors (Item, Component, Technology, Value, Coordinate),
-// and the & operator for attaching numeric components.
-// The b and comment params are needed for runtime constructors that emit frames.
+// the & operator for attaching numeric components, and arithmetic expressions
+// (PEMDAS) on numeric and variable operands.
+// The b and comment params are needed for runtime constructors and arithmetic
+// that emit frames.
 func (p *parser) parseArgValue(syms *symbolTable, b *frameBuilder, comment string) (any, error) {
 	tok, err := p.next()
 	if err != nil {
@@ -724,7 +726,14 @@ func (p *parser) parseArgValue(syms *symbolTable, b *frameBuilder, comment strin
 		base = tok.val
 	case tokNumber:
 		num, _ := strconv.Atoi(tok.val)
-		base = map[string]any{"num": num}
+		numVal := any(map[string]any{"num": num})
+		// Parse arithmetic (PEMDAS)
+		ac := &arithCounter{}
+		result, err := p.parseArithExprFromFull(numVal, syms, b, "", ac)
+		if err != nil {
+			return nil, err
+		}
+		base = result
 	case tokIdent:
 		if tok.val == "localize" {
 			resolved, err := p.parseLocalize()
@@ -748,8 +757,22 @@ func (p *parser) parseArgValue(syms *symbolTable, b *frameBuilder, comment strin
 			} else {
 				return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
 			}
+			// Parse arithmetic (PEMDAS) on $register
+			ac := &arithCounter{}
+			result, err := p.parseArithExprFromFull(base, syms, b, "", ac)
+			if err != nil {
+				return nil, err
+			}
+			base = result
 		} else {
 			base = tok.val // variable name
+			// Parse arithmetic (PEMDAS) on variable
+			ac := &arithCounter{}
+			result, err := p.parseArithExprFromFull(base, syms, b, "", ac)
+			if err != nil {
+				return nil, err
+			}
+			base = result
 		}
 	default:
 		return nil, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
@@ -1147,9 +1170,32 @@ func arithmeticOpName(kind tokenKind) string {
 	return ""
 }
 
-// parseArithmeticRHS parses the right-hand operand of an arithmetic expression.
-// Accepts a number literal (→ {"num": N}) or an identifier (→ resolved operand).
-func (p *parser) parseArithmeticRHS(syms *symbolTable) (any, error) {
+// isHighPriorityArithOp reports whether the token kind is * or / (higher PEMDAS
+// precedence than + and -).
+func isHighPriorityArithOp(kind tokenKind) bool {
+	return kind == tokStar || kind == tokSlash
+}
+
+// isLowPriorityArithOp reports whether the token kind is + or - (lower PEMDAS
+// precedence than * and /).
+func isLowPriorityArithOp(kind tokenKind) bool {
+	return kind == tokPlus || kind == tokMinus
+}
+
+// arithCounter tracks the number of @arith temp variables allocated during
+// arithmetic expression parsing.
+type arithCounter struct {
+	n int
+}
+
+func (c *arithCounter) next(usedVars map[string]bool) string {
+	c.n++
+	return allocUniqueVar(fmt.Sprintf("@arith%d", c.n), usedVars)
+}
+
+// parseArithPrimary parses a primary arithmetic value: number literal, null,
+// variable, $register, or a parenthesized arithmetic sub-expression.
+func (p *parser) parseArithPrimary(syms *symbolTable, b *frameBuilder, comment string, ac *arithCounter) (any, error) {
 	tok, err := p.next()
 	if err != nil {
 		return nil, err
@@ -1158,11 +1204,118 @@ func (p *parser) parseArithmeticRHS(syms *symbolTable) (any, error) {
 	case tokNumber:
 		num, _ := strconv.Atoi(tok.val)
 		return map[string]any{"num": num}, nil
+	case tokLParen:
+		val, err := p.parseArithExpr(syms, b, comment, ac)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return val, nil
 	case tokIdent:
+		if tok.val == "null" {
+			return false, nil
+		}
 		return p.resolveComparisonOperand(tok, syms)
 	default:
-		return nil, p.errorf(tok.pos, "expected number or variable after arithmetic operator, got %s", tok.describe())
+		return nil, p.errorf(tok.pos, "expected number, variable, or '(' in arithmetic expression, got %s", tok.describe())
 	}
+}
+
+// parseArithTerm parses `primary (* | / primary)*`. Emits mul/div frames for
+// each operation using @arith temps for intermediates. Returns the result value.
+func (p *parser) parseArithTerm(syms *symbolTable, b *frameBuilder, comment string, ac *arithCounter) (any, error) {
+	lhs, err := p.parseArithPrimary(syms, b, comment, ac)
+	if err != nil {
+		return nil, err
+	}
+	return p.parseArithTermFrom(lhs, syms, b, comment, ac)
+}
+
+// parseArithTermFrom is like parseArithTerm but starts from an already-parsed
+// first value.
+func (p *parser) parseArithTermFrom(firstVal any, syms *symbolTable, b *frameBuilder, comment string, ac *arithCounter) (any, error) {
+	result := firstVal
+	for {
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if !isHighPriorityArithOp(peek.kind) {
+			p.unget(peek)
+			return result, nil
+		}
+		rhs, err := p.parseArithPrimary(syms, b, comment, ac)
+		if err != nil {
+			return nil, err
+		}
+		tmp := ac.next(syms.usedVars)
+		f := map[string]any{
+			"op": arithmeticOpName(peek.kind),
+			"1":  result,
+			"2":  rhs,
+			"3":  tmp,
+		}
+		setComment(f, comment)
+		b.emit(f)
+		comment = "" // only first frame gets the comment
+		result = tmp
+	}
+}
+
+// parseArithExpr parses `term (+ | - term)*`. Emits add/sub frames. Returns
+// the result value (direct value if no operations, or the temp variable).
+func (p *parser) parseArithExpr(syms *symbolTable, b *frameBuilder, comment string, ac *arithCounter) (any, error) {
+	lhs, err := p.parseArithTerm(syms, b, comment, ac)
+	if err != nil {
+		return nil, err
+	}
+	return p.parseArithExprFrom(lhs, syms, b, comment, ac)
+}
+
+// parseArithExprFrom is like parseArithExpr but starts from an already-parsed
+// first term value.
+func (p *parser) parseArithExprFrom(firstVal any, syms *symbolTable, b *frameBuilder, comment string, ac *arithCounter) (any, error) {
+	result := firstVal
+	for {
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if !isLowPriorityArithOp(peek.kind) {
+			p.unget(peek)
+			return result, nil
+		}
+		rhs, err := p.parseArithTerm(syms, b, comment, ac)
+		if err != nil {
+			return nil, err
+		}
+		tmp := ac.next(syms.usedVars)
+		f := map[string]any{
+			"op": arithmeticOpName(peek.kind),
+			"1":  result,
+			"2":  rhs,
+			"3":  tmp,
+		}
+		setComment(f, comment)
+		b.emit(f)
+		comment = "" // only first frame gets the comment
+		result = tmp
+	}
+}
+
+// parseArithExprFromFull parses a full PEMDAS arithmetic expression starting
+// from an already-parsed first value. Handles * / before + - properly.
+// If firstVal had no higher-precedence ops following it, parses from term level.
+func (p *parser) parseArithExprFromFull(firstVal any, syms *symbolTable, b *frameBuilder, comment string, ac *arithCounter) (any, error) {
+	// First see if firstVal is followed by * or /
+	termResult, err := p.parseArithTermFrom(firstVal, syms, b, comment, ac)
+	if err != nil {
+		return nil, err
+	}
+	// Then handle + or -
+	return p.parseArithExprFrom(termResult, syms, b, comment, ac)
 }
 
 // isCompoundAssignOp reports whether the token kind is a compound assignment
@@ -1266,11 +1419,45 @@ func (p *parser) emitTypeCheck(lhs, target any, typeSlot string, b *frameBuilder
 	})
 }
 
+// emitTruthyCheck emits a 3-frame compare_register + set_reg + set_reg pattern
+// that tests whether lhs is truthy (non-empty). Empty → false, non-empty → 1.
+func (p *parser) emitTruthyCheck(lhs, target any, b *frameBuilder, comment string) {
+	falsePos := b.pos() + 1
+	truePos := b.pos() + 2
+	afterPos := b.pos() + 3
+
+	check := map[string]any{
+		"op":                "compare_register",
+		compareRegValue1:    lhs,
+		compareRegValue2:    false,
+		compareRegDifferent: frameRef(truePos),
+		"next":              frameRef(falsePos),
+	}
+	setComment(check, comment)
+	b.emit(check)
+
+	// False frame
+	b.emit(map[string]any{
+		"op":   "set_reg",
+		"1":    false,
+		"2":    target,
+		"next": frameRef(afterPos),
+	})
+
+	// True frame
+	b.emit(map[string]any{
+		"op": "set_reg",
+		"1":  map[string]any{"num": 1},
+		"2":  target,
+	})
+}
+
 // comparisonTerm holds the parsed components of a single comparison expression.
 // For comparison ops (>, <, etc.), rhs is any (resolved operand).
 // For the 'is' type check op, rhs is a string (the wire-format slot key).
+// For tokTruthy, rhs is nil (only lhs is used).
 type comparisonTerm struct {
-	op  tokenKind // tokGreater, tokLess, tokGreaterEquals, tokLessEquals, tokDoubleEquals, tokNotEquals, or tokIs
+	op  tokenKind // tokGreater, tokLess, tokGreaterEquals, tokLessEquals, tokDoubleEquals, tokNotEquals, tokIs, or tokTruthy
 	lhs any
 	rhs any
 }
@@ -1303,15 +1490,16 @@ func (e *boolExpr) frameCount() int {
 }
 
 // parseBoolTerm parses a single boolean term: either a parenthesized
-// sub-expression or a bare comparison/type-check (ident op rhs | ident is Type).
-func (p *parser) parseBoolTerm(syms *symbolTable) (*boolExpr, error) {
+// sub-expression, or a value (possibly with arithmetic) followed by a
+// comparison operator, 'is', or nothing (truthy check).
+func (p *parser) parseBoolTerm(syms *symbolTable, b *frameBuilder, comment string) (*boolExpr, error) {
 	tok, err := p.next()
 	if err != nil {
 		return nil, err
 	}
 
 	if tok.kind == tokLParen {
-		inner, err := p.parseBoolExprFull(syms)
+		inner, err := p.parseBoolExprFull(syms, b, comment)
 		if err != nil {
 			return nil, err
 		}
@@ -1321,15 +1509,35 @@ func (p *parser) parseBoolTerm(syms *symbolTable) (*boolExpr, error) {
 		return inner, nil
 	}
 
-	if tok.kind != tokIdent {
-		return nil, p.errorf(tok.pos, "expected identifier or '(' in boolean expression, got %s", tok.describe())
+	// Parse the LHS value with optional arithmetic
+	ac := &arithCounter{}
+	var lhs any
+
+	if tok.kind == tokNumber {
+		num, _ := strconv.Atoi(tok.val)
+		val := any(map[string]any{"num": num})
+		lhs, err = p.parseArithExprFromFull(val, syms, b, comment, ac)
+		if err != nil {
+			return nil, err
+		}
+	} else if tok.kind == tokIdent {
+		if tok.val == "null" {
+			lhs = false
+		} else {
+			resolved, err := p.resolveComparisonOperand(tok, syms)
+			if err != nil {
+				return nil, err
+			}
+			lhs, err = p.parseArithExprFromFull(resolved, syms, b, comment, ac)
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		return nil, p.errorf(tok.pos, "expected identifier, number, or '(' in boolean expression, got %s", tok.describe())
 	}
 
-	lhs, err := p.resolveComparisonOperand(tok, syms)
-	if err != nil {
-		return nil, err
-	}
-
+	// Peek for comparison operator, 'is', or truthy (no operator)
 	cmpTok, err := p.next()
 	if err != nil {
 		return nil, err
@@ -1343,20 +1551,29 @@ func (p *parser) parseBoolTerm(syms *symbolTable) (*boolExpr, error) {
 		return &boolExpr{term: &comparisonTerm{op: tokIs, lhs: lhs, rhs: slot}}, nil
 	}
 	if isComparisonOp(cmpTok.kind) {
-		rhs, err := p.parseComparisonRHS(syms)
+		rhs, err := p.parseComparisonRHSArith(syms, b, comment)
 		if err != nil {
 			return nil, err
 		}
 		return &boolExpr{term: &comparisonTerm{op: cmpTok.kind, lhs: lhs, rhs: rhs}}, nil
 	}
 
-	return nil, p.errorf(cmpTok.pos, "expected comparison operator (>, <, >=, <=, ==, !=) or 'is' after identifier")
+	// No comparison/is operator — this is a truthy check
+	p.unget(cmpTok)
+	return &boolExpr{term: &comparisonTerm{op: tokTruthy, lhs: lhs}}, nil
+}
+
+// parseComparisonRHSArith parses the RHS of a comparison in a boolean context,
+// allowing arithmetic expressions (PEMDAS) on the RHS.
+func (p *parser) parseComparisonRHSArith(syms *symbolTable, b *frameBuilder, comment string) (any, error) {
+	ac := &arithCounter{}
+	return p.parseArithExpr(syms, b, comment, ac)
 }
 
 // parseBoolExprChain peeks for && or ||. If absent, returns first unchanged.
 // If present, loops collecting more terms via parseBoolTerm and enforces
 // same-operator per level.
-func (p *parser) parseBoolExprChain(first *boolExpr, syms *symbolTable) (*boolExpr, error) {
+func (p *parser) parseBoolExprChain(first *boolExpr, syms *symbolTable, b *frameBuilder, comment string) (*boolExpr, error) {
 	peek, err := p.next()
 	if err != nil {
 		return nil, err
@@ -1370,7 +1587,7 @@ func (p *parser) parseBoolExprChain(first *boolExpr, syms *symbolTable) (*boolEx
 	children := []*boolExpr{first}
 
 	for {
-		next, err := p.parseBoolTerm(syms)
+		next, err := p.parseBoolTerm(syms, b, comment)
 		if err != nil {
 			return nil, err
 		}
@@ -1394,18 +1611,31 @@ func (p *parser) parseBoolExprChain(first *boolExpr, syms *symbolTable) (*boolEx
 
 // parseBoolExprFull parses a complete boolean expression (used inside parens
 // and as the top-level entry point for parenthesized expressions).
-func (p *parser) parseBoolExprFull(syms *symbolTable) (*boolExpr, error) {
-	first, err := p.parseBoolTerm(syms)
+func (p *parser) parseBoolExprFull(syms *symbolTable, b *frameBuilder, comment string) (*boolExpr, error) {
+	first, err := p.parseBoolTerm(syms, b, comment)
 	if err != nil {
 		return nil, err
 	}
-	return p.parseBoolExprChain(first, syms)
+	return p.parseBoolExprChain(first, syms, b, comment)
 }
 
 // emitBoolCheckFrame emits a single check frame for a comparison term with
 // explicit true/false routing targets. Always sets "next".
 func (p *parser) emitBoolCheckFrame(term *comparisonTerm, trueTarget, falseTarget frameRef, b *frameBuilder, comment string) {
 	var check map[string]any
+
+	if term.op == tokTruthy {
+		check = map[string]any{
+			"op":                "compare_register",
+			compareRegValue1:    term.lhs,
+			compareRegValue2:    false,
+			compareRegDifferent: trueTarget,
+			"next":              falseTarget,
+		}
+		setComment(check, comment)
+		b.emit(check)
+		return
+	}
 
 	if isTypeCheckOp(term.op) {
 		typeSlot := term.rhs.(string)
@@ -1530,21 +1760,25 @@ func (p *parser) emitBoolExprTree(expr *boolExpr, target any, b *frameBuilder, c
 }
 
 // parseAndEmitBooleanExpr checks whether a boolean expression is followed by
-// && or ||. If not, it delegates to emitComparison or emitTypeCheck. If so, it
-// builds a boolExpr tree (supporting parenthesized sub-expressions) and calls
-// emitBoolExprTree. Mixed && and || at the same level is a compile error.
+// && or ||. If not, it delegates to emitComparison, emitTypeCheck, or
+// emitTruthyCheck. If so, it builds a boolExpr tree (supporting parenthesized
+// sub-expressions) and calls emitBoolExprTree. Mixed && and || at the same
+// level is a compile error.
 func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *frameBuilder, comment string, syms *symbolTable) error {
 	first := &boolExpr{term: &comparisonTerm{op: op, lhs: lhs, rhs: rhs}}
 
-	expr, err := p.parseBoolExprChain(first, syms)
+	expr, err := p.parseBoolExprChain(first, syms, b, comment)
 	if err != nil {
 		return err
 	}
 
 	if expr.isLeaf() {
-		if isTypeCheckOp(op) {
+		switch {
+		case isTypeCheckOp(op):
 			p.emitTypeCheck(lhs, target, rhs.(string), b, comment)
-		} else {
+		case op == tokTruthy:
+			p.emitTruthyCheck(lhs, target, b, comment)
+		default:
 			p.emitComparison(op, lhs, rhs, target, b, comment)
 		}
 		return nil
@@ -1552,6 +1786,48 @@ func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *
 
 	p.emitBoolExprTree(expr, target, b, comment)
 	return nil
+}
+
+// maybeExprContinuation peeks for comparison/is/&&/|| after a value. valueName
+// is the value to use as LHS in the comparison; target is where to write the
+// result. Returns true if a continuation was handled, false if not (token
+// ungotten).
+func (p *parser) maybeExprContinuation(valueName, target any, syms *symbolTable, b *frameBuilder, comment string) (bool, error) {
+	peek, err := p.next()
+	if err != nil {
+		return false, err
+	}
+	if isComparisonOp(peek.kind) {
+		rhs, err := p.parseComparisonRHSArith(syms, b, comment)
+		if err != nil {
+			return false, err
+		}
+		return true, p.parseAndEmitBooleanExpr(peek.kind, valueName, rhs, target, b, comment, syms)
+	}
+	if peek.kind == tokIdent && peek.val == "is" {
+		slot, err := p.parseIsRHS()
+		if err != nil {
+			return false, err
+		}
+		return true, p.parseAndEmitBooleanExpr(tokIs, valueName, slot, target, b, comment, syms)
+	}
+	if peek.kind == tokDoubleAmpersand || peek.kind == tokDoublePipe {
+		// Truthy first term, then chain
+		p.unget(peek)
+		first := &boolExpr{term: &comparisonTerm{op: tokTruthy, lhs: valueName}}
+		expr, err := p.parseBoolExprChain(first, syms, b, comment)
+		if err != nil {
+			return false, err
+		}
+		if expr.isLeaf() {
+			p.emitTruthyCheck(valueName, target, b, comment)
+		} else {
+			p.emitBoolExprTree(expr, target, b, comment)
+		}
+		return true, nil
+	}
+	p.unget(peek)
+	return false, nil
 }
 
 // compileDefaultStatement compiles a function call or compound assignment.
@@ -1605,34 +1881,39 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		}
 		if rhsTok.kind == tokNumber {
 			num, _ := strconv.Atoi(rhsTok.val)
-			// Check for arithmetic operator after number
-			peek, err := p.next()
+
+			// Parse with PEMDAS arithmetic
+			ac := &arithCounter{}
+			numVal := any(map[string]any{"num": num})
+			framesBefore := b.pos()
+			result, err := p.parseArithExprFromFull(numVal, syms, b, comment, ac)
 			if err != nil {
 				return err
 			}
-			if isArithmeticOp(peek.kind) {
-				rhs, err := p.parseArithmeticRHS(syms)
-				if err != nil {
-					return err
-				}
+			arithEmitted := b.pos() > framesBefore
+
+			// Check for comparison/boolean continuation
+			handled, err := p.maybeExprContinuation(result, target, syms, b, comment)
+			if err != nil {
+				return err
+			}
+			if handled {
+				return nil
+			}
+
+			if !arithEmitted {
+				// No arithmetic; emit set_number
 				f := map[string]any{
-					"op": arithmeticOpName(peek.kind),
-					"1":  map[string]any{"num": num},
-					"2":  rhs,
+					"op": "set_number",
+					"2":  map[string]any{"num": num},
 					"3":  target,
 				}
 				setComment(f, comment)
 				b.emit(f)
-				return nil
+			} else {
+				// Arithmetic was performed; rewrite last frame's target
+				p.rewriteLastArithTarget(b, target)
 			}
-			p.unget(peek)
-			f := map[string]any{
-				"op": "set_number",
-				"2":  map[string]any{"num": num},
-				"3":  target,
-			}
-			setComment(f, comment)
-			b.emit(f)
 			return nil
 		}
 		if rhsTok.kind == tokIdent && isConstructor(rhsTok.val) {
@@ -1679,54 +1960,35 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		if rhsTok.kind == tokIdent {
 			fn := p.fns[rhsTok.val]
 			if fn == nil {
-				// Check for comparison or type check expression
-				peek, err := p.next()
+				// Not a known function — parse as value with arithmetic/comparison/boolean
+				lhs, err := p.resolveComparisonOperand(rhsTok, syms)
 				if err != nil {
 					return err
 				}
-				if isComparisonOp(peek.kind) {
-					lhs, err := p.resolveComparisonOperand(rhsTok, syms)
-					if err != nil {
-						return err
-					}
-					rhs, err := p.parseComparisonRHS(syms)
-					if err != nil {
-						return err
-					}
-					return p.parseAndEmitBooleanExpr(peek.kind, lhs, rhs, target, b, comment, syms)
+
+				ac := &arithCounter{}
+				result, err := p.parseArithExprFromFull(lhs, syms, b, comment, ac)
+				if err != nil {
+					return err
 				}
-				if peek.kind == tokIdent && peek.val == "is" {
-					lhs, err := p.resolveComparisonOperand(rhsTok, syms)
-					if err != nil {
-						return err
-					}
-					slot, err := p.parseIsRHS()
-					if err != nil {
-						return err
-					}
-					return p.parseAndEmitBooleanExpr(tokIs, lhs, slot, target, b, comment, syms)
+
+				// Check for comparison/is/&&/|| continuation
+				handled, err := p.maybeExprContinuation(result, target, syms, b, comment)
+				if err != nil {
+					return err
 				}
-				if isArithmeticOp(peek.kind) {
-					lhs, err := p.resolveComparisonOperand(rhsTok, syms)
-					if err != nil {
-						return err
-					}
-					rhs, err := p.parseArithmeticRHS(syms)
-					if err != nil {
-						return err
-					}
-					f := map[string]any{
-						"op": arithmeticOpName(peek.kind),
-						"1":  lhs,
-						"2":  rhs,
-						"3":  target,
-					}
-					setComment(f, comment)
-					b.emit(f)
+				if handled {
 					return nil
 				}
-				p.unget(peek)
-				return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+
+				if result == lhs {
+					// No arithmetic, no continuation — unknown function
+					return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+				}
+
+				// Arithmetic was performed; rewrite last frame's target
+				p.rewriteLastArithTarget(b, target)
+				return nil
 			}
 			if !fn.hasReturn() {
 				return p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
@@ -1738,23 +2000,79 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 			if err := p.checkCallDirections(fn, rhsTok.val, args, kwArgs, syms, rhsTok.pos); err != nil {
 				return err
 			}
-			return p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment, syms.usedVars)
-		}
-		if rhsTok.kind == tokLParen {
-			p.unget(rhsTok)
-			expr, err := p.parseBoolExprFull(syms)
+			if err := p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment, syms.usedVars); err != nil {
+				return err
+			}
+
+			// Check for comparison/boolean continuation after function call
+			handled, err := p.maybeExprContinuation(target, target, syms, b, "")
 			if err != nil {
 				return err
 			}
+			if handled {
+				return nil
+			}
+			return nil
+		}
+		if rhsTok.kind == tokLParen {
+			p.unget(rhsTok)
+			expr, err := p.parseBoolExprFull(syms, b, comment)
+			if err != nil {
+				return err
+			}
+
+			if expr.isLeaf() && expr.term.op == tokTruthy {
+				// Parenthesized value — check for arithmetic continuation
+				innerVal := expr.term.lhs
+				ac := &arithCounter{}
+				framesBefore := b.pos()
+				result, err := p.parseArithExprFromFull(innerVal, syms, b, comment, ac)
+				if err != nil {
+					return err
+				}
+				arithEmitted := b.pos() > framesBefore
+
+				handled, err := p.maybeExprContinuation(result, target, syms, b, comment)
+				if err != nil {
+					return err
+				}
+				if handled {
+					return nil
+				}
+
+				if arithEmitted {
+					p.rewriteLastArithTarget(b, target)
+				} else {
+					f := map[string]any{
+						"op": "set_reg",
+						"1":  innerVal,
+						"2":  target,
+					}
+					setComment(f, comment)
+					b.emit(f)
+				}
+				return nil
+			}
+
 			if expr.isLeaf() {
 				t := expr.term
-				if isTypeCheckOp(t.op) {
+				switch {
+				case isTypeCheckOp(t.op):
 					p.emitTypeCheck(t.lhs, target, t.rhs.(string), b, comment)
-				} else {
+				default:
 					p.emitComparison(t.op, t.lhs, t.rhs, target, b, comment)
 				}
 			} else {
 				p.emitBoolExprTree(expr, target, b, comment)
+			}
+
+			// Check for continuation after parenthesized expression
+			handled, err := p.maybeExprContinuation(target, target, syms, b, "")
+			if err != nil {
+				return err
+			}
+			if handled {
+				return nil
 			}
 			return nil
 		}
@@ -1766,7 +2084,8 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 		if err != nil {
 			return err
 		}
-		rhs, err := p.parseArithmeticRHS(syms)
+		ac := &arithCounter{}
+		rhs, err := p.parseArithExpr(syms, b, comment, ac)
 		if err != nil {
 			return err
 		}
@@ -2239,7 +2558,9 @@ func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
 
 // compileVarInit compiles the right-hand side of a var/let declaration.
 // The '=' has already been consumed. Accepts a number literal, a function call,
-// or a type constructor (with optional & operator).
+// a type constructor (with optional & operator), arithmetic expressions (PEMDAS),
+// comparison/type-check/boolean expressions, and combined expressions
+// (e.g., fn call result compared or chained with &&/||).
 func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, comment string, syms *symbolTable) error {
 	rhsTok, err := p.next()
 	if err != nil {
@@ -2248,7 +2569,7 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 
 	if rhsTok.kind == tokNumber {
 		num, _ := strconv.Atoi(rhsTok.val)
-		// Check for & or arithmetic operator after number
+		// Check for & after number (error)
 		peek, err := p.next()
 		if err != nil {
 			return err
@@ -2256,33 +2577,44 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 		if peek.kind == tokAmpersand {
 			return p.errorf(peek.pos, "number literal cannot be left side of '&' (use a type constructor)")
 		}
-		if isArithmeticOp(peek.kind) {
-			rhs, err := p.parseArithmeticRHS(syms)
-			if err != nil {
-				return err
-			}
-			syms.vars[nameTok.val] = varInfo{mutable: mutable}
-			syms.usedVars[nameTok.val] = true
+		p.unget(peek)
+
+		// Parse with PEMDAS arithmetic
+		ac := &arithCounter{}
+		numVal := any(map[string]any{"num": num})
+		framesBefore := b.pos()
+		result, err := p.parseArithExprFromFull(numVal, syms, b, comment, ac)
+		if err != nil {
+			return err
+		}
+		arithEmitted := b.pos() > framesBefore
+
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
+
+		// Check for comparison/boolean continuation
+		handled, err := p.maybeExprContinuation(result, nameTok.val, syms, b, comment)
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
+
+		// No continuation — emit the value
+		if !arithEmitted {
+			// No arithmetic was performed; emit set_number
 			f := map[string]any{
-				"op": arithmeticOpName(peek.kind),
-				"1":  map[string]any{"num": num},
-				"2":  rhs,
+				"op": "set_number",
+				"2":  map[string]any{"num": num},
 				"3":  nameTok.val,
 			}
 			setComment(f, comment)
 			b.emit(f)
-			return nil
+		} else {
+			// Arithmetic was performed; rewrite last frame's target
+			p.rewriteLastArithTarget(b, nameTok.val)
 		}
-		p.unget(peek)
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
-		f := map[string]any{
-			"op": "set_number",
-			"2":  map[string]any{"num": num},
-			"3":  nameTok.val,
-		}
-		setComment(f, comment)
-		b.emit(f)
 		return nil
 	}
 
@@ -2329,60 +2661,38 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 	if rhsTok.kind == tokIdent {
 		fn := p.fns[rhsTok.val]
 		if fn == nil {
-			// Check for comparison or type check expression
-			peek, err := p.next()
+			// Not a known function — parse as value with arithmetic/comparison/boolean
+			lhs, err := p.resolveComparisonOperand(rhsTok, syms)
 			if err != nil {
 				return err
 			}
-			if isComparisonOp(peek.kind) {
-				lhs, err := p.resolveComparisonOperand(rhsTok, syms)
-				if err != nil {
-					return err
-				}
-				rhs, err := p.parseComparisonRHS(syms)
-				if err != nil {
-					return err
-				}
-				syms.vars[nameTok.val] = varInfo{mutable: mutable}
-				syms.usedVars[nameTok.val] = true
-				return p.parseAndEmitBooleanExpr(peek.kind, lhs, rhs, nameTok.val, b, comment, syms)
+
+			ac := &arithCounter{}
+			result, err := p.parseArithExprFromFull(lhs, syms, b, comment, ac)
+			if err != nil {
+				return err
 			}
-			if peek.kind == tokIdent && peek.val == "is" {
-				lhs, err := p.resolveComparisonOperand(rhsTok, syms)
-				if err != nil {
-					return err
-				}
-				slot, err := p.parseIsRHS()
-				if err != nil {
-					return err
-				}
-				syms.vars[nameTok.val] = varInfo{mutable: mutable}
-				syms.usedVars[nameTok.val] = true
-				return p.parseAndEmitBooleanExpr(tokIs, lhs, slot, nameTok.val, b, comment, syms)
+
+			syms.vars[nameTok.val] = varInfo{mutable: mutable}
+			syms.usedVars[nameTok.val] = true
+
+			// Check for comparison/is/&&/|| continuation
+			handled, err := p.maybeExprContinuation(result, nameTok.val, syms, b, comment)
+			if err != nil {
+				return err
 			}
-			if isArithmeticOp(peek.kind) {
-				lhs, err := p.resolveComparisonOperand(rhsTok, syms)
-				if err != nil {
-					return err
-				}
-				rhs, err := p.parseArithmeticRHS(syms)
-				if err != nil {
-					return err
-				}
-				syms.vars[nameTok.val] = varInfo{mutable: mutable}
-				syms.usedVars[nameTok.val] = true
-				f := map[string]any{
-					"op": arithmeticOpName(peek.kind),
-					"1":  lhs,
-					"2":  rhs,
-					"3":  nameTok.val,
-				}
-				setComment(f, comment)
-				b.emit(f)
+			if handled {
 				return nil
 			}
-			p.unget(peek)
-			return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+
+			if result == lhs {
+				// No arithmetic, no continuation — unknown function
+				return p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+			}
+
+			// Arithmetic was performed; rewrite last frame's target
+			p.rewriteLastArithTarget(b, nameTok.val)
+			return nil
 		}
 		if !fn.hasReturn() {
 			return p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
@@ -2396,31 +2706,97 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 		if err := p.checkCallDirections(fn, rhsTok.val, args, kwArgs, syms, rhsTok.pos); err != nil {
 			return err
 		}
-		return p.expandCall(rhsTok.val, args, kwArgs, []any{nameTok.val}, b, rhsTok.pos, comment, syms.usedVars)
+		if err := p.expandCall(rhsTok.val, args, kwArgs, []any{nameTok.val}, b, rhsTok.pos, comment, syms.usedVars); err != nil {
+			return err
+		}
+
+		// Check for comparison/boolean continuation after function call
+		handled, err := p.maybeExprContinuation(nameTok.val, nameTok.val, syms, b, "")
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
+		return nil
 	}
 
 	if rhsTok.kind == tokLParen {
 		p.unget(rhsTok)
-		expr, err := p.parseBoolExprFull(syms)
+		expr, err := p.parseBoolExprFull(syms, b, comment)
 		if err != nil {
 			return err
 		}
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
 		syms.usedVars[nameTok.val] = true
+
+		if expr.isLeaf() && expr.term.op == tokTruthy {
+			// Parenthesized value — check for arithmetic continuation (* d, + d, etc.)
+			innerVal := expr.term.lhs
+			ac := &arithCounter{}
+			framesBefore := b.pos()
+			result, err := p.parseArithExprFromFull(innerVal, syms, b, comment, ac)
+			if err != nil {
+				return err
+			}
+			arithEmitted := b.pos() > framesBefore
+
+			// Check for comparison/boolean continuation
+			handled, err := p.maybeExprContinuation(result, nameTok.val, syms, b, comment)
+			if err != nil {
+				return err
+			}
+			if handled {
+				return nil
+			}
+
+			if arithEmitted {
+				p.rewriteLastArithTarget(b, nameTok.val)
+			} else {
+				// Just a parenthesized value, copy to target
+				f := map[string]any{
+					"op": "set_reg",
+					"1":  innerVal,
+					"2":  nameTok.val,
+				}
+				setComment(f, comment)
+				b.emit(f)
+			}
+			return nil
+		}
+
 		if expr.isLeaf() {
 			t := expr.term
-			if isTypeCheckOp(t.op) {
+			switch {
+			case isTypeCheckOp(t.op):
 				p.emitTypeCheck(t.lhs, nameTok.val, t.rhs.(string), b, comment)
-			} else {
+			default:
 				p.emitComparison(t.op, t.lhs, t.rhs, nameTok.val, b, comment)
 			}
 		} else {
 			p.emitBoolExprTree(expr, nameTok.val, b, comment)
 		}
+
+		// Check for continuation after parenthesized expression
+		handled, err := p.maybeExprContinuation(nameTok.val, nameTok.val, syms, b, "")
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
 		return nil
 	}
 
 	return p.errorf(rhsTok.pos, "expected number, function call, or constructor after '=', got %s", rhsTok.describe())
+}
+
+// rewriteLastArithTarget changes the output target of the last emitted frame
+// (assumed to be an arithmetic instruction) from a temp variable to the final
+// target variable. This avoids an extra set_reg copy.
+func (p *parser) rewriteLastArithTarget(b *frameBuilder, target any) {
+	last := b.get(b.pos() - 1)
+	last["3"] = target
 }
 
 // compileMultiReturn compiles a multi-return binding list.

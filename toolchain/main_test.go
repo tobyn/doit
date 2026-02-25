@@ -1204,7 +1204,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number, variable, or null after comparison operator") {
+		if !strings.Contains(err.Error(), "expected number, variable, or '(' in arithmetic expression") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1226,7 +1226,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number, variable, or null after comparison operator") {
+		if !strings.Contains(err.Error(), "expected number, variable, or '(' in arithmetic expression") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1255,24 +1255,20 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("logical_missing_comparison", func(t *testing.T) {
+	t.Run("logical_number_truthy", func(t *testing.T) {
+		// Numbers and bare variables are now valid as truthy terms in && / ||
 		src := `behavior a { var x = 5; let r = x > 2 && 5 }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "expected identifier") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("logical_missing_operator", func(t *testing.T) {
+	t.Run("logical_var_truthy", func(t *testing.T) {
+		// Bare variable is a valid truthy term in &&
 		src := `behavior a { var x = 5; var y = 3; let r = x > 2 && y }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "expected comparison operator") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1296,7 +1292,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number, variable, or null after comparison operator") {
+		if !strings.Contains(err.Error(), "expected number, variable, or '(' in arithmetic expression") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1364,7 +1360,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number or variable after arithmetic operator") {
+		if !strings.Contains(err.Error(), "expected number, variable, or '(' in arithmetic expression") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1421,7 +1417,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected identifier or '('") {
+		if !strings.Contains(err.Error(), "expected identifier, number, or '('") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1433,6 +1429,51 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "parentheses") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// --- Expression priority error tests ---
+
+	t.Run("compound_assign_arith_string", func(t *testing.T) {
+		src := `behavior a { var x = 5; x += "hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number, variable, or '(' in arithmetic expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("arith_chain_string_rhs", func(t *testing.T) {
+		src := `behavior a { var b = 5; let a = b + 1 + "hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number, variable, or '(' in arithmetic expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("constructor_arith_not_supported", func(t *testing.T) {
+		// Constructor followed by arithmetic operator is not a valid expression
+		src := `behavior a { var b = 5; let a = Item("metalbar") + 1 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected statement") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// Positive test: parenthesized single value compiles as value passthrough
+	t.Run("paren_value_passthrough", func(t *testing.T) {
+		src := `behavior a { var x = 5; let a = (x) }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1715,6 +1756,11 @@ func matchBehaviors(t *testing.T, got, want map[string]any) {
 
 		gFrame, gOk := got[p.g].(map[string]any)
 		wFrame, wOk := want[p.w].(map[string]any)
+		if !gOk && !wOk {
+			// Both reference nonexistent frames (e.g., dangling "next" past
+			// the last frame). This is fine — both behaviors end the same way.
+			continue
+		}
 		if !gOk || !wOk {
 			t.Errorf("frames got:%s / want:%s: expected maps", p.g, p.w)
 			failed = true

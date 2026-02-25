@@ -1,0 +1,9 @@
+# AI-generated test
+# PEMDAS: let a = b + c * d (multiply before add)
+behavior arith_chain {
+    @name "Arith Chain"
+    var b = 2
+    var c = 3
+    var d = 4
+    let a = b + c * d
+}

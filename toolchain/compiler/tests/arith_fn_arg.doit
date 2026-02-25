@@ -1,0 +1,13 @@
+# AI-generated test
+# Arithmetic in function argument: notify_number b + 1
+fn notify_number(value) {
+    instruction "notify" {
+        0: value
+    }
+}
+
+behavior arith_fn_arg {
+    @name "Arith Fn Arg"
+    var b = 5
+    notify_number b + 1
+}

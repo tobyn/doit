@@ -189,12 +189,12 @@ and resolves it to `false` (the empty register value).
 
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
 level. Number literals, variable identifiers, and `null` are valid as
-the RHS operand.
+operands. Number literal LHS (`5 > b`) is supported. Both LHS and RHS
+can include arithmetic expressions (`x + 1 > y - 2`).
 
 **Deferred**: fn body comparison expressions (requires branching in
 flat `fnBodyCall` list); comparison in function call arguments (parsing
-ambiguity); number literal LHS (`5 > b` — use `b < 5` instead);
-constructor RHS (`a == Item("metalbar")`).
+ambiguity); constructor RHS (`a == Item("metalbar")`).
 
 ## Type check operator (`is`)
 
@@ -237,15 +237,16 @@ and assignment RHS at behavior level. Works in `&&`/`||` chains.
 ## Logical operators (`&&` and `||`)
 
 `&&` and `||` chain multiple boolean sub-expressions into a single
-boolean value. Each sub-expression can be a comparison
-(`ident >|<|>=|<=|==|!= number|ident|null`) or a type check
-(`ident is TypeName`). Same-operator chaining is supported
+boolean value. Each sub-expression can be a comparison (with optional
+arithmetic on either side), a type check (`ident is TypeName`), a bare
+variable (truthy check), or a number literal (truthy check).
+Same-operator chaining is supported
 (`a > b && c < d && e > f`). Mixing `&&` and `||` at the same
 parenthesization level is a compile error — use parentheses to
 group: `(a > 1 || b < 2) && c > 3`. Different sub-expression types
-(numeric comparisons, equality comparisons, and type checks) can
-be freely mixed in the same chain — each term emits its own
-independent check frame.
+(numeric comparisons, equality comparisons, type checks, and truthy
+checks) can be freely mixed in the same chain — each term emits its
+own independent check frame.
 
 **`&&` frame pattern** (N terms → N+2 frames):
 
@@ -265,6 +266,10 @@ Frames 0..N-1: check_number, compare_register, or value_type per term
   For value_type (is):
   - matching type → next check (or true for last)
   - all other types + "next" → false
+
+  For compare_register (truthy):
+  - Different (non-empty) → next check (or true for last)
+  - Equal (empty, "next") → false
 
 Frame N:   set_reg false → target, next → N+2
 Frame N+1: set_reg 1 → target (falls through)
@@ -288,6 +293,10 @@ Frames 0..N-1: check_number, compare_register, or value_type per term
   For value_type (is):
   - matching type → true
   - all other types + "next" → next check (or false for last)
+
+  For compare_register (truthy):
+  - Different (non-empty) → true
+  - Equal (empty, "next") → next check (or false for last)
 
 Frame N:   set_reg false → target, next → N+2
 Frame N+1: set_reg 1 → target (falls through)
@@ -409,10 +418,11 @@ defer number-literal LHS), arithmetic supports `let a = 5 + b` because
 `add(5, b)` is meaningful — it adds b's number to 5.
 
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
-level. Single operation per expression (no chaining).
+level. Chained PEMDAS operations with `@arith` temp variables.
+Arithmetic in function call arguments. Arithmetic within comparison
+and boolean expression operands. Compound assignment RHS.
 
-**Deferred**: fn body arithmetic expressions; chained operations
-(`a + b + c`); arithmetic in function call arguments.
+**Deferred**: fn body arithmetic expressions.
 
 ## Compound assignment operators (+=, -=, *=, /=)
 
@@ -488,3 +498,62 @@ equality comparisons, and type checks, freely mixed.
 
 **Deferred**: fn body parenthesized boolean expressions; parenthesized
 expressions in function call arguments.
+
+## Expression priority hierarchy
+
+**Priority order** (highest first): arithmetic > comparisons > function
+calls > boolean operators. This means `my_fn b + 1, c || d` parses as
+`(my_fn(b+1, c)) || d`.
+
+**PEMDAS arithmetic**: Chained arithmetic like `a + b * c` emits
+intermediate frames using `@arith`-prefixed temp variables. `mul b, c →
+@arith1`, then `add a, @arith1 → target`. The last operation writes
+directly to the caller's target variable (via `rewriteLastArithTarget`)
+to avoid an extra copy. The `arithCounter` struct manages unique
+temporary names.
+
+**Five arithmetic parser functions**: `parseArithPrimary` (atom),
+`parseArithTerm` (* /), `parseArithExpr` (+ -), plus "From" variants
+(`parseArithTermFrom`, `parseArithExprFrom`) that accept an
+already-parsed first value. The "From" variants exist because callers
+like `parseArgValue` may have already scanned the first token.
+`parseArithExprFromFull` wraps `parseArithExprFrom` with proper
+initialization.
+
+**Truthy checks via `compare_register`**: Plain values in `&&`/`||`
+chains (not comparisons) are tested for truthiness using
+`compare_register value, false` — Different (non-empty) → truthy,
+Equal (empty) → falsy. The internal sentinel `tokTruthy` in
+`comparisonTerm.op` identifies these terms. The `emitTruthyCheck`
+helper emits the standalone 3-frame pattern; `emitBoolCheckFrame`
+handles `tokTruthy` within chained expressions.
+
+**Function calls as first boolean term only**: `my_fn x || d` works
+(function call is first, always executes, result goes to target, then
+boolean check). `d || my_fn x` is deferred — it would require
+interleaved frame emission for proper short-circuit semantics. After
+a function call result, `maybeExprContinuation` peeks for comparison,
+`is`, or `&&`/`||` to compose the result into a larger expression.
+
+**Arithmetic in function arguments**: `parseArgValue` checks for
+arithmetic operators after parsing a number or variable argument. If
+found, `parseArithExprFromFull` handles the full PEMDAS expression.
+The arithmetic parser naturally stops at non-arithmetic tokens (commas,
+`&&`, `||`, `)`, etc.), so argument boundaries are respected.
+
+**Arithmetic frames emitted eagerly**: Arithmetic in boolean terms
+(`a > 1 && b + 2 > 3`) emits the arithmetic frames during parsing,
+before the check frames. The boolean emitter receives resolved values
+(temp variable names). This is correct (arithmetic has no side effects)
+but not optimally short-circuit.
+
+**`framesBefore` pattern**: To detect whether arithmetic was emitted
+without comparing result values (which would panic for map types), the
+compiler records `b.pos()` before parsing and checks
+`b.pos() > framesBefore` after. This avoids uncomparable-type panics.
+
+**Supported contexts**: `let`/`var` init and assignment RHS at behavior
+level. Compound assignment RHS. Function call arguments.
+
+**Deferred**: fn body expressions (all types); function calls in
+non-first boolean position.

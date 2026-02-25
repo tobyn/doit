@@ -1,0 +1,8 @@
+# AI-generated test
+# Truthy chain: let a = x && y
+behavior truthy_and {
+    @name "Truthy And"
+    var x = 1
+    var y = 5
+    let a = x && y
+}

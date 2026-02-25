@@ -1,0 +1,15 @@
+# AI-generated test
+# Function result in boolean: let a = get_number x || d
+fn get_number(v) {
+    return instruction "get_number" {
+        0: v
+        2: @1
+    }
+}
+
+behavior fn_call_bool {
+    @name "Fn Call Bool"
+    var x = 10
+    var d = 3
+    let a = get_number x || d
+}

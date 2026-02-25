@@ -1,0 +1,8 @@
+# AI-generated test
+# Arithmetic in comparison: let a = x + 1 > y - 2
+behavior arith_in_cmp {
+    @name "Arith In Cmp"
+    var x = 5
+    var y = 8
+    let a = x + 1 > y - 2
+}

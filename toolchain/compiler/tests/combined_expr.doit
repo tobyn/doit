@@ -1,0 +1,17 @@
+# AI-generated test
+# Combined expression: let a = my_fn b + 1, c || d
+fn my_fn(x, y) {
+    return instruction "add" {
+        0: x
+        1: y
+        2: @1
+    }
+}
+
+behavior combined_expr {
+    @name "Combined Expr"
+    var b = 3
+    var c = 2
+    var d = 7
+    let a = my_fn b + 1, c || d
+}

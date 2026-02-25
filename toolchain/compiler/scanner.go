@@ -41,7 +41,8 @@ const (
 	tokMinusEquals
 	tokStarEquals
 	tokSlashEquals
-	tokIs // internal-only: represents the 'is' operator in comparisonTerm.op
+	tokIs     // internal-only: represents the 'is' operator in comparisonTerm.op
+	tokTruthy // internal-only: represents a truthy check in comparisonTerm.op
 )
 
 type token struct {
@@ -462,6 +463,8 @@ func (t token) describe() string {
 		return "'/='"
 	case tokIs:
 		return "'is'"
+	case tokTruthy:
+		return "truthy"
 	}
 	return t.val
 }

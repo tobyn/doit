@@ -1,0 +1,10 @@
+# AI-generated test
+# Multiple PEMDAS operations: let a = w * x + y * z
+behavior arith_chain_multi {
+    @name "Arith Chain Multi"
+    var w = 1
+    var x = 2
+    var y = 3
+    var z = 4
+    let a = w * x + y * z
+}

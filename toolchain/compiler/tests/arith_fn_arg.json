@@ -1,0 +1,18 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 5},
+        "2": "b"
+    },
+    "1": {
+        "op": "add",
+        "0": "b",
+        "1": {"num": 1},
+        "2": "@arith1"
+    },
+    "2": {
+        "op": "notify",
+        "0": "@arith1"
+    },
+    "name": "Arith Fn Arg"
+}

@@ -36,7 +36,8 @@ output format.
   `tokNotEquals` for `!=`, `tokPlus`/`tokMinus`/`tokStar`/`tokSlash`
   for arithmetic operators, `tokMinusMinus`/`tokMinusEquals`/
   `tokStarEquals`/`tokSlashEquals` for compound assignment/decrement,
-  `tokIs` for the internal-only `is` type check operator),
+  `tokIs` for the internal-only `is` type check operator,
+  `tokTruthy` for the internal-only truthy check in boolean chains),
   `Keywords` map (includes `"is"`)
   (includes type constructor names, direction keywords, and `lock`/`unlock`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
@@ -56,17 +57,23 @@ output format.
   `checkInstructionDirections`, `checkCallAnnotation`),
   `resolveInstructionFrame` helper for 0→1 key conversion and slot substitution,
   `frameHasReturnSlot`/`frameReturnCount` helpers, `instruction` as expression
-  in let/var/assign/multi-return, arithmetic expression helpers
-  (`isArithmeticOp`, `arithmeticOpName`, `parseArithmeticRHS`),
+  in let/var/assign/multi-return, PEMDAS arithmetic parser
+  (`arithCounter`, `parseArithPrimary`, `parseArithTerm`,
+  `parseArithTermFrom`, `parseArithExpr`, `parseArithExprFrom`,
+  `parseArithExprFromFull`, `isHighPriorityArithOp`,
+  `isLowPriorityArithOp`, `rewriteLastArithTarget`),
+  arithmetic helpers (`isArithmeticOp`, `arithmeticOpName`),
   compound assignment helpers (`isCompoundAssignOp`, `compoundAssignOpName`),
   comparison expression helpers
   (`emitComparison`, `resolveComparisonOperand`, `parseComparisonRHS`,
-  `isComparisonOp`, `isEqualityOp`),
+  `parseComparisonRHSArith`, `isComparisonOp`, `isEqualityOp`),
   type check helpers (`isTypeCheckOp`, `parseIsRHS`, `emitTypeCheck`),
+  truthy check helpers (`emitTruthyCheck`),
   logical operator helpers (`parseAndEmitBooleanExpr`,
   `comparisonTerm`, `boolExpr`, `parseBoolTerm`, `parseBoolExprFull`,
   `parseBoolExprChain`, `emitBoolCheckFrame`, `emitBoolExprFrames`,
   `emitBoolExprTree`),
+  expression continuation helper (`maybeExprContinuation`),
   lock/unlock keyword handling with compile-time mode tracking
   (in `parseBehaviorBody`, `compileBody`, `compileLoop`),
   loops, if/else, deferred body emission,
@@ -390,55 +397,77 @@ string-only args (which are unambiguous without commas) while supporting
 the natural `set_reg x, $store` style with mixed types.
 
 **Arithmetic expressions**: `+`, `-`, `*`, `/` work as expression operators
-in `let`/`var` init and assignment RHS at behavior level. Each maps to a
+in `let`/`var` init, assignment RHS, compound assignment RHS, function call
+arguments, and comparison operands at behavior level. Each maps to a
 single instruction: `+` → `add`, `-` → `sub`, `*` → `mul`, `/` → `div`.
-The compiler emits the instruction frame directly. LHS can be a variable,
-register, or number literal. RHS can be a number literal or variable.
-Compound assignment (`+=`, `-=`, `*=`, `/=`) and decrement (`--`) are also
-supported. `+=` was broadened to accept variable RHS (previously
-number-only).
+Chained arithmetic follows PEMDAS precedence (`*`/`/` before `+`/`-`)
+using a recursive descent parser: `parseArithPrimary` (atoms),
+`parseArithTerm` (`*`/`/`), `parseArithExpr` (`+`/`-`). "From" variants
+(`parseArithTermFrom`, `parseArithExprFrom`, `parseArithExprFromFull`)
+accept an already-parsed first value. Intermediate results use `@arith`
+temp variables managed by `arithCounter`. The last operation in a chain
+writes directly to the caller's target via `rewriteLastArithTarget`.
+Parenthesized arithmetic `(b + c) * d` is supported via `parseArithPrimary`
+handling `tokLParen`. Compound assignment (`+=`, `-=`, `*=`, `/=`) and
+decrement (`--`) are also supported, with compound assignment RHS parsed
+via `parseArithExpr`.
 
 **Comparison expressions**: `>`, `<`, `>=`, `<=`, `==`, and `!=` work as
 boolean expression operators in `let`/`var` init and assignment RHS at
 behavior level. Syntax: `let result = a > b`, `x = a < 5`,
-`let r = a >= 3`, `let eq = a == b`, `let ne = a != null`.
+`let r = a >= 3`, `let eq = a == b`, `let ne = a != null`,
+`let x = 5 > b`, `let x = a + 1 > b - 2`.
 Numeric comparisons (`>`, `<`, `>=`, `<=`) emit a 3-frame
 `check_number` + `set_reg` pattern. Equality comparisons (`==`, `!=`)
 emit a 3-frame `compare_register` + `set_reg` pattern (see decisions.md
 for frame layouts). `compare_register` is a 2-way branch
 (Different / Equal) that compares full register composites, not just
 numeric components. The `isEqualityOp` helper distinguishes equality ops
-from numeric ops. Parsing is integrated into `compileVarInit` and
-`compileDefaultStatement`: when the RHS ident is not a known function,
-the parser peeks for a comparison operator (via `isComparisonOp`, which
-covers all 6 operators) before reporting "unknown function". The helpers
-`emitComparison`, `resolveComparisonOperand`, and `parseComparisonRHS`
-handle the emission and operand validation. `parseComparisonRHS` accepts
-number literals, identifiers, and `null`. Comparison expressions inside
-`compileBody` (if/while bodies) use `frameRef` values, which are rebased
-via `rebaseFrameRefs` when the body frames are transplanted into the
-parent `frameBuilder`. The `&&` and `||` operators chain multiple
-comparisons into a single boolean expression: `let r = a > 2 && b < 10`.
+from numeric ops. Number literal LHS is supported (`5 > b`). Both LHS
+and RHS can include arithmetic expressions (parsed via the PEMDAS
+arithmetic parser). `parseComparisonRHSArith` handles arithmetic in
+comparison RHS within boolean contexts. Parsing is integrated into
+`compileVarInit` and `compileDefaultStatement`: when the RHS ident is
+not a known function, the parser peeks for arithmetic operators and then
+comparison operators. The helpers `emitComparison`,
+`resolveComparisonOperand`, and `parseComparisonRHS` handle the emission
+and operand validation. `parseComparisonRHS` accepts number literals,
+identifiers, and `null`. Comparison expressions inside `compileBody`
+(if/while bodies) use `frameRef` values, which are rebased via
+`rebaseFrameRefs` when the body frames are transplanted into the parent
+`frameBuilder`. The `&&` and `||` operators chain multiple
+comparisons, type checks, and truthy values into a single boolean
+expression: `let r = a > 2 && b < 10`, `let r = x && y`,
+`let r = get_number x || d`.
 The `is` operator checks whether a value is a specific data type:
 `let a = x is Unit`. It compiles to a 3-frame `value_type` + `set_reg`
 pattern (same structure as comparisons). The `isTypeCheckOp` helper
 identifies `tokIs` terms, `parseIsRHS` validates the type name via
 `typeCheckSlot`, and `emitTypeCheck` emits the frames. The `is` keyword
 scans as `tokIdent` with val `"is"` — `tokIs` is only used internally
-in `comparisonTerm.op`. After parsing the first comparison or type
-check, `parseAndEmitBooleanExpr` wraps it in a `boolExpr` leaf and
-calls `parseBoolExprChain`; if no `&&`/`||` follows, it delegates to
-`emitComparison` or `emitTypeCheck`; otherwise, `emitBoolExprTree`
-emits the recursive frame pattern. Different expression types
-(numeric comparisons, equality comparisons, and type checks) can be
-freely mixed in the same `&&`/`||` chain — each term emits its own
-independent check frame. Parenthesized sub-expressions allow mixing
-`&&` and `||` at different nesting levels:
-`(a > 1 || b < 2) && c > 3`. The recursive `boolExpr` tree model
-supports arbitrary nesting depth. Mixing `&&` and `||` at the same
-parenthesization level is a compile error. `compileVarInit` and
-`compileDefaultStatement` handle `tokLParen` as a boolean expression
-entry point via `parseBoolExprFull`.
+in `comparisonTerm.op`. `tokTruthy` is an internal-only token kind
+used in `comparisonTerm.op` to identify truthy check terms (bare
+variables or numbers tested for non-emptiness via `compare_register`).
+After parsing the first comparison, type check, or truthy term,
+`parseAndEmitBooleanExpr` wraps it in a `boolExpr` leaf and calls
+`parseBoolExprChain`; if no `&&`/`||` follows, it delegates to
+`emitComparison`, `emitTypeCheck`, or `emitTruthyCheck`; otherwise,
+`emitBoolExprTree` emits the recursive frame pattern. Different
+expression types (numeric comparisons, equality comparisons, type
+checks, and truthy checks) can be freely mixed in the same `&&`/`||`
+chain — each term emits its own independent check frame.
+Parenthesized sub-expressions allow mixing `&&` and `||` at different
+nesting levels: `(a > 1 || b < 2) && c > 3`. The recursive `boolExpr`
+tree model supports arbitrary nesting depth. Mixing `&&` and `||` at
+the same parenthesization level is a compile error. `compileVarInit`
+and `compileDefaultStatement` handle `tokLParen` as a boolean
+expression entry point via `parseBoolExprFull`. `parseBoolTerm`,
+`parseBoolExprFull`, and `parseBoolExprChain` accept `(syms, b,
+comment)` parameters to support arithmetic frame emission during
+boolean parsing. Function call results can compose with boolean
+operators: `let a = my_fn x || d` (function call as first boolean
+term); `maybeExprContinuation` handles peeking for comparison/is/&&/||
+after a computed value.
 
 **`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
 values shifted by an offset. Non-destructive (creates copies) to handle the

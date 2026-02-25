@@ -1,0 +1,55 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 3},
+        "2": "b"
+    },
+    "1": {
+        "op": "set_number",
+        "1": {"num": 2},
+        "2": "c"
+    },
+    "2": {
+        "op": "set_number",
+        "1": {"num": 7},
+        "2": "d"
+    },
+    "3": {
+        "op": "add",
+        "0": "b",
+        "1": {"num": 1},
+        "2": "@arith1"
+    },
+    "4": {
+        "op": "add",
+        "0": "@arith1",
+        "1": "c",
+        "2": "a"
+    },
+    "5": {
+        "op": "compare_register",
+        "0": 9,
+        "1": "a",
+        "2": false,
+        "next": 7
+    },
+    "6": {
+        "op": "compare_register",
+        "0": 9,
+        "1": "d",
+        "2": false,
+        "next": 8
+    },
+    "7": {
+        "op": "set_reg",
+        "0": false,
+        "1": "a",
+        "next": 10
+    },
+    "8": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "a"
+    },
+    "name": "Combined Expr"
+}

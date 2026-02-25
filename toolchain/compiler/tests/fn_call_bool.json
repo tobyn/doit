@@ -1,0 +1,43 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 10},
+        "2": "x"
+    },
+    "1": {
+        "op": "set_number",
+        "1": {"num": 3},
+        "2": "d"
+    },
+    "2": {
+        "op": "get_number",
+        "0": "x",
+        "2": "a"
+    },
+    "3": {
+        "op": "compare_register",
+        "0": 7,
+        "1": "a",
+        "2": false,
+        "next": 5
+    },
+    "4": {
+        "op": "compare_register",
+        "0": 7,
+        "1": "d",
+        "2": false,
+        "next": 6
+    },
+    "5": {
+        "op": "set_reg",
+        "0": false,
+        "1": "a",
+        "next": 8
+    },
+    "6": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "a"
+    },
+    "name": "Fn Call Bool"
+}

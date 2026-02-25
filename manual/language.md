@@ -322,8 +322,14 @@ x++
 x--
 ```
 
-The right-hand side of `+=`, `-=`, `*=`, `/=` can be a number literal or a
-variable. `++` adds 1, `--` subtracts 1.
+The right-hand side of `+=`, `-=`, `*=`, `/=` can be an arithmetic
+expression (number literals, variables, and `+`, `-`, `*`, `/` with PEMDAS
+precedence). `++` adds 1, `--` subtracts 1:
+
+```doit
+x += y + 1
+x -= a * 2
+```
 
 Assignment targets can also be unit registers (`$store = 5`) or parameters.
 
@@ -381,6 +387,27 @@ if a == 1 {
 }
 ```
 
+### Expression Priority
+
+When multiple expression types appear in the same statement, they are
+evaluated in this priority order (highest first):
+
+1. **Arithmetic** (`*`, `/`, `+`, `-`) — PEMDAS rules: multiplication and
+   division bind tighter than addition and subtraction
+2. **Comparisons** (`>`, `<`, `>=`, `<=`, `==`, `!=`, `is`) — compare
+   arithmetic results
+3. **Function calls** — consume arguments (which can contain arithmetic)
+4. **Boolean** (`&&`, `||`) — chain comparisons, function results, or
+   truthy values
+
+This means you can write combined expressions naturally:
+
+```doit
+let a = x + 1 > y - 2           # arithmetic, then comparison
+let b = my_fn a + 1, c || d     # fn call with arithmetic args, then boolean
+let c = count * 2 > threshold && active
+```
+
 ### Arithmetic Expressions
 
 Arithmetic operators produce a value by applying the corresponding game
@@ -393,8 +420,8 @@ instruction:
 | `*`      | `mul`       | Multiplication |
 | `/`      | `div`       | Division    |
 
-The left operand can be a variable, register, or number literal. The right
-operand can be a number literal or a variable:
+Operands can be variables, registers, number literals, or parenthesized
+sub-expressions:
 
 ```doit
 let sum = a + b
@@ -406,14 +433,42 @@ var result = a + b
 result = a - b
 ```
 
-Each arithmetic expression compiles to a single instruction frame. The
+#### PEMDAS precedence
+
+Chained arithmetic follows standard PEMDAS rules — `*` and `/` are
+evaluated before `+` and `-`. The compiler emits intermediate results
+using temporary variables:
+
+```doit
+let a = b + c * d       # c*d first, then +b
+let a = w * x + y * z   # w*x and y*z first, then add
+```
+
+Use parentheses to override the default precedence:
+
+```doit
+let a = (b + c) * d     # b+c first, then *d
+```
+
+#### Arithmetic in function arguments
+
+Arithmetic expressions can appear directly in function call arguments:
+
+```doit
+notify_number b + 1
+my_fn a * 2, b + c
+```
+
+#### Value semantics
+
+Each arithmetic operation compiles to a single instruction frame. The
 result's typed value comes from the left operand, and the number component
 is the arithmetic result of both operands' number components. This means
 `Item("metalbar") & 3` followed by `item + 2` would produce
 `Item("metalbar") & 5` — the item type is preserved.
 
-> **Not yet supported:** Arithmetic expressions in function bodies; chained
-> operations (`a + b + c`); arithmetic in function call arguments.
+> **Not yet supported:** Arithmetic expressions in function bodies; modulo
+> operator (`%`).
 
 ### Comparison and Type Check Operators
 
@@ -441,8 +496,9 @@ var result = a > b
 result = a < b
 ```
 
-The left operand must be a variable or register. The right operand can be a
-number literal, a variable, or `null`:
+The left operand can be a variable, register, or number literal. The right
+operand can be a number literal, a variable, or `null`. Both sides can
+include arithmetic:
 
 ```doit
 let gt_num = x > 5         # compare with number
@@ -450,6 +506,8 @@ let gt_var = x > y          # compare with variable
 let lt_param = x < $input   # compare with parameter
 let is_empty = x == null    # compare with null
 let has_value = x != null   # not-null check
+let num_lhs = 5 > b         # number literal on left
+let arith = x + 1 > y - 2   # arithmetic on both sides
 ```
 
 **Numeric vs equality comparisons:** `>`, `<`, `>=`, and `<=` compare only
@@ -512,13 +570,39 @@ let ok = a > 1 && b < 10 && c > 0
 let any_match = a == b || c == d || e == f
 ```
 
-Each sub-expression must be a comparison (`variable op operand`) or a
-type check (`variable is Type`). Different expression types can be
-freely mixed in the same chain:
+Each sub-expression can be a comparison (with optional arithmetic),
+a type check, a bare variable (truthy check), or a number literal.
+Different expression types can be freely mixed in the same chain:
 
 ```doit
 let ok = x is Unit && y > 5
 let match = a == b || x is Item
+let any = x && y               # truthy: non-empty is true
+let either = x || y            # truthy: first non-empty wins
+```
+
+#### Truthy values in boolean chains
+
+Bare variables and number literals in `&&`/`||` chains are tested for
+"truthiness" — a non-empty register value is true, an empty value is
+false:
+
+```doit
+let a = x && y               # true if both x and y are non-empty
+let b = x || y                # true if either is non-empty
+let c = x > 5 && active       # comparison AND truthy check
+```
+
+#### Function call results in boolean chains
+
+A function call can be the first term in a boolean chain. The function
+always executes, and its result is tested for truthiness or used as
+the LHS of a comparison:
+
+```doit
+let a = get_number x || d           # fn result OR'd with d
+let b = get_number x > 5            # fn result compared to 5
+let c = my_fn b + 1, c || d         # fn with arithmetic args, then ||
 ```
 
 Mixing `&&` and `||` at the same level is not allowed — use parentheses
@@ -556,9 +640,9 @@ r = (a > 1 || b < 2) && c > 3
 ```
 
 > **Not yet supported:** Comparison and type check expressions in function
-> bodies; number literals on the left side (use `let x = b < 5` instead of
-> `let x = 5 > b`); constructor values on the right side
-> (`a == Item("metalbar")`); `is Number` (cannot distinguish from null).
+> bodies; constructor values on the right side (`a == Item("metalbar")`);
+> function calls in non-first boolean position (`d || my_fn x`);
+> `is Number` (cannot distinguish from null).
 
 ### `while`
 

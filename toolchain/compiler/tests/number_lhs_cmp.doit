@@ -1,0 +1,7 @@
+# AI-generated test
+# Number as comparison LHS: let a = 5 > b
+behavior number_lhs_cmp {
+    @name "Number LHS Cmp"
+    var b = 3
+    let a = 5 > b
+}

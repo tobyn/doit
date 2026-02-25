@@ -29,18 +29,15 @@ not currently handle `(` after a function name. See F13 in
 ## Extended comparison and type check expressions
 
 `>`, `<`, `>=`, `<=`, `==`, `!=`, and `is` work as expressions at
-behavior level, with `&&`/`||` chaining. Different expression types
-(numeric comparisons, equality comparisons, and type checks) can be
-freely mixed in the same chain. Natural extensions:
+behavior level, with `&&`/`||` chaining, truthy terms, number literal
+LHS, arithmetic within terms, and function call composability.
+Natural extensions:
 
 - **fn body comparison/type check expressions**: Requires branching in
   the flat `fnBodyCall` list, which only supports linear sequences
   today. This also blocks fn body `&&`/`||` and `is` support.
 - **Comparison in function arguments**: `notify (a > 5)` — needs
   parenthesized expressions to disambiguate from `notify a, ...`.
-- **Number literal LHS**: `let x = 5 > b` — the `tokNumber` path in
-  `compileVarInit` is consumed before checking for a comparison
-  operator. Workaround: `let x = b < 5`.
 - **Constructor RHS**: `a == Item("metalbar")` — requires parsing
   type constructors in comparison RHS position.
 - **Implicit `&&`/`||` precedence**: `a > 1 && b < 5 || c > 3`
@@ -51,19 +48,18 @@ freely mixed in the same chain. Natural extensions:
   (both fall through to "No Match"), so `is Number` is not available.
   Could potentially be implemented with `check_number` against itself
   (nonzero = number), but the null/0 ambiguity remains.
+- **Function calls in non-first boolean position**: `d || my_fn x`
+  would require interleaved frame emission for proper short-circuit
+  semantics.
 
 ## Extended arithmetic expressions
 
-`+`, `-`, `*`, `/` work as single-operation expressions at behavior level.
+`+`, `-`, `*`, `/` work as chained PEMDAS expressions at behavior
+level, in function arguments, and in comparison operands.
 Natural extensions:
 
 - **fn body arithmetic expressions**: Requires emitting instruction frames
   in the flat `fnBodyCall` list. Same constraint as fn body comparisons.
-- **Chained operations**: `a + b + c` — currently only single operations
-  are supported. Chaining would require either left-to-right evaluation
-  with temporaries or a proper expression parser with precedence.
-- **Arithmetic in function arguments**: `notify (a + 5)` — needs
-  parenthesized expressions to disambiguate.
 - **Modulo operator**: `%` → `modulo` instruction. The instruction exists
   in the stdlib but has no operator syntax yet.
 
