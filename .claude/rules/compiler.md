@@ -98,10 +98,18 @@ output format.
   `emitBhvIfStmt`/`emitBhvWhileStmt`/`emitBhvLoopStmt` (control flow
   emission). Internal types: `resolvedBoolExpr` (pre-resolved boolean
   tree for emission)
+- **`compiler/optimize.go`** — AST-level optimization passes run between
+  parsing and emission. `optimizeLockUnlock` walks `[]Stmt`, tracks
+  `execMode`, and removes redundant `LockStmt` nodes. Handles control
+  flow (`optimizeLockIf` with cross-branch mode analysis via
+  `computeModeAfterIf`, `optimizeLockWhile`, `optimizeLockLoop`).
+  Cross-function analysis via `stmtModeEffect`/`fnModeEffect` which
+  walk inlined function AST bodies to determine mode effects of calls.
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
-  `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +
-  statements into `[]Stmt` via `parseBhv*` functions, then emit via
-  `emitBehaviorStmts`), `resolveInstructionFrame` (0→1 key conversion
+  `parseBehaviorBody` (three-phase: parse `@name`/`@param` attributes +
+  statements into `[]Stmt` via `parseBhv*` functions, optimize AST via
+  `optimizeLockUnlock`, then emit via `emitBehaviorStmts`),
+  `resolveInstructionFrame` (0→1 key conversion
   and slot substitution), `frameHasReturnSlot`/`frameReturnCount`,
   direction enforcement (`argDirection`, `checkReadable`,
   `checkCallDirections`, `checkInstructionDirections`,
@@ -121,8 +129,10 @@ recursive-descent `parser`. The scanner tokenizes the source into identifiers
 (including `$`-prefixed unit register names), string literals, numbers,
 braces, parentheses, colons, commas, `@`, and comparison/assignment
 operators, skipping whitespace and `#` line comments. Both function bodies
-and behavior bodies use a two-phase AST approach: parse into `[]Stmt` with
-`Expr` nodes (defined in `ast.go`), then emit frames. For fn bodies,
+and behavior bodies use an AST approach: parse into `[]Stmt` with
+`Expr` nodes (defined in `ast.go`), then emit frames. Behavior bodies
+add an optimization phase between parsing and emission (see
+`optimize.go`). For fn bodies,
 `emitFnBody` runs during `expandCall` inlining. For behavior bodies,
 `parseBehaviorBody` collects statements into `[]Stmt` using `parseBhv*`
 parsers (in `bhvast.go`), then `emitBehaviorStmts` walks the AST to emit

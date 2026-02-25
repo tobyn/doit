@@ -190,7 +190,6 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	b := &frameBuilder{}
 	syms := newSymbolTable()
 	hasInstruction := false // true after any instruction-emitting statement
-	mode := modeLocked     // execution mode tracking for lock/unlock optimization
 
 	// Phase 1: Parse attributes and statements into AST nodes.
 	var stmts []Stmt
@@ -407,8 +406,11 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		}
 	}
 
-	// Phase 2: Emit frames from AST.
-	if err := p.emitBehaviorStmts(stmts, b, syms, &mode); err != nil {
+	// Phase 2: Optimize AST (remove redundant lock/unlock).
+	stmts, _ = p.optimizeLockUnlock(stmts, modeLocked)
+
+	// Phase 3: Emit frames from AST.
+	if err := p.emitBehaviorStmts(stmts, b, syms); err != nil {
 		return nil, err
 	}
 

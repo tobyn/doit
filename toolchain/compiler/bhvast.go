@@ -1845,9 +1845,10 @@ func (p *parser) emitResolvedBoolFrames(expr *resolvedBoolExpr, trueTarget, fals
 }
 
 // emitBehaviorStmts walks a []Stmt list and emits frames, handling deferred
-// bodies from if statements, break target patching from loops, and lock/unlock
-// mode tracking. This is the main behavior-level statement emitter.
-func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTable, mode *execMode) error {
+// bodies from if statements and break target patching from loops. Lock/unlock
+// optimization is performed at the AST level before this function is called
+// (see optimizeLockUnlock), so every LockStmt in the input is emitted.
+func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTable) error {
 	var deferred []deferredBody
 	breakTargetFrame := -1
 	resumeFrame := -1
@@ -1856,20 +1857,15 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 		switch s := stmt.(type) {
 		case *LockStmt:
 			op := "lock"
-			targetMode := modeLocked
 			if s.Unlock {
 				op = "unlock"
-				targetMode = modeUnlocked
 			}
-			if *mode != targetMode {
-				f := map[string]any{"op": op}
-				setComment(f, s.Comment)
-				b.emit(f)
-				*mode = targetMode
-			}
+			f := map[string]any{"op": op}
+			setComment(f, s.Comment)
+			b.emit(f)
 
 		case *IfStmt:
-			if err := p.emitBhvIfStmt(s, b, syms, mode, &deferred); err != nil {
+			if err := p.emitBhvIfStmt(s, b, syms, &deferred); err != nil {
 				return err
 			}
 
@@ -1877,7 +1873,6 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 			if err := p.emitBhvWhileStmt(s, b, syms); err != nil {
 				return err
 			}
-			*mode = modeUnknown
 
 		case *LoopStmt:
 			checkFrame, err := p.emitBhvLoopStmt(s, b, syms)
@@ -1889,25 +1884,10 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 				resumeFrame = b.pos()
 				b.seek(breakTargetFrame)
 			}
-			*mode = modeUnknown
 
 		default:
-			framesBefore := b.pos()
 			if err := p.emitBhvStmtSimple(stmt, b, syms); err != nil {
 				return err
-			}
-			// Scan newly emitted frames for lock/unlock mode tracking.
-			// Since all function calls are inlined, any lock/unlock inside
-			// a called function appears as a frame in the builder.
-			for j := framesBefore; j < b.pos(); j++ {
-				if op, ok := b.get(j)["op"].(string); ok {
-					switch op {
-					case "lock":
-						*mode = modeLocked
-					case "unlock":
-						*mode = modeUnlocked
-					}
-				}
 			}
 		}
 
@@ -2078,7 +2058,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 
 // emitBhvIfStmt emits an if/else-if/else statement, appending deferred bodies
 // to the caller's deferred list for emission after all main-line frames.
-func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, mode *execMode, deferred *[]deferredBody) error {
+func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, deferred *[]deferredBody) error {
 	cmp, ok := s.Cond.(*CompareExpr)
 	if !ok {
 		return fmt.Errorf("if condition must be a CompareExpr, got %T", s.Cond)
@@ -2103,8 +2083,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, mo
 
 	// Compile body into separate builder
 	bodyBuilder := &frameBuilder{}
-	bodyMode := modeUnknown
-	if err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms, &bodyMode); err != nil {
+	if err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms); err != nil {
 		return err
 	}
 	bodyFrames := bodyBuilder.frames
@@ -2126,8 +2105,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, mo
 		}
 		if s.Else != nil {
 			elseBuilder := &frameBuilder{}
-			elseMode := modeUnknown
-			if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms, &elseMode); err != nil {
+			if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 				return err
 			}
 			*deferred = append(*deferred, deferredBody{
@@ -2159,8 +2137,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, mo
 				return fmt.Errorf("unsupported else-if operator")
 			}
 			eiBuilder := &frameBuilder{}
-			eiMode := modeUnknown
-			if err := p.emitBehaviorStmts(ei.Body, eiBuilder, syms, &eiMode); err != nil {
+			if err := p.emitBehaviorStmts(ei.Body, eiBuilder, syms); err != nil {
 				return err
 			}
 			*deferred = append(*deferred, deferredBody{
@@ -2176,8 +2153,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, mo
 					elseSlot = checkLarger
 				}
 				elseBuilder := &frameBuilder{}
-				elseMode := modeUnknown
-				if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms, &elseMode); err != nil {
+				if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 					return err
 				}
 				*deferred = append(*deferred, deferredBody{
@@ -2188,8 +2164,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, mo
 			}
 		} else if s.Else != nil {
 			elseBuilder := &frameBuilder{}
-			elseMode := modeUnknown
-			if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms, &elseMode); err != nil {
+			if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 				return err
 			}
 			// For == with plain else: both slots go to the else body
@@ -2222,7 +2197,6 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, mo
 		}
 	}
 
-	*mode = modeUnknown
 	return nil
 }
 
@@ -2252,8 +2226,7 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 
 	// Compile body
 	bodyBuilder := &frameBuilder{}
-	bodyMode := modeUnknown
-	if err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms, &bodyMode); err != nil {
+	if err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms); err != nil {
 		return err
 	}
 
@@ -2277,8 +2250,6 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable) (int, error) {
 	loopStart := b.pos()
 	checkFrame := -1
-	loopMode := modeUnknown
-
 	for _, stmt := range s.Body {
 		if ifStmt, ok := stmt.(*IfStmt); ok {
 			if len(ifStmt.Body) == 1 {
@@ -2311,20 +2282,15 @@ func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable
 				}
 			}
 		}
-		// Regular statement — handle lock/unlock inline, delegate rest
+		// Regular statement — lock/unlock already optimized at AST level
 		if ls, ok := stmt.(*LockStmt); ok {
 			op := "lock"
-			targetMode := modeLocked
 			if ls.Unlock {
 				op = "unlock"
-				targetMode = modeUnlocked
 			}
-			if loopMode != targetMode {
-				f := map[string]any{"op": op}
-				setComment(f, ls.Comment)
-				b.emit(f)
-				loopMode = targetMode
-			}
+			f := map[string]any{"op": op}
+			setComment(f, ls.Comment)
+			b.emit(f)
 		} else {
 			if err := p.emitBhvStmtSimple(stmt, b, syms); err != nil {
 				return -1, err

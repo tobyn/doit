@@ -26,47 +26,26 @@ strings are compile-time-only types baked into instructions, the
 not currently handle `(` after a function name. See F13 in
 `analysis-findings.md`.
 
-## AST unification plan (Phases 1-3 complete, Phase 4 pending)
+## AST unification plan (Phases 1-4 complete)
 
-Both fn bodies and behavior bodies use a two-phase AST approach with
-shared expression parsers (parameterized via `operandResolver`). Phase
-3 enabled fn body parity: arithmetic, comparisons, boolean chains,
-type checks, `var` declarations, assignment, compound assignment,
-increment/decrement, and control flow (`if`/`else if`/`else`, `while`,
-`loop`/`break`). It also extended behavior-level inner block parsing
-(`parseBhvStmtBlock`) to handle the full statement set.
+Both fn bodies and behavior bodies use an AST approach with shared
+expression parsers (parameterized via `operandResolver`). Phase 3
+enabled fn body parity. Phase 4 added AST-level optimization:
+`optimizeLockUnlock` in `optimize.go` removes redundant `LockStmt`
+nodes before emission, replacing the old frame-scanning mode tracker.
+It supports cross-branch analysis (all branches end in `lock` → mode
+is `locked` after `if`) and cross-function analysis (walks inlined
+function AST bodies to determine mode effects).
 
-### Phase 4: AST-level optimizations
+### Future AST optimizations
 
-**Goal**: Optimization passes between parsing and emission.
+Potential optimization passes to add to `optimize.go`:
 
-**Steps**:
-
-1. **Lock/unlock elimination on AST**: Walk `[]Stmt`, track `execMode`,
-   remove redundant `LockStmt` nodes before emission. Replaces the current
-   post-emission frame-scanning approach. Can do cross-branch analysis
-   (both branches end in `lock` → mode is `locked` after `if`).
-
-2. **Future**: Constant folding, dead code elimination after
-   `return`/`break`, etc.
-
-**Files**: New `optimize.go` (or in `ast.go`)
-
-**Tests**: Existing `lock_unlock_optimize` tests pass. New optimization
-tests.
-
-**Risk**: Low. Optimizations are additive.
-
-### Verification
-
-After each phase:
-```sh
-cd toolchain && go build ./... && go test ./...
-```
-
-All existing test cases must pass. Graph isomorphism comparison
-(`matchBehaviors`) tolerates frame reordering, so emission order
-changes don't break tests.
+- **Constant folding**: Evaluate compile-time-computable expressions.
+- **Dead code elimination**: Remove unreachable statements after
+  `return`/`break`.
+- **Fn body lock/unlock optimization**: Extend `optimizeLockUnlock`
+  to fn body paths (currently only behavior-level).
 
 ## Extended comparison and type check expressions
 

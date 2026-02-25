@@ -712,16 +712,20 @@ behavior runner {
 ### Redundant mode change elimination
 
 The compiler tracks the current execution mode at compile time and eliminates
-redundant mode changes. Since behaviors always start locked:
+redundant mode changes before emitting any frames. Since behaviors always
+start locked:
 
 - `lock` at the start of a behavior is a no-op (already locked)
 - Two consecutive `unlock` statements emit only one `unlock` frame
 - After control flow (`if`/`while`/`loop`), the mode resets to unknown, so
   a subsequent `lock` or `unlock` is always emitted
+- If all branches of an `if`/`else` end in the same mode, that mode is
+  known after the `if` (enabling further elimination)
 
-When `lock` or `unlock` appears inside a function that is inlined at the call
-site, the compiler scans the newly emitted frames and updates its mode
-tracking accordingly.
+When `lock` or `unlock` appears inside a function called from the behavior,
+the compiler analyzes the function's body to determine its effect on the
+execution mode and uses that to eliminate redundant lock/unlock at the call
+site.
 
 ## Localization
 
