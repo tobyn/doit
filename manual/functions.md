@@ -243,6 +243,87 @@ This means instructions that write to the returned name write directly into
 the caller's destination with no copies. At call sites, the caller provides
 the return target via assignment syntax (`let loc = locate_self`).
 
+### Expressions in function bodies
+
+Function bodies support the same expressions as behavior bodies:
+
+```doit
+fn compute(a, b) {
+    let sum = a + b             # arithmetic
+    let bigger = a > b          # comparison
+    let both = a > 0 && b > 0   # boolean chain
+    let is_coord = a is Coordinate  # type check
+    return sum
+}
+```
+
+Arithmetic (`+`, `-`, `*`, `/`), comparison (`>`, `<`, `>=`, `<=`, `==`,
+`!=`), type checks (`is`), boolean operators (`&&`, `||`), and
+parenthesized grouping all work inside `fn` bodies.
+
+### Mutable variables (`var`)
+
+Use `var` to declare a mutable local variable in a function body:
+
+```doit
+fn increment(inout x) {
+    var count = 0
+    count += 1       # compound assignment
+    count++          # increment
+    x = count        # assignment
+}
+```
+
+`let` declarations are immutable — assigning to a `let` variable is a
+compile error. `var` variables can be reassigned, used with compound
+assignment (`+=`, `-=`, `*=`, `/=`), and incremented/decremented (`++`,
+`--`).
+
+Assignment to `in` parameters is also a compile error. `out` and `inout`
+parameters can be assigned to.
+
+### Control flow in function bodies
+
+Function bodies support `if`/`else if`/`else`, `while`, and `loop`/`break`:
+
+```doit
+fn clamp(a, min, max) {
+    var result = a
+    if a < min {
+        result = min
+    } else if a > max {
+        result = max
+    }
+    return result
+}
+
+fn sum_to(n) {
+    var total = 0
+    var i = 1
+    while i <= n {
+        total += i
+        i++
+    }
+    return total
+}
+
+fn find_threshold(inout x) {
+    loop {
+        if x >= 10 {
+            break
+        }
+        x += 3
+    }
+}
+```
+
+Control flow conditions support the same expressions as behavior-level
+conditions: comparisons, type checks, boolean chains, and parenthesized
+grouping.
+
+`return` is not allowed inside control flow blocks (`if`, `while`, `loop`).
+It must appear at the top level of the function body.
+
 ### Private Functions
 
 A function defined with `private fn` is only visible within the file that

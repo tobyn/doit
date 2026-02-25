@@ -365,6 +365,11 @@ set_number null, 5, x
 
 ## Control Flow
 
+All control flow constructs work in both behavior bodies and function bodies.
+In behavior bodies, control flow blocks support the full statement set
+including `let`/`var` declarations, nested control flow, and `break` (inside
+`loop`).
+
 ### `if` / `else if` / `else`
 
 ```doit

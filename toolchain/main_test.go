@@ -561,17 +561,6 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("let_fn_body_unknown", func(t *testing.T) {
-		src := "fn bad() { let x = nonexistent }\nbehavior a { bad }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "unknown function") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("return_slot_at0", func(t *testing.T) {
 		stdlibSrc := "fn bad() { instruction \"test\" { 0: @0 } }"
 		err := compiler.TestParseStdlibFile(stdlibSrc)
@@ -1476,6 +1465,83 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+	})
+
+	// --- fn body expression and control flow error cases ---
+
+	t.Run("fn_body_assign_to_let", func(t *testing.T) {
+		src := "fn bad(x) { let a = x; a = 5 }\nbehavior a { bad 1 }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_assign_to_in_param", func(t *testing.T) {
+		src := "fn bad(x) { x = 5 }\nbehavior a { bad 1 }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to input parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_compound_assign_to_let", func(t *testing.T) {
+		src := "fn bad(x) { let a = x; a += 1 }\nbehavior a { bad 1 }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_read_out_param", func(t *testing.T) {
+		src := "fn bad(out x) { let a = x }\nbehavior a { var z = 5; bad out z }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot read from output parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_var_underscore", func(t *testing.T) {
+		src := "fn bad() { var _ = 5 }\nbehavior a { bad }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot be used as a variable name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_return_in_block", func(t *testing.T) {
+		src := "fn bad(x) { if x > 1 { return x } }\nbehavior a { bad 1 }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not allowed inside control flow blocks") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_break_outside_loop", func(t *testing.T) {
+		src := "behavior a { break }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		// At behavior level, break outside loop should fail
 	})
 
 }

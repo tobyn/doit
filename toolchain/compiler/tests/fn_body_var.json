@@ -1,0 +1,37 @@
+{
+    "0": {
+        "0": {
+            "num": 0
+        },
+        "1": "count",
+        "op": "set_reg"
+    },
+    "1": {
+        "0": "count",
+        "1": {
+            "num": 1
+        },
+        "2": "count",
+        "op": "add"
+    },
+    "2": {
+        "0": "count",
+        "1": {
+            "num": 1
+        },
+        "2": "count",
+        "op": "add"
+    },
+    "3": {
+        "0": "count",
+        "1": 1,
+        "op": "set_reg"
+    },
+    "name": "Fn Body Var",
+    "parameters": [
+        false
+    ],
+    "pnames": [
+        "Val"
+    ]
+}

@@ -1,0 +1,34 @@
+{
+    "0": {
+        "0": 2,
+        "1": 3,
+        "2": 1,
+        "3": {
+            "num": 10
+        },
+        "next": 2,
+        "op": "check_number"
+    },
+    "1": {
+        "0": false,
+        "1": false,
+        "next": 4,
+        "op": "set_reg"
+    },
+    "2": {
+        "0": 1,
+        "1": {
+            "num": 3
+        },
+        "2": 1,
+        "next": 1,
+        "op": "add"
+    },
+    "name": "Fn Body Loop",
+    "parameters": [
+        false
+    ],
+    "pnames": [
+        "Val"
+    ]
+}

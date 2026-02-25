@@ -1,0 +1,17 @@
+# AI-generated test
+# If/else in fn body
+fn clamp_min(a, b) {
+    var result = a
+    if a < b {
+        result = b
+    }
+    return result
+}
+
+behavior fn_body_if {
+    @name "Fn Body If"
+    @param in x "X"
+    @param in min "Min"
+    let r = clamp_min $x, $min
+    notify "result", value: r
+}

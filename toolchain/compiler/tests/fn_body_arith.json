@@ -1,0 +1,22 @@
+{
+    "0": {
+        "0": 1,
+        "1": 2,
+        "2": "result",
+        "op": "add"
+    },
+    "1": {
+        "0": "result",
+        "op": "notify",
+        "txt": "result"
+    },
+    "name": "Fn Body Arith",
+    "parameters": [
+        false,
+        false
+    ],
+    "pnames": [
+        "X",
+        "Y"
+    ]
+}

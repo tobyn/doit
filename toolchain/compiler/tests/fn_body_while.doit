@@ -1,0 +1,18 @@
+# AI-generated test
+# While loop in fn body
+fn sum_to(n) {
+    var total = 0
+    var i = 1
+    while i <= n {
+        total += i
+        i++
+    }
+    return total
+}
+
+behavior fn_body_while {
+    @name "Fn Body While"
+    @param in n "N"
+    let result = sum_to $n
+    notify "result", value: result
+}

@@ -1,0 +1,14 @@
+# AI-generated test
+# Mutable var declarations and assignment in fn body
+fn counter(inout x) {
+    var count = 0
+    count += 1
+    count++
+    x = count
+}
+
+behavior fn_body_var {
+    @name "Fn Body Var"
+    @param inout val "Val"
+    counter inout $val
+}

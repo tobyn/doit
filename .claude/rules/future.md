@@ -26,51 +26,15 @@ strings are compile-time-only types baked into instructions, the
 not currently handle `(` after a function name. See F13 in
 `analysis-findings.md`.
 
-## AST unification plan (Phases 1-2 complete, Phases 3-4 pending)
+## AST unification plan (Phases 1-3 complete, Phase 4 pending)
 
-Both fn bodies and behavior bodies now use a two-phase AST approach:
-parse into `[]Stmt` with `Expr` nodes (defined in `ast.go`), then emit
-frames. The AST defines all the expression/statement node types needed
-for full language parity. Phase 3 unifies the two parsing paths and
-enables fn body parity.
-
-### Phase 3: Unify parsing and enable fn body parity
-
-**Goal**: Both paths share the same parser. Fn bodies gain expressions and
-control flow.
-
-**Steps**:
-
-1. Extract shared `parseStmtBlock(context)` that parses a brace-delimited
-   block of statements. Both `parseBehaviorBody` and `parseUserFn` call it.
-   The `context` parameter controls behavior-only features (`@param`,
-   `@name`, `var`, break-target patching).
-
-2. Enable expressions in fn bodies — since fn bodies now use the same
-   `Stmt`/`Expr` types and `emitFnBody` dispatches to the same emission
-   logic, this is mostly removing artificial restrictions in the parser:
-   - `let x = a + b` (arithmetic)
-   - `let r = a > b` (comparison)
-   - `let r = a > b && c < d` (boolean chain)
-   - `let r = x is Unit` (type check)
-   - `x = expr` (assignment)
-   - `x += 3`, `x++` (compound assignment, increment/decrement)
-
-3. Enable control flow in fn bodies:
-   - `if`/`else if`/`else`
-   - `while`
-   - `loop`/`break`
-
-   These work because `emitFnBody` (from Phase 1) can emit branching
-   frames via `frameBuilder` during inlining.
-
-**Files**: `parse.go`, `bhvast.go`, `codegen.go`
-
-**Tests**: New `.doit`/`.json` test cases for each newly-supported fn body
-construct. New error cases in `TestCompileErrors`.
-
-**Risk**: Low-medium. The hard work is in Phases 1-2. This phase removes
-restrictions.
+Both fn bodies and behavior bodies use a two-phase AST approach with
+shared expression parsers (parameterized via `operandResolver`). Phase
+3 enabled fn body parity: arithmetic, comparisons, boolean chains,
+type checks, `var` declarations, assignment, compound assignment,
+increment/decrement, and control flow (`if`/`else if`/`else`, `while`,
+`loop`/`break`). It also extended behavior-level inner block parsing
+(`parseBhvStmtBlock`) to handle the full statement set.
 
 ### Phase 4: AST-level optimizations
 
@@ -100,19 +64,9 @@ After each phase:
 cd toolchain && go build ./... && go test ./...
 ```
 
-All existing test cases must pass. New test cases added in Phase 3 for
-fn body parity. Graph isomorphism comparison (`matchBehaviors`) tolerates
-frame reordering, so emission order changes don't break tests.
-
-### Critical files
-
-- `toolchain/compiler/ast.go` — AST node types (done)
-- `toolchain/compiler/compiler.go` — `fnDef` struct, shared types (done)
-- `toolchain/compiler/parse.go` — `parseUserFn`, `expandCall`, `emitFnBody` (done)
-- `toolchain/compiler/bhvast.go` — Behavior-level AST parsers + emitter (done)
-- `toolchain/compiler/codegen.go` — Shared helpers, `parseBehaviorBody` dispatch (done)
-- `toolchain/main_test.go` — New test cases (Phase 3)
-- `toolchain/compiler/tests/` — New `.doit`/`.json` test pairs (Phase 3)
+All existing test cases must pass. Graph isomorphism comparison
+(`matchBehaviors`) tolerates frame reordering, so emission order
+changes don't break tests.
 
 ## Extended comparison and type check expressions
 

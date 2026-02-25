@@ -1,0 +1,14 @@
+# AI-generated test
+# Comparison expressions in fn body
+fn is_greater(a, b) {
+    let r = a > b
+    return r
+}
+
+behavior fn_body_comparison {
+    @name "Fn Body Comparison"
+    @param in x "X"
+    @param in y "Y"
+    let result = is_greater $x, $y
+    notify "result", value: result
+}

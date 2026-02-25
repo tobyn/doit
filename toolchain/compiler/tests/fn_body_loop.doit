@@ -1,0 +1,16 @@
+# AI-generated test
+# Loop/break in fn body
+fn find_threshold(inout x) {
+    loop {
+        if x >= 10 {
+            break
+        }
+        x += 3
+    }
+}
+
+behavior fn_body_loop {
+    @name "Fn Body Loop"
+    @param inout val "Val"
+    find_threshold inout $val
+}

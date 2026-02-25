@@ -53,27 +53,41 @@ output format.
   `#!` comments
 - **`compiler/parse.go`** — Stdlib parsing (delegates to `parseUserFn`),
   file-level parsing, function definitions with `instruction` support,
-  fn body AST parsing (`parseFnBodyExpr`, `parseFnBodyConstructorExpr`,
+  `fnBodyResolver` (operandResolver for fn bodies),
+  `fnBodyContext` (tracks paramDirs, fnVars, resolve for fn body parsing),
+  fn body AST parsing (`parseFnBodyStmts`, `parseFnBodyLetVar`,
+  `parseFnBodyRHSExpr`, `parseFnBodyIfStmt`, `parseFnBodyElseIfChain`,
+  `parseFnBodyWhileStmt`, `parseFnBodyLoopStmt`,
+  `parseFnBodyExpr`, `parseFnBodyConstructorExpr`,
   `parseFnBodyCallArgs`, `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
   fn body AST emission (`emitFnBody`, `emitExprGetValue`, `emitExprTo`,
+  `emitFnArithTo`, `emitFnArithNode`, `emitFnBoolExprTo`,
+  `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnWhileStmt`, `emitFnLoopStmt`,
   `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
   `collectASTOutputVars`, `resolveVarName`, `tryResolveConstructorLiteral`,
   `tryResolveAmpersandLiteral`),
   call expansion with `[]any`/`map[string]any` argument types,
   fn body instruction direction enforcement
   (`checkFnBodyInstructionDirections`)
-- **`compiler/bhvast.go`** — Behavior-level AST parsers and emitters
-  (Phase 2 of AST unification). Expression parsers return `Expr` AST
-  nodes: `parseBhvArithExpr` (PEMDAS arithmetic → `ArithExpr`),
-  `parseBhvBoolExpr` (boolean chains → `BoolChainExpr`/`CompareExpr`/
-  `TypeCheckExpr`/`TruthyExpr`), `parseBhvArgExpr` (function arguments
-  → `Expr`), `parseBhvConstructorExpr`/`parseBhvAmpersandExpr`
-  (constructors → `ConstructorExpr`/`AmpersandExpr`). Statement parsers
-  return `Stmt` nodes: `parseBhvVarInit` → `LetStmt`/`AssignStmt`,
+- **`compiler/bhvast.go`** — Behavior-level AST parsers and emitters,
+  plus shared expression parsers. `operandResolver` type and
+  `bhvResolver` factory for behavior-level operand resolution.
+  Shared expression parsers (parameterized by `operandResolver`,
+  used by both behavior and fn body paths): `parseArithExpr`/
+  `parseArithExprFrom`/`parseArithExprFromFull`/`parseArithTerm`/
+  `parseArithTermFrom`/`parseArithPrimary` (PEMDAS arithmetic →
+  `ArithExpr`), `parseBoolExpr`/`parseBoolPrimary`/`parseBoolChain`
+  (boolean expressions → `BoolChainExpr`/`CompareExpr`/
+  `TypeCheckExpr`/`TruthyExpr`). Behavior-level argument parser:
+  `parseBhvArgExpr`. Constructor parsers: `parseBhvConstructorExpr`/
+  `parseBhvAmpersandExpr`. Statement parsers:
+  `parseBhvVarInit` → `LetStmt`/`AssignStmt`,
   `parseBhvDefaultStmt` → `CallStmt`/`AssignStmt`/`CompoundAssignStmt`/
   `IncrDecrStmt`, `parseBhvIfStmt` → `IfStmt`, `parseBhvWhileStmt` →
   `WhileStmt`, `parseBhvLoopStmt` → `LoopStmt`, `parseBhvMultiReturn`
-  → `MultiReturnStmt`. Emitter functions: `emitBehaviorStmts` (top-level
+  → `MultiReturnStmt`, `parseBhvStmtBlock`/`parseBhvStmtBlockInner`
+  (full statement set in inner blocks including var/let/instruction/
+  control flow/break). Emitter functions: `emitBehaviorStmts` (top-level
   behavior emitter with deferred body management, break target patching,
   and mode tracking), `emitBhvStmtSimple` (non-control-flow statements),
   `emitBhvExprTo`/`emitBhvExprGetValue` (expression emission),
@@ -323,7 +337,9 @@ are `let` locals. Each binding becomes a `MultiBinding` in
 `MultiReturnStmt.Bindings` (with `Name` for idents, `Discard: true` for
 `_`). During emission, `emitFnBody` resolves bindings through `paramMap`
 and passes the result slice as `retVals` to the recursive `expandCall`.
-No `var` in fn bodies — mutability is a behavior-level concept.
+`var` is supported in fn bodies for mutable local variables. `let` is
+immutable. Multi-return binding lists in fn bodies use the modifier of
+the leading keyword (`let` or `var`) for all bindings.
 
 The `parseBhvCallArgs` helper (bhvast.go) extracts behavior-level
 positional + keyword arg parsing into a reusable method shared by bare

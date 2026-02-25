@@ -15,11 +15,25 @@ import (
 
 // -----------------------------------------------------------------------
 // Expression parsers → Expr nodes
+//
+// These parsers are parameterized by an operandResolver callback, allowing
+// them to be shared between behavior-level and fn body contexts.
 // -----------------------------------------------------------------------
 
-// parseBhvArithPrimary parses an arithmetic atom: number literal, null,
+// operandResolver resolves a bare identifier token to an Expr.
+// Used to abstract $register/parameter resolution for shared expression parsers.
+type operandResolver func(tok token) (Expr, error)
+
+// bhvResolver returns an operandResolver for behavior-level contexts.
+func (p *parser) bhvResolver(syms *symbolTable) operandResolver {
+	return func(tok token) (Expr, error) {
+		return p.resolveBhvOperand(tok, syms)
+	}
+}
+
+// parseArithPrimary parses an arithmetic atom: number literal, null,
 // variable, $register, or a parenthesized sub-expression.
-func (p *parser) parseBhvArithPrimary(syms *symbolTable) (Expr, error) {
+func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 	tok, err := p.next()
 	if err != nil {
 		return nil, err
@@ -29,7 +43,7 @@ func (p *parser) parseBhvArithPrimary(syms *symbolTable) (Expr, error) {
 		num, _ := strconv.Atoi(tok.val)
 		return &LiteralExpr{Value: map[string]any{"num": num}}, nil
 	case tokLParen:
-		val, err := p.parseBhvArithExpr(syms)
+		val, err := p.parseArithExpr(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -41,23 +55,23 @@ func (p *parser) parseBhvArithPrimary(syms *symbolTable) (Expr, error) {
 		if tok.val == "null" {
 			return &LiteralExpr{Value: false}, nil
 		}
-		return p.resolveBhvOperand(tok, syms)
+		return resolve(tok)
 	default:
 		return nil, p.errorf(tok.pos, "expected number, variable, or '(' in arithmetic expression, got %s", tok.describe())
 	}
 }
 
-// parseBhvArithTerm parses `primary (* | / primary)*`.
-func (p *parser) parseBhvArithTerm(syms *symbolTable) (Expr, error) {
-	lhs, err := p.parseBhvArithPrimary(syms)
+// parseArithTerm parses `primary (* | / primary)*`.
+func (p *parser) parseArithTerm(resolve operandResolver) (Expr, error) {
+	lhs, err := p.parseArithPrimary(resolve)
 	if err != nil {
 		return nil, err
 	}
-	return p.parseBhvArithTermFrom(lhs, syms)
+	return p.parseArithTermFrom(lhs, resolve)
 }
 
-// parseBhvArithTermFrom parses `(* | / primary)*` from an already-parsed first.
-func (p *parser) parseBhvArithTermFrom(first Expr, syms *symbolTable) (Expr, error) {
+// parseArithTermFrom parses `(* | / primary)*` from an already-parsed first.
+func (p *parser) parseArithTermFrom(first Expr, resolve operandResolver) (Expr, error) {
 	result := first
 	for {
 		peek, err := p.next()
@@ -68,7 +82,7 @@ func (p *parser) parseBhvArithTermFrom(first Expr, syms *symbolTable) (Expr, err
 			p.unget(peek)
 			return result, nil
 		}
-		rhs, err := p.parseBhvArithPrimary(syms)
+		rhs, err := p.parseArithPrimary(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -76,17 +90,17 @@ func (p *parser) parseBhvArithTermFrom(first Expr, syms *symbolTable) (Expr, err
 	}
 }
 
-// parseBhvArithExpr parses `term (+ | - term)*`.
-func (p *parser) parseBhvArithExpr(syms *symbolTable) (Expr, error) {
-	lhs, err := p.parseBhvArithTerm(syms)
+// parseArithExpr parses `term (+ | - term)*`.
+func (p *parser) parseArithExpr(resolve operandResolver) (Expr, error) {
+	lhs, err := p.parseArithTerm(resolve)
 	if err != nil {
 		return nil, err
 	}
-	return p.parseBhvArithExprFrom(lhs, syms)
+	return p.parseArithExprFrom(lhs, resolve)
 }
 
-// parseBhvArithExprFrom parses `(+ | - term)*` from an already-parsed first.
-func (p *parser) parseBhvArithExprFrom(first Expr, syms *symbolTable) (Expr, error) {
+// parseArithExprFrom parses `(+ | - term)*` from an already-parsed first.
+func (p *parser) parseArithExprFrom(first Expr, resolve operandResolver) (Expr, error) {
 	result := first
 	for {
 		peek, err := p.next()
@@ -97,7 +111,7 @@ func (p *parser) parseBhvArithExprFrom(first Expr, syms *symbolTable) (Expr, err
 			p.unget(peek)
 			return result, nil
 		}
-		rhs, err := p.parseBhvArithTerm(syms)
+		rhs, err := p.parseArithTerm(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -105,14 +119,14 @@ func (p *parser) parseBhvArithExprFrom(first Expr, syms *symbolTable) (Expr, err
 	}
 }
 
-// parseBhvArithExprFromFull parses a full PEMDAS expression from an
+// parseArithExprFromFull parses a full PEMDAS expression from an
 // already-parsed first value.
-func (p *parser) parseBhvArithExprFromFull(first Expr, syms *symbolTable) (Expr, error) {
-	termResult, err := p.parseBhvArithTermFrom(first, syms)
+func (p *parser) parseArithExprFromFull(first Expr, resolve operandResolver) (Expr, error) {
+	termResult, err := p.parseArithTermFrom(first, resolve)
 	if err != nil {
 		return nil, err
 	}
-	return p.parseBhvArithExprFrom(termResult, syms)
+	return p.parseArithExprFrom(termResult, resolve)
 }
 
 // resolveBhvOperand validates an identifier as readable and resolves it:
@@ -133,17 +147,17 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 	return &IdentExpr{Name: tok.val}, nil
 }
 
-// parseBhvBoolPrimary parses a single boolean term: parenthesized
+// parseBoolPrimary parses a single boolean term: parenthesized
 // sub-expression, or value (with optional arithmetic) followed by
 // comparison operator, 'is', or nothing (truthy check).
-func (p *parser) parseBhvBoolPrimary(syms *symbolTable) (Expr, error) {
+func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 	tok, err := p.next()
 	if err != nil {
 		return nil, err
 	}
 
 	if tok.kind == tokLParen {
-		inner, err := p.parseBhvBoolExpr(syms)
+		inner, err := p.parseBoolExpr(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +171,7 @@ func (p *parser) parseBhvBoolPrimary(syms *symbolTable) (Expr, error) {
 	if tok.kind == tokNumber {
 		num, _ := strconv.Atoi(tok.val)
 		val := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
-		lhs, err = p.parseBhvArithExprFromFull(val, syms)
+		lhs, err = p.parseArithExprFromFull(val, resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -165,11 +179,11 @@ func (p *parser) parseBhvBoolPrimary(syms *symbolTable) (Expr, error) {
 		if tok.val == "null" {
 			lhs = &LiteralExpr{Value: false}
 		} else {
-			resolved, err := p.resolveBhvOperand(tok, syms)
+			resolved, err := resolve(tok)
 			if err != nil {
 				return nil, err
 			}
-			lhs, err = p.parseBhvArithExprFromFull(resolved, syms)
+			lhs, err = p.parseArithExprFromFull(resolved, resolve)
 			if err != nil {
 				return nil, err
 			}
@@ -190,7 +204,7 @@ func (p *parser) parseBhvBoolPrimary(syms *symbolTable) (Expr, error) {
 		return &TypeCheckExpr{Value: lhs, TypeSlot: slot}, nil
 	}
 	if isComparisonOp(cmpTok.kind) {
-		rhs, err := p.parseBhvArithExpr(syms)
+		rhs, err := p.parseArithExpr(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -201,17 +215,17 @@ func (p *parser) parseBhvBoolPrimary(syms *symbolTable) (Expr, error) {
 	return &TruthyExpr{Value: lhs}, nil
 }
 
-// parseBhvBoolExpr parses a complete boolean expression.
-func (p *parser) parseBhvBoolExpr(syms *symbolTable) (Expr, error) {
-	first, err := p.parseBhvBoolPrimary(syms)
+// parseBoolExpr parses a complete boolean expression.
+func (p *parser) parseBoolExpr(resolve operandResolver) (Expr, error) {
+	first, err := p.parseBoolPrimary(resolve)
 	if err != nil {
 		return nil, err
 	}
-	return p.parseBhvBoolChain(first, syms)
+	return p.parseBoolChain(first, resolve)
 }
 
-// parseBhvBoolChain peeks for &&/||. If absent, returns first unchanged.
-func (p *parser) parseBhvBoolChain(first Expr, syms *symbolTable) (Expr, error) {
+// parseBoolChain peeks for &&/||. If absent, returns first unchanged.
+func (p *parser) parseBoolChain(first Expr, resolve operandResolver) (Expr, error) {
 	peek, err := p.next()
 	if err != nil {
 		return nil, err
@@ -224,7 +238,7 @@ func (p *parser) parseBhvBoolChain(first Expr, syms *symbolTable) (Expr, error) 
 	chainOp := peek.kind
 	children := []Expr{first}
 	for {
-		next, err := p.parseBhvBoolPrimary(syms)
+		next, err := p.parseBoolPrimary(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -248,6 +262,7 @@ func (p *parser) parseBhvBoolChain(first Expr, syms *symbolTable) (Expr, error) 
 
 // parseBhvArgExpr parses a single argument value into an Expr.
 func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
+	resolve := p.bhvResolver(syms)
 	tok, err := p.next()
 	if err != nil {
 		return nil, err
@@ -259,7 +274,7 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 	case tokNumber:
 		num, _ := strconv.Atoi(tok.val)
 		val := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
-		result, err := p.parseBhvArithExprFromFull(val, syms)
+		result, err := p.parseArithExprFromFull(val, resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -290,14 +305,14 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 			} else {
 				return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
 			}
-			result, err := p.parseBhvArithExprFromFull(resolved, syms)
+			result, err := p.parseArithExprFromFull(resolved, resolve)
 			if err != nil {
 				return nil, err
 			}
 			base = result
 		} else {
 			resolved := Expr(&IdentExpr{Name: tok.val})
-			result, err := p.parseBhvArithExprFromFull(resolved, syms)
+			result, err := p.parseArithExprFromFull(resolved, resolve)
 			if err != nil {
 				return nil, err
 			}
@@ -499,17 +514,18 @@ func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) (
 // maybeBhvExprContinuation peeks for comparison/is/&&/|| after a value.
 // Returns (expr, true) if continuation found, (original, false) otherwise.
 func (p *parser) maybeBhvExprContinuation(valueExpr Expr, syms *symbolTable) (Expr, bool, error) {
+	resolve := p.bhvResolver(syms)
 	peek, err := p.next()
 	if err != nil {
 		return nil, false, err
 	}
 	if isComparisonOp(peek.kind) {
-		rhs, err := p.parseBhvArithExpr(syms)
+		rhs, err := p.parseArithExpr(resolve)
 		if err != nil {
 			return nil, false, err
 		}
 		cmp := Expr(&CompareExpr{Op: peek.kind, LHS: valueExpr, RHS: rhs})
-		chained, err := p.parseBhvBoolChain(cmp, syms)
+		chained, err := p.parseBoolChain(cmp, resolve)
 		if err != nil {
 			return nil, false, err
 		}
@@ -521,7 +537,7 @@ func (p *parser) maybeBhvExprContinuation(valueExpr Expr, syms *symbolTable) (Ex
 			return nil, false, err
 		}
 		tc := Expr(&TypeCheckExpr{Value: valueExpr, TypeSlot: slot})
-		chained, err := p.parseBhvBoolChain(tc, syms)
+		chained, err := p.parseBoolChain(tc, resolve)
 		if err != nil {
 			return nil, false, err
 		}
@@ -530,7 +546,7 @@ func (p *parser) maybeBhvExprContinuation(valueExpr Expr, syms *symbolTable) (Ex
 	if peek.kind == tokDoubleAmpersand || peek.kind == tokDoublePipe {
 		p.unget(peek)
 		truthy := Expr(&TruthyExpr{Value: valueExpr})
-		chained, err := p.parseBhvBoolChain(truthy, syms)
+		chained, err := p.parseBoolChain(truthy, resolve)
 		if err != nil {
 			return nil, false, err
 		}
@@ -547,6 +563,7 @@ func (p *parser) maybeBhvExprContinuation(valueExpr Expr, syms *symbolTable) (Ex
 // parseBhvVarInit parses the RHS of a var/let declaration after '='.
 // May return multiple statements (e.g., fn call + boolean continuation).
 func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable) ([]Stmt, error) {
+	resolve := p.bhvResolver(syms)
 	comment := p.docComment
 	rhsTok, err := p.next()
 	if err != nil {
@@ -566,7 +583,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		p.unget(peek)
 
 		numExpr := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
-		result, err := p.parseBhvArithExprFromFull(numExpr, syms)
+		result, err := p.parseArithExprFromFull(numExpr, resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -620,12 +637,12 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		fn := p.fns[rhsTok.val]
 		if fn == nil {
 			// Not a function — parse as value with arithmetic/comparison/boolean
-			resolved, err := p.resolveBhvOperand(rhsTok, syms)
+			resolved, err := resolve(rhsTok)
 			if err != nil {
 				return nil, err
 			}
 
-			result, err := p.parseBhvArithExprFromFull(resolved, syms)
+			result, err := p.parseArithExprFromFull(resolved, resolve)
 			if err != nil {
 				return nil, err
 			}
@@ -681,7 +698,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 
 	if rhsTok.kind == tokLParen {
 		p.unget(rhsTok)
-		expr, err := p.parseBhvBoolExpr(syms)
+		expr, err := p.parseBoolExpr(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -691,7 +708,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		// Single truthy = parenthesized value — check for arithmetic continuation
 		if truthy, ok := expr.(*TruthyExpr); ok {
 			innerVal := truthy.Value
-			result, err := p.parseBhvArithExprFromFull(innerVal, syms)
+			result, err := p.parseArithExprFromFull(innerVal, resolve)
 			if err != nil {
 				return nil, err
 			}
@@ -727,6 +744,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 // parseBhvDefaultStmt parses a function call, assignment, compound assignment,
 // or increment/decrement. Returns one or more statements.
 func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, error) {
+	resolve := p.bhvResolver(syms)
 	comment := p.docComment
 	tok2, err := p.next()
 	if err != nil {
@@ -749,7 +767,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		if rhsTok.kind == tokNumber {
 			num, _ := strconv.Atoi(rhsTok.val)
 			numExpr := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
-			result, err := p.parseBhvArithExprFromFull(numExpr, syms)
+			result, err := p.parseArithExprFromFull(numExpr, resolve)
 			if err != nil {
 				return nil, err
 			}
@@ -795,11 +813,11 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			fn := p.fns[rhsTok.val]
 			if fn == nil {
 				// Not a function — value + arithmetic/comparison/boolean
-				resolved, err := p.resolveBhvOperand(rhsTok, syms)
+				resolved, err := resolve(rhsTok)
 				if err != nil {
 					return nil, err
 				}
-				result, err := p.parseBhvArithExprFromFull(resolved, syms)
+				result, err := p.parseArithExprFromFull(resolved, resolve)
 				if err != nil {
 					return nil, err
 				}
@@ -843,14 +861,14 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 
 		if rhsTok.kind == tokLParen {
 			p.unget(rhsTok)
-			expr, err := p.parseBhvBoolExpr(syms)
+			expr, err := p.parseBoolExpr(resolve)
 			if err != nil {
 				return nil, err
 			}
 
 			if truthy, ok := expr.(*TruthyExpr); ok {
 				innerVal := truthy.Value
-				result, err := p.parseBhvArithExprFromFull(innerVal, syms)
+				result, err := p.parseArithExprFromFull(innerVal, resolve)
 				if err != nil {
 					return nil, err
 				}
@@ -882,7 +900,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 	}
 
 	if isCompoundAssignOp(tok2.kind) {
-		rhs, err := p.parseBhvArithExpr(syms)
+		rhs, err := p.parseArithExpr(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -903,7 +921,8 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 }
 
 // parseBhvIfStmt parses an if/else-if/else statement.
-func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
+func (p *parser) parseBhvIfStmt(syms *symbolTable, inLoop ...bool) (*IfStmt, error) {
+	loop := len(inLoop) > 0 && inLoop[0]
 	comment := p.docComment
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
@@ -934,7 +953,7 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	body, err := p.parseBhvStmtBlock(syms)
+	body, err := p.parseBhvStmtBlockInner(syms, loop)
 	if err != nil {
 		return nil, err
 	}
@@ -957,7 +976,7 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
 		}
 		if peek.kind == tokIdent && peek.val == "if" {
 			// else if
-			err := p.parseBhvElseIfChain(stmt, syms)
+			err := p.parseBhvElseIfChain(stmt, syms, loop)
 			if err != nil {
 				return nil, err
 			}
@@ -967,7 +986,7 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
 			if _, err := p.expect(tokLBrace); err != nil {
 				return nil, err
 			}
-			elseBody, err := p.parseBhvStmtBlock(syms)
+			elseBody, err := p.parseBhvStmtBlockInner(syms, loop)
 			if err != nil {
 				return nil, err
 			}
@@ -982,7 +1001,7 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
 
 // parseBhvElseIfChain parses the else-if / else chain and attaches them
 // to the given IfStmt.
-func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable) error {
+func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable, inLoop bool) error {
 	// Parse condition for "else if"
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
@@ -1013,7 +1032,7 @@ func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable) error {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return err
 	}
-	body, err := p.parseBhvStmtBlock(syms)
+	body, err := p.parseBhvStmtBlockInner(syms, inLoop)
 	if err != nil {
 		return err
 	}
@@ -1031,14 +1050,14 @@ func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable) error {
 			return err
 		}
 		if peek.kind == tokIdent && peek.val == "if" {
-			return p.parseBhvElseIfChain(stmt, syms)
+			return p.parseBhvElseIfChain(stmt, syms, inLoop)
 		}
 		// Plain else
 		p.unget(peek)
 		if _, err := p.expect(tokLBrace); err != nil {
 			return err
 		}
-		elseBody, err := p.parseBhvStmtBlock(syms)
+		elseBody, err := p.parseBhvStmtBlockInner(syms, inLoop)
 		if err != nil {
 			return err
 		}
@@ -1099,90 +1118,10 @@ func (p *parser) parseBhvLoopStmt(syms *symbolTable) (*LoopStmt, error) {
 	return &LoopStmt{Body: body, Comment: comment}, nil
 }
 
-// parseBhvLoopBody parses loop body statements. Handles 'if' as if/break
-// (the only form currently supported in loop bodies).
+// parseBhvLoopBody parses loop body statements. Supports the full statement
+// set including break, var/let, nested control flow, etc.
 func (p *parser) parseBhvLoopBody(syms *symbolTable) ([]Stmt, error) {
-	var stmts []Stmt
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if tok.kind == tokRBrace {
-			break
-		}
-		if tok.kind == tokEOF {
-			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
-		}
-		if tok.kind != tokIdent {
-			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
-		}
-		comment := p.docComment
-
-		switch tok.val {
-		case "if":
-			// Parse if/break pattern inside loop
-			ifStmt, err := p.parseBhvIfBreak(syms)
-			if err != nil {
-				return nil, err
-			}
-			ifStmt.Comment = comment
-			stmts = append(stmts, ifStmt)
-		case "lock":
-			stmts = append(stmts, &LockStmt{Unlock: false, Comment: comment})
-		case "unlock":
-			stmts = append(stmts, &LockStmt{Unlock: true, Comment: comment})
-		default:
-			parsed, err := p.parseBhvDefaultStmt(tok, syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, parsed...)
-		}
-	}
-	return stmts, nil
-}
-
-// parseBhvIfBreak parses `if ident >= number { break }` inside a loop.
-func (p *parser) parseBhvIfBreak(syms *symbolTable) (*IfStmt, error) {
-	lhsTok, err := p.expect(tokIdent)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.checkReadable(lhsTok.val, syms, lhsTok.pos); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(tokGreaterEquals); err != nil {
-		return nil, err
-	}
-	rhsTok, err := p.expect(tokNumber)
-	if err != nil {
-		return nil, err
-	}
-	rhsNum, _ := strconv.Atoi(rhsTok.val)
-
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-	breakTok, err := p.expect(tokIdent)
-	if err != nil {
-		return nil, err
-	}
-	if breakTok.val != "break" {
-		return nil, p.errorf(breakTok.pos, "expected 'break', got %q", breakTok.val)
-	}
-	if _, err := p.expect(tokRBrace); err != nil {
-		return nil, err
-	}
-
-	return &IfStmt{
-		Cond: &CompareExpr{
-			Op:  tokGreaterEquals,
-			LHS: &IdentExpr{Name: lhsTok.val},
-			RHS: &LiteralExpr{Value: map[string]any{"num": rhsNum}},
-		},
-		Body: []Stmt{&BreakStmt{}},
-	}, nil
+	return p.parseBhvStmtBlockInner(syms, true)
 }
 
 // parseBhvMultiReturn parses a multi-return binding list.
@@ -1342,6 +1281,12 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 // parseBhvStmtBlock parses a brace-delimited block of statements.
 // The opening '{' has been consumed. Reads until '}'.
 func (p *parser) parseBhvStmtBlock(syms *symbolTable) ([]Stmt, error) {
+	return p.parseBhvStmtBlockInner(syms, false)
+}
+
+// parseBhvStmtBlockInner parses a brace-delimited block of statements.
+// If inLoop is true, 'break' is allowed.
+func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool) ([]Stmt, error) {
 	var stmts []Stmt
 	for {
 		tok, err := p.next()
@@ -1357,12 +1302,162 @@ func (p *parser) parseBhvStmtBlock(syms *symbolTable) ([]Stmt, error) {
 		if tok.kind != tokIdent {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
+		comment := p.docComment
 
 		switch tok.val {
 		case "lock":
-			stmts = append(stmts, &LockStmt{Unlock: false, Comment: p.docComment})
+			stmts = append(stmts, &LockStmt{Unlock: false, Comment: comment})
 		case "unlock":
-			stmts = append(stmts, &LockStmt{Unlock: true, Comment: p.docComment})
+			stmts = append(stmts, &LockStmt{Unlock: true, Comment: comment})
+		case "instruction":
+			rawFrame, err := p.parseInstruction()
+			if err != nil {
+				return nil, err
+			}
+			if err := p.checkInstructionDirections(rawFrame, syms, tok.pos); err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &InstructionStmt{Frame: rawFrame, Comment: comment})
+		case "var":
+			nameTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			if nameTok.val == "_" {
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind != tokComma {
+					return nil, p.errorf(nameTok.pos, "'_' cannot be used as a variable name")
+				}
+				parsed, err := p.parseBhvMultiReturn(nameTok, true, true, syms)
+				if err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, parsed...)
+			} else {
+				if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
+					return nil, err
+				}
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind == tokComma {
+					parsed, err := p.parseBhvMultiReturn(nameTok, true, false, syms)
+					if err != nil {
+						return nil, err
+					}
+					stmts = append(stmts, parsed...)
+				} else if sep.kind == tokEquals {
+					parsed, err := p.parseBhvVarInit(nameTok, true, syms)
+					if err != nil {
+						return nil, err
+					}
+					stmts = append(stmts, parsed...)
+				} else {
+					return nil, p.errorf(sep.pos, "expected ',' or '=' after var identifier, got %s", sep.describe())
+				}
+			}
+		case "let":
+			nameTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			if nameTok.val == "_" {
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind != tokComma {
+					return nil, p.errorf(nameTok.pos, "'_' cannot be used as a variable name")
+				}
+				parsed, err := p.parseBhvMultiReturn(nameTok, false, true, syms)
+				if err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, parsed...)
+			} else {
+				if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
+					return nil, err
+				}
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind == tokComma {
+					parsed, err := p.parseBhvMultiReturn(nameTok, false, false, syms)
+					if err != nil {
+						return nil, err
+					}
+					stmts = append(stmts, parsed...)
+				} else if sep.kind == tokEquals {
+					parsed, err := p.parseBhvVarInit(nameTok, false, syms)
+					if err != nil {
+						return nil, err
+					}
+					stmts = append(stmts, parsed...)
+				} else {
+					return nil, p.errorf(sep.pos, "expected ',' or '=' after let identifier, got %s", sep.describe())
+				}
+			}
+		case "_":
+			sep, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if sep.kind == tokComma {
+				parsed, err := p.parseBhvMultiReturn(tok, false, true, syms)
+				if err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, parsed...)
+			} else if sep.kind == tokEquals {
+				calleeTok, err := p.expect(tokIdent)
+				if err != nil {
+					return nil, err
+				}
+				fn := p.fns[calleeTok.val]
+				if fn == nil {
+					return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+				}
+				args, kwArgs, err := p.parseBhvCallArgs(fn, calleeTok, syms)
+				if err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &CallStmt{
+					Name:    calleeTok.val,
+					Args:    args,
+					KwArgs:  kwArgs,
+					Comment: comment,
+				})
+			} else {
+				return nil, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
+			}
+		case "if":
+			ifStmt, err := p.parseBhvIfStmt(syms, inLoop)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, ifStmt)
+		case "while":
+			whileStmt, err := p.parseBhvWhileStmt(syms)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, whileStmt)
+		case "loop":
+			loopStmt, err := p.parseBhvLoopStmt(syms)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, loopStmt)
+		case "break":
+			if !inLoop {
+				return nil, p.errorf(tok.pos, "'break' outside of loop")
+			}
+			stmts = append(stmts, &BreakStmt{Comment: comment})
 		default:
 			parsed, err := p.parseBhvDefaultStmt(tok, syms)
 			if err != nil {

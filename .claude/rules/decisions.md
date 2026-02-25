@@ -13,12 +13,12 @@ behavior-level `default` case dispatch, etc.). Any expression or
 statement that works at behavior level should also work in fn bodies,
 and vice versa.
 
-This is a core design principle, not a nice-to-have. The current state
-where expressions (arithmetic, comparisons, boolean chains, `is`,
-`&&`/`||`, parenthesized grouping) only work at behavior level is a
-significant gap that should be closed. The "Deferred: fn body ..."
-notes throughout this file represent parity debt, not optional
-extensions.
+This is a core design principle, not a nice-to-have. Phase 3 of the
+AST unification closed the parity gap: fn bodies now support
+arithmetic, comparisons, boolean chains, `is`, `&&`/`||`, parenthesized
+grouping, `var` declarations, assignment, compound assignment,
+increment/decrement, and control flow (`if`/`else if`/`else`, `while`,
+`loop`/`break`).
 
 **Compiler architecture**: Both function bodies and behavior bodies
 use a two-phase AST approach. Parsing produces `[]Stmt` with `Expr`
@@ -26,11 +26,27 @@ nodes (defined in `ast.go`), then a separate emitter walks the AST
 and emits frames via `frameBuilder`. For fn bodies, `emitFnBody` runs
 during `expandCall` inlining. For behavior bodies, `emitBehaviorStmts`
 (in `bhvast.go`) runs after `parseBehaviorBody` collects all statements.
-Behavior-level expression/statement parsers (`parseBhv*` functions in
-`bhvast.go`) return AST nodes; `emitBhv*` functions emit frames from
-them. This decoupling replaced the old single-pass parse-and-emit
-approach (Phase 1 replaced `fnBodyCall` IR; Phase 2 decoupled behavior
-compilation).
+Expression parsers are shared between both paths via the
+`operandResolver` callback — behavior-level resolution goes through
+`bhvResolver` (resolves `$register`/parameters via `symbolTable`),
+while fn body resolution uses `fnBodyResolver` (resolves `$register`
+to literals, checks out-only params). The shared parsers
+(`parseArithExpr`, `parseBoolExpr`, etc.) accept an `operandResolver`
+and return AST nodes. Behavior-level emitters (`emitBhv*` in
+`bhvast.go`) resolve operands through `symbolTable`; fn body emitters
+(`emitFnArithTo`, `emitFnBoolExprTo`, etc. in `parse.go`) resolve
+through `paramMap`. Both paths share the low-level frame emitters in
+`codegen.go` (`emitComparison`, `emitTypeCheck`, `emitTruthyCheck`,
+`emitBoolCheckFrame`, `emitResolvedBoolFrames`).
+
+**Fn body control flow emission**: Fn bodies use inline forward-jump
+patching for control flow. `emitFnIfStmt` emits check frames with
+placeholder false branches (`frameRef(0)`), emits the body, then
+patches the placeholders to point after the body. `emitFnWhileStmt`
+uses the same pattern plus a back-edge jump to the loop start.
+`emitFnLoopStmt` scans for `@break` placeholder frames and patches
+them to point after the loop. This is simpler than behavior-level
+deferred bodies (`deferredBody` structs with `rebaseFrameRefs`).
 
 ## Stdlib function signatures
 
@@ -221,12 +237,12 @@ The parser recognizes `null` as a valid RHS for all comparison operators
 and resolves it to `false` (the empty register value).
 
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
-level. Number literals, variable identifiers, and `null` are valid as
-operands. Number literal LHS (`5 > b`) is supported. Both LHS and RHS
-can include arithmetic expressions (`x + 1 > y - 2`).
+level and in fn bodies. Number literals, variable identifiers, and
+`null` are valid as operands. Number literal LHS (`5 > b`) is
+supported. Both LHS and RHS can include arithmetic expressions
+(`x + 1 > y - 2`).
 
-**Deferred**: fn body comparison expressions (AST supports it,
-emitter not yet implemented); comparison in function call arguments
+**Deferred**: comparison in function call arguments
 (parsing ambiguity); constructor RHS (`a == Item("metalbar")`).
 
 ## Type check operator (`is`)
@@ -263,10 +279,10 @@ from null (both fall through to "No Match"), so `is Number` is not
 available.
 
 **Supported contexts**: Same as comparison operators — `let`/`var` init
-and assignment RHS at behavior level. Works in `&&`/`||` chains.
+and assignment RHS at behavior level and in fn bodies. Works in
+`&&`/`||` chains.
 
-**Deferred**: fn body `is` expressions (AST supports it, emitter not
-yet implemented); `is` in function arguments.
+**Deferred**: `is` in function arguments.
 
 ## Logical operators (`&&` and `||`)
 
@@ -342,14 +358,13 @@ for the existing 3-frame pattern. This keeps single comparisons
 unchanged.
 
 **Supported contexts**: Same as single comparisons — `let`/`var` init
-and assignment RHS at behavior level.
+and assignment RHS at behavior level and in fn bodies.
 
 **Parenthesized grouping**: Mixed `&&`/`||` is supported via
 parenthesized sub-expressions (see "Parenthesized boolean expressions"
 section below). Implicit precedence (without parens) is not supported.
 
-**Deferred**: fn body logical expressions (AST supports it, emitter
-not yet implemented); logical expressions in function call arguments.
+**Deferred**: logical expressions in function call arguments.
 
 ## Lock/unlock as keywords with compile-time mode tracking
 
@@ -452,12 +467,9 @@ defer number-literal LHS), arithmetic supports `let a = 5 + b` because
 `add(5, b)` is meaningful — it adds b's number to 5.
 
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
-level. Chained PEMDAS operations with `@arith` temp variables.
-Arithmetic in function call arguments. Arithmetic within comparison
-and boolean expression operands. Compound assignment RHS.
-
-**Deferred**: fn body arithmetic expressions (AST supports it,
-emitter not yet implemented).
+level and in fn bodies. Chained PEMDAS operations with `@arith` temp
+variables. Arithmetic in function call arguments. Arithmetic within
+comparison and boolean expression operands. Compound assignment RHS.
 
 ## Compound assignment operators (+=, -=, *=, /=)
 
@@ -479,6 +491,45 @@ map all four compound tokens to their opcode.
 `{"num": 1}`, `--` emits `sub` with `{"num": 1}`. Both use
 `resolveAssignTarget` with `compound: true` (reads and writes the
 target).
+
+## Mutable variables (`var`) in fn bodies
+
+`var` declares a mutable local variable in a function body. `let`
+declarations are immutable. The `fnBodyContext.fnVars` map tracks
+declared variables: `name → true` (mutable/var) or `name → false`
+(immutable/let). Assignment validation happens at parse time via
+`canAssign` (rejects `let` vars and `in` params) and `canCompound`
+(additionally rejects `out` params since compound assignment reads).
+
+The `fnBodyExprDir` function determines argument direction for fn body
+call-site checking: `let` vars → `"in"`, `var` vars → `"inout"`,
+params → their declared direction. This map replaces the old
+`letVars map[string]bool` which only tracked let vars.
+
+## Fn body control flow
+
+`if`/`else if`/`else`, `while`, and `loop`/`break` work in fn bodies
+with the same syntax as behavior level. Parsing uses `parseFnBodyIfStmt`,
+`parseFnBodyWhileStmt`, `parseFnBodyLoopStmt` which delegate to
+`parseFnBodyStmts` for nested blocks.
+
+Conditions use the shared expression parsers (`parseBoolPrimary`,
+`parseBoolChain`) via `fnBodyResolver`, supporting comparisons, type
+checks, boolean chains, and parenthesized grouping.
+
+Emission uses inline forward-jump patching:
+- **IfStmt**: Emit check frame with placeholder false target → emit body
+  → emit jump-to-continuation → patch false target → emit else/else-if.
+- **WhileStmt**: Record loop start → emit check → emit body → last
+  frame's `"next"` points back to start → patch false branches past body.
+- **LoopStmt**: Record loop start → emit body → scan for `@break`
+  placeholder frames → last frame's `"next"` points to loop start →
+  patch `@break` frames to point after loop.
+- **BreakStmt**: Emits `{"op": "@break"}` placeholder, patched by the
+  enclosing `emitFnLoopStmt`.
+
+`return` is not allowed inside control flow blocks in fn bodies
+(validated at parse time with `inBlock` flag).
 
 ## Parenthesized boolean expressions
 
@@ -506,12 +557,10 @@ parentheses: `"cannot mix '&&' and '||' without parentheses; use '('
 and ')' to group sub-expressions"`.
 
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
-level. Works with all sub-expression types: numeric comparisons,
-equality comparisons, and type checks, freely mixed.
+level and in fn bodies. Works with all sub-expression types: numeric
+comparisons, equality comparisons, and type checks, freely mixed.
 
-**Deferred**: fn body parenthesized boolean expressions (AST supports
-it, emitter not yet implemented); parenthesized expressions in function
-call arguments.
+**Deferred**: parenthesized expressions in function call arguments.
 
 ## Expression priority hierarchy
 
@@ -549,7 +598,7 @@ precedence. The parser naturally stops at non-arithmetic tokens (commas,
 `&&`, `||`, `)`, etc.), so argument boundaries are respected.
 
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
-level. Compound assignment RHS. Function call arguments.
+level and in fn bodies. Compound assignment RHS. Function call
+arguments.
 
-**Deferred**: fn body expressions (AST supports it, emitter not yet
-implemented); function calls in non-first boolean position.
+**Deferred**: function calls in non-first boolean position.

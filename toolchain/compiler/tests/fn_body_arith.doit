@@ -1,0 +1,14 @@
+# AI-generated test
+# Arithmetic expressions in fn body
+fn add_values(a, b) {
+    let c = a + b
+    return c
+}
+
+behavior fn_body_arith {
+    @name "Fn Body Arith"
+    @param in x "X"
+    @param in y "Y"
+    let result = add_values $x, $y
+    notify "result", value: result
+}
