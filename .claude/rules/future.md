@@ -26,16 +26,31 @@ strings are compile-time-only types baked into instructions, the
 not currently handle `(` after a function name. See F13 in
 `analysis-findings.md`.
 
+## Fn body expression parity (Phase 1 complete, Phase 2-3 pending)
+
+Behavior blocks support arithmetic, comparisons, boolean chains (`&&`/`||`),
+`is`, truthy checks, and parenthesized grouping. None of these work in fn
+bodies yet, but the architectural blocker has been removed: fn bodies now
+use an AST IR (`[]Stmt` with `Expr` nodes in `ast.go`) instead of the old
+flat `fnBodyCall` list. The AST already defines all the expression node
+types needed (`ArithExpr`, `CompareExpr`, `BoolChainExpr`, `TypeCheckExpr`,
+`TruthyExpr`, `IfStmt`, `WhileStmt`, `LoopStmt`, `BreakStmt`).
+
+Remaining work:
+- **Phase 2**: Parse behavior-level statements into the same AST types
+  (refactor `codegen.go` to separate parsing from emission)
+- **Phase 3**: Unify parsers — both fn bodies and behavior bodies call
+  the same `parseStmtBlock`, removing artificial restrictions. Fn bodies
+  gain expressions and control flow.
+- **Phase 4**: AST-level optimizations (lock/unlock elimination on AST,
+  constant folding, dead code elimination)
+
+See the plan file for detailed steps.
+
 ## Extended comparison and type check expressions
 
-`>`, `<`, `>=`, `<=`, `==`, `!=`, and `is` work as expressions at
-behavior level, with `&&`/`||` chaining, truthy terms, number literal
-LHS, arithmetic within terms, and function call composability.
-Natural extensions:
+Natural extensions beyond fn body parity:
 
-- **fn body comparison/type check expressions**: Requires branching in
-  the flat `fnBodyCall` list, which only supports linear sequences
-  today. This also blocks fn body `&&`/`||` and `is` support.
 - **Comparison in function arguments**: `notify (a > 5)` — needs
   parenthesized expressions to disambiguate from `notify a, ...`.
 - **Constructor RHS**: `a == Item("metalbar")` — requires parsing
@@ -54,12 +69,8 @@ Natural extensions:
 
 ## Extended arithmetic expressions
 
-`+`, `-`, `*`, `/` work as chained PEMDAS expressions at behavior
-level, in function arguments, and in comparison operands.
-Natural extensions:
+Natural extensions beyond fn body parity:
 
-- **fn body arithmetic expressions**: Requires emitting instruction frames
-  in the flat `fnBodyCall` list. Same constraint as fn body comparisons.
 - **Modulo operator**: `%` → `modulo` instruction. The instruction exists
   in the stdlib but has no operator syntax yet.
 

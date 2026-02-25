@@ -11,9 +11,17 @@ output format.
 
 ## Architecture
 
+- **`compiler/ast.go`** — AST node type definitions: `Stmt` interface
+  (13 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
+  `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
+  `InstructionStmt`, `LockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
+  `LoopStmt`, `BreakStmt`) and `Expr` interface (11 concrete types:
+  `LiteralExpr`, `IdentExpr`, `CallExpr`, `InstructionExpr`,
+  `ArithExpr`, `CompareExpr`, `TypeCheckExpr`, `TruthyExpr`,
+  `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`)
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
-  (`fnDef`, `fnBodyArg`, `fnBodyCall` with `frame` field, `symbolTable`,
-  `unitRegisters`), `paramDef` (with `direction` field, `effectiveDirection()`)
+  (`fnDef`, `symbolTable`, `unitRegisters`),
+  `paramDef` (with `direction` field, `effectiveDirection()`)
   and `paramInfo` (with `direction` field) types, direction compatibility
   via `canPass(paramDir, argDir)`, `frameBuilder`/`frameRef` abstraction
   for frame management, `rebaseFrameRefs` for shifting `frameRef` values
@@ -45,11 +53,15 @@ output format.
   `#!` comments
 - **`compiler/parse.go`** — Stdlib parsing (delegates to `parseUserFn`),
   file-level parsing, function definitions with `instruction` support,
-  lock/unlock handling in fn bodies (emitted as `fnBodyCall` with inline frames),
-  call expansion with `[]any`/`map[string]any` argument types, inline
-  frame expansion for `fnBodyCall.frame`, fn body direction enforcement
-  (`fnBodyArgDir`, `checkFnBodyCallDirections`,
-  `checkFnBodyInstructionDirections`)
+  fn body AST parsing (`parseFnBodyExpr`, `parseFnBodyConstructorExpr`,
+  `parseFnBodyCallArgs`, `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
+  fn body AST emission (`emitFnBody`, `emitExprGetValue`, `emitExprTo`,
+  `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
+  `collectASTOutputVars`, `resolveVarName`, `tryResolveConstructorLiteral`,
+  `tryResolveAmpersandLiteral`),
+  call expansion with `[]any`/`map[string]any` argument types,
+  fn body instruction direction enforcement
+  (`checkFnBodyInstructionDirections`)
 - **`compiler/codegen.go`** — Behavior body compilation: param/let/var declarations,
   symbol table tracking, rich argument parsing, assignment target resolution
   (with direction checks in `resolveAssignTarget`), direction enforcement
@@ -85,10 +97,11 @@ The compiler is structured as a standalone `scanner` struct embedded in a
 recursive-descent `parser`. The scanner tokenizes the source into identifiers
 (including `$`-prefixed unit register names), string literals, numbers,
 braces, parentheses, colons, commas, `@`, and comparison/assignment
-operators, skipping whitespace and `#` line comments. The parser consumes
-tokens via the promoted scanner methods and directly emits the
-`*codec.Object` output (type `Behavior`) via `frameBuilder` without an
-intermediate AST. Errors include line:column positions. Wire format details
+operators, skipping whitespace and `#` line comments. Function bodies are
+parsed into an AST (`[]Stmt` with `Expr` nodes defined in `ast.go`) and
+emitted during inlining via `emitFnBody`. Behavior-level compilation still
+uses single-pass parse-and-emit via `frameBuilder` (AST unification is
+planned for Phase 2). Errors include line:column positions. Wire format details
 (like Lua's 1-based indexing) are encapsulated at the `frameBuilder`
 boundary — compilation logic uses 0-based indices internally, and `frameRef`
 values are converted to 1-based wire format integers by `finalize`. The
@@ -175,7 +188,7 @@ them).
 `inout` arguments to match the callee's parameter direction. For example,
 `fn writer(out target)` must be called as `writer out z`. Explicit `in`
 is accepted but not required. Mismatched or missing annotations are compile
-errors. Both `parseFnCallArgs` (behavior level) and `parseFnBodyCall`
+errors. Both `parseFnCallArgs` (behavior level) and `parseFnBodyCallArgs`
 (fn body) peek for a direction keyword before each positional argument
 and before each keyword name. The shared `checkCallAnnotation` helper
 validates the annotation against the parameter's `effectiveDirection()`.
@@ -186,18 +199,18 @@ For keyword arguments, the direction annotation precedes the keyword name:
 (`checkCallAnnotation`) checks that call sites provide the correct direction
 keyword — `out`/`inout` arguments must be explicitly annotated, `in` is
 implicit. Second, **compatibility checking** (`checkCallDirections` at
-behavior level, `checkFnBodyCallDirections` in fn bodies) verifies that the
-argument's inherent direction is compatible with the parameter's direction
+behavior level, `checkFnBodyCallDirectionsExpr` in fn bodies) verifies that
+the argument's inherent direction is compatible with the parameter's direction
 using `canPass(paramDir, argDir)`. The `canPass` function enforces: `in`
 params accept `in`/`inout` args, `out` params accept `out`/`inout` args,
 `inout` params accept only `inout` args.
 
 Argument directions are determined by `argDirection` (behavior level) and
-`fnBodyArgDir` (fn bodies). At behavior level, `argDirection` looks up the
+`fnBodyExprDir` (fn bodies). At behavior level, `argDirection` looks up the
 argument in the symbol table: `let` variables and `in` parameters are `in`,
 `var` variables and `inout` parameters are `inout`, `out` parameters are
-`out`. In fn bodies, `fnBodyArgDir` maps function parameter directions
-through to the body-level calls.
+`out`. In fn bodies, `fnBodyExprDir` examines `Expr` AST nodes: `IdentExpr`
+names are checked against parameter directions and let-variable sets.
 
 In fn body `instruction` blocks, direction enforcement uses the `@N`
 convention: non-`@N` slots are inputs (reads), `@N` slots are outputs
@@ -217,9 +230,9 @@ the function's return values. Single return:
 Multi-value return uses comma-separated items:
 `fn get_xy(coord) { let x, y = separate_coordinate coord; return x, y }`.
 Return items can be identifiers, number literals, or `null`. Literals are
-desugared into synthetic body calls (`set_number` for numbers, `set_reg`
-for null) with `@retK` synthetic names that can't collide with user
-identifiers. Return names are stored in `fnDef.rets` (a `[]string`;
+desugared into synthetic `LetStmt` AST nodes (`set_number` for numbers,
+`set_reg` for null) with `@retK` synthetic names that can't collide with
+user identifiers. Return names are stored in `fnDef.rets` (a `[]string`;
 nil/empty = no return). `returnCount()` returns `len(rets)` for body-based
 functions. In `expandCall`, each `fn.rets[i]` is added to `paramMap` with
 `retVals[i]` as its value, so body calls that reference the returned names
@@ -248,9 +261,9 @@ everywhere — not just in stdlib function definitions. It can be used as:
 
 At behavior level, `instruction` expressions go through `resolveInstructionFrame`
 which handles 0→1 key conversion and `@N` slot substitution. In fn bodies,
-`instruction` blocks are stored as `fnBodyCall` entries with the `frame` field
-set (a `map[string]any`). During `expandCall`, these inline frames are resolved
-through `resolveInstructionFrame` with `paramMap` substitution.
+`instruction` blocks are stored as `InstructionStmt` or `InstructionExpr` AST
+nodes containing `map[string]any` frames. During `emitFnBody`, these frames
+are resolved through `resolveInstructionFrame` with `paramMap` substitution.
 
 In stdlib files, `return instruction` is the preferred form for functions
 with output slots. The `@1` in the frame is what drives `hasReturn()`.
@@ -294,17 +307,17 @@ new bindings, resolved targets for existing-var assignments, `false` for
 **fn body multi-return**: In function bodies, `let` supports multi-return
 binding with `_` discards: `let x, y = separate_coordinate coord` and
 `let _, y = separate_coordinate coord`. No modifier switching — all names
-are `let` locals. Each binding becomes a `fnBodyArg` in `fnBodyCall.retArgs`
-(name idents or `{literal: false}` for discards). During expansion,
-`resolveBodyArg` resolves each retArg through `paramMap` and passes the
-result slice as `retVals` to the recursive `expandCall`. No `var` in fn
-bodies — mutability is a behavior-level concept.
+are `let` locals. Each binding becomes a `MultiBinding` in
+`MultiReturnStmt.Bindings` (with `Name` for idents, `Discard: true` for
+`_`). During emission, `emitFnBody` resolves bindings through `paramMap`
+and passes the result slice as `retVals` to the recursive `expandCall`.
+No `var` in fn bodies — mutability is a behavior-level concept.
 
 The `parseFnCallArgs` helper (codegen.go) extracts positional + keyword arg
 parsing into a reusable method shared by bare function calls, `let`/`var`
-declarations, and assignment-from-function-call. Similarly, `parseFnBodyCall`
-(parse.go) extracts fn body call argument parsing shared by regular calls
-and `let` in fn bodies.
+declarations, and assignment-from-function-call. Similarly,
+`parseFnBodyCallArgs` (parse.go) extracts fn body call argument parsing
+into AST `Expr` nodes, shared by regular calls and `let` in fn bodies.
 
 **Inline variable renaming**: When a user-defined function is inlined via
 `expandCall`, its internal variables (those not mapped through `paramMap`
@@ -312,17 +325,16 @@ as parameters or return values) could collide with variables already in
 use at the behavior level. The compiler automatically renames colliding
 variables by appending a disambiguating suffix (`_2`, `_3`, etc.).
 
-The mechanism works as a pre-scan in `expandCall`'s body-based expansion
-path. Before iterating over `fn.body`, it scans all `retArgs` with
-`isIdent == true` that are not already in `paramMap` (i.e., internal
-variables, not parameters or return values). For each, it calls
-`allocUniqueVar(name, usedVars)` which returns the original name if
-unused or `name_2`, `name_3`, etc. if there's a collision. The result
-is always added to `paramMap`, so `resolveBodyArg` resolves both output
-slots (retArgs) and input references (args/kwArgs) to the renamed value
-automatically. The `usedVars map[string]bool` on `symbolTable` tracks
-all variable names in use across the behavior; it is threaded through
-`expandCall` and all call sites in codegen.go.
+The mechanism works as a pre-scan in `emitFnBody`. Before iterating over
+`fn.astBody`, `collectASTOutputVars` scans all `LetStmt`, `AssignStmt`,
+and `MultiReturnStmt` nodes for output variable names not already in
+`paramMap`. For each, it calls `allocUniqueVar(name, usedVars)` which
+returns the original name if unused or `name_2`, `name_3`, etc. if
+there's a collision. The result is added to `paramMap`, so
+`resolveVarName` resolves both output targets and input references to
+the renamed value automatically. The `usedVars map[string]bool` on
+`symbolTable` tracks all variable names in use across the behavior; it
+is threaded through `expandCall` and all call sites in codegen.go.
 
 **Symbol table**: During behavior compilation, a `symbolTable` tracks
 `@param` declarations (with `$name` keys mapping to 1-based indices,
@@ -363,21 +375,19 @@ declarations, `parseConstructorForTarget` avoids extra `set_reg` copies by
 directly targeting the declared variable name. In `compileDefaultStatement`
 assignments, the simpler `parseArgValue` path is used.
 
-In function bodies (`fnBodyArg`), numbers, `null`, `$register`, and
-compile-time type constructors are pre-resolved at parse time into
-the `literal` field. Runtime constructors (e.g., `Coordinate(x, y)` with
-variable args, `Item("metalbar") & count`) emit synthetic `fnBodyCall`
-entries (like `combine_coordinate` or `set_number`) with `@ctorN`
-synthetic variable names. The `parseFnBodyArgValue` method returns
-`(fnBodyArg, []fnBodyCall, error)` — the middle value carries these
-synthetic setup calls. `parseFnBodyCall` collects all synthetic calls
-from its arguments and prepends them to the main call in its return
-slice. For `let x = Constructor(args)` in fn bodies, the last synthetic
-call's retArg is rewritten to target the declared variable directly,
-avoiding an extra copy. Identifier arguments that refer to function
-parameters are resolved at expansion time via `resolveBodyArg` and the
-`paramMap`. The `expandCall` function uses `[]any`/`map[string]any` for
-args and kwArgs, allowing non-string values to flow through to instruction
+In function bodies, arguments are parsed into `Expr` AST nodes.
+`LiteralExpr` holds compile-time values (numbers, `null`, `$register`
+refs, and compile-time type constructors). `IdentExpr` holds variable
+references. `ConstructorExpr` and `AmpersandExpr` represent runtime
+constructors. During emission (`emitFnBody`), `emitExprGetValue` and
+`emitExprTo` resolve expressions: compile-time literals flow through
+as values, while runtime constructors emit frames (e.g.,
+`combine_coordinate` or `set_number`) with `@ctor`-prefixed temp
+variable names allocated via `allocUniqueVar`. For `let x =
+Constructor(args)` in fn bodies, `emitConstructorTo` writes directly
+to the declared variable target, avoiding an extra copy. The
+`expandCall` function uses `[]any`/`map[string]any` for args and
+kwArgs, allowing non-string values to flow through to instruction
 template substitution.
 
 **Behavior parameters**: Declared with the `@param` attribute before any

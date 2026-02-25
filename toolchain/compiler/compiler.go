@@ -136,10 +136,10 @@ func canPass(paramDir, argDir string) bool {
 }
 
 type fnDef struct {
-	params []paramDef
-	rets   []string       // return names (nil = no return)
-	frame  map[string]any // instruction-based (stdlib)
-	body   []fnBodyCall   // call-based (user-defined)
+	params  []paramDef
+	rets    []string       // return names (nil = no return)
+	frame   map[string]any // instruction-based (stdlib)
+	astBody []Stmt         // call-based (user-defined) — AST IR
 }
 
 // positionalCount returns the number of positional params.
@@ -214,12 +214,6 @@ func (f *fnDef) hasReturn() bool {
 	return f.returnCount() > 0
 }
 
-type fnBodyArg struct {
-	isIdent bool
-	val     string
-	literal any // non-nil for numbers, null, $register (pre-resolved)
-}
-
 // unitRegisters maps $name identifiers to their wire-format integers.
 var unitRegisters = map[string]int{
 	"$signal": -4,
@@ -267,15 +261,6 @@ func allocUniqueVar(name string, usedVars map[string]bool) string {
 			return candidate
 		}
 	}
-}
-
-type fnBodyCall struct {
-	name    string
-	args    []fnBodyArg          // positional args
-	kwArgs  map[string]fnBodyArg // keyword -> value
-	retArgs []fnBodyArg          // return value targets (nil = no return)
-	comment string               // #! doc comment
-	frame   map[string]any       // non-nil for inline instruction blocks
 }
 
 type deferredBody struct {

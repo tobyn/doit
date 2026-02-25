@@ -3,6 +3,33 @@
 Non-obvious choices and their rationale. Helps future sessions make
 consistent decisions without re-deriving past conclusions.
 
+## Behaviors as top-level functions
+
+**Uniform construct support**: Behavior blocks and function bodies
+should support almost the exact same language constructs. A behavior
+is conceptually a top-level function with some extra syntax sugar for
+things that don't apply to functions (parameters as external registers,
+behavior-level `default` case dispatch, etc.). Any expression or
+statement that works at behavior level should also work in fn bodies,
+and vice versa.
+
+This is a core design principle, not a nice-to-have. The current state
+where expressions (arithmetic, comparisons, boolean chains, `is`,
+`&&`/`||`, parenthesized grouping) only work at behavior level is a
+significant gap that should be closed. The "Deferred: fn body ..."
+notes throughout this file represent parity debt, not optional
+extensions.
+
+**Compiler architecture**: Function bodies are parsed into an AST
+(`[]Stmt` with `Expr` nodes) defined in `ast.go`. The AST decouples
+parsing from emission, enabling fn bodies to support the same constructs
+as behavior bodies. During inlining (`expandCall`), `emitFnBody` walks
+the AST and emits frames via `frameBuilder`, which supports branching
+patterns. This replaces the old flat `fnBodyCall` IR that could only
+represent linear sequences. Behavior-level compilation still uses a
+single-pass parse-and-emit approach (Phase 2 of the AST plan will
+unify both paths).
+
 ## Stdlib function signatures
 
 **Output parameters → return values**: Functions with output slots use
@@ -96,11 +123,16 @@ compile time when all operands are literals, producing inline JSON values
 with no runtime instructions. When any operand is a variable, the
 compiler emits the appropriate stdlib call (`combine_coordinate` for
 `Coordinate`, `set_number` for `&`). This works uniformly at both
-behavior level and in function bodies. At behavior level, runtime
-constructors emit frames via `expandCall` with `frameBuilder`. In fn
-bodies, they emit synthetic `fnBodyCall` entries with `@ctorN` temp
-variable names (using the same `@`-prefix convention as `@retK` return
-desugaring to avoid collisions with user identifiers).
+behavior level and in function bodies. The compile-time vs runtime
+decision is based on AST node types (`LiteralExpr` = compile-time,
+`IdentExpr` = runtime), not on resolved values after parameter
+substitution. This ensures that `Coordinate(x, y)` with variable
+parameters always emits runtime instructions, even when the call site
+passes literal values. At behavior level, runtime constructors emit
+frames via `expandCall` with `frameBuilder`. In fn bodies, the AST
+(`ConstructorExpr`, `AmpersandExpr`) is resolved during `emitFnBody`
+using `@ctor`-prefixed temp variable names allocated via
+`allocUniqueVar`.
 
 **`parseConstructorForTarget` optimization**: For `let`/`var`
 declarations, the compiler avoids an extra `set_reg` copy by passing the
@@ -192,9 +224,9 @@ level. Number literals, variable identifiers, and `null` are valid as
 operands. Number literal LHS (`5 > b`) is supported. Both LHS and RHS
 can include arithmetic expressions (`x + 1 > y - 2`).
 
-**Deferred**: fn body comparison expressions (requires branching in
-flat `fnBodyCall` list); comparison in function call arguments (parsing
-ambiguity); constructor RHS (`a == Item("metalbar")`).
+**Deferred**: fn body comparison expressions (AST supports it,
+emitter not yet implemented); comparison in function call arguments
+(parsing ambiguity); constructor RHS (`a == Item("metalbar")`).
 
 ## Type check operator (`is`)
 
@@ -232,7 +264,8 @@ available.
 **Supported contexts**: Same as comparison operators — `let`/`var` init
 and assignment RHS at behavior level. Works in `&&`/`||` chains.
 
-**Deferred**: fn body `is` expressions; `is` in function arguments.
+**Deferred**: fn body `is` expressions (AST supports it, emitter not
+yet implemented); `is` in function arguments.
 
 ## Logical operators (`&&` and `||`)
 
@@ -314,8 +347,8 @@ and assignment RHS at behavior level.
 parenthesized sub-expressions (see "Parenthesized boolean expressions"
 section below). Implicit precedence (without parens) is not supported.
 
-**Deferred**: fn body logical expressions; logical expressions in
-function call arguments; fn body `is` expressions.
+**Deferred**: fn body logical expressions (AST supports it, emitter
+not yet implemented); logical expressions in function call arguments.
 
 ## Lock/unlock as keywords with compile-time mode tracking
 
@@ -339,9 +372,9 @@ control flow (`if`/`while`/`loop`), mode resets to `modeUnknown`
 (conservative), so subsequent lock/unlock is always emitted.
 
 **Uniform handling**: `lock`/`unlock` work in behavior bodies,
-`compileBody` (if/else bodies), `compileLoop` bodies, and fn bodies
-(as `fnBodyCall` entries with inline frames). In fn bodies, they flow
-through the existing `call.frame != nil` path in `expandCall`.
+`compileBody` (if/else bodies), `compileLoop` bodies, and fn bodies.
+In fn bodies, they are represented as `LockStmt` AST nodes. During
+`emitFnBody`, they emit lock/unlock frames via `resolveInstructionFrame`.
 
 ## Control flow stubs
 
@@ -422,7 +455,8 @@ level. Chained PEMDAS operations with `@arith` temp variables.
 Arithmetic in function call arguments. Arithmetic within comparison
 and boolean expression operands. Compound assignment RHS.
 
-**Deferred**: fn body arithmetic expressions.
+**Deferred**: fn body arithmetic expressions (AST supports it,
+emitter not yet implemented).
 
 ## Compound assignment operators (+=, -=, *=, /=)
 
@@ -496,8 +530,9 @@ and ')' to group sub-expressions"`.
 level. Works with all sub-expression types: numeric comparisons,
 equality comparisons, and type checks, freely mixed.
 
-**Deferred**: fn body parenthesized boolean expressions; parenthesized
-expressions in function call arguments.
+**Deferred**: fn body parenthesized boolean expressions (AST supports
+it, emitter not yet implemented); parenthesized expressions in function
+call arguments.
 
 ## Expression priority hierarchy
 
@@ -555,5 +590,5 @@ compiler records `b.pos()` before parsing and checks
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
 level. Compound assignment RHS. Function call arguments.
 
-**Deferred**: fn body expressions (all types); function calls in
-non-first boolean position.
+**Deferred**: fn body expressions (AST supports it, emitter not yet
+implemented); function calls in non-first boolean position.

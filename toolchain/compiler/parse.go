@@ -35,6 +35,588 @@ func isDirection(val string) bool {
 	return val == "in" || val == "out" || val == "inout"
 }
 
+// --- AST-based fn body parsing ---
+
+// parseFnBodyExpr parses a single expression in a fn body context.
+// Accepts strings, identifiers, numbers, null, $register references,
+// type constructors, the & operator, and localize blocks.
+func (p *parser) parseFnBodyExpr() (Expr, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	var base Expr
+	switch tok.kind {
+	case tokString:
+		base = &LiteralExpr{Value: tok.val}
+	case tokNumber:
+		num, _ := strconv.Atoi(tok.val)
+		base = &LiteralExpr{Value: map[string]any{"num": num}}
+	case tokIdent:
+		if tok.val == "localize" {
+			resolved, err := p.parseLocalize()
+			if err != nil {
+				return nil, err
+			}
+			base = &LiteralExpr{Value: resolved}
+		} else if tok.val == "null" {
+			base = &LiteralExpr{Value: false}
+		} else if isConstructor(tok.val) {
+			ctor, err := p.parseFnBodyConstructorExpr(tok)
+			if err != nil {
+				return nil, err
+			}
+			base = ctor
+		} else if strings.HasPrefix(tok.val, "$") {
+			if reg, ok := unitRegisters[tok.val]; ok {
+				base = &LiteralExpr{Value: reg}
+			} else {
+				return nil, p.errorf(tok.pos, "unknown unit register %q", tok.val)
+			}
+		} else {
+			base = &IdentExpr{Name: tok.val}
+		}
+	default:
+		return nil, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
+	}
+
+	// Check for & operator
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek.kind == tokAmpersand {
+		numExpr, err := p.parseFnBodyExpr()
+		if err != nil {
+			return nil, err
+		}
+		return &AmpersandExpr{Value: base, Num: numExpr}, nil
+	}
+	p.unget(peek)
+	return base, nil
+}
+
+// parseFnBodyConstructorExpr parses a type constructor in a fn body,
+// returning a ConstructorExpr AST node.
+func (p *parser) parseFnBodyConstructorExpr(nameTok token) (Expr, error) {
+	if _, err := p.expect(tokLParen); err != nil {
+		return nil, p.errorf(nameTok.pos, "expected '(' after %s", nameTok.val)
+	}
+	switch nameTok.val {
+	case "Item", "Component", "Technology", "Value":
+		argTok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if argTok.kind != tokString {
+			return nil, p.errorf(argTok.pos, "expected string argument, got %s", argTok.describe())
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return &ConstructorExpr{
+			TypeName: nameTok.val,
+			Args:     []Expr{&LiteralExpr{Value: argTok.val}},
+		}, nil
+	case "Coordinate":
+		x, err := p.parseFnBodyExpr()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokComma); err != nil {
+			return nil, err
+		}
+		y, err := p.parseFnBodyExpr()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return &ConstructorExpr{
+			TypeName: "Coordinate",
+			Args:     []Expr{x, y},
+		}, nil
+	}
+	return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
+}
+
+// parseFnBodyCallArgs parses positional and keyword arguments for a
+// function call in a fn body, returning AST-typed expressions.
+func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, paramDirs map[string]string, letVars map[string]bool) ([]Expr, map[string]Expr, error) {
+	posCount := callee.positionalCount()
+	args := make([]Expr, posCount)
+	for i := 0; i < posCount; i++ {
+		// Peek for direction annotation
+		dirTok, err := p.next()
+		if err != nil {
+			return nil, nil, err
+		}
+		annotation := ""
+		annotationPos := dirTok.pos
+		if dirTok.kind == tokIdent && isDirection(dirTok.val) {
+			annotation = dirTok.val
+		} else {
+			p.unget(dirTok)
+			annotationPos = dirTok.pos
+		}
+
+		pd := callee.positionalParam(i)
+		if err := p.checkCallAnnotation(annotation, pd, calleeTok.val, annotationPos); err != nil {
+			return nil, nil, err
+		}
+
+		arg, err := p.parseFnBodyExpr()
+		if err != nil {
+			return nil, nil, err
+		}
+		args[i] = arg
+	}
+
+	// Parse optional keyword args
+	var kwArgs map[string]Expr
+	peek, err := p.next()
+	if err != nil {
+		return nil, nil, err
+	}
+	if (peek.kind == tokString || peek.kind == tokIdent) && callee.positionalCount() < len(callee.params) {
+		if peek.kind == tokString {
+			return nil, nil, p.errorf(peek.pos,
+				"too many positional arguments for %s (remaining parameters are keyword-only)", calleeTok.val)
+		}
+		p.unget(peek)
+	} else if peek.kind == tokComma {
+		kwArgs = map[string]Expr{}
+		for {
+			dirOrKw, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, nil, err
+			}
+			annotation := ""
+			annotationPos := dirOrKw.pos
+			if isDirection(dirOrKw.val) {
+				annotation = dirOrKw.val
+				dirOrKw, err = p.expect(tokIdent)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			kw := callee.keywordByName(dirOrKw.val)
+			if kw == nil {
+				return nil, nil, p.errorf(dirOrKw.pos, "unknown keyword argument %q", dirOrKw.val)
+			}
+			if _, exists := kwArgs[dirOrKw.val]; exists {
+				return nil, nil, p.errorf(dirOrKw.pos, "duplicate keyword argument %q", dirOrKw.val)
+			}
+			if err := p.checkCallAnnotation(annotation, kw, calleeTok.val, annotationPos); err != nil {
+				return nil, nil, err
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return nil, nil, err
+			}
+			val, err := p.parseFnBodyExpr()
+			if err != nil {
+				return nil, nil, err
+			}
+			kwArgs[dirOrKw.val] = val
+
+			next, err := p.next()
+			if err != nil {
+				return nil, nil, err
+			}
+			if next.kind != tokComma {
+				p.unget(next)
+				break
+			}
+		}
+	} else {
+		p.unget(peek)
+	}
+
+	if err := p.checkFnBodyCallDirectionsExpr(callee, calleeTok.val, args, kwArgs, paramDirs, letVars, calleeTok.pos); err != nil {
+		return nil, nil, err
+	}
+
+	return args, kwArgs, nil
+}
+
+// fnBodyExprDir determines the effective direction of an AST expression
+// in a fn body context.
+func fnBodyExprDir(expr Expr, paramDirs map[string]string, letVars map[string]bool) string {
+	if e, ok := expr.(*IdentExpr); ok {
+		if dir, ok := paramDirs[e.Name]; ok {
+			return dir
+		}
+		if letVars[e.Name] {
+			return "in"
+		}
+		return "inout"
+	}
+	return "in" // literals, constructors, etc.
+}
+
+// checkFnBodyCallDirectionsExpr checks direction compatibility for AST-typed args.
+func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string, args []Expr, kwArgs map[string]Expr, paramDirs map[string]string, letVars map[string]bool, pos int) error {
+	posIdx := 0
+	for _, pd := range callee.params {
+		calleeDir := pd.effectiveDirection()
+		if pd.keyword == "" {
+			if posIdx < len(args) {
+				aDir := fnBodyExprDir(args[posIdx], paramDirs, letVars)
+				if !canPass(calleeDir, aDir) {
+					return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
+						aDir, calleeDir, pd.name, calleeName)
+				}
+			}
+			posIdx++
+		} else if kwArgs != nil {
+			if val, ok := kwArgs[pd.keyword]; ok {
+				aDir := fnBodyExprDir(val, paramDirs, letVars)
+				if !canPass(calleeDir, aDir) {
+					return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
+						aDir, calleeDir, pd.name, calleeName)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// --- AST-based fn body emission ---
+
+// collectASTOutputVars pre-scans AST statements for output variables
+// and adds them to paramMap with unique names (for inline renaming).
+func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[string]bool) {
+	for _, stmt := range stmts {
+		switch s := stmt.(type) {
+		case *LetStmt:
+			if _, mapped := paramMap[s.Name]; !mapped {
+				paramMap[s.Name] = allocUniqueVar(s.Name, usedVars)
+			}
+		case *MultiReturnStmt:
+			for _, bind := range s.Bindings {
+				if !bind.Discard {
+					if _, mapped := paramMap[bind.Name]; !mapped {
+						paramMap[bind.Name] = allocUniqueVar(bind.Name, usedVars)
+					}
+				}
+			}
+		}
+	}
+}
+
+// resolveVarName resolves a variable name through paramMap.
+func resolveVarName(name string, paramMap map[string]any) any {
+	if val, ok := paramMap[name]; ok {
+		return val
+	}
+	return name
+}
+
+// emitCallExprArgs resolves AST call args through paramMap, emitting
+// complex expressions (constructors, &) to temp variables as needed.
+func (p *parser) emitCallExprArgs(args []Expr, kwArgs map[string]Expr, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, pos int) ([]any, map[string]any, error) {
+	resolvedArgs := make([]any, len(args))
+	for i, arg := range args {
+		val, err := p.emitExprGetValue(arg, b, paramMap, usedVars, "", pos)
+		if err != nil {
+			return nil, nil, err
+		}
+		resolvedArgs[i] = val
+	}
+	resolvedKwArgs := map[string]any{}
+	for kw, arg := range kwArgs {
+		val, err := p.emitExprGetValue(arg, b, paramMap, usedVars, "", pos)
+		if err != nil {
+			return nil, nil, err
+		}
+		resolvedKwArgs[kw] = val
+	}
+	return resolvedArgs, resolvedKwArgs, nil
+}
+
+// tryResolveConstructorLiteral attempts to resolve a ConstructorExpr to a
+// compile-time literal. Returns (nil, false) if any argument is not a literal.
+func tryResolveConstructorLiteral(ctor *ConstructorExpr) (any, bool) {
+	prefix := ""
+	switch ctor.TypeName {
+	case "Component":
+		prefix = "c_"
+	case "Technology":
+		prefix = "t_"
+	case "Value":
+		prefix = "v_"
+	}
+	switch ctor.TypeName {
+	case "Item", "Component", "Technology", "Value":
+		lit, ok := ctor.Args[0].(*LiteralExpr)
+		if !ok {
+			return nil, false
+		}
+		s, ok := lit.Value.(string)
+		if !ok {
+			return nil, false
+		}
+		return map[string]any{"id": prefix + s}, true
+	case "Coordinate":
+		xLit, xOk := ctor.Args[0].(*LiteralExpr)
+		yLit, yOk := ctor.Args[1].(*LiteralExpr)
+		if !xOk || !yOk {
+			return nil, false
+		}
+		xMap, xIsMap := xLit.Value.(map[string]any)
+		yMap, yIsMap := yLit.Value.(map[string]any)
+		if !xIsMap || !yIsMap {
+			return nil, false
+		}
+		xNum, xHas := xMap["num"]
+		yNum, yHas := yMap["num"]
+		if !xHas || !yHas || len(xMap) != 1 || len(yMap) != 1 {
+			return nil, false
+		}
+		return map[string]any{"coord": map[string]any{"x": xNum, "y": yNum}}, true
+	}
+	return nil, false
+}
+
+// tryResolveAmpersandLiteral attempts to resolve an AmpersandExpr to a
+// compile-time literal. Returns (nil, false) if any operand is not compile-time.
+func tryResolveAmpersandLiteral(amp *AmpersandExpr) (any, bool) {
+	// Resolve LHS
+	var baseVal map[string]any
+	switch lhs := amp.Value.(type) {
+	case *LiteralExpr:
+		if m, ok := lhs.Value.(map[string]any); ok {
+			baseVal = m
+		}
+	case *ConstructorExpr:
+		if v, ok := tryResolveConstructorLiteral(lhs); ok {
+			if m, ok := v.(map[string]any); ok {
+				baseVal = m
+			}
+		}
+	}
+	if baseVal == nil {
+		return nil, false
+	}
+	// Resolve RHS
+	numLit, ok := amp.Num.(*LiteralExpr)
+	if !ok {
+		return nil, false
+	}
+	numMap, ok := numLit.Value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	numN, ok := numMap["num"]
+	if !ok || len(numMap) != 1 {
+		return nil, false
+	}
+	result := make(map[string]any, len(baseVal)+1)
+	for k, v := range baseVal {
+		result[k] = v
+	}
+	result["num"] = numN
+	return result, true
+}
+
+// emitExprGetValue emits an expression and returns the resolved value.
+// For simple literals/idents, returns without emitting. For compile-time
+// constructors/ampersands, returns the literal. For runtime expressions,
+// emits to a temp variable and returns the temp name.
+func (p *parser) emitExprGetValue(expr Expr, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) (any, error) {
+	switch e := expr.(type) {
+	case *LiteralExpr:
+		return e.Value, nil
+	case *IdentExpr:
+		return resolveVarName(e.Name, paramMap), nil
+	case *ConstructorExpr:
+		if val, ok := tryResolveConstructorLiteral(e); ok {
+			return val, nil
+		}
+		tempName := allocUniqueVar("@ctor", usedVars)
+		if err := p.emitConstructorTo(e, tempName, b, paramMap, usedVars, comment, pos); err != nil {
+			return nil, err
+		}
+		return tempName, nil
+	case *AmpersandExpr:
+		if val, ok := tryResolveAmpersandLiteral(e); ok {
+			return val, nil
+		}
+		tempName := allocUniqueVar("@ctor", usedVars)
+		if err := p.emitAmpersandTo(e, tempName, b, paramMap, usedVars, comment, pos); err != nil {
+			return nil, err
+		}
+		return tempName, nil
+	default:
+		tempName := allocUniqueVar("@ctor", usedVars)
+		if err := p.emitExprTo(e, tempName, b, paramMap, usedVars, comment, pos); err != nil {
+			return nil, err
+		}
+		return tempName, nil
+	}
+}
+
+// emitExprTo emits an expression writing the result to target.
+func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	switch e := expr.(type) {
+	case *CallExpr:
+		resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(e.Args, e.KwArgs, b, paramMap, usedVars, pos)
+		if err != nil {
+			return err
+		}
+		return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, pos, comment, usedVars)
+	case *InstructionExpr:
+		resolved := resolveInstructionFrame(e.Frame, []any{target}, paramMap, nil, comment)
+		b.emit(resolved)
+		return nil
+	case *ConstructorExpr:
+		return p.emitConstructorTo(e, target, b, paramMap, usedVars, comment, pos)
+	case *AmpersandExpr:
+		return p.emitAmpersandTo(e, target, b, paramMap, usedVars, comment, pos)
+	case *LiteralExpr:
+		f := map[string]any{"op": "set_reg", "1": e.Value, "2": target}
+		setComment(f, comment)
+		b.emit(f)
+		return nil
+	case *IdentExpr:
+		val := resolveVarName(e.Name, paramMap)
+		f := map[string]any{"op": "set_reg", "1": val, "2": target}
+		setComment(f, comment)
+		b.emit(f)
+		return nil
+	}
+	return fmt.Errorf("unsupported expression type %T in emitExprTo", expr)
+}
+
+// emitConstructorTo emits a type constructor writing the result to target.
+func (p *parser) emitConstructorTo(ctor *ConstructorExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	// Try compile-time resolution first (based on AST types, not resolved values)
+	if val, ok := tryResolveConstructorLiteral(ctor); ok {
+		f := map[string]any{"op": "set_reg", "1": val, "2": target}
+		setComment(f, comment)
+		b.emit(f)
+		return nil
+	}
+
+	// Runtime path — only Coordinate can be runtime (others always have literal args)
+	if ctor.TypeName == "Coordinate" {
+		xVal, err := p.emitExprGetValue(ctor.Args[0], b, paramMap, usedVars, "", pos)
+		if err != nil {
+			return err
+		}
+		yVal, err := p.emitExprGetValue(ctor.Args[1], b, paramMap, usedVars, "", pos)
+		if err != nil {
+			return err
+		}
+		return p.expandCall("combine_coordinate", []any{xVal, yVal}, nil, []any{target}, b, pos, comment, usedVars)
+	}
+	return fmt.Errorf("unknown constructor %q", ctor.TypeName)
+}
+
+// emitAmpersandTo emits an & expression writing the result to target.
+func (p *parser) emitAmpersandTo(amp *AmpersandExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	// Try compile-time resolution (based on AST types)
+	if val, ok := tryResolveAmpersandLiteral(amp); ok {
+		f := map[string]any{"op": "set_reg", "1": val, "2": target}
+		setComment(f, comment)
+		b.emit(f)
+		return nil
+	}
+
+	// Runtime: emit set_number
+	baseVal, err := p.emitExprGetValue(amp.Value, b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+	numVal, err := p.emitExprGetValue(amp.Num, b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+	return p.expandCall("set_number", []any{baseVal, numVal}, nil, []any{target}, b, pos, comment, usedVars)
+}
+
+// emitFnBody emits frames for an AST body during call expansion.
+func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	collectASTOutputVars(stmts, paramMap, usedVars)
+
+	for _, stmt := range stmts {
+		switch s := stmt.(type) {
+		case *InstructionStmt:
+			callComment := s.Comment
+			if callComment == "" {
+				callComment = comment
+			}
+			resolved := resolveInstructionFrame(s.Frame, nil, paramMap, nil, callComment)
+			b.emit(resolved)
+
+		case *LockStmt:
+			op := "lock"
+			if s.Unlock {
+				op = "unlock"
+			}
+			callComment := s.Comment
+			if callComment == "" {
+				callComment = comment
+			}
+			f := map[string]any{"op": op}
+			setComment(f, callComment)
+			b.emit(f)
+
+		case *CallStmt:
+			resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(s.Args, s.KwArgs, b, paramMap, usedVars, pos)
+			if err != nil {
+				return err
+			}
+			callComment := s.Comment
+			if callComment == "" {
+				callComment = comment
+			}
+			if err := p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, pos, callComment, usedVars); err != nil {
+				return err
+			}
+
+		case *LetStmt:
+			target := resolveVarName(s.Name, paramMap)
+			callComment := s.Comment
+			if callComment == "" {
+				callComment = comment
+			}
+			if err := p.emitExprTo(s.Value, target, b, paramMap, usedVars, callComment, pos); err != nil {
+				return err
+			}
+
+		case *MultiReturnStmt:
+			retVals := make([]any, len(s.Bindings))
+			for i, bind := range s.Bindings {
+				if bind.Discard {
+					retVals[i] = false
+				} else {
+					retVals[i] = resolveVarName(bind.Name, paramMap)
+				}
+			}
+			callComment := s.Comment
+			if callComment == "" {
+				callComment = comment
+			}
+			switch v := s.Value.(type) {
+			case *CallExpr:
+				resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(v.Args, v.KwArgs, b, paramMap, usedVars, pos)
+				if err != nil {
+					return err
+				}
+				if err := p.expandCall(v.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, callComment, usedVars); err != nil {
+					return err
+				}
+			case *InstructionExpr:
+				resolved := resolveInstructionFrame(v.Frame, retVals, paramMap, nil, callComment)
+				b.emit(resolved)
+			}
+		}
+	}
+	return nil
+}
+
 func (p *parser) parseParamList() ([]paramDef, error) {
 	if _, err := p.expect(tokLParen); err != nil {
 		return nil, err
@@ -269,9 +851,8 @@ func (p *parser) parseUserFn() error {
 	}
 	letVars := map[string]bool{} // tracks let-declared locals in fn body
 
-	var body []fnBodyCall
+	var astBody []Stmt
 	var rets []string
-	synthIdx := 0
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -287,9 +868,9 @@ func (p *parser) parseUserFn() error {
 
 		// Handle lock/unlock in fn body
 		if tok.val == "lock" || tok.val == "unlock" {
-			body = append(body, fnBodyCall{
-				frame:   map[string]any{"op": tok.val},
-				comment: comment,
+			astBody = append(astBody, &LockStmt{
+				Unlock:  tok.val == "unlock",
+				Comment: comment,
 			})
 			continue
 		}
@@ -303,13 +884,11 @@ func (p *parser) parseUserFn() error {
 			if err := p.checkFnBodyInstructionDirections(frame, paramDirs, tok.pos); err != nil {
 				return err
 			}
-			body = append(body, fnBodyCall{frame: frame, comment: comment})
+			astBody = append(astBody, &InstructionStmt{Frame: frame, Comment: comment})
 			continue
 		}
 
 		// Handle return statement: return instruction OR return item (',' item)*
-		// Items can be identifiers, number literals, or null.
-		// Literals are desugared into synthetic body calls.
 		if tok.val == "return" {
 			retPeek, err := p.next()
 			if err != nil {
@@ -338,17 +917,17 @@ func (p *parser) parseUserFn() error {
 					synthName := "@ret" + strconv.Itoa(i)
 					rets = append(rets, synthName)
 				}
-				// Replace returnSlot values with synth names in frame
 				for k, v := range modifiedFrame {
 					if rs, ok := v.(returnSlot); ok {
 						modifiedFrame[k] = "@ret" + strconv.Itoa(int(rs))
 					}
 				}
-				body = append(body, fnBodyCall{frame: modifiedFrame, comment: comment})
+				astBody = append(astBody, &InstructionStmt{Frame: modifiedFrame, Comment: comment})
 				continue
 			}
 			p.unget(retPeek)
 
+			// return item (',' item)* — identifiers, numbers, or null
 			rets = nil
 			retIdx := 0
 			for {
@@ -361,10 +940,12 @@ func (p *parser) parseUserFn() error {
 					if retTok.val == "null" {
 						retIdx++
 						synthName := "@ret" + strconv.Itoa(retIdx)
-						body = append(body, fnBodyCall{
-							name:    "set_reg",
-							args:    []fnBodyArg{{literal: false}},
-							retArgs: []fnBodyArg{{isIdent: true, val: synthName}},
+						astBody = append(astBody, &LetStmt{
+							Name: synthName,
+							Value: &CallExpr{
+								Name: "set_reg",
+								Args: []Expr{&LiteralExpr{Value: false}},
+							},
 						})
 						rets = append(rets, synthName)
 					} else {
@@ -374,16 +955,20 @@ func (p *parser) parseUserFn() error {
 					retIdx++
 					synthName := "@ret" + strconv.Itoa(retIdx)
 					num, _ := strconv.Atoi(retTok.val)
-					body = append(body, fnBodyCall{
-						name:    "set_number",
-						args:    []fnBodyArg{{literal: false}, {literal: map[string]any{"num": num}}},
-						retArgs: []fnBodyArg{{isIdent: true, val: synthName}},
+					astBody = append(astBody, &LetStmt{
+						Name: synthName,
+						Value: &CallExpr{
+							Name: "set_number",
+							Args: []Expr{
+								&LiteralExpr{Value: false},
+								&LiteralExpr{Value: map[string]any{"num": num}},
+							},
+						},
 					})
 					rets = append(rets, synthName)
 				default:
 					return p.errorf(retTok.pos, "expected identifier, number, or null in return list, got %s", retTok.describe())
 				}
-				// Check for comma (more items) or end of list
 				sep, err := p.next()
 				if err != nil {
 					return err
@@ -396,39 +981,31 @@ func (p *parser) parseUserFn() error {
 			continue
 		}
 
-		// Handle let statements in fn bodies:
-		//   let varName = fnCall args...
-		//   let varName = Constructor(args...)
-		//   let a, b, _ = fnCall args...   (multi-return)
+		// Handle let statements in fn bodies
 		if tok.val == "let" {
 			varTok, err := p.expect(tokIdent)
 			if err != nil {
 				return err
 			}
-			// Peek for comma (multi-return) vs equals (single return)
 			sep, err := p.next()
 			if err != nil {
 				return err
 			}
 			if sep.kind == tokComma {
-				// Multi-return: let a, b, _ = fnCall args...
-				type binding struct {
-					name    string // "" for discard (_)
-					discard bool
-				}
-				bindings := []binding{{name: varTok.val}}
+				// Multi-return: let a, b, _ = fnCall args... OR instruction
+				bindings := []MultiBinding{{Name: varTok.val}}
 				for {
-					nameTok, err := p.next()
+					bindTok, err := p.next()
 					if err != nil {
 						return err
 					}
-					if nameTok.kind != tokIdent {
-						return p.errorf(nameTok.pos, "expected identifier or '_' in binding list, got %s", nameTok.describe())
+					if bindTok.kind != tokIdent {
+						return p.errorf(bindTok.pos, "expected identifier or '_' in binding list, got %s", bindTok.describe())
 					}
-					if nameTok.val == "_" {
-						bindings = append(bindings, binding{discard: true})
+					if bindTok.val == "_" {
+						bindings = append(bindings, MultiBinding{Discard: true})
 					} else {
-						bindings = append(bindings, binding{name: nameTok.val})
+						bindings = append(bindings, MultiBinding{Name: bindTok.val})
 					}
 					next, err := p.next()
 					if err != nil {
@@ -458,29 +1035,18 @@ func (p *parser) parseUserFn() error {
 						return p.errorf(calleeTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
 					}
 					if err := p.checkFnBodyInstructionDirections(frame, paramDirs, calleeTok.pos); err != nil {
-					return err
-				}
-				modifiedFrame := maps.Clone(frame)
-					for k, v := range modifiedFrame {
-						if rs, ok := v.(returnSlot); ok {
-							idx := int(rs) - 1
-							if idx < len(bindings) {
-								if bindings[idx].discard {
-									modifiedFrame[k] = "@discard"
-								} else {
-									modifiedFrame[k] = bindings[idx].name
-								}
-							} else {
-								modifiedFrame[k] = "@discard"
-							}
-						}
+						return err
 					}
 					for _, bind := range bindings {
-						if !bind.discard {
-							letVars[bind.name] = true
+						if !bind.Discard {
+							letVars[bind.Name] = true
 						}
 					}
-					body = append(body, fnBodyCall{frame: modifiedFrame, comment: comment})
+					astBody = append(astBody, &MultiReturnStmt{
+						Bindings: bindings,
+						Value:    &InstructionExpr{Frame: frame},
+						Comment:  comment,
+					})
 					continue
 				}
 				callee := p.fns[calleeTok.val]
@@ -493,29 +1059,27 @@ func (p *parser) parseUserFn() error {
 				if len(bindings) > callee.returnCount() {
 					return p.errorf(calleeTok.pos, "too many bindings (%d) for function %q which returns %d values", len(bindings), calleeTok.val, callee.returnCount())
 				}
-				calls, err := p.parseFnBodyCall(callee, calleeTok, &synthIdx, paramDirs, letVars)
+				args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, paramDirs, letVars)
 				if err != nil {
 					return err
 				}
-				retArgs := make([]fnBodyArg, len(bindings))
-				for i, b := range bindings {
-					if b.discard {
-						retArgs[i] = fnBodyArg{literal: false}
-					} else {
-						retArgs[i] = fnBodyArg{isIdent: true, val: b.name}
-					}
-				}
-				calls[len(calls)-1].retArgs = retArgs
-				calls[len(calls)-1].comment = comment
 				for _, bind := range bindings {
-					if !bind.discard {
-						letVars[bind.name] = true
+					if !bind.Discard {
+						letVars[bind.Name] = true
 					}
 				}
-				body = append(body, calls...)
+				astBody = append(astBody, &MultiReturnStmt{
+					Bindings: bindings,
+					Value: &CallExpr{
+						Name:   calleeTok.val,
+						Args:   args,
+						KwArgs: kwArgs,
+					},
+					Comment: comment,
+				})
 				continue
 			}
-			// Single return: let varName = fnCall args... OR let varName = Constructor(args...)
+			// Single return: let varName = fnCall / Constructor / instruction
 			if sep.kind != tokEquals {
 				return p.errorf(sep.pos, "expected ',' or '=' after let identifier, got %s", sep.describe())
 			}
@@ -536,22 +1100,18 @@ func (p *parser) parseUserFn() error {
 				if !frameHasReturnSlot(frame) {
 					return p.errorf(rhsTok.pos, "instruction has no return slots (@N); cannot assign its result")
 				}
-				// Replace returnSlot(1) with varTok.val in frame
-				modifiedFrame := maps.Clone(frame)
-				for k, v := range modifiedFrame {
-					if rs, ok := v.(returnSlot); ok && int(rs) == 1 {
-						modifiedFrame[k] = varTok.val
-					}
-				}
 				letVars[varTok.val] = true
-				body = append(body, fnBodyCall{frame: modifiedFrame, comment: comment})
+				astBody = append(astBody, &LetStmt{
+					Name:    varTok.val,
+					Value:   &InstructionExpr{Frame: frame},
+					Comment: comment,
+				})
 				continue
 			}
 
-
 			// Check for constructor RHS
 			if isConstructor(rhsTok.val) {
-				arg, synthCalls, err := p.parseFnBodyConstructor(rhsTok, &synthIdx)
+				ctor, err := p.parseFnBodyConstructorExpr(rhsTok)
 				if err != nil {
 					return err
 				}
@@ -560,37 +1120,22 @@ func (p *parser) parseUserFn() error {
 				if err != nil {
 					return err
 				}
+				var value Expr = ctor
 				if peek.kind == tokAmpersand {
-					result, ampCalls, err := p.parseFnBodyAmpersand(arg, rhsTok.pos, &synthIdx)
+					numExpr, err := p.parseFnBodyExpr()
 					if err != nil {
 						return err
 					}
-					synthCalls = append(synthCalls, ampCalls...)
-					arg = result
+					value = &AmpersandExpr{Value: ctor, Num: numExpr}
 				} else {
 					p.unget(peek)
 				}
-
-				if arg.isIdent {
-					// Runtime constructor — synthetic calls already emitted,
-					// the last one writes into a temp var. We need to either
-					// rewrite that last call's retArg to target varTok.val directly,
-					// or add a copy. Rewriting is cleaner.
-					lastCall := &synthCalls[len(synthCalls)-1]
-					lastCall.retArgs = []fnBodyArg{{isIdent: true, val: varTok.val}}
-					lastCall.comment = comment
-					body = append(body, synthCalls...)
-				} else {
-					// Compile-time literal — emit set_reg
-					body = append(body, synthCalls...)
-					body = append(body, fnBodyCall{
-						name:    "set_reg",
-						args:    []fnBodyArg{arg},
-						retArgs: []fnBodyArg{{isIdent: true, val: varTok.val}},
-						comment: comment,
-					})
-				}
 				letVars[varTok.val] = true
+				astBody = append(astBody, &LetStmt{
+					Name:    varTok.val,
+					Value:   value,
+					Comment: comment,
+				})
 				continue
 			}
 
@@ -601,341 +1146,98 @@ func (p *parser) parseUserFn() error {
 			if !callee.hasReturn() {
 				return p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
 			}
-			calls, err := p.parseFnBodyCall(callee, rhsTok, &synthIdx, paramDirs, letVars)
+			args, kwArgs, err := p.parseFnBodyCallArgs(callee, rhsTok, paramDirs, letVars)
 			if err != nil {
 				return err
 			}
-			calls[len(calls)-1].retArgs = []fnBodyArg{{isIdent: true, val: varTok.val}}
-			calls[len(calls)-1].comment = comment
 			letVars[varTok.val] = true
-			body = append(body, calls...)
+			astBody = append(astBody, &LetStmt{
+				Name: varTok.val,
+				Value: &CallExpr{
+					Name:   rhsTok.val,
+					Args:   args,
+					KwArgs: kwArgs,
+				},
+				Comment: comment,
+			})
 			continue
 		}
 
+		// Bare function call
 		callee := p.fns[tok.val]
 		if callee == nil {
 			return p.errorf(tok.pos, "unknown function %q", tok.val)
 		}
-
-		calls, err := p.parseFnBodyCall(callee, tok, &synthIdx, paramDirs, letVars)
+		args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, paramDirs, letVars)
 		if err != nil {
 			return err
 		}
-		calls[len(calls)-1].comment = comment
-		body = append(body, calls...)
+		astBody = append(astBody, &CallStmt{
+			Name:    tok.val,
+			Args:    args,
+			KwArgs:  kwArgs,
+			Comment: comment,
+		})
 	}
 
 	// Pure-instruction optimization: if the function body is a single
 	// instruction frame, promote it to fnDef.frame for the fast direct-frame
-	// expansion path. This makes stdlib functions parsed through parseUserFn
-	// get the same efficient expansion as the old dedicated parseStdlibFile.
-	if len(body) == 1 && body[0].frame != nil {
-		frame := body[0].frame
-		canPromote := true
-		// Check that all string values are either the op, param names, or ret names
-		opVal, _ := frame["op"].(string)
-		for _, v := range frame {
-			s, ok := v.(string)
-			if !ok {
-				continue
-			}
-			if s == opVal {
-				continue
-			}
-			isParam := false
-			for _, pd := range params {
-				if pd.name == s {
-					isParam = true
-					break
+	// expansion path.
+	if len(astBody) == 1 {
+		if instrStmt, ok := astBody[0].(*InstructionStmt); ok {
+			frame := instrStmt.Frame
+			canPromote := true
+			opVal, _ := frame["op"].(string)
+			for _, v := range frame {
+				s, ok := v.(string)
+				if !ok {
+					continue
 				}
-			}
-			if isParam {
-				continue
-			}
-			isRet := false
-			for _, r := range rets {
-				if r == s {
-					isRet = true
-					break
+				if s == opVal {
+					continue
 				}
+				isParam := false
+				for _, pd := range params {
+					if pd.name == s {
+						isParam = true
+						break
+					}
+				}
+				if isParam {
+					continue
+				}
+				isRet := false
+				for _, r := range rets {
+					if r == s {
+						isRet = true
+						break
+					}
+				}
+				if isRet {
+					continue
+				}
+				canPromote = false
+				break
 			}
-			if isRet {
-				continue
-			}
-			canPromote = false
-			break
-		}
-		if canPromote {
-			// Rebuild frame with returnSlots replacing ret names
-			promoted := maps.Clone(frame)
-			for k, v := range promoted {
-				if s, ok := v.(string); ok {
-					for i, r := range rets {
-						if s == r {
-							promoted[k] = returnSlot(i + 1)
-							break
+			if canPromote {
+				promoted := maps.Clone(frame)
+				for k, v := range promoted {
+					if s, ok := v.(string); ok {
+						for i, r := range rets {
+							if s == r {
+								promoted[k] = returnSlot(i + 1)
+								break
+							}
 						}
 					}
 				}
-			}
-			p.fns[nameTok.val] = &fnDef{params: params, frame: promoted}
-			return nil
-		}
-	}
-
-
-	p.fns[nameTok.val] = &fnDef{params: params, rets: rets, body: body}
-	return nil
-}
-
-// parseFnBodyArgValue parses a single argument value in a function body call.
-// Accepts strings, identifiers, numbers, null, $register references,
-// type constructors, and the & operator. Returns the argument value plus
-// any synthetic body calls needed for runtime constructors/&.
-func (p *parser) parseFnBodyArgValue(synthIdx *int) (fnBodyArg, []fnBodyCall, error) {
-	tok, err := p.next()
-	if err != nil {
-		return fnBodyArg{}, nil, err
-	}
-	var base fnBodyArg
-	var synthCalls []fnBodyCall
-	switch tok.kind {
-	case tokString:
-		base = fnBodyArg{val: tok.val}
-	case tokNumber:
-		num, _ := strconv.Atoi(tok.val)
-		base = fnBodyArg{literal: map[string]any{"num": num}}
-	case tokIdent:
-		if tok.val == "localize" {
-			resolved, err := p.parseLocalize()
-			if err != nil {
-				return fnBodyArg{}, nil, err
-			}
-			base = fnBodyArg{val: resolved}
-		} else if tok.val == "null" {
-			base = fnBodyArg{literal: false}
-		} else if isConstructor(tok.val) {
-			arg, calls, err := p.parseFnBodyConstructor(tok, synthIdx)
-			if err != nil {
-				return fnBodyArg{}, nil, err
-			}
-			base = arg
-			synthCalls = append(synthCalls, calls...)
-		} else if strings.HasPrefix(tok.val, "$") {
-			if reg, ok := unitRegisters[tok.val]; ok {
-				base = fnBodyArg{literal: reg}
-			} else {
-				return fnBodyArg{}, nil, p.errorf(tok.pos, "unknown unit register %q", tok.val)
-			}
-		} else {
-			base = fnBodyArg{isIdent: true, val: tok.val}
-		}
-	default:
-		return fnBodyArg{}, nil, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
-	}
-
-	// Check for & operator
-	peek, err := p.next()
-	if err != nil {
-		return fnBodyArg{}, nil, err
-	}
-	if peek.kind == tokAmpersand {
-		result, ampCalls, err := p.parseFnBodyAmpersand(base, tok.pos, synthIdx)
-		if err != nil {
-			return fnBodyArg{}, nil, err
-		}
-		synthCalls = append(synthCalls, ampCalls...)
-		return result, synthCalls, nil
-	}
-	p.unget(peek)
-	return base, synthCalls, nil
-}
-
-// parseFnBodyConstructor parses a type constructor in a function body.
-// Returns the argument value plus any synthetic body calls for runtime constructors.
-func (p *parser) parseFnBodyConstructor(nameTok token, synthIdx *int) (fnBodyArg, []fnBodyCall, error) {
-	if _, err := p.expect(tokLParen); err != nil {
-		return fnBodyArg{}, nil, p.errorf(nameTok.pos, "expected '(' after %s", nameTok.val)
-	}
-
-	switch nameTok.val {
-	case "Item":
-		lit, err := p.parseFnBodySimpleConstructor("", nameTok.pos)
-		if err != nil {
-			return fnBodyArg{}, nil, err
-		}
-		return fnBodyArg{literal: lit}, nil, nil
-	case "Component":
-		lit, err := p.parseFnBodySimpleConstructor("c_", nameTok.pos)
-		if err != nil {
-			return fnBodyArg{}, nil, err
-		}
-		return fnBodyArg{literal: lit}, nil, nil
-	case "Technology":
-		lit, err := p.parseFnBodySimpleConstructor("t_", nameTok.pos)
-		if err != nil {
-			return fnBodyArg{}, nil, err
-		}
-		return fnBodyArg{literal: lit}, nil, nil
-	case "Value":
-		lit, err := p.parseFnBodySimpleConstructor("v_", nameTok.pos)
-		if err != nil {
-			return fnBodyArg{}, nil, err
-		}
-		return fnBodyArg{literal: lit}, nil, nil
-	case "Coordinate":
-		return p.parseFnBodyCoordinateConstructor(nameTok.pos, synthIdx)
-	}
-	return fnBodyArg{}, nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
-}
-
-// parseFnBodySimpleConstructor parses Item/Component/Technology/Value("id") in fn bodies.
-func (p *parser) parseFnBodySimpleConstructor(prefix string, pos int) (any, error) {
-	argTok, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	if argTok.kind != tokString {
-		return nil, p.errorf(argTok.pos, "expected string argument, got %s", argTok.describe())
-	}
-	if _, err := p.expect(tokRParen); err != nil {
-		return nil, err
-	}
-	return map[string]any{"id": prefix + argTok.val}, nil
-}
-
-// parseFnBodyCoordinateConstructor parses Coordinate(x, y) in fn bodies.
-// With literal args, returns a compile-time value. With variable args,
-// emits a synthetic combine_coordinate call.
-func (p *parser) parseFnBodyCoordinateConstructor(pos int, synthIdx *int) (fnBodyArg, []fnBodyCall, error) {
-	xArg, xCalls, err := p.parseFnBodyArgValue(synthIdx)
-	if err != nil {
-		return fnBodyArg{}, nil, err
-	}
-	if _, err := p.expect(tokComma); err != nil {
-		return fnBodyArg{}, nil, err
-	}
-	yArg, yCalls, err := p.parseFnBodyArgValue(synthIdx)
-	if err != nil {
-		return fnBodyArg{}, nil, err
-	}
-	if _, err := p.expect(tokRParen); err != nil {
-		return fnBodyArg{}, nil, err
-	}
-
-	// Check if both are compile-time numeric literals
-	if xArg.literal != nil && yArg.literal != nil && !xArg.isIdent && !yArg.isIdent {
-		xMap, xIsMap := xArg.literal.(map[string]any)
-		yMap, yIsMap := yArg.literal.(map[string]any)
-		if xIsMap && yIsMap {
-			xNum, xHasNum := xMap["num"]
-			yNum, yHasNum := yMap["num"]
-			if xHasNum && yHasNum && len(xMap) == 1 && len(yMap) == 1 {
-				lit := map[string]any{"coord": map[string]any{"x": xNum, "y": yNum}}
-				var allCalls []fnBodyCall
-				allCalls = append(allCalls, xCalls...)
-				allCalls = append(allCalls, yCalls...)
-				return fnBodyArg{literal: lit}, allCalls, nil
+				p.fns[nameTok.val] = &fnDef{params: params, frame: promoted}
+				return nil
 			}
 		}
 	}
 
-	// Runtime: emit combine_coordinate synthetic call
-	*synthIdx++
-	synthName := "@ctor" + strconv.Itoa(*synthIdx)
-	var allCalls []fnBodyCall
-	allCalls = append(allCalls, xCalls...)
-	allCalls = append(allCalls, yCalls...)
-	allCalls = append(allCalls, fnBodyCall{
-		name:    "combine_coordinate",
-		args:    []fnBodyArg{xArg, yArg},
-		retArgs: []fnBodyArg{{isIdent: true, val: synthName}},
-	})
-	return fnBodyArg{isIdent: true, val: synthName}, allCalls, nil
-}
-
-// parseFnBodyAmpersand handles & in function bodies. If both sides are
-// compile-time, merges the num field. Otherwise emits a synthetic set_number call.
-func (p *parser) parseFnBodyAmpersand(base fnBodyArg, basePos int, synthIdx *int) (fnBodyArg, []fnBodyCall, error) {
-	if !base.isIdent && base.literal == nil {
-		// string literal — not meaningful for &
-		return fnBodyArg{}, nil, p.errorf(basePos, "string literal cannot be left side of '&'")
-	}
-
-	rhsArg, rhsCalls, err := p.parseFnBodyArgValue(synthIdx)
-	if err != nil {
-		return fnBodyArg{}, nil, err
-	}
-
-	// Check if both are compile-time values
-	if !base.isIdent && base.literal != nil && !rhsArg.isIdent && rhsArg.literal != nil {
-		baseMap, baseIsMap := base.literal.(map[string]any)
-		rhsMap, rhsIsMap := rhsArg.literal.(map[string]any)
-		if baseIsMap && rhsIsMap {
-			rhsNum, rhsHasNum := rhsMap["num"]
-			if rhsHasNum && len(rhsMap) == 1 {
-				result := make(map[string]any, len(baseMap)+1)
-				for k, v := range baseMap {
-					result[k] = v
-				}
-				result["num"] = rhsNum
-				return fnBodyArg{literal: result}, rhsCalls, nil
-			}
-		}
-	}
-
-	// Runtime: emit set_number synthetic call
-	*synthIdx++
-	synthName := "@ctor" + strconv.Itoa(*synthIdx)
-	var allCalls []fnBodyCall
-	allCalls = append(allCalls, rhsCalls...)
-	allCalls = append(allCalls, fnBodyCall{
-		name:    "set_number",
-		args:    []fnBodyArg{base, rhsArg},
-		retArgs: []fnBodyArg{{isIdent: true, val: synthName}},
-	})
-	return fnBodyArg{isIdent: true, val: synthName}, allCalls, nil
-}
-
-// fnBodyArgDir determines the effective direction of a function body argument.
-func fnBodyArgDir(arg fnBodyArg, paramDirs map[string]string, letVars map[string]bool) string {
-	if !arg.isIdent {
-		return "in" // literal
-	}
-	if dir, ok := paramDirs[arg.val]; ok {
-		return dir
-	}
-	if letVars[arg.val] {
-		return "in"
-	}
-	return "inout"
-}
-
-// checkFnBodyCallDirections checks direction compatibility for each argument
-// at a function call site within a fn body.
-func (p *parser) checkFnBodyCallDirections(callee *fnDef, calleeName string, args []fnBodyArg, kwArgs map[string]fnBodyArg, paramDirs map[string]string, letVars map[string]bool, pos int) error {
-	posIdx := 0
-	for _, pd := range callee.params {
-		calleeDir := pd.effectiveDirection()
-		if pd.keyword == "" {
-			if posIdx < len(args) {
-				aDir := fnBodyArgDir(args[posIdx], paramDirs, letVars)
-				if !canPass(calleeDir, aDir) {
-					return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
-						aDir, calleeDir, pd.name, calleeName)
-				}
-			}
-			posIdx++
-		} else if kwArgs != nil {
-			if val, ok := kwArgs[pd.keyword]; ok {
-				aDir := fnBodyArgDir(val, paramDirs, letVars)
-				if !canPass(calleeDir, aDir) {
-					return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
-						aDir, calleeDir, pd.name, calleeName)
-				}
-			}
-		}
-	}
+	p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
 	return nil
 }
 
@@ -953,113 +1255,6 @@ func (p *parser) checkFnBodyInstructionDirections(frame map[string]any, paramDir
 		}
 	}
 	return nil
-}
-
-// parseFnBodyCall parses the positional and keyword arguments for a function
-// call in a fn body. Returns the main call plus any synthetic setup calls
-// needed for runtime constructors/&. The caller sets comment and retArgs on
-// the last call (the main one).
-func (p *parser) parseFnBodyCall(callee *fnDef, calleeTok token, synthIdx *int, paramDirs map[string]string, letVars map[string]bool) ([]fnBodyCall, error) {
-	posCount := callee.positionalCount()
-	args := make([]fnBodyArg, posCount)
-	var synthCalls []fnBodyCall
-	for i := 0; i < posCount; i++ {
-		// Peek for direction annotation (in, out, inout)
-		dirTok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		annotation := ""
-		annotationPos := dirTok.pos
-		if dirTok.kind == tokIdent && isDirection(dirTok.val) {
-			annotation = dirTok.val
-		} else {
-			p.unget(dirTok)
-			annotationPos = dirTok.pos
-		}
-
-		pd := callee.positionalParam(i)
-		if err := p.checkCallAnnotation(annotation, pd, calleeTok.val, annotationPos); err != nil {
-			return nil, err
-		}
-
-		arg, calls, err := p.parseFnBodyArgValue(synthIdx)
-		if err != nil {
-			return nil, err
-		}
-		args[i] = arg
-		synthCalls = append(synthCalls, calls...)
-	}
-
-	// Parse optional keyword args: , keyword: value
-	var kwArgs map[string]fnBodyArg
-	peek, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	if (peek.kind == tokString || peek.kind == tokIdent) && callee.positionalCount() < len(callee.params) {
-		if peek.kind == tokString {
-			return nil, p.errorf(peek.pos,
-				"too many positional arguments for %s (remaining parameters are keyword-only)", calleeTok.val)
-		}
-		p.unget(peek)
-	} else if peek.kind == tokComma {
-		kwArgs = map[string]fnBodyArg{}
-		for {
-			// Read the first ident — could be a direction annotation or keyword name
-			dirOrKw, err := p.expect(tokIdent)
-			if err != nil {
-				return nil, err
-			}
-			annotation := ""
-			annotationPos := dirOrKw.pos
-			if isDirection(dirOrKw.val) {
-				annotation = dirOrKw.val
-				dirOrKw, err = p.expect(tokIdent)
-				if err != nil {
-					return nil, err
-				}
-			}
-
-			kw := callee.keywordByName(dirOrKw.val)
-			if kw == nil {
-				return nil, p.errorf(dirOrKw.pos, "unknown keyword argument %q", dirOrKw.val)
-			}
-			if _, exists := kwArgs[dirOrKw.val]; exists {
-				return nil, p.errorf(dirOrKw.pos, "duplicate keyword argument %q", dirOrKw.val)
-			}
-			if err := p.checkCallAnnotation(annotation, kw, calleeTok.val, annotationPos); err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(tokColon); err != nil {
-				return nil, err
-			}
-			val, calls, err := p.parseFnBodyArgValue(synthIdx)
-			if err != nil {
-				return nil, err
-			}
-			kwArgs[dirOrKw.val] = val
-			synthCalls = append(synthCalls, calls...)
-
-			next, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if next.kind != tokComma {
-				p.unget(next)
-				break
-			}
-		}
-	} else {
-		p.unget(peek)
-	}
-
-	if err := p.checkFnBodyCallDirections(callee, calleeTok.val, args, kwArgs, paramDirs, letVars, calleeTok.pos); err != nil {
-		return nil, err
-	}
-
-	result := append(synthCalls, fnBodyCall{name: calleeTok.val, args: args, kwArgs: kwArgs})
-	return result, nil
 }
 
 func (p *parser) skipBraceBlock() error {
@@ -1172,19 +1367,6 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 	return frame, nil
 }
 
-func resolveBodyArg(arg fnBodyArg, paramMap map[string]any) any {
-	if arg.literal != nil {
-		return arg.literal
-	}
-	if arg.isIdent {
-		if val, ok := paramMap[arg.val]; ok {
-			return val
-		}
-		return arg.val // variable name string
-	}
-	return arg.val // string literal
-}
-
 func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool) error {
 	fn := p.fns[name]
 	if fn == nil {
@@ -1229,58 +1411,13 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		return nil
 	}
 
-	// Pre-scan: collect internal variables and rename collisions.
-	for _, call := range fn.body {
-		for _, arg := range call.retArgs {
-			if arg.isIdent {
-				if _, mapped := paramMap[arg.val]; !mapped {
-					uniqueName := allocUniqueVar(arg.val, usedVars)
-					paramMap[arg.val] = uniqueName
-				}
-			}
-		}
+	if err := p.emitFnBody(fn.astBody, b, paramMap, usedVars, comment, pos); err != nil {
+		return err
 	}
-
-	for _, call := range fn.body {
-		if call.frame != nil {
-			callComment := call.comment
-			if callComment == "" {
-				callComment = comment
-			}
-			resolved := resolveInstructionFrame(call.frame, nil, paramMap, nil, callComment)
-			b.emit(resolved)
-			continue
-		}
-		resolvedArgs := make([]any, len(call.args))
-		for i, arg := range call.args {
-			resolvedArgs[i] = resolveBodyArg(arg, paramMap)
-		}
-		resolvedKwArgs := map[string]any{}
-		for kw, arg := range call.kwArgs {
-			resolvedKwArgs[kw] = resolveBodyArg(arg, paramMap)
-		}
-		var resolvedRets []any
-		if len(call.retArgs) > 0 {
-			resolvedRets = make([]any, len(call.retArgs))
-			for i, arg := range call.retArgs {
-				resolvedRets[i] = resolveBodyArg(arg, paramMap)
-			}
-		}
-		callComment := call.comment
-		if callComment == "" {
-			callComment = comment
-		}
-		if err := p.expandCall(call.name, resolvedArgs, resolvedKwArgs, resolvedRets, b, pos, callComment, usedVars); err != nil {
-			return err
-		}
-	}
-
-	// Emit set_reg frames for return/parameter collisions.
 	for _, rc := range retCopies {
 		f := map[string]any{"op": "set_reg", "1": rc.from, "2": rc.to}
 		setComment(f, comment)
 		b.emit(f)
 	}
-
 	return nil
 }

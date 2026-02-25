@@ -6,11 +6,11 @@
         "1": {
             "num": 5
         },
-        "2": "@ctor1",
+        "2": "@ctor",
         "op": "set_number"
     },
     "1": {
-        "0": "@ctor1",
+        "0": "@ctor",
         "op": "notify",
         "txt": "Items"
     },
