@@ -1,0 +1,10 @@
+# AI-generated test
+# assignment RHS with parenthesized boolean expression
+behavior paren_assign {
+    @name "Paren Assign"
+    var a = 5
+    var b = 3
+    var r = 0
+    r = (a > 1 || b < 5) && a < 10
+    notify "done"
+}

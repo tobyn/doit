@@ -43,13 +43,10 @@ freely mixed in the same chain. Natural extensions:
   operator. Workaround: `let x = b < 5`.
 - **Constructor RHS**: `a == Item("metalbar")` — requires parsing
   type constructors in comparison RHS position.
-- **Mixed `&&`/`||` precedence**: `a > 1 && b < 5 || c > 3` is
-  currently a compile error. Supporting this requires either
-  operator precedence (`&&` binds tighter than `||`) or parenthesized
-  sub-expressions (`(a > 1 && b < 5) || c > 3`), or both.
-- **Parenthesized sub-expressions**: `let x = (a > 1 || b < 2) && c > 3`
-  would enable arbitrary nesting. Requires the parser to handle `(`
-  in expression context.
+- **Implicit `&&`/`||` precedence**: `a > 1 && b < 5 || c > 3`
+  without parentheses is a compile error. Could add implicit
+  precedence (`&&` binds tighter than `||`), but parenthesized
+  grouping is already supported.
 - **`is Number`**: `value_type` cannot distinguish numbers from null
   (both fall through to "No Match"), so `is Number` is not available.
   Could potentially be implemented with `check_number` against itself

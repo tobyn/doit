@@ -521,16 +521,42 @@ let ok = x is Unit && y > 5
 let match = a == b || x is Item
 ```
 
-Mixing `&&` and `||` in the same expression is not allowed:
+Mixing `&&` and `||` at the same level is not allowed — use parentheses
+to group sub-expressions:
 
 ```doit
-# ERROR: cannot mix '&&' and '||' in the same expression
+# ERROR: cannot mix '&&' and '||' without parentheses
 let bad = a > 1 && b < 5 || c > 3
+
+# OK: parentheses make the grouping explicit
+let ok1 = (a > 1 && b < 5) || c > 3
+let ok2 = a > 1 && (b < 5 || c > 3)
+```
+
+Parentheses can be used to build arbitrarily complex boolean expressions
+by nesting `&&` and `||` at different levels:
+
+```doit
+let r = (a > 1 || b < 2) && c > 3
+let r = ((a > 1 || b < 2) && c > 3) || d > 4
+let r = ($x is Item || $x is Unit) && count > 0
+let r = (a == b || c != null) && a > 1
+```
+
+Redundant parentheses are allowed: `let r = (a > 3)` is equivalent to
+`let r = a > 3`.
+
+Parenthesized expressions work in `let`/`var` initialization and
+assignment:
+
+```doit
+let r = (a > 1 || b < 2) && c > 3
+var r = (a > 1 || b < 2) && c > 3
+r = (a > 1 || b < 2) && c > 3
 ```
 
 > **Not yet supported:** Comparison and type check expressions in function
-> bodies; mixed `&&`/`||` with parenthesized sub-expressions; number
-> literals on the left side (use `let x = b < 5` instead of
+> bodies; number literals on the left side (use `let x = b < 5` instead of
 > `let x = 5 > b`); constructor values on the right side
 > (`a == Item("metalbar")`); `is Number` (cannot distinguish from null).
 

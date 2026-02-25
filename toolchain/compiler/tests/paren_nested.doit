@@ -1,0 +1,11 @@
+# AI-generated test
+# ((a > 1 || b < 2) && c > 3) || d > 4: nested parentheses
+behavior paren_nested {
+    @name "Paren Nested"
+    var a = 5
+    var b = 3
+    var c = 7
+    var d = 2
+    let r = ((a > 1 || b < 2) && c > 3) || d > 4
+    notify "done"
+}

@@ -240,8 +240,9 @@ and assignment RHS at behavior level. Works in `&&`/`||` chains.
 boolean value. Each sub-expression can be a comparison
 (`ident >|<|>=|<=|==|!= number|ident|null`) or a type check
 (`ident is TypeName`). Same-operator chaining is supported
-(`a > b && c < d && e > f`). Mixing `&&` and `||` in the same
-expression is a compile error. Different sub-expression types
+(`a > b && c < d && e > f`). Mixing `&&` and `||` at the same
+parenthesization level is a compile error — use parentheses to
+group: `(a > 1 || b < 2) && c > 3`. Different sub-expression types
 (numeric comparisons, equality comparisons, and type checks) can
 be freely mixed in the same chain — each term emits its own
 independent check frame.
@@ -254,8 +255,7 @@ Frames 0..N-1: check_number, compare_register, or value_type per term
   For check_number (>, <, >=, <=):
   - true branch  → next check (or true frame for last)
   - false branch → shared false frame
-  - equal (>/< ) → false frame (explicit "next" on intermediates;
-                   natural fall-through on last)
+  - equal (>/< ) → false frame (always explicit "next")
   - equal (>=/<= ) → next check (or true frame for last)
 
   For compare_register (==, !=):
@@ -278,8 +278,7 @@ Frames 0..N-1: check_number, compare_register, or value_type per term
   For check_number (>, <, >=, <=):
   - true branch  → shared true frame
   - false branch → next check (or false frame for last)
-  - equal (>/< ) → next check on intermediates (natural fall-through);
-                   false frame on last (natural fall-through)
+  - equal (>/< ) → false target (always explicit "next")
   - equal (>=/<= ) → shared true frame
 
   For compare_register (==, !=):
@@ -302,8 +301,11 @@ unchanged.
 **Supported contexts**: Same as single comparisons — `let`/`var` init
 and assignment RHS at behavior level.
 
-**Deferred**: Mixed `&&`/`||` with precedence and parenthesized
-sub-expressions; fn body logical expressions; logical expressions in
+**Parenthesized grouping**: Mixed `&&`/`||` is supported via
+parenthesized sub-expressions (see "Parenthesized boolean expressions"
+section below). Implicit precedence (without parens) is not supported.
+
+**Deferred**: fn body logical expressions; logical expressions in
 function call arguments; fn body `is` expressions.
 
 ## Lock/unlock as keywords with compile-time mode tracking
@@ -433,3 +435,56 @@ map all four compound tokens to their opcode. The handler in
 `{"num": 1}`, `--` emits `sub` with `{"num": 1}`. Both use
 `resolveAssignTarget` with `compound: true` (reads and writes the
 target).
+
+## Parenthesized boolean expressions
+
+**Recursive tree model over flat chain**: The flat `[]comparisonTerm`
+chain model was replaced with a recursive `boolExpr` tree. Each node
+is either a leaf (single comparison/type-check) or a group (children
+connected by `&&` or `||`). Parentheses create nested groups, enabling
+mixed `&&`/`||` at different levels.
+
+**`boolExpr` struct**: `term *comparisonTerm` (leaf) or
+`chainOp`+`children []*boolExpr` (group). `isLeaf()` and
+`frameCount()` methods support both emission paths.
+
+**Recursive parser**: Three functions handle parsing:
+- `parseBoolTerm(syms)`: Parses `(expr)` (recursive) or `ident op rhs`.
+- `parseBoolExprFull(syms)`: Entry point — calls `parseBoolTerm` then
+  `parseBoolExprChain`.
+- `parseBoolExprChain(first, syms)`: Collects same-operator terms;
+  errors on mixed `&&`/`||` at the same level.
+
+**Recursive emitter**: Three functions handle emission:
+- `emitBoolCheckFrame(term, true, false, b, comment)`: Emits one
+  check frame with explicit true/false targets. Always sets `"next"`.
+- `emitBoolExprFrames(expr, true, false, b, comment)`: Recursive.
+  For `&&`: child true → next child (or parent true for last), child
+  false → parent false. For `||`: child true → parent true, child
+  false → next child (or parent false for last).
+- `emitBoolExprTree(expr, target, b, comment)`: Top-level wrapper that
+  allocates false/true `set_reg` frames.
+
+**Always-set `"next"` on check frames**: The new emitter always sets
+`"next"` on every check frame (via `emitBoolCheckFrame`). The old
+emitter omitted `"next"` as a fall-through optimization for `>` and
+`<` in certain positions. This simplification makes the emitter uniform
+and the frame structure more predictable.
+
+**Single-leaf backward compatibility**: When `parseAndEmitBooleanExpr`
+detects a single leaf (no `&&`/`||`), it delegates to the existing
+`emitComparison`/`emitTypeCheck` functions. This preserves the exact
+frame output for single comparisons. `tokLParen` paths in
+`compileVarInit` and `compileDefaultStatement` also check `isLeaf()`.
+
+**Same-level operator enforcement**: Mixing `&&` and `||` at the same
+parenthesization level is a compile error with a message suggesting
+parentheses: `"cannot mix '&&' and '||' without parentheses; use '('
+and ')' to group sub-expressions"`.
+
+**Supported contexts**: `let`/`var` init and assignment RHS at behavior
+level. Works with all sub-expression types: numeric comparisons,
+equality comparisons, and type checks, freely mixed.
+
+**Deferred**: fn body parenthesized boolean expressions; parenthesized
+expressions in function call arguments.

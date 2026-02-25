@@ -1,0 +1,36 @@
+{
+    "0": {
+        "1": {
+            "num": 5
+        },
+        "2": "a",
+        "op": "set_number"
+    },
+    "1": {
+        "0": 4,
+        "1": 3,
+        "2": "a",
+        "3": {
+            "num": 3
+        },
+        "op": "check_number"
+    },
+    "2": {
+        "0": false,
+        "1": "r",
+        "next": 5,
+        "op": "set_reg"
+    },
+    "3": {
+        "0": {
+            "num": 1
+        },
+        "1": "r",
+        "op": "set_reg"
+    },
+    "4": {
+        "op": "notify",
+        "txt": "done"
+    },
+    "name": "Paren Simple"
+}

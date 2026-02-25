@@ -1,0 +1,8 @@
+# AI-generated test
+# redundant parentheses around a single comparison
+behavior paren_simple {
+    @name "Paren Simple"
+    var a = 5
+    let r = (a > 3)
+    notify "done"
+}

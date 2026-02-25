@@ -1,0 +1,9 @@
+# AI-generated test
+# ($x is Item || $x is Unit) && b > 0: mixed type checks and comparison in parens
+behavior paren_mixed_types {
+    @name "Paren Mixed Types"
+    @param in x "X"
+    var b = 5
+    let r = ($x is Item || $x is Unit) && b > 0
+    notify "done"
+}

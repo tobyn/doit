@@ -1275,291 +1275,243 @@ type comparisonTerm struct {
 	rhs any
 }
 
-// parseAndEmitBooleanExpr checks whether a boolean expression is followed by
-// && or ||. If not, it delegates to emitComparison or emitTypeCheck. If so, it
-// collects all chained terms and calls emitChainedBoolExpr. Mixed && and || in
-// the same expression is a compile error.
-func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *frameBuilder, comment string, syms *symbolTable) error {
+// boolExpr is a recursive boolean expression tree. Each node is either a leaf
+// (single comparison/type-check term) or a group (children connected by the
+// same logical operator).
+type boolExpr struct {
+	term     *comparisonTerm // non-nil for leaf nodes
+	chainOp  tokenKind       // tokDoubleAmpersand or tokDoublePipe for group nodes
+	children []*boolExpr     // non-empty for group nodes
+}
+
+// isLeaf reports whether the expression is a single comparison/type-check.
+func (e *boolExpr) isLeaf() bool {
+	return e.term != nil
+}
+
+// frameCount returns the number of check frames this expression contributes.
+// Leaves contribute 1 frame; groups contribute the sum of their children.
+func (e *boolExpr) frameCount() int {
+	if e.isLeaf() {
+		return 1
+	}
+	n := 0
+	for _, child := range e.children {
+		n += child.frameCount()
+	}
+	return n
+}
+
+// parseBoolTerm parses a single boolean term: either a parenthesized
+// sub-expression or a bare comparison/type-check (ident op rhs | ident is Type).
+func (p *parser) parseBoolTerm(syms *symbolTable) (*boolExpr, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	if tok.kind == tokLParen {
+		inner, err := p.parseBoolExprFull(syms)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return inner, nil
+	}
+
+	if tok.kind != tokIdent {
+		return nil, p.errorf(tok.pos, "expected identifier or '(' in boolean expression, got %s", tok.describe())
+	}
+
+	lhs, err := p.resolveComparisonOperand(tok, syms)
+	if err != nil {
+		return nil, err
+	}
+
+	cmpTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	if cmpTok.kind == tokIdent && cmpTok.val == "is" {
+		slot, err := p.parseIsRHS()
+		if err != nil {
+			return nil, err
+		}
+		return &boolExpr{term: &comparisonTerm{op: tokIs, lhs: lhs, rhs: slot}}, nil
+	}
+	if isComparisonOp(cmpTok.kind) {
+		rhs, err := p.parseComparisonRHS(syms)
+		if err != nil {
+			return nil, err
+		}
+		return &boolExpr{term: &comparisonTerm{op: cmpTok.kind, lhs: lhs, rhs: rhs}}, nil
+	}
+
+	return nil, p.errorf(cmpTok.pos, "expected comparison operator (>, <, >=, <=, ==, !=) or 'is' after identifier")
+}
+
+// parseBoolExprChain peeks for && or ||. If absent, returns first unchanged.
+// If present, loops collecting more terms via parseBoolTerm and enforces
+// same-operator per level.
+func (p *parser) parseBoolExprChain(first *boolExpr, syms *symbolTable) (*boolExpr, error) {
 	peek, err := p.next()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if peek.kind != tokDoubleAmpersand && peek.kind != tokDoublePipe {
 		p.unget(peek)
-		if isTypeCheckOp(op) {
-			p.emitTypeCheck(lhs, target, rhs.(string), b, comment)
-		} else {
-			p.emitComparison(op, lhs, rhs, target, b, comment)
-		}
-		return nil
+		return first, nil
 	}
 
 	chainOp := peek.kind
-	terms := []comparisonTerm{{op: op, lhs: lhs, rhs: rhs}}
+	children := []*boolExpr{first}
 
 	for {
-		// Parse next term: ident (comparison_op rhs | 'is' TypeName)
-		lhsTok, err := p.next()
+		next, err := p.parseBoolTerm(syms)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if lhsTok.kind != tokIdent {
-			return p.errorf(lhsTok.pos, "expected identifier after %s", peek.val)
-		}
-		nextLhs, err := p.resolveComparisonOperand(lhsTok, syms)
-		if err != nil {
-			return err
-		}
-		cmpTok, err := p.next()
-		if err != nil {
-			return err
-		}
-		if cmpTok.kind == tokIdent && cmpTok.val == "is" {
-			slot, err := p.parseIsRHS()
-			if err != nil {
-				return err
-			}
-			terms = append(terms, comparisonTerm{op: tokIs, lhs: nextLhs, rhs: slot})
-		} else if isComparisonOp(cmpTok.kind) {
-			nextRhs, err := p.parseComparisonRHS(syms)
-			if err != nil {
-				return err
-			}
-			terms = append(terms, comparisonTerm{op: cmpTok.kind, lhs: nextLhs, rhs: nextRhs})
-		} else {
-			return p.errorf(cmpTok.pos, "expected comparison operator (>, <, >=, <=, ==, !=) or 'is' after identifier")
-		}
+		children = append(children, next)
 
-		// Check for another chained operator
-		next, err := p.next()
+		tok, err := p.next()
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if next.kind != tokDoubleAmpersand && next.kind != tokDoublePipe {
-			p.unget(next)
+		if tok.kind != tokDoubleAmpersand && tok.kind != tokDoublePipe {
+			p.unget(tok)
 			break
 		}
-		if next.kind != chainOp {
-			return p.errorf(next.pos, "cannot mix '&&' and '||' in the same expression")
+		if tok.kind != chainOp {
+			return nil, p.errorf(tok.pos, "cannot mix '&&' and '||' without parentheses; use '(' and ')' to group sub-expressions")
 		}
 	}
 
-	p.emitChainedBoolExpr(terms, chainOp, target, b, comment)
-	return nil
+	return &boolExpr{chainOp: chainOp, children: children}, nil
 }
 
-// emitChainedBoolExpr emits the N+2 frame pattern for a chain of boolean
-// terms (comparisons and/or type checks) connected by && or ||.
-func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, target any, b *frameBuilder, comment string) {
-	n := len(terms)
-	// Positions: check frames at base..base+n-1, false at base+n, true at base+n+1
-	base := b.pos()
-	falsePos := base + n
-	truePos := base + n + 1
-	afterPos := base + n + 2
+// parseBoolExprFull parses a complete boolean expression (used inside parens
+// and as the top-level entry point for parenthesized expressions).
+func (p *parser) parseBoolExprFull(syms *symbolTable) (*boolExpr, error) {
+	first, err := p.parseBoolTerm(syms)
+	if err != nil {
+		return nil, err
+	}
+	return p.parseBoolExprChain(first, syms)
+}
 
-	for i, term := range terms {
-		isLast := i == n-1
-		nextCheck := frameRef(base + i + 1)
+// emitBoolCheckFrame emits a single check frame for a comparison term with
+// explicit true/false routing targets. Always sets "next".
+func (p *parser) emitBoolCheckFrame(term *comparisonTerm, trueTarget, falseTarget frameRef, b *frameBuilder, comment string) {
+	var check map[string]any
 
-		var check map[string]any
-
-		if isTypeCheckOp(term.op) {
-			// value_type: 6-way type branch + "next" no-match
-			typeSlot := term.rhs.(string)
-			check = map[string]any{
-				"op":           "value_type",
-				valueTypeInput: term.lhs,
-			}
-			if chainOp == tokDoubleAmpersand {
-				// &&: matching type -> next check (or true for last), all others -> false
-				for _, slot := range allTypeSlots {
-					if slot == typeSlot {
-						if isLast {
-							check[slot] = frameRef(truePos)
-						} else {
-							check[slot] = nextCheck
-						}
-					} else {
-						check[slot] = frameRef(falsePos)
-					}
-				}
-				check["next"] = frameRef(falsePos)
+	if isTypeCheckOp(term.op) {
+		typeSlot := term.rhs.(string)
+		check = map[string]any{
+			"op":           "value_type",
+			valueTypeInput: term.lhs,
+		}
+		for _, slot := range allTypeSlots {
+			if slot == typeSlot {
+				check[slot] = trueTarget
 			} else {
-				// ||: matching type -> true, all others -> next check (or false for last)
-				for _, slot := range allTypeSlots {
-					if slot == typeSlot {
-						check[slot] = frameRef(truePos)
-					} else {
-						if isLast {
-							check[slot] = frameRef(falsePos)
-						} else {
-							check[slot] = nextCheck
-						}
-					}
-				}
-				if isLast {
-					check["next"] = frameRef(falsePos)
-				} else {
-					check["next"] = nextCheck
-				}
+				check[slot] = falseTarget
 			}
-		} else if isEqualityOp(term.op) {
-			// compare_register: 2-way branch (Different / Equal via "next")
-			check = map[string]any{
-				"op":             "compare_register",
-				compareRegValue1: term.lhs,
-				compareRegValue2: term.rhs,
-			}
-			if chainOp == tokDoubleAmpersand {
-				switch term.op {
-				case tokDoubleEquals:
-					// &&: equal -> next check (or true for last), different -> false
-					check[compareRegDifferent] = frameRef(falsePos)
-					if isLast {
-						check["next"] = frameRef(truePos)
-					} else {
-						check["next"] = nextCheck
-					}
-				case tokNotEquals:
-					// &&: different -> next check (or true for last), equal -> false
-					if isLast {
-						check[compareRegDifferent] = frameRef(truePos)
-					} else {
-						check[compareRegDifferent] = nextCheck
-					}
-					check["next"] = frameRef(falsePos)
-				}
+		}
+		check["next"] = falseTarget
+	} else if isEqualityOp(term.op) {
+		check = map[string]any{
+			"op":             "compare_register",
+			compareRegValue1: term.lhs,
+			compareRegValue2: term.rhs,
+		}
+		switch term.op {
+		case tokDoubleEquals:
+			check[compareRegDifferent] = falseTarget
+			check["next"] = trueTarget
+		case tokNotEquals:
+			check[compareRegDifferent] = trueTarget
+			check["next"] = falseTarget
+		}
+	} else {
+		check = map[string]any{
+			"op":        "check_number",
+			checkValue:  term.lhs,
+			checkTarget: term.rhs,
+		}
+		switch term.op {
+		case tokGreater:
+			check[checkLarger] = trueTarget
+			check[checkSmaller] = falseTarget
+			check["next"] = falseTarget
+		case tokLess:
+			check[checkLarger] = falseTarget
+			check[checkSmaller] = trueTarget
+			check["next"] = falseTarget
+		case tokGreaterEquals:
+			check[checkLarger] = trueTarget
+			check[checkSmaller] = falseTarget
+			check["next"] = trueTarget
+		case tokLessEquals:
+			check[checkLarger] = falseTarget
+			check[checkSmaller] = trueTarget
+			check["next"] = trueTarget
+		}
+	}
+
+	setComment(check, comment)
+	b.emit(check)
+}
+
+// emitBoolExprFrames recursively emits check frames for a boolExpr tree.
+// trueTarget and falseTarget are the frame positions to jump to on true/false.
+// comment is set only on the first emitted frame; pass "" for subsequent calls.
+func (p *parser) emitBoolExprFrames(expr *boolExpr, trueTarget, falseTarget frameRef, b *frameBuilder, comment string) {
+	if expr.isLeaf() {
+		p.emitBoolCheckFrame(expr.term, trueTarget, falseTarget, b, comment)
+		return
+	}
+
+	for i, child := range expr.children {
+		isLast := i == len(expr.children)-1
+		childComment := ""
+		if i == 0 {
+			childComment = comment
+		}
+
+		if expr.chainOp == tokDoubleAmpersand {
+			// &&: child true -> next child (or parent true for last), child false -> parent false
+			if isLast {
+				p.emitBoolExprFrames(child, trueTarget, falseTarget, b, childComment)
 			} else {
-				switch term.op {
-				case tokDoubleEquals:
-					// ||: equal -> true, different -> next check (or false for last)
-					check["next"] = frameRef(truePos)
-					if isLast {
-						check[compareRegDifferent] = frameRef(falsePos)
-					} else {
-						check[compareRegDifferent] = nextCheck
-					}
-				case tokNotEquals:
-					// ||: different -> true, equal -> next check (or false for last)
-					check[compareRegDifferent] = frameRef(truePos)
-					if isLast {
-						check["next"] = frameRef(falsePos)
-					} else {
-						check["next"] = nextCheck
-					}
-				}
+				nextChildPos := frameRef(b.pos() + child.frameCount())
+				p.emitBoolExprFrames(child, nextChildPos, falseTarget, b, childComment)
 			}
 		} else {
-			// check_number: 3-way branch (Larger / Smaller / Equal via "next")
-			check = map[string]any{
-				"op":        "check_number",
-				checkValue:  term.lhs,
-				checkTarget: term.rhs,
-			}
-
-			if chainOp == tokDoubleAmpersand {
-				// &&: true branch -> next check (or true frame for last)
-				//     false branch -> shared false frame
-				//     equal -> depends on operator (false for >/< , true for >=/<= )
-				switch term.op {
-				case tokGreater:
-					if isLast {
-						check[checkLarger] = frameRef(truePos)
-					} else {
-						check[checkLarger] = nextCheck
-					}
-					check[checkSmaller] = frameRef(falsePos)
-					// Equal falls through to false (natural on last, explicit on intermediates).
-					if !isLast {
-						check["next"] = frameRef(falsePos)
-					}
-				case tokLess:
-					if isLast {
-						check[checkSmaller] = frameRef(truePos)
-					} else {
-						check[checkSmaller] = nextCheck
-					}
-					check[checkLarger] = frameRef(falsePos)
-					// Equal falls through to false (natural on last, explicit on intermediates).
-					if !isLast {
-						check["next"] = frameRef(falsePos)
-					}
-				case tokGreaterEquals:
-					if isLast {
-						check[checkLarger] = frameRef(truePos)
-					} else {
-						check[checkLarger] = nextCheck
-					}
-					check[checkSmaller] = frameRef(falsePos)
-					// Equal -> true: next check on intermediates, true frame on last.
-					if isLast {
-						check["next"] = frameRef(truePos)
-					} else {
-						check["next"] = nextCheck
-					}
-				case tokLessEquals:
-					if isLast {
-						check[checkSmaller] = frameRef(truePos)
-					} else {
-						check[checkSmaller] = nextCheck
-					}
-					check[checkLarger] = frameRef(falsePos)
-					// Equal -> true: next check on intermediates, true frame on last.
-					if isLast {
-						check["next"] = frameRef(truePos)
-					} else {
-						check["next"] = nextCheck
-					}
-				}
+			// ||: child true -> parent true, child false -> next child (or parent false for last)
+			if isLast {
+				p.emitBoolExprFrames(child, trueTarget, falseTarget, b, childComment)
 			} else {
-				// ||: true branch -> shared true frame
-				//     false branch -> next check (or false frame for last)
-				//     equal -> depends on operator
-				switch term.op {
-				case tokGreater:
-					check[checkLarger] = frameRef(truePos)
-					if isLast {
-						check[checkSmaller] = frameRef(falsePos)
-					} else {
-						check[checkSmaller] = nextCheck
-					}
-					// Equal falls through naturally (to next check or false frame).
-				case tokLess:
-					check[checkSmaller] = frameRef(truePos)
-					if isLast {
-						check[checkLarger] = frameRef(falsePos)
-					} else {
-						check[checkLarger] = nextCheck
-					}
-					// Equal falls through naturally (to next check or false frame).
-				case tokGreaterEquals:
-					check[checkLarger] = frameRef(truePos)
-					if isLast {
-						check[checkSmaller] = frameRef(falsePos)
-					} else {
-						check[checkSmaller] = nextCheck
-					}
-					// Equal -> true.
-					check["next"] = frameRef(truePos)
-				case tokLessEquals:
-					check[checkSmaller] = frameRef(truePos)
-					if isLast {
-						check[checkLarger] = frameRef(falsePos)
-					} else {
-						check[checkLarger] = nextCheck
-					}
-					// Equal -> true.
-					check["next"] = frameRef(truePos)
-				}
+				nextChildPos := frameRef(b.pos() + child.frameCount())
+				p.emitBoolExprFrames(child, trueTarget, nextChildPos, b, childComment)
 			}
 		}
-
-		if i == 0 {
-			setComment(check, comment)
-		}
-		b.emit(check)
 	}
+}
+
+// emitBoolExprTree is the top-level emitter for a boolExpr tree. It calculates
+// the total frame count, allocates false/true set_reg positions, emits the
+// check frames via emitBoolExprFrames, then emits the two set_reg frames.
+func (p *parser) emitBoolExprTree(expr *boolExpr, target any, b *frameBuilder, comment string) {
+	totalChecks := expr.frameCount()
+	base := b.pos()
+	falsePos := base + totalChecks
+	truePos := base + totalChecks + 1
+	afterPos := base + totalChecks + 2
+
+	p.emitBoolExprFrames(expr, frameRef(truePos), frameRef(falsePos), b, comment)
 
 	// False frame
 	b.emit(map[string]any{
@@ -1575,6 +1527,31 @@ func (p *parser) emitChainedBoolExpr(terms []comparisonTerm, chainOp tokenKind, 
 		"1":  map[string]any{"num": 1},
 		"2":  target,
 	})
+}
+
+// parseAndEmitBooleanExpr checks whether a boolean expression is followed by
+// && or ||. If not, it delegates to emitComparison or emitTypeCheck. If so, it
+// builds a boolExpr tree (supporting parenthesized sub-expressions) and calls
+// emitBoolExprTree. Mixed && and || at the same level is a compile error.
+func (p *parser) parseAndEmitBooleanExpr(op tokenKind, lhs, rhs, target any, b *frameBuilder, comment string, syms *symbolTable) error {
+	first := &boolExpr{term: &comparisonTerm{op: op, lhs: lhs, rhs: rhs}}
+
+	expr, err := p.parseBoolExprChain(first, syms)
+	if err != nil {
+		return err
+	}
+
+	if expr.isLeaf() {
+		if isTypeCheckOp(op) {
+			p.emitTypeCheck(lhs, target, rhs.(string), b, comment)
+		} else {
+			p.emitComparison(op, lhs, rhs, target, b, comment)
+		}
+		return nil
+	}
+
+	p.emitBoolExprTree(expr, target, b, comment)
+	return nil
 }
 
 // compileDefaultStatement compiles a function call or compound assignment.
@@ -1762,6 +1739,24 @@ func (p *parser) compileDefaultStatement(tok token, b *frameBuilder, comment str
 				return err
 			}
 			return p.expandCall(rhsTok.val, args, kwArgs, []any{target}, b, rhsTok.pos, comment, syms.usedVars)
+		}
+		if rhsTok.kind == tokLParen {
+			p.unget(rhsTok)
+			expr, err := p.parseBoolExprFull(syms)
+			if err != nil {
+				return err
+			}
+			if expr.isLeaf() {
+				t := expr.term
+				if isTypeCheckOp(t.op) {
+					p.emitTypeCheck(t.lhs, target, t.rhs.(string), b, comment)
+				} else {
+					p.emitComparison(t.op, t.lhs, t.rhs, target, b, comment)
+				}
+			} else {
+				p.emitBoolExprTree(expr, target, b, comment)
+			}
+			return nil
 		}
 		return p.errorf(rhsTok.pos, "expected number, function call, constructor, or instruction after '=', got %s", rhsTok.describe())
 	}
@@ -2402,6 +2397,27 @@ func (p *parser) compileVarInit(nameTok token, mutable bool, b *frameBuilder, co
 			return err
 		}
 		return p.expandCall(rhsTok.val, args, kwArgs, []any{nameTok.val}, b, rhsTok.pos, comment, syms.usedVars)
+	}
+
+	if rhsTok.kind == tokLParen {
+		p.unget(rhsTok)
+		expr, err := p.parseBoolExprFull(syms)
+		if err != nil {
+			return err
+		}
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
+		if expr.isLeaf() {
+			t := expr.term
+			if isTypeCheckOp(t.op) {
+				p.emitTypeCheck(t.lhs, nameTok.val, t.rhs.(string), b, comment)
+			} else {
+				p.emitComparison(t.op, t.lhs, t.rhs, nameTok.val, b, comment)
+			}
+		} else {
+			p.emitBoolExprTree(expr, nameTok.val, b, comment)
+		}
+		return nil
 	}
 
 	return p.errorf(rhsTok.pos, "expected number, function call, or constructor after '=', got %s", rhsTok.describe())

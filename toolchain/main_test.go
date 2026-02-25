@@ -1402,6 +1402,41 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	// --- Parenthesized boolean expression errors ---
+
+	t.Run("paren_unclosed", func(t *testing.T) {
+		src := `behavior a { var x = 5; var y = 3; let r = (x > 2 && y < 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unexpected '}'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("paren_empty", func(t *testing.T) {
+		src := `behavior a { let r = () }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected identifier or '('") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("logical_mixed_suggests_parens", func(t *testing.T) {
+		src := `behavior a { var x = 5; var y = 3; var z = 1; let r = x > 2 && y < 10 || z > 0 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "parentheses") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

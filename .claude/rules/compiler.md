@@ -64,7 +64,9 @@ output format.
   `isComparisonOp`, `isEqualityOp`),
   type check helpers (`isTypeCheckOp`, `parseIsRHS`, `emitTypeCheck`),
   logical operator helpers (`parseAndEmitBooleanExpr`,
-  `emitChainedBoolExpr`, `comparisonTerm`),
+  `comparisonTerm`, `boolExpr`, `parseBoolTerm`, `parseBoolExprFull`,
+  `parseBoolExprChain`, `emitBoolCheckFrame`, `emitBoolExprFrames`,
+  `emitBoolExprTree`),
   lock/unlock keyword handling with compile-time mode tracking
   (in `parseBehaviorBody`, `compileBody`, `compileLoop`),
   loops, if/else, deferred body emission,
@@ -424,15 +426,19 @@ identifies `tokIs` terms, `parseIsRHS` validates the type name via
 `typeCheckSlot`, and `emitTypeCheck` emits the frames. The `is` keyword
 scans as `tokIdent` with val `"is"` — `tokIs` is only used internally
 in `comparisonTerm.op`. After parsing the first comparison or type
-check, `parseAndEmitBooleanExpr` peeks for `&&`/`||`; if absent, it
-delegates to `emitComparison` or `emitTypeCheck`; if present, it
-collects additional `comparisonTerm`s. Different expression types
+check, `parseAndEmitBooleanExpr` wraps it in a `boolExpr` leaf and
+calls `parseBoolExprChain`; if no `&&`/`||` follows, it delegates to
+`emitComparison` or `emitTypeCheck`; otherwise, `emitBoolExprTree`
+emits the recursive frame pattern. Different expression types
 (numeric comparisons, equality comparisons, and type checks) can be
 freely mixed in the same `&&`/`||` chain — each term emits its own
-independent check frame. `emitChainedBoolExpr` emits an N+2 frame
-pattern (N check frames + false/true set_reg frames), handling
-`check_number`, `compare_register`, and `value_type` routing.
-Mixing `&&` and `||` in the same expression is a compile error.
+independent check frame. Parenthesized sub-expressions allow mixing
+`&&` and `||` at different nesting levels:
+`(a > 1 || b < 2) && c > 3`. The recursive `boolExpr` tree model
+supports arbitrary nesting depth. Mixing `&&` and `||` at the same
+parenthesization level is a compile error. `compileVarInit` and
+`compileDefaultStatement` handle `tokLParen` as a boolean expression
+entry point via `parseBoolExprFull`.
 
 **`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
 values shifted by an offset. Non-destructive (creates copies) to handle the

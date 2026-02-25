@@ -1,0 +1,10 @@
+# AI-generated test
+# (a > 1 && b < 2) || c > 3: parenthesized && inside ||
+behavior paren_or_and {
+    @name "Paren Or And"
+    var a = 5
+    var b = 3
+    var c = 7
+    let r = (a > 1 && b < 2) || c > 3
+    notify "done"
+}

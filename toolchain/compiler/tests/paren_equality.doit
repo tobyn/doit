@@ -1,0 +1,10 @@
+# AI-generated test
+# (a == b || c != null) && a > 1: equality comparisons in parens
+behavior paren_equality {
+    @name "Paren Equality"
+    var a = 5
+    var b = 3
+    var c = 7
+    let r = (a == b || c != null) && a > 1
+    notify "done"
+}
