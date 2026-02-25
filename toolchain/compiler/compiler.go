@@ -263,6 +263,18 @@ func allocUniqueVar(name string, usedVars map[string]bool) string {
 	}
 }
 
+// arithCounter tracks the number of @arith temp variables allocated during
+// arithmetic expression emission.
+type arithCounter struct {
+	n int
+}
+
+func (c *arithCounter) next(usedVars map[string]bool) string {
+	c.n++
+	name := fmt.Sprintf("@arith%d", c.n)
+	return allocUniqueVar(name, usedVars)
+}
+
 type deferredBody struct {
 	frames       []map[string]any
 	checkFrame   int    // index of the check_number frame to patch

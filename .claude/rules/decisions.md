@@ -20,15 +20,17 @@ significant gap that should be closed. The "Deferred: fn body ..."
 notes throughout this file represent parity debt, not optional
 extensions.
 
-**Compiler architecture**: Function bodies are parsed into an AST
-(`[]Stmt` with `Expr` nodes) defined in `ast.go`. The AST decouples
-parsing from emission, enabling fn bodies to support the same constructs
-as behavior bodies. During inlining (`expandCall`), `emitFnBody` walks
-the AST and emits frames via `frameBuilder`, which supports branching
-patterns. This replaces the old flat `fnBodyCall` IR that could only
-represent linear sequences. Behavior-level compilation still uses a
-single-pass parse-and-emit approach (Phase 2 of the AST plan will
-unify both paths).
+**Compiler architecture**: Both function bodies and behavior bodies
+use a two-phase AST approach. Parsing produces `[]Stmt` with `Expr`
+nodes (defined in `ast.go`), then a separate emitter walks the AST
+and emits frames via `frameBuilder`. For fn bodies, `emitFnBody` runs
+during `expandCall` inlining. For behavior bodies, `emitBehaviorStmts`
+(in `bhvast.go`) runs after `parseBehaviorBody` collects all statements.
+Behavior-level expression/statement parsers (`parseBhv*` functions in
+`bhvast.go`) return AST nodes; `emitBhv*` functions emit frames from
+them. This decoupling replaced the old single-pass parse-and-emit
+approach (Phase 1 replaced `fnBodyCall` IR; Phase 2 decoupled behavior
+compilation).
 
 ## Stdlib function signatures
 
@@ -134,13 +136,12 @@ frames via `expandCall` with `frameBuilder`. In fn bodies, the AST
 using `@ctor`-prefixed temp variable names allocated via
 `allocUniqueVar`.
 
-**`parseConstructorForTarget` optimization**: For `let`/`var`
-declarations, the compiler avoids an extra `set_reg` copy by passing the
-declared variable name directly as the output target for runtime
-constructor instructions. The general-purpose `parseArgValue` path
-(used in function call arguments and assignments) allocates a temporary
-variable instead, which is simpler but produces one extra frame for
-runtime cases.
+**Constructor target optimization**: For `let`/`var` declarations, the
+compiler avoids an extra `set_reg` copy by passing the declared variable
+name directly as the output target for runtime constructor instructions.
+The general-purpose argument parsing path (used in function call
+arguments and assignments) allocates a temporary variable instead, which
+is simpler but produces one extra frame for runtime cases.
 
 ## Instruction metadata limitations
 
@@ -234,8 +235,8 @@ emitter not yet implemented); comparison in function call arguments
 compiles to a 3-frame `value_type` + `set_reg` + `set_reg` pattern,
 following the same boolean expression convention as comparison operators.
 
-**Syntax**: `let a = b is Unit`. The LHS is a variable or parameter
-(resolved via `resolveComparisonOperand`). The RHS is one of the six
+**Syntax**: `let a = b is Unit`. The LHS is a variable or parameter.
+The RHS is one of the six
 type constructor keywords: `Item`, `Unit`, `Component`, `Technology`,
 `Value`, `Coordinate`.
 
@@ -336,7 +337,7 @@ Frame N+1: set_reg 1 → target (falls through)
 ```
 
 **Single comparison fallback**: When no `&&`/`||` follows the first
-comparison, `parseAndEmitBooleanExpr` delegates to `emitComparison`
+comparison, `emitBhvBoolExprTo` delegates to `emitComparison`
 for the existing 3-frame pattern. This keeps single comparisons
 unchanged.
 
@@ -371,10 +372,11 @@ locked or `unlock` when already unlocked is simply not emitted. After
 control flow (`if`/`while`/`loop`), mode resets to `modeUnknown`
 (conservative), so subsequent lock/unlock is always emitted.
 
-**Uniform handling**: `lock`/`unlock` work in behavior bodies,
-`compileBody` (if/else bodies), `compileLoop` bodies, and fn bodies.
-In fn bodies, they are represented as `LockStmt` AST nodes. During
-`emitFnBody`, they emit lock/unlock frames via `resolveInstructionFrame`.
+**Uniform handling**: `lock`/`unlock` work in behavior bodies
+(including if/else, while, and loop bodies) and fn bodies. They are
+represented as `LockStmt` AST nodes. At behavior level,
+`emitBehaviorStmts` handles them with mode tracking. In fn bodies,
+`emitFnBody` emits lock/unlock frames via `resolveInstructionFrame`.
 
 ## Control flow stubs
 
@@ -431,8 +433,7 @@ instruction frame — no branching like comparison expressions.
 
 **Syntax**: `let a = b + c`, `x = a - 3`, `let r = 5 + offset`.
 The LHS is a variable, register, or number literal. The RHS is a number
-literal or variable (resolved via `resolveComparisonOperand` for
-readability checking and `$` resolution).
+literal or variable.
 
 **Single-instruction mapping**: Each operator maps directly to one stdlib
 opcode. `+` → `add`, `-` → `sub`, `*` → `mul`, `/` → `div`. The
@@ -470,8 +471,7 @@ four compound operators now accept both number literals and variables
 as the RHS operand (via `parseArithmeticRHS`).
 
 **Unified handler**: `isCompoundAssignOp` and `compoundAssignOpName`
-map all four compound tokens to their opcode. The handler in
-`compileDefaultStatement` uses `parseArithmeticRHS` for the RHS.
+map all four compound tokens to their opcode.
 
 ## Increment/decrement (++, --)
 
@@ -482,44 +482,23 @@ target).
 
 ## Parenthesized boolean expressions
 
-**Recursive tree model over flat chain**: The flat `[]comparisonTerm`
-chain model was replaced with a recursive `boolExpr` tree. Each node
-is either a leaf (single comparison/type-check) or a group (children
-connected by `&&` or `||`). Parentheses create nested groups, enabling
-mixed `&&`/`||` at different levels.
+**Recursive tree model**: Boolean expressions are parsed into AST nodes
+(`CompareExpr`, `TypeCheckExpr`, `TruthyExpr`, `BoolChainExpr`) that
+form a recursive tree. `BoolChainExpr` has an `Op` (`&&` or `||`) and
+`Children` list. Parentheses create nested `BoolChainExpr` nodes,
+enabling mixed `&&`/`||` at different levels.
 
-**`boolExpr` struct**: `term *comparisonTerm` (leaf) or
-`chainOp`+`children []*boolExpr` (group). `isLeaf()` and
-`frameCount()` methods support both emission paths.
+**Two-phase approach**: Parsing (`parseBhvBoolExpr` in `bhvast.go`)
+produces AST nodes. Before emission, `resolveBhvBoolTree` resolves
+operands into a `resolvedBoolExpr` tree (with `comparisonTerm` leaves).
+Emission uses `emitBoolCheckFrame` (single term), which always sets
+`"next"` on check frames.
 
-**Recursive parser**: Three functions handle parsing:
-- `parseBoolTerm(syms)`: Parses `(expr)` (recursive) or `ident op rhs`.
-- `parseBoolExprFull(syms)`: Entry point — calls `parseBoolTerm` then
-  `parseBoolExprChain`.
-- `parseBoolExprChain(first, syms)`: Collects same-operator terms;
-  errors on mixed `&&`/`||` at the same level.
-
-**Recursive emitter**: Three functions handle emission:
-- `emitBoolCheckFrame(term, true, false, b, comment)`: Emits one
-  check frame with explicit true/false targets. Always sets `"next"`.
-- `emitBoolExprFrames(expr, true, false, b, comment)`: Recursive.
-  For `&&`: child true → next child (or parent true for last), child
-  false → parent false. For `||`: child true → parent true, child
-  false → next child (or parent false for last).
-- `emitBoolExprTree(expr, target, b, comment)`: Top-level wrapper that
-  allocates false/true `set_reg` frames.
-
-**Always-set `"next"` on check frames**: The new emitter always sets
-`"next"` on every check frame (via `emitBoolCheckFrame`). The old
-emitter omitted `"next"` as a fall-through optimization for `>` and
-`<` in certain positions. This simplification makes the emitter uniform
-and the frame structure more predictable.
-
-**Single-leaf backward compatibility**: When `parseAndEmitBooleanExpr`
+**Single-leaf backward compatibility**: When `emitBhvBoolExprTo`
 detects a single leaf (no `&&`/`||`), it delegates to the existing
-`emitComparison`/`emitTypeCheck` functions. This preserves the exact
-frame output for single comparisons. `tokLParen` paths in
-`compileVarInit` and `compileDefaultStatement` also check `isLeaf()`.
+`emitComparison`/`emitTypeCheck`/`emitTruthyCheck` functions. This
+preserves the exact frame output for single comparisons (which omit
+`"next"` as a fall-through optimization for `>`, `<`, and `!=`).
 
 **Same-level operator enforcement**: Mixing `&&` and `||` at the same
 parenthesization level is a compile error with a message suggesting
@@ -540,20 +519,13 @@ call arguments.
 calls > boolean operators. This means `my_fn b + 1, c || d` parses as
 `(my_fn(b+1, c)) || d`.
 
-**PEMDAS arithmetic**: Chained arithmetic like `a + b * c` emits
-intermediate frames using `@arith`-prefixed temp variables. `mul b, c →
-@arith1`, then `add a, @arith1 → target`. The last operation writes
-directly to the caller's target variable (via `rewriteLastArithTarget`)
-to avoid an extra copy. The `arithCounter` struct manages unique
-temporary names.
-
-**Five arithmetic parser functions**: `parseArithPrimary` (atom),
-`parseArithTerm` (* /), `parseArithExpr` (+ -), plus "From" variants
-(`parseArithTermFrom`, `parseArithExprFrom`) that accept an
-already-parsed first value. The "From" variants exist because callers
-like `parseArgValue` may have already scanned the first token.
-`parseArithExprFromFull` wraps `parseArithExprFrom` with proper
-initialization.
+**PEMDAS arithmetic**: Chained arithmetic like `a + b * c` is parsed
+into nested `ArithExpr` AST nodes respecting operator precedence
+(`*`/`/` before `+`/`-`). During emission, `emitBhvArithTo` uses a
+per-tree `arithCounter` to allocate `@arith`-prefixed temp variables
+for intermediate results. `mul b, c → @arith1`, then
+`add a, @arith1 → target`. The outermost operation writes directly to
+the caller's target variable to avoid an extra copy.
 
 **Truthy checks via `compare_register`**: Plain values in `&&`/`||`
 chains (not comparisons) are tested for truthiness using
@@ -567,25 +539,14 @@ handles `tokTruthy` within chained expressions.
 (function call is first, always executes, result goes to target, then
 boolean check). `d || my_fn x` is deferred — it would require
 interleaved frame emission for proper short-circuit semantics. After
-a function call result, `maybeExprContinuation` peeks for comparison,
+a function call result, `maybeBhvExprContinuation` peeks for comparison,
 `is`, or `&&`/`||` to compose the result into a larger expression.
 
-**Arithmetic in function arguments**: `parseArgValue` checks for
-arithmetic operators after parsing a number or variable argument. If
-found, `parseArithExprFromFull` handles the full PEMDAS expression.
-The arithmetic parser naturally stops at non-arithmetic tokens (commas,
+**Arithmetic in function arguments**: `parseBhvArgExpr` checks for
+arithmetic operators after parsing a number or variable argument. The
+arithmetic parser produces `ArithExpr` AST nodes respecting PEMDAS
+precedence. The parser naturally stops at non-arithmetic tokens (commas,
 `&&`, `||`, `)`, etc.), so argument boundaries are respected.
-
-**Arithmetic frames emitted eagerly**: Arithmetic in boolean terms
-(`a > 1 && b + 2 > 3`) emits the arithmetic frames during parsing,
-before the check frames. The boolean emitter receives resolved values
-(temp variable names). This is correct (arithmetic has no side effects)
-but not optimally short-circuit.
-
-**`framesBefore` pattern**: To detect whether arithmetic was emitted
-without comparing result values (which would panic for map types), the
-compiler records `b.pos()` before parsing and checks
-`b.pos() > framesBefore` after. This avoids uncomparable-type panics.
 
 **Supported contexts**: `let`/`var` init and assignment RHS at behavior
 level. Compound assignment RHS. Function call arguments.

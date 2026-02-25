@@ -62,34 +62,43 @@ output format.
   call expansion with `[]any`/`map[string]any` argument types,
   fn body instruction direction enforcement
   (`checkFnBodyInstructionDirections`)
-- **`compiler/codegen.go`** — Behavior body compilation: param/let/var declarations,
-  symbol table tracking, rich argument parsing, assignment target resolution
-  (with direction checks in `resolveAssignTarget`), direction enforcement
-  (`argDirection`, `checkReadable`, `checkCallDirections`,
-  `checkInstructionDirections`, `checkCallAnnotation`),
-  `resolveInstructionFrame` helper for 0→1 key conversion and slot substitution,
-  `frameHasReturnSlot`/`frameReturnCount` helpers, `instruction` as expression
-  in let/var/assign/multi-return, PEMDAS arithmetic parser
-  (`arithCounter`, `parseArithPrimary`, `parseArithTerm`,
-  `parseArithTermFrom`, `parseArithExpr`, `parseArithExprFrom`,
-  `parseArithExprFromFull`, `isHighPriorityArithOp`,
-  `isLowPriorityArithOp`, `rewriteLastArithTarget`),
-  arithmetic helpers (`isArithmeticOp`, `arithmeticOpName`),
-  compound assignment helpers (`isCompoundAssignOp`, `compoundAssignOpName`),
-  comparison expression helpers
-  (`emitComparison`, `resolveComparisonOperand`, `parseComparisonRHS`,
-  `parseComparisonRHSArith`, `isComparisonOp`, `isEqualityOp`),
-  type check helpers (`isTypeCheckOp`, `parseIsRHS`, `emitTypeCheck`),
-  truthy check helpers (`emitTruthyCheck`),
-  logical operator helpers (`parseAndEmitBooleanExpr`,
-  `comparisonTerm`, `boolExpr`, `parseBoolTerm`, `parseBoolExprFull`,
-  `parseBoolExprChain`, `emitBoolCheckFrame`, `emitBoolExprFrames`,
-  `emitBoolExprTree`),
-  expression continuation helper (`maybeExprContinuation`),
-  lock/unlock keyword handling with compile-time mode tracking
-  (in `parseBehaviorBody`, `compileBody`, `compileLoop`),
-  loops, if/else, deferred body emission,
-  `matchLocale` shared BCP 47 matching helper
+- **`compiler/bhvast.go`** — Behavior-level AST parsers and emitters
+  (Phase 2 of AST unification). Expression parsers return `Expr` AST
+  nodes: `parseBhvArithExpr` (PEMDAS arithmetic → `ArithExpr`),
+  `parseBhvBoolExpr` (boolean chains → `BoolChainExpr`/`CompareExpr`/
+  `TypeCheckExpr`/`TruthyExpr`), `parseBhvArgExpr` (function arguments
+  → `Expr`), `parseBhvConstructorExpr`/`parseBhvAmpersandExpr`
+  (constructors → `ConstructorExpr`/`AmpersandExpr`). Statement parsers
+  return `Stmt` nodes: `parseBhvVarInit` → `LetStmt`/`AssignStmt`,
+  `parseBhvDefaultStmt` → `CallStmt`/`AssignStmt`/`CompoundAssignStmt`/
+  `IncrDecrStmt`, `parseBhvIfStmt` → `IfStmt`, `parseBhvWhileStmt` →
+  `WhileStmt`, `parseBhvLoopStmt` → `LoopStmt`, `parseBhvMultiReturn`
+  → `MultiReturnStmt`. Emitter functions: `emitBehaviorStmts` (top-level
+  behavior emitter with deferred body management, break target patching,
+  and mode tracking), `emitBhvStmtSimple` (non-control-flow statements),
+  `emitBhvExprTo`/`emitBhvExprGetValue` (expression emission),
+  `emitBhvArithTo`/`emitBhvArithNode` (arithmetic with per-tree
+  `arithCounter`), `emitBhvBoolExprTo` (boolean expression emission with
+  single-leaf delegation to `emitComparison`/`emitTypeCheck`/
+  `emitTruthyCheck`), `emitBhvCallStmt` (function call emission),
+  `emitBhvIfStmt`/`emitBhvWhileStmt`/`emitBhvLoopStmt` (control flow
+  emission). Internal types: `resolvedBoolExpr` (pre-resolved boolean
+  tree for emission)
+- **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
+  `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +
+  statements into `[]Stmt` via `parseBhv*` functions, then emit via
+  `emitBehaviorStmts`), `resolveInstructionFrame` (0→1 key conversion
+  and slot substitution), `frameHasReturnSlot`/`frameReturnCount`,
+  direction enforcement (`argDirection`, `checkReadable`,
+  `checkCallDirections`, `checkInstructionDirections`,
+  `checkCallAnnotation`), `resolveAssignTarget`, single-expression
+  emitters (`emitComparison`, `emitTypeCheck`, `emitTruthyCheck`,
+  `emitBoolCheckFrame`, `comparisonTerm` type), arithmetic/comparison
+  op helpers (`isArithmeticOp`, `arithmeticOpName`, `isComparisonOp`,
+  `isEqualityOp`, `isCompoundAssignOp`, `compoundAssignOpName`,
+  `isHighPriorityArithOp`, `isLowPriorityArithOp`), type check helpers
+  (`isTypeCheckOp`, `parseIsRHS`), `parseParamAttr`, `checkVarName`,
+  `parseName`, `parseLocalize`, `matchLocale` shared BCP 47 helper
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled
   output)
 
@@ -97,11 +106,13 @@ The compiler is structured as a standalone `scanner` struct embedded in a
 recursive-descent `parser`. The scanner tokenizes the source into identifiers
 (including `$`-prefixed unit register names), string literals, numbers,
 braces, parentheses, colons, commas, `@`, and comparison/assignment
-operators, skipping whitespace and `#` line comments. Function bodies are
-parsed into an AST (`[]Stmt` with `Expr` nodes defined in `ast.go`) and
-emitted during inlining via `emitFnBody`. Behavior-level compilation still
-uses single-pass parse-and-emit via `frameBuilder` (AST unification is
-planned for Phase 2). Errors include line:column positions. Wire format details
+operators, skipping whitespace and `#` line comments. Both function bodies
+and behavior bodies use a two-phase AST approach: parse into `[]Stmt` with
+`Expr` nodes (defined in `ast.go`), then emit frames. For fn bodies,
+`emitFnBody` runs during `expandCall` inlining. For behavior bodies,
+`parseBehaviorBody` collects statements into `[]Stmt` using `parseBhv*`
+parsers (in `bhvast.go`), then `emitBehaviorStmts` walks the AST to emit
+frames. Errors include line:column positions. Wire format details
 (like Lua's 1-based indexing) are encapsulated at the `frameBuilder`
 boundary — compilation logic uses 0-based indices internally, and `frameRef`
 values are converted to 1-based wire format integers by `finalize`. The
@@ -188,7 +199,7 @@ them).
 `inout` arguments to match the callee's parameter direction. For example,
 `fn writer(out target)` must be called as `writer out z`. Explicit `in`
 is accepted but not required. Mismatched or missing annotations are compile
-errors. Both `parseFnCallArgs` (behavior level) and `parseFnBodyCallArgs`
+errors. Both `parseBhvCallArgs` (behavior level) and `parseFnBodyCallArgs`
 (fn body) peek for a direction keyword before each positional argument
 and before each keyword name. The shared `checkCallAnnotation` helper
 validates the annotation against the parameter's `effectiveDirection()`.
@@ -298,11 +309,12 @@ lists support mixed modifiers:
 - `_` as a standalone variable name (`var _ = 5`, `let _ = 5`) is a
   compile error.
 
-The `compileMultiReturn` helper in codegen.go handles behavior-level
-binding list parsing. It builds a `retVals []any` slice (name strings for
-new bindings, resolved targets for existing-var assignments, `false` for
-`_`) and passes it to `expandCall`. The `retVals []any` parameter on
-`expandCall` carries return targets through the call chain.
+The `parseBhvMultiReturn` helper in bhvast.go handles behavior-level
+binding list parsing, producing `MultiReturnStmt` AST nodes. During
+emission, `emitBhvStmtSimple` builds a `retVals []any` slice (name
+strings for new bindings, resolved targets for existing-var assignments,
+`false` for `_`) and passes it to `expandCall`. The `retVals []any`
+parameter on `expandCall` carries return targets through the call chain.
 
 **fn body multi-return**: In function bodies, `let` supports multi-return
 binding with `_` discards: `let x, y = separate_coordinate coord` and
@@ -313,11 +325,12 @@ are `let` locals. Each binding becomes a `MultiBinding` in
 and passes the result slice as `retVals` to the recursive `expandCall`.
 No `var` in fn bodies — mutability is a behavior-level concept.
 
-The `parseFnCallArgs` helper (codegen.go) extracts positional + keyword arg
-parsing into a reusable method shared by bare function calls, `let`/`var`
-declarations, and assignment-from-function-call. Similarly,
-`parseFnBodyCallArgs` (parse.go) extracts fn body call argument parsing
-into AST `Expr` nodes, shared by regular calls and `let` in fn bodies.
+The `parseBhvCallArgs` helper (bhvast.go) extracts behavior-level
+positional + keyword arg parsing into a reusable method shared by bare
+function calls, `let`/`var` declarations, and assignment-from-function-call.
+Similarly, `parseFnBodyCallArgs` (parse.go) extracts fn body call argument
+parsing into AST `Expr` nodes, shared by regular calls and `let` in fn
+bodies.
 
 **Inline variable renaming**: When a user-defined function is inlined via
 `expandCall`, its internal variables (those not mapped through `paramMap`
@@ -370,10 +383,11 @@ single string argument. `Component` prefixes `c_`, `Technology` prefixes
 literals (compile-time) or variables (emits `combine_coordinate` at
 runtime). Constructor names are reserved keywords via `isConstructor()`.
 The `&` operator follows a constructor or value and merges a `"num"` field
-(compile-time) or emits `set_number` (runtime). For `let`/`var`
-declarations, `parseConstructorForTarget` avoids extra `set_reg` copies by
-directly targeting the declared variable name. In `compileDefaultStatement`
-assignments, the simpler `parseArgValue` path is used.
+(compile-time) or emits `set_number` (runtime). At behavior level,
+constructors and `&` are parsed into `ConstructorExpr`/`AmpersandExpr` AST
+nodes by `parseBhvConstructorExpr`/`parseBhvAmpersandExpr`. During emission,
+`emitBhvExprTo` resolves compile-time literals directly and emits runtime
+instructions targeting the declared variable name.
 
 In function bodies, arguments are parsed into `Expr` AST nodes.
 `LiteralExpr` holds compile-time values (numbers, `null`, `$register`
@@ -410,17 +424,14 @@ the natural `set_reg x, $store` style with mixed types.
 in `let`/`var` init, assignment RHS, compound assignment RHS, function call
 arguments, and comparison operands at behavior level. Each maps to a
 single instruction: `+` → `add`, `-` → `sub`, `*` → `mul`, `/` → `div`.
-Chained arithmetic follows PEMDAS precedence (`*`/`/` before `+`/`-`)
-using a recursive descent parser: `parseArithPrimary` (atoms),
-`parseArithTerm` (`*`/`/`), `parseArithExpr` (`+`/`-`). "From" variants
-(`parseArithTermFrom`, `parseArithExprFrom`, `parseArithExprFromFull`)
-accept an already-parsed first value. Intermediate results use `@arith`
-temp variables managed by `arithCounter`. The last operation in a chain
-writes directly to the caller's target via `rewriteLastArithTarget`.
-Parenthesized arithmetic `(b + c) * d` is supported via `parseArithPrimary`
-handling `tokLParen`. Compound assignment (`+=`, `-=`, `*=`, `/=`) and
-decrement (`--`) are also supported, with compound assignment RHS parsed
-via `parseArithExpr`.
+Chained arithmetic follows PEMDAS precedence (`*`/`/` before `+`/`-`).
+At behavior level, `parseBhvArithExpr` (in `bhvast.go`) produces nested
+`ArithExpr` AST nodes. During emission, `emitBhvArithTo` uses a per-tree
+`arithCounter` to allocate `@arith`-prefixed temp variables for
+intermediate results. The outermost operation writes directly to the
+caller's target. Parenthesized arithmetic `(b + c) * d` is supported.
+Compound assignment (`+=`, `-=`, `*=`, `/=`) and decrement (`--`) are
+also supported.
 
 **Comparison expressions**: `>`, `<`, `>=`, `<=`, `==`, and `!=` work as
 boolean expression operators in `let`/`var` init and assignment RHS at
@@ -434,21 +445,14 @@ for frame layouts). `compare_register` is a 2-way branch
 (Different / Equal) that compares full register composites, not just
 numeric components. The `isEqualityOp` helper distinguishes equality ops
 from numeric ops. Number literal LHS is supported (`5 > b`). Both LHS
-and RHS can include arithmetic expressions (parsed via the PEMDAS
-arithmetic parser). `parseComparisonRHSArith` handles arithmetic in
-comparison RHS within boolean contexts. Parsing is integrated into
-`compileVarInit` and `compileDefaultStatement`: when the RHS ident is
-not a known function, the parser peeks for arithmetic operators and then
-comparison operators. The helpers `emitComparison`,
-`resolveComparisonOperand`, and `parseComparisonRHS` handle the emission
-and operand validation. `parseComparisonRHS` accepts number literals,
-identifiers, and `null`. Comparison expressions inside `compileBody`
-(if/while bodies) use `frameRef` values, which are rebased via
-`rebaseFrameRefs` when the body frames are transplanted into the parent
-`frameBuilder`. The `&&` and `||` operators chain multiple
-comparisons, type checks, and truthy values into a single boolean
-expression: `let r = a > 2 && b < 10`, `let r = x && y`,
-`let r = get_number x || d`.
+and RHS can include arithmetic expressions. At behavior level,
+`parseBhvBoolPrimary` parses comparison operands and produces
+`CompareExpr` AST nodes. During emission, `emitBhvBoolExprTo` resolves
+operands and delegates to `emitComparison` (for single comparisons) or
+the recursive `emitResolvedBoolFrames` (for chains).
+The `&&` and `||` operators chain multiple comparisons, type checks, and
+truthy values into a single boolean expression: `let r = a > 2 && b < 10`,
+`let r = x && y`, `let r = get_number x || d`.
 The `is` operator checks whether a value is a specific data type:
 `let a = x is Unit`. It compiles to a 3-frame `value_type` + `set_reg`
 pattern (same structure as comparisons). The `isTypeCheckOp` helper
@@ -458,33 +462,22 @@ scans as `tokIdent` with val `"is"` — `tokIs` is only used internally
 in `comparisonTerm.op`. `tokTruthy` is an internal-only token kind
 used in `comparisonTerm.op` to identify truthy check terms (bare
 variables or numbers tested for non-emptiness via `compare_register`).
-After parsing the first comparison, type check, or truthy term,
-`parseAndEmitBooleanExpr` wraps it in a `boolExpr` leaf and calls
-`parseBoolExprChain`; if no `&&`/`||` follows, it delegates to
-`emitComparison`, `emitTypeCheck`, or `emitTruthyCheck`; otherwise,
-`emitBoolExprTree` emits the recursive frame pattern. Different
-expression types (numeric comparisons, equality comparisons, type
-checks, and truthy checks) can be freely mixed in the same `&&`/`||`
-chain — each term emits its own independent check frame.
+Different expression types (numeric comparisons, equality comparisons,
+type checks, and truthy checks) can be freely mixed in the same
+`&&`/`||` chain — each term emits its own independent check frame.
 Parenthesized sub-expressions allow mixing `&&` and `||` at different
-nesting levels: `(a > 1 || b < 2) && c > 3`. The recursive `boolExpr`
-tree model supports arbitrary nesting depth. Mixing `&&` and `||` at
-the same parenthesization level is a compile error. `compileVarInit`
-and `compileDefaultStatement` handle `tokLParen` as a boolean
-expression entry point via `parseBoolExprFull`. `parseBoolTerm`,
-`parseBoolExprFull`, and `parseBoolExprChain` accept `(syms, b,
-comment)` parameters to support arithmetic frame emission during
-boolean parsing. Function call results can compose with boolean
-operators: `let a = my_fn x || d` (function call as first boolean
-term); `maybeExprContinuation` handles peeking for comparison/is/&&/||
+nesting levels: `(a > 1 || b < 2) && c > 3`. The recursive
+`BoolChainExpr` AST node supports arbitrary nesting depth. Mixing `&&`
+and `||` at the same parenthesization level is a compile error.
+Function call results can compose with boolean operators:
+`let a = my_fn x || d` (function call as first boolean term);
+`maybeBhvExprContinuation` handles peeking for comparison/is/&&/||
 after a computed value.
 
 **`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
-values shifted by an offset. Non-destructive (creates copies) to handle the
-shared-frames case in `compileElseClauses` where `== else` shares
-`elseFrames` between two deferred body entries. Called at all four body
-transplant sites: `compileWhile`, `compileIfStmt` `>=` inline,
-`compileIfStmt` `==` inline, and `parseBehaviorBody` deferred body loop.
+values shifted by an offset. Non-destructive (creates copies). Called at
+body transplant sites in `emitBhvIfStmt`, `emitBhvWhileStmt`, and the
+deferred body loop in `emitBehaviorStmts`.
 
 ## Test Case Format
 

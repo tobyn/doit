@@ -36,9 +36,10 @@ type LetStmt struct {
 
 // AssignStmt is an assignment to an existing target: `x = get_self`
 type AssignStmt struct {
-	Target  string // variable name or $register
-	Value   Expr
-	Comment string
+	Target   string // variable name or $register
+	Value    Expr
+	Comment  string
+	Internal bool // true for compiler-generated assigns (skip mutability check)
 }
 
 // CompoundAssignStmt is a compound assignment: `x += 3`
