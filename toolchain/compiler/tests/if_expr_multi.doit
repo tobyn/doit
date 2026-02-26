@@ -1,0 +1,17 @@
+# AI-generated test
+# If expression with multi-return tail (function call)
+fn separate_coordinate(coordinate) {
+    return instruction "separate_coordinate" {
+        0: coordinate
+        1: @1
+        2: @2
+    }
+}
+
+behavior if_expr_multi {
+    @name "If Expr Multi"
+    @param in a "A"
+    @param in coord "Coord"
+    let x, y = if $a > 0 { separate_coordinate $coord } else { separate_coordinate $a }
+    notify "done", value: x
+}

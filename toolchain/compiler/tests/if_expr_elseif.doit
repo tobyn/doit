@@ -1,0 +1,8 @@
+# AI-generated test
+# If expression with else-if chain
+behavior if_expr_elseif {
+    @name "If Expr Elseif"
+    @param in a "A"
+    let x = if $a > 10 { 5 } else if $a == 0 { 0 } else { 3 }
+    notify "done", value: x
+}

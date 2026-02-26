@@ -16,10 +16,10 @@ output format.
   `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
   `InstructionStmt`, `ModeBlockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
   `LoopStmt`, `BreakStmt`, `exprTailStmt`) and `Expr` interface
-  (13 concrete types: `LiteralExpr`, `IdentExpr`, `CallExpr`,
+  (14 concrete types: `LiteralExpr`, `IdentExpr`, `CallExpr`,
   `InstructionExpr`, `ArithExpr`, `CompareExpr`, `TypeCheckExpr`,
   `TruthyExpr`, `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`,
-  `ExprListExpr`, `ModeBlockExpr`)
+  `ExprListExpr`, `ModeBlockExpr`, `IfExpr`)
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
   (`fnDef`, `symbolTable`, `unitRegisters`),
   `paramDef` (with `direction` field, `effectiveDirection()`)
@@ -65,7 +65,8 @@ output format.
   (with `exprTail` parameter for mode block expression tail detection;
   uses `p.loopDepth > 0` for break validation; detects
   `ident: loop`/`ident: while` label syntax in default case),
-  `parseFnBodyModeBlockExpr`, `parseFnBodyReturnItem`,
+  `parseFnBodyModeBlockExpr`, `parseFnBodyIfExprBranch`/
+  `parseFnBodyIfExpr`, `parseFnBodyReturnItem`,
   `parseFnBodyLetVar`, `parseFnBodyRHSExpr`, `parseFnBodyIfStmt`,
   `parseFnBodyElseIfChain`, `parseFnBodyWhileStmt`
   (variadic `label ...string`),
@@ -77,11 +78,15 @@ output format.
   `tryPromoteInstruction`),
   fn body AST emission (`emitFnBody`, `emitExprGetValue`, `emitExprTo`,
   `emitFnArithTo`, `emitFnArithNode`, `emitFnBoolExprTo`,
-  `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnWhileStmt`, `emitFnLoopStmt`,
+  `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnIfExpr`/
+  `emitFnIfExprMulti`/`emitFnIfExprTailMulti`,
+  `emitFnWhileStmt`, `emitFnLoopStmt`,
   `emitFnCountedLoop`,
   `emitFnModeBlockExpr`, `emitFnModeBlockExprMulti`,
   `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
-  `collectASTOutputVars`, `resolveVarName`, `tryResolveConstructorLiteral`,
+  `collectASTOutputVars`, `collectExprOutputVars`,
+  `ifExprArityStatic`/`exprArityStatic`,
+  `resolveVarName`, `tryResolveConstructorLiteral`,
   `tryResolveAmpersandLiteral`),
   call expansion with `[]any`/`map[string]any` argument types,
   fn body instruction direction enforcement
@@ -108,7 +113,9 @@ output format.
   control flow/break; uses `p.loopDepth > 0` for break validation;
   detects `ident: loop`/`ident: while` label syntax in default case;
   accepts variadic `exprTail` for mode block expression
-  tail detection), `parseBhvModeBlockExpr`, `modeBlockExprArity`.
+  tail detection), `parseBhvModeBlockExpr`, `exprArity`/`ifExprArity`
+  (generalized arity helper for `CallExpr`/`IfExpr`/`ModeBlockExpr`),
+  `parseBhvIfExprBranch`/`parseBhvIfExpr` → `IfExpr`.
   Emitter functions: `emitBehaviorStmts` (top-level
   behavior emitter returning `(int, error)` where int is mainFrameCount,
   with deferred body management, `@break`/`BreakStmt` handling,
@@ -122,6 +129,8 @@ output format.
   `emitBhvModeBlock` (mode block statement emission with on-the-fly
   transitions), `emitBhvModeBlockExpr`/`emitBhvModeBlockExprMulti`
   (mode block expression emission),
+  `emitBhvIfExpr`/`emitBhvIfExprMulti`/`emitBhvIfExprTailMulti`
+  (if-expression emission),
   `emitBhvIfStmt`/`emitBhvIfBreak`/`emitBhvWhileStmt`/
   `emitBhvLoopStmt`/`emitBhvCountedLoop` (control flow emission).
   Internal types: `resolvedBoolExpr` (pre-resolved boolean

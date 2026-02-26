@@ -1,0 +1,14 @@
+# AI-generated test
+# If expression inside fn body
+fn pick(a, threshold) {
+    let x = if a > threshold { a } else { threshold }
+    return x
+}
+
+behavior fn_body_if_expr {
+    @name "Fn Body If Expr"
+    @param in a "A"
+    @param in t "Threshold"
+    let r = pick $a, $t
+    notify "done", value: r
+}

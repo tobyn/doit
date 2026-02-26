@@ -314,10 +314,12 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 			if _, mapped := paramMap[s.Name]; !mapped {
 				paramMap[s.Name] = allocUniqueVar(s.Name, usedVars)
 			}
+			collectExprOutputVars(s.Value, paramMap, usedVars)
 		case *AssignStmt:
 			if _, mapped := paramMap[s.Target]; !mapped {
 				paramMap[s.Target] = allocUniqueVar(s.Target, usedVars)
 			}
+			collectExprOutputVars(s.Value, paramMap, usedVars)
 		case *CompoundAssignStmt:
 			if _, mapped := paramMap[s.Target]; !mapped {
 				paramMap[s.Target] = allocUniqueVar(s.Target, usedVars)
@@ -334,6 +336,7 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 					}
 				}
 			}
+			collectExprOutputVars(s.Value, paramMap, usedVars)
 		case *IfStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 			for _, elif := range s.ElseIfs {
@@ -346,6 +349,29 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 		case *ModeBlockStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
+		}
+	}
+}
+
+// collectExprOutputVars recursively scans an expression for nested statement
+// bodies (IfExpr, ModeBlockExpr) that may declare output variables.
+func collectExprOutputVars(expr Expr, paramMap map[string]any, usedVars map[string]bool) {
+	switch e := expr.(type) {
+	case *IfExpr:
+		collectASTOutputVars(e.Body, paramMap, usedVars)
+		collectExprOutputVars(e.Tail, paramMap, usedVars)
+		for _, elif := range e.ElseIfs {
+			collectASTOutputVars(elif.Body, paramMap, usedVars)
+			collectExprOutputVars(elif.Tail, paramMap, usedVars)
+		}
+		collectASTOutputVars(e.ElsBody, paramMap, usedVars)
+		collectExprOutputVars(e.ElsTail, paramMap, usedVars)
+	case *ModeBlockExpr:
+		collectASTOutputVars(e.Body, paramMap, usedVars)
+		collectExprOutputVars(e.Tail, paramMap, usedVars)
+	case *ExprListExpr:
+		for _, item := range e.Exprs {
+			collectExprOutputVars(item, paramMap, usedVars)
 		}
 	}
 }
@@ -536,6 +562,8 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 		return p.emitFnBoolExprTo(expr, target, b, paramMap, usedVars, comment, pos)
 	case *ModeBlockExpr:
 		return p.emitFnModeBlockExpr(e, target, b, paramMap, usedVars, comment, pos)
+	case *IfExpr:
+		return p.emitFnIfExpr(e, target, b, paramMap, usedVars, comment, pos)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitExprTo", expr)
 }
@@ -845,6 +873,10 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 				if err := p.emitFnModeBlockExprMulti(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
 					return err
 				}
+			case *IfExpr:
+				if err := p.emitFnIfExprMulti(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
+					return err
+				}
 			case *InstructionExpr:
 				resolved := resolveInstructionFrame(v.Frame, retVals, paramMap, nil, callComment)
 				b.emit(resolved)
@@ -870,7 +902,7 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 						}
 						bindIdx += callArity
 					case *ModeBlockExpr:
-						arity := p.modeBlockExprArity(e.Tail)
+						arity := p.exprArity(e.Tail)
 						remaining := len(s.Bindings) - bindIdx
 						mbeArity := arity
 						if mbeArity > remaining {
@@ -889,6 +921,26 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 							}
 						}
 						bindIdx += mbeArity
+					case *IfExpr:
+						arity := p.ifExprArity(e)
+						remaining := len(s.Bindings) - bindIdx
+						ifArity := arity
+						if ifArity > remaining {
+							ifArity = remaining
+						}
+						if ifArity == 1 {
+							if !s.Bindings[bindIdx].Discard {
+								if err := p.emitFnIfExpr(e, retVals[bindIdx], b, paramMap, usedVars, callComment, pos); err != nil {
+									return err
+								}
+							}
+						} else {
+							ifRetVals := retVals[bindIdx : bindIdx+ifArity]
+							if err := p.emitFnIfExprMulti(e, ifRetVals, b, paramMap, usedVars, callComment, pos); err != nil {
+								return err
+							}
+						}
+						bindIdx += ifArity
 					default:
 						if !s.Bindings[bindIdx].Discard {
 							if err := p.emitExprTo(expr, retVals[bindIdx], b, paramMap, usedVars, callComment, pos); err != nil {
@@ -1127,6 +1179,190 @@ func (p *parser) emitFnIfStmt(s *IfStmt, b *frameBuilder, paramMap map[string]an
 		b.get(idx)["next"] = afterAll
 	}
 
+	return nil
+}
+
+// emitFnIfExpr emits an if-expression in a fn body, writing the result to target.
+func (p *parser) emitFnIfExpr(e *IfExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	type branch struct {
+		cond Expr
+		body []Stmt
+		tail Expr
+	}
+	branches := []branch{{cond: e.Cond, body: e.Body, tail: e.Tail}}
+	for _, elif := range e.ElseIfs {
+		branches = append(branches, branch{cond: elif.Cond, body: elif.Body, tail: elif.Tail})
+	}
+
+	var jumpsToPatch []int
+
+	for i, br := range branches {
+		brComment := ""
+		if i == 0 {
+			brComment = comment
+		}
+
+		resolved, err := p.resolveFnBoolTree(br.cond, b, paramMap, usedVars, pos)
+		if err != nil {
+			return err
+		}
+
+		checkStart := b.pos()
+		checkCount := resolved.frameCount()
+		trueBranch := frameRef(checkStart + checkCount)
+		falsePlaceholder := frameRef(0)
+
+		if resolved.isLeaf() {
+			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
+		} else {
+			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
+		}
+
+		// Emit body
+		if err := p.emitFnBody(br.body, b, paramMap, usedVars, "", pos); err != nil {
+			return err
+		}
+
+		// Emit tail to target
+		if err := p.emitExprTo(br.tail, target, b, paramMap, usedVars, "", pos); err != nil {
+			return err
+		}
+
+		// Jump-to-continuation
+		jumpIdx := b.pos()
+		b.emit(map[string]any{
+			"op":   "set_reg",
+			"1":    false,
+			"2":    false,
+			"next": frameRef(0),
+		})
+		jumpsToPatch = append(jumpsToPatch, jumpIdx)
+
+		// Patch false branches
+		falseTarget := frameRef(b.pos())
+		for j := checkStart; j < checkStart+checkCount; j++ {
+			f := b.get(j)
+			for k, v := range f {
+				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
+					f[k] = falseTarget
+				}
+			}
+		}
+	}
+
+	// Else body + tail
+	if err := p.emitFnBody(e.ElsBody, b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+	if err := p.emitExprTo(e.ElsTail, target, b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+
+	// Patch jumps
+	afterAll := frameRef(b.pos())
+	for _, idx := range jumpsToPatch {
+		b.get(idx)["next"] = afterAll
+	}
+
+	return nil
+}
+
+// emitFnIfExprMulti emits an if-expression with multi-return tails in a fn body.
+func (p *parser) emitFnIfExprMulti(e *IfExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	type branch struct {
+		cond Expr
+		body []Stmt
+		tail Expr
+	}
+	branches := []branch{{cond: e.Cond, body: e.Body, tail: e.Tail}}
+	for _, elif := range e.ElseIfs {
+		branches = append(branches, branch{cond: elif.Cond, body: elif.Body, tail: elif.Tail})
+	}
+
+	var jumpsToPatch []int
+
+	for i, br := range branches {
+		brComment := ""
+		if i == 0 {
+			brComment = comment
+		}
+
+		resolved, err := p.resolveFnBoolTree(br.cond, b, paramMap, usedVars, pos)
+		if err != nil {
+			return err
+		}
+
+		checkStart := b.pos()
+		checkCount := resolved.frameCount()
+		trueBranch := frameRef(checkStart + checkCount)
+		falsePlaceholder := frameRef(0)
+
+		if resolved.isLeaf() {
+			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
+		} else {
+			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
+		}
+
+		if err := p.emitFnBody(br.body, b, paramMap, usedVars, "", pos); err != nil {
+			return err
+		}
+
+		// Emit tail to retVals
+		if err := p.emitFnIfExprTailMulti(br.tail, retVals, b, paramMap, usedVars, pos); err != nil {
+			return err
+		}
+
+		jumpIdx := b.pos()
+		b.emit(map[string]any{
+			"op":   "set_reg",
+			"1":    false,
+			"2":    false,
+			"next": frameRef(0),
+		})
+		jumpsToPatch = append(jumpsToPatch, jumpIdx)
+
+		falseTarget := frameRef(b.pos())
+		for j := checkStart; j < checkStart+checkCount; j++ {
+			f := b.get(j)
+			for k, v := range f {
+				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
+					f[k] = falseTarget
+				}
+			}
+		}
+	}
+
+	if err := p.emitFnBody(e.ElsBody, b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+	if err := p.emitFnIfExprTailMulti(e.ElsTail, retVals, b, paramMap, usedVars, pos); err != nil {
+		return err
+	}
+
+	afterAll := frameRef(b.pos())
+	for _, idx := range jumpsToPatch {
+		b.get(idx)["next"] = afterAll
+	}
+
+	return nil
+}
+
+// emitFnIfExprTailMulti emits a tail expression directing values to retVals in fn body context.
+func (p *parser) emitFnIfExprTailMulti(tail Expr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, pos int) error {
+	if ce, ok := tail.(*CallExpr); ok {
+		resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(ce.Args, ce.KwArgs, b, paramMap, usedVars, pos)
+		if err != nil {
+			return err
+		}
+		return p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, "", usedVars)
+	}
+	// Single-return tail: emit to first retVal, zero rest
+	if err := p.emitExprTo(tail, retVals[0], b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+	for i := 1; i < len(retVals); i++ {
+		b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
+	}
 	return nil
 }
 
@@ -1786,6 +2022,36 @@ func collectReturnStmts(stmts []Stmt) []*ReturnStmt {
 }
 
 // returnStmtArity computes the return arity of a single ReturnStmt.
+// ifExprArityStatic computes the max arity of an IfExpr using a fns map
+// (for use outside a parser context, e.g., returnStmtArity).
+func ifExprArityStatic(e *IfExpr, fns map[string]*fnDef) int {
+	max := exprArityStatic(e.Tail, fns)
+	for _, elif := range e.ElseIfs {
+		if a := exprArityStatic(elif.Tail, fns); a > max {
+			max = a
+		}
+	}
+	if a := exprArityStatic(e.ElsTail, fns); a > max {
+		max = a
+	}
+	return max
+}
+
+// exprArityStatic computes arity using a fns map (no parser needed).
+func exprArityStatic(expr Expr, fns map[string]*fnDef) int {
+	switch e := expr.(type) {
+	case *CallExpr:
+		if fn, ok := fns[e.Name]; ok {
+			return fn.returnCount()
+		}
+	case *IfExpr:
+		return ifExprArityStatic(e, fns)
+	case *ModeBlockExpr:
+		return exprArityStatic(e.Tail, fns)
+	}
+	return 1
+}
+
 func returnStmtArity(ret *ReturnStmt, fns map[string]*fnDef) int {
 	arity := 0
 	for _, v := range ret.Values {
@@ -1796,6 +2062,8 @@ func returnStmtArity(ret *ReturnStmt, fns map[string]*fnDef) int {
 			} else {
 				arity++
 			}
+		case *IfExpr:
+			arity += ifExprArityStatic(e, fns)
 		case *InstructionExpr:
 			arity += frameReturnCount(e.Frame)
 		default:
@@ -1855,6 +2123,96 @@ func (p *parser) parseFnBodyModeBlockExpr(unlock bool, ctx *fnBodyContext, comme
 		Tail:    tail.Expr,
 		Comment: comment,
 	}, nil
+}
+
+// parseFnBodyIfExprBranch parses a brace-delimited expression block
+// (statements + tail expression) for an if-expression branch in a fn body.
+func (p *parser) parseFnBodyIfExprBranch(ctx *fnBodyContext) ([]Stmt, Expr, error) {
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, nil, err
+	}
+	stmts, err := p.parseFnBodyStmtsInner(ctx, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, nil, p.errorf(0, "empty if-expression branch")
+	}
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, nil, p.errorf(0, "last item in if-expression branch must be a value-producing expression")
+	}
+	return stmts[:len(stmts)-1], tail.Expr, nil
+}
+
+// parseFnBodyIfExpr parses an if-expression in a fn body context.
+// The 'if' keyword has been consumed.
+func (p *parser) parseFnBodyIfExpr(ctx *fnBodyContext, comment string) (*IfExpr, error) {
+	// Parse condition using full boolean expression parser
+	cond, err := p.parseBoolPrimary(ctx.resolve)
+	if err != nil {
+		return nil, err
+	}
+	cond, err = p.parseBoolChain(cond, ctx.resolve)
+	if err != nil {
+		return nil, err
+	}
+
+	body, tail, err := p.parseFnBodyIfExprBranch(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	expr := &IfExpr{
+		Cond:    cond,
+		Body:    body,
+		Tail:    tail,
+		Comment: comment,
+	}
+
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind != tokIdent || tok.val != "else" {
+			p.unget(tok)
+			return nil, p.errorf(tok.pos, "if-expression requires an else clause")
+		}
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokIdent && peek.val == "if" {
+			eiCond, err := p.parseBoolPrimary(ctx.resolve)
+			if err != nil {
+				return nil, err
+			}
+			eiCond, err = p.parseBoolChain(eiCond, ctx.resolve)
+			if err != nil {
+				return nil, err
+			}
+			eiBody, eiTail, err := p.parseFnBodyIfExprBranch(ctx)
+			if err != nil {
+				return nil, err
+			}
+			expr.ElseIfs = append(expr.ElseIfs, ElseIfExprClause{
+				Cond: eiCond,
+				Body: eiBody,
+				Tail: eiTail,
+			})
+		} else {
+			p.unget(peek)
+			elsBody, elsTail, err := p.parseFnBodyIfExprBranch(ctx)
+			if err != nil {
+				return nil, err
+			}
+			expr.ElsBody = elsBody
+			expr.ElsTail = elsTail
+			return expr, nil
+		}
+	}
 }
 
 // parseFnBodyStmts parses fn body statements until '}'. The opening '{'
@@ -1981,6 +2339,22 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			astBody = append(astBody, stmt...)
 
 		case "if":
+			if exprTail {
+				// Try as if-expression tail
+				ifExpr, err := p.parseFnBodyIfExpr(ctx, comment)
+				if err != nil {
+					return nil, err
+				}
+				peek, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if peek.kind == tokRBrace {
+					astBody = append(astBody, &exprTailStmt{Expr: ifExpr})
+					return astBody, nil
+				}
+				return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
+			}
 			stmt, err := p.parseFnBodyIfStmt(ctx, comment)
 			if err != nil {
 				return nil, err
@@ -2287,7 +2661,17 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 					return nil, err
 				}
 				items = append(items, mbe)
-				bindingsConsumed += p.modeBlockExprArity(mbe.Tail)
+				bindingsConsumed += p.exprArity(mbe.Tail)
+				continue
+			}
+
+			if tok.kind == tokIdent && tok.val == "if" {
+				ifExpr, err := p.parseFnBodyIfExpr(ctx, comment)
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, ifExpr)
+				bindingsConsumed += p.ifExprArity(ifExpr)
 				continue
 			}
 
@@ -2406,6 +2790,11 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 	// Mode block expression RHS
 	if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
 		return p.parseFnBodyModeBlockExpr(rhsTok.val == "unlocked", ctx, "")
+	}
+
+	// If-expression RHS
+	if rhsTok.kind == tokIdent && rhsTok.val == "if" {
+		return p.parseFnBodyIfExpr(ctx, "")
 	}
 
 	// Instruction RHS

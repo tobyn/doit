@@ -1,0 +1,8 @@
+# AI-generated test
+# If expression: let x = if cond { val } else { val }
+behavior if_expr {
+    @name "If Expr"
+    @param in a "A"
+    let x = if $a > 1 { 5 } else { 3 }
+    notify "done", value: x
+}

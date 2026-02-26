@@ -1725,6 +1725,72 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("if_expr_missing_else", func(t *testing.T) {
+		src := `behavior a { @param in x "X" let r = if $x > 1 { 5 } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "if-expression requires an else clause") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("if_expr_empty_branch", func(t *testing.T) {
+		src := `behavior a { @param in x "X" let r = if $x > 1 { } else { 5 } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty if-expression branch") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("if_expr_non_value_tail", func(t *testing.T) {
+		src := `behavior a { @param in x "X" let r = if $x > 1 { notify "hi" } else { 5 } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "last item in if-expression branch must be a value-producing expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("if_expr_fn_body_missing_else", func(t *testing.T) {
+		src := `behavior a { let r = f } fn f() { let x = if 1 > 0 { 5 }; return x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "if-expression requires an else clause") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("if_expr_fn_body_empty_branch", func(t *testing.T) {
+		src := `behavior a { let r = f } fn f() { let x = if 1 > 0 { } else { 5 }; return x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty if-expression branch") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("if_expr_fn_body_non_value_tail", func(t *testing.T) {
+		src := `behavior a { let r = f } fn f() { let x = if 1 > 0 { notify "hi" } else { 5 }; return x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "last item in if-expression branch must be a value-producing expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

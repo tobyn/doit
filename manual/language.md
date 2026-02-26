@@ -433,6 +433,50 @@ if a == 1 {
 }
 ```
 
+### If Expressions
+
+`if`/`else if`/`else` can be used as an expression to produce a value.
+Each branch block contains optional statements followed by a
+value-producing tail expression (the last item). The `else` clause is
+mandatory.
+
+```doit
+let x = if a > 1 { 5 } else { 3 }
+
+let y = if a > 10 {
+    5
+} else if a == 0 {
+    0
+} else {
+    3
+}
+```
+
+Branches can contain statements before the tail expression:
+
+```doit
+let x = if a > 1 {
+    notify "big"
+    5
+} else {
+    notify "small"
+    3
+}
+```
+
+If-expression tails can be multi-return function calls, enabling
+multi-return conditional bindings:
+
+```doit
+let x, y = if a > 0 {
+    separate_coordinate coord
+} else {
+    separate_coordinate fallback
+}
+```
+
+If-expressions work in both behavior bodies and function bodies.
+
 ### Expression Priority
 
 When multiple expression types appear in the same statement, they are

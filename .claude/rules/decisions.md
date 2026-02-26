@@ -866,3 +866,52 @@ level and in fn bodies. Expression lists in multi-binding declarations.
 **Deferred**: continuation after mode block (`locked { get_number v } + 1`),
 mode blocks in function call arguments, mode blocks in `return` statement
 items.
+
+## If-expressions (`if`/`else if`/`else` as expressions)
+
+`if`/`else if`/`else` can produce a value when used in expression context.
+Each branch block contains optional statements followed by a
+value-producing tail expression (the last item in the block). The `else`
+clause is mandatory — without it, the expression would have no value on
+the false path.
+
+**AST representation**: `IfExpr` has `Cond Expr`, `Body []Stmt`,
+`Tail Expr` (if-true branch value), `ElseIfs []ElseIfExprClause`,
+`ElsBody []Stmt`, `ElsTail Expr` (else branch value), and `Comment`.
+Each `ElseIfExprClause` has its own `Cond`, `Body`, and `Tail`. The
+internal `exprTailStmt` wrapper carries a bare expression parsed at
+the end of a branch body; it is extracted and never appears in the
+final AST.
+
+**Arity**: `ifExprArity` computes the maximum arity across all branches
+recursively. This allows mixed-arity branches where some branches
+return multi-return function calls. Branches with lower arity than
+the maximum have remaining slots zeroed during emission. The generalized
+`exprArity` helper replaces the old `modeBlockExprArity` — it handles
+`CallExpr`, `IfExpr`, and `ModeBlockExpr` uniformly.
+
+**Condition parsing**: If-expressions use the full boolean expression
+parser (`parseBoolPrimary` + `parseBoolChain`) for conditions, not the
+limited `parseBhvIfStmt` format. This is because if-expressions appear
+in expression contexts where the full expression language is available.
+
+**Emission**: At behavior level, `emitBhvIfExpr` uses the child
+`frameBuilder` pattern per branch body (same as `emitBhvIfStmt`) to
+isolate deferred body handling, followed by `rebaseFrameRefs`. Tail
+expressions are emitted to the target after the branch body. Forward-jump
+patching connects branches via `set_reg false false` placeholder frames.
+At fn body level, `emitFnIfExpr` uses the simpler forward-jump pattern
+(no child builders needed since fn bodies don't use deferred bodies).
+
+**Multi-return**: `emitBhvIfExprMulti` and `emitFnIfExprMulti` handle
+branches where the tail is a multi-return `CallExpr`. For single-return
+tails in a multi-return context, the value goes to `retVals[0]` and
+remaining slots are zeroed.
+
+**Supported contexts**: `let`/`var` init and assignment RHS at behavior
+level and in fn bodies. Expression lists in multi-binding declarations.
+Mode block expression tails.
+
+**Deferred**: if-expressions in function call arguments, if-expressions
+in `return` statement items, continuation after if-expression
+(`if cond { a } else { b } + 1`).

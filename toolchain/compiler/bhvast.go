@@ -581,6 +581,17 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: mbe, Comment: comment}}, nil
 	}
 
+	// If-expression RHS: let x = if cond { ... } else { ... }
+	if rhsTok.kind == tokIdent && rhsTok.val == "if" {
+		ifExpr, err := p.parseBhvIfExpr(syms, comment)
+		if err != nil {
+			return nil, err
+		}
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
+		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: ifExpr, Comment: comment}}, nil
+	}
+
 	if rhsTok.kind == tokNumber {
 		num, _ := strconv.Atoi(rhsTok.val)
 		// Check for & after number (error)
@@ -782,6 +793,15 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				return nil, err
 			}
 			return []Stmt{&AssignStmt{Target: tok.val, Value: mbe, Comment: comment}}, nil
+		}
+
+		// If-expression RHS: x = if cond { ... } else { ... }
+		if rhsTok.kind == tokIdent && rhsTok.val == "if" {
+			ifExpr, err := p.parseBhvIfExpr(syms, comment)
+			if err != nil {
+				return nil, err
+			}
+			return []Stmt{&AssignStmt{Target: tok.val, Value: ifExpr, Comment: comment}}, nil
 		}
 
 		if rhsTok.kind == tokNumber {
@@ -1361,7 +1381,17 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 				return nil, err
 			}
 			items = append(items, mbe)
-			bindingsConsumed += p.modeBlockExprArity(mbe.Tail)
+			bindingsConsumed += p.exprArity(mbe.Tail)
+			continue
+		}
+
+		if tok.kind == tokIdent && tok.val == "if" {
+			ifExpr, err := p.parseBhvIfExpr(syms, comment)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, ifExpr)
+			bindingsConsumed += p.ifExprArity(ifExpr)
 			continue
 		}
 
@@ -1445,14 +1475,33 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 	}}, nil
 }
 
-// modeBlockExprArity returns the arity of a ModeBlockExpr's tail expression.
-func (p *parser) modeBlockExprArity(expr Expr) int {
-	if ce, ok := expr.(*CallExpr); ok {
-		if fn := p.fns[ce.Name]; fn != nil {
+// exprArity returns the arity (number of values produced) of an expression.
+func (p *parser) exprArity(expr Expr) int {
+	switch e := expr.(type) {
+	case *CallExpr:
+		if fn := p.fns[e.Name]; fn != nil {
 			return fn.returnCount()
 		}
+	case *IfExpr:
+		return p.ifExprArity(e)
+	case *ModeBlockExpr:
+		return p.exprArity(e.Tail)
 	}
 	return 1
+}
+
+// ifExprArity returns the maximum arity across all branches of an if-expression.
+func (p *parser) ifExprArity(e *IfExpr) int {
+	max := p.exprArity(e.Tail)
+	for _, elif := range e.ElseIfs {
+		if a := p.exprArity(elif.Tail); a > max {
+			max = a
+		}
+	}
+	if a := p.exprArity(e.ElsTail); a > max {
+		max = a
+	}
+	return max
 }
 
 // parseBhvModeBlockExpr parses a locked/unlocked block used as an expression.
@@ -1481,6 +1530,102 @@ func (p *parser) parseBhvModeBlockExpr(unlock bool, syms *symbolTable, comment s
 		Tail:    tail.Expr,
 		Comment: comment,
 	}, nil
+}
+
+// parseBhvIfExprBranch parses a brace-delimited expression block (statements +
+// tail expression) for an if-expression branch.
+func (p *parser) parseBhvIfExprBranch(syms *symbolTable) ([]Stmt, Expr, error) {
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, nil, err
+	}
+	stmts, err := p.parseBhvStmtBlockInner(syms, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, nil, p.errorf(0, "empty if-expression branch")
+	}
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, nil, p.errorf(0, "last item in if-expression branch must be a value-producing expression")
+	}
+	return stmts[:len(stmts)-1], tail.Expr, nil
+}
+
+// parseBhvIfExpr parses an if-expression after the 'if' keyword has been
+// consumed. Uses the full boolean expression parser for conditions.
+func (p *parser) parseBhvIfExpr(syms *symbolTable, comment string) (*IfExpr, error) {
+	resolve := p.bhvResolver(syms)
+
+	// Parse condition
+	cond, err := p.parseBoolPrimary(resolve)
+	if err != nil {
+		return nil, err
+	}
+	cond, err = p.parseBoolChain(cond, resolve)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse if body
+	body, tail, err := p.parseBhvIfExprBranch(syms)
+	if err != nil {
+		return nil, err
+	}
+
+	expr := &IfExpr{
+		Cond:    cond,
+		Body:    body,
+		Tail:    tail,
+		Comment: comment,
+	}
+
+	// Parse else-if / else chain
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind != tokIdent || tok.val != "else" {
+			p.unget(tok)
+			return nil, p.errorf(tok.pos, "if-expression requires an else clause")
+		}
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokIdent && peek.val == "if" {
+			// else if
+			eiCond, err := p.parseBoolPrimary(resolve)
+			if err != nil {
+				return nil, err
+			}
+			eiCond, err = p.parseBoolChain(eiCond, resolve)
+			if err != nil {
+				return nil, err
+			}
+			eiBody, eiTail, err := p.parseBhvIfExprBranch(syms)
+			if err != nil {
+				return nil, err
+			}
+			expr.ElseIfs = append(expr.ElseIfs, ElseIfExprClause{
+				Cond: eiCond,
+				Body: eiBody,
+				Tail: eiTail,
+			})
+		} else {
+			// plain else
+			p.unget(peek)
+			elsBody, elsTail, err := p.parseBhvIfExprBranch(syms)
+			if err != nil {
+				return nil, err
+			}
+			expr.ElsBody = elsBody
+			expr.ElsTail = elsTail
+			return expr, nil
+		}
+	}
 }
 
 // parseBhvStmtBlock parses a brace-delimited block of statements.
@@ -1689,6 +1834,24 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				return nil, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
 			}
 		case "if":
+			if allowExprTail {
+				// Try as if-expression tail
+				ifExpr, err := p.parseBhvIfExpr(syms, comment)
+				if err != nil {
+					return nil, err
+				}
+				// Check if this was the last item in the block
+				peek, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if peek.kind == tokRBrace {
+					stmts = append(stmts, &exprTailStmt{Expr: ifExpr})
+					return stmts, nil
+				}
+				// Not the tail — cannot use if-expression as a statement
+				return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
+			}
 			ifStmt, err := p.parseBhvIfStmt(syms)
 			if err != nil {
 				return nil, err
@@ -1899,6 +2062,12 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 			return nil, err
 		}
 		return tmp, nil
+	case *IfExpr:
+		tmp := allocUniqueVar("@if", syms.usedVars)
+		if err := p.emitBhvIfExpr(e, tmp, syms, b, comment); err != nil {
+			return nil, err
+		}
+		return tmp, nil
 	default:
 		return nil, fmt.Errorf("unsupported expression type %T in emitBhvExprGetValue", expr)
 	}
@@ -1976,6 +2145,8 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 		return p.emitBhvBoolExprTo(expr, target, syms, b, comment)
 	case *ModeBlockExpr:
 		return p.emitBhvModeBlockExpr(e, target, syms, b, comment)
+	case *IfExpr:
+		return p.emitBhvIfExpr(e, target, syms, b, comment)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitBhvExprTo", expr)
 }
@@ -2530,6 +2701,8 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 			return p.expandCall(v.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, s.Comment, syms.usedVars)
 		case *ModeBlockExpr:
 			return p.emitBhvModeBlockExprMulti(v, retVals, syms, b, s.Comment)
+		case *IfExpr:
+			return p.emitBhvIfExprMulti(v, retVals, syms, b, s.Comment)
 		case *InstructionExpr:
 			resolved := resolveInstructionFrame(v.Frame, retVals, nil, nil, s.Comment)
 			b.emit(resolved)
@@ -2559,7 +2732,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 					}
 					bindIdx += callArity
 				case *ModeBlockExpr:
-					arity := p.modeBlockExprArity(e.Tail)
+					arity := p.exprArity(e.Tail)
 					remaining := len(s.Bindings) - bindIdx
 					mbeArity := arity
 					if mbeArity > remaining {
@@ -2578,6 +2751,26 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 						}
 					}
 					bindIdx += mbeArity
+				case *IfExpr:
+					arity := p.ifExprArity(e)
+					remaining := len(s.Bindings) - bindIdx
+					ifArity := arity
+					if ifArity > remaining {
+						ifArity = remaining
+					}
+					if ifArity == 1 {
+						if !s.Bindings[bindIdx].Discard {
+							if err := p.emitBhvIfExpr(e, retVals[bindIdx], syms, b, s.Comment); err != nil {
+								return err
+							}
+						}
+					} else {
+						ifRetVals := retVals[bindIdx : bindIdx+ifArity]
+						if err := p.emitBhvIfExprMulti(e, ifRetVals, syms, b, s.Comment); err != nil {
+							return err
+						}
+					}
+					bindIdx += ifArity
 				default:
 					if !s.Bindings[bindIdx].Discard {
 						if err := p.emitBhvExprTo(expr, retVals[bindIdx], syms, b, s.Comment); err != nil {
@@ -2654,6 +2847,258 @@ func (p *parser) emitBhvModeBlockExprMulti(e *ModeBlockExpr, retVals []any, syms
 		return err
 	}
 	emitModeExit(b, saved)
+	return nil
+}
+
+// emitBhvIfExpr emits an if-expression writing each branch's tail to target.
+// Uses forward-jump patching (same pattern as emitFnIfStmt).
+func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
+	// Collect all conditional branches
+	type branch struct {
+		cond Expr
+		body []Stmt
+		tail Expr
+	}
+	branches := []branch{{cond: e.Cond, body: e.Body, tail: e.Tail}}
+	for _, elif := range e.ElseIfs {
+		branches = append(branches, branch{cond: elif.Cond, body: elif.Body, tail: elif.Tail})
+	}
+
+	var jumpsToPatch []int
+
+	for i, br := range branches {
+		brComment := ""
+		if i == 0 {
+			brComment = comment
+		}
+
+		// Resolve condition and emit check frames with placeholder false branch
+		resolved, err := p.resolveBhvBoolTree(br.cond, syms, b)
+		if err != nil {
+			return err
+		}
+
+		checkStart := b.pos()
+		checkCount := resolved.frameCount()
+		trueBranch := frameRef(checkStart + checkCount)
+		falsePlaceholder := frameRef(0)
+
+		if resolved.isLeaf() {
+			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
+		} else {
+			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
+		}
+
+		// Emit body via child builder
+		bodyBuilder := &frameBuilder{mode: b.mode}
+		mainCount, err := p.emitBehaviorStmts(br.body, bodyBuilder, syms)
+		if err != nil {
+			return err
+		}
+		if len(bodyBuilder.frames) > 0 {
+			bodyStart := b.pos()
+			rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+			for _, f := range rebased {
+				b.emit(f)
+			}
+			// Patch last main-line frame's "next" to skip deferred → tail
+			if mainCount > 0 {
+				lastMain := b.get(bodyStart + mainCount - 1)
+				lastMain["next"] = frameRef(b.pos())
+			}
+		}
+
+		// Emit tail expression to target
+		if err := p.emitBhvExprTo(br.tail, target, syms, b, ""); err != nil {
+			return err
+		}
+
+		// Emit jump-to-continuation
+		jumpIdx := b.pos()
+		b.emit(map[string]any{
+			"op":   "set_reg",
+			"1":    false,
+			"2":    false,
+			"next": frameRef(0), // patched later
+		})
+		jumpsToPatch = append(jumpsToPatch, jumpIdx)
+
+		// Patch false branches to here (next branch or else)
+		falseTarget := frameRef(b.pos())
+		for j := checkStart; j < checkStart+checkCount; j++ {
+			f := b.get(j)
+			for k, v := range f {
+				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
+					f[k] = falseTarget
+				}
+			}
+		}
+	}
+
+	// Emit else body via child builder
+	bodyBuilder := &frameBuilder{mode: b.mode}
+	mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
+	if err != nil {
+		return err
+	}
+	if len(bodyBuilder.frames) > 0 {
+		bodyStart := b.pos()
+		rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+		for _, f := range rebased {
+			b.emit(f)
+		}
+		if mainCount > 0 {
+			lastMain := b.get(bodyStart + mainCount - 1)
+			lastMain["next"] = frameRef(b.pos())
+		}
+	}
+
+	// Emit else tail to target
+	if err := p.emitBhvExprTo(e.ElsTail, target, syms, b, ""); err != nil {
+		return err
+	}
+
+	// Patch all jumps-to-continuation
+	afterAll := frameRef(b.pos())
+	for _, idx := range jumpsToPatch {
+		b.get(idx)["next"] = afterAll
+	}
+
+	return nil
+}
+
+// emitBhvIfExprMulti emits an if-expression with multi-return tails,
+// directing return values to the given retVals slice.
+func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable, b *frameBuilder, comment string) error {
+	type branch struct {
+		cond Expr
+		body []Stmt
+		tail Expr
+	}
+	branches := []branch{{cond: e.Cond, body: e.Body, tail: e.Tail}}
+	for _, elif := range e.ElseIfs {
+		branches = append(branches, branch{cond: elif.Cond, body: elif.Body, tail: elif.Tail})
+	}
+
+	var jumpsToPatch []int
+
+	for i, br := range branches {
+		brComment := ""
+		if i == 0 {
+			brComment = comment
+		}
+
+		resolved, err := p.resolveBhvBoolTree(br.cond, syms, b)
+		if err != nil {
+			return err
+		}
+
+		checkStart := b.pos()
+		checkCount := resolved.frameCount()
+		trueBranch := frameRef(checkStart + checkCount)
+		falsePlaceholder := frameRef(0)
+
+		if resolved.isLeaf() {
+			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
+		} else {
+			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
+		}
+
+		bodyBuilder := &frameBuilder{mode: b.mode}
+		mainCount, err := p.emitBehaviorStmts(br.body, bodyBuilder, syms)
+		if err != nil {
+			return err
+		}
+		if len(bodyBuilder.frames) > 0 {
+			bodyStart := b.pos()
+			rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+			for _, f := range rebased {
+				b.emit(f)
+			}
+			if mainCount > 0 {
+				lastMain := b.get(bodyStart + mainCount - 1)
+				lastMain["next"] = frameRef(b.pos())
+			}
+		}
+
+		// Emit tail to retVals
+		if err := p.emitBhvIfExprTailMulti(br.tail, retVals, syms, b); err != nil {
+			return err
+		}
+
+		jumpIdx := b.pos()
+		b.emit(map[string]any{
+			"op":   "set_reg",
+			"1":    false,
+			"2":    false,
+			"next": frameRef(0),
+		})
+		jumpsToPatch = append(jumpsToPatch, jumpIdx)
+
+		falseTarget := frameRef(b.pos())
+		for j := checkStart; j < checkStart+checkCount; j++ {
+			f := b.get(j)
+			for k, v := range f {
+				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
+					f[k] = falseTarget
+				}
+			}
+		}
+	}
+
+	// Else body
+	bodyBuilder := &frameBuilder{mode: b.mode}
+	mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
+	if err != nil {
+		return err
+	}
+	if len(bodyBuilder.frames) > 0 {
+		bodyStart := b.pos()
+		rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+		for _, f := range rebased {
+			b.emit(f)
+		}
+		if mainCount > 0 {
+			lastMain := b.get(bodyStart + mainCount - 1)
+			lastMain["next"] = frameRef(b.pos())
+		}
+	}
+
+	// Else tail to retVals
+	if err := p.emitBhvIfExprTailMulti(e.ElsTail, retVals, syms, b); err != nil {
+		return err
+	}
+
+	afterAll := frameRef(b.pos())
+	for _, idx := range jumpsToPatch {
+		b.get(idx)["next"] = afterAll
+	}
+
+	return nil
+}
+
+// emitBhvIfExprTailMulti emits a tail expression directing values to retVals.
+// If the tail is a CallExpr, uses expandCall. Otherwise, emits to retVals[0]
+// and zeros remaining slots.
+func (p *parser) emitBhvIfExprTailMulti(tail Expr, retVals []any, syms *symbolTable, b *frameBuilder) error {
+	if ce, ok := tail.(*CallExpr); ok {
+		resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(ce.Args, ce.KwArgs, syms, b)
+		if err != nil {
+			return err
+		}
+		fn := p.fns[ce.Name]
+		if err := p.checkCallDirections(fn, ce.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+			return err
+		}
+		return p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, "", syms.usedVars)
+	}
+	// Single-return tail: emit to first retVal, zero rest
+	if err := p.emitBhvExprTo(tail, retVals[0], syms, b, ""); err != nil {
+		return err
+	}
+	for i := 1; i < len(retVals); i++ {
+		b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
+	}
 	return nil
 }
 

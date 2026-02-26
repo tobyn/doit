@@ -56,6 +56,18 @@ decisions.md "Mode block expressions"). These extensions are deferred:
 - **Mode blocks in `return` statement items**: `return unlocked { get_self }` —
   requires parsing mode blocks in return item position.
 
+## If-expression extensions
+
+If-expressions are implemented (see decisions.md "If-expressions").
+These extensions are deferred:
+
+- **Continuation after if-expression**: `if cond { a } else { b } + 1` —
+  using the if-expression result in a larger expression.
+- **If-expressions in function call arguments**: `my_fn if cond { a } else { b }` —
+  requires parsing if-expressions in argument position.
+- **If-expressions in `return` statement items**: `return if cond { a } else { b }` —
+  requires parsing if-expressions in return item position.
+
 ## Extended comparison and type check expressions
 
 Natural extensions beyond fn body parity:

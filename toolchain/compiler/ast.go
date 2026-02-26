@@ -209,10 +209,30 @@ type ModeBlockExpr struct {
 	Comment string
 }
 
+// IfExpr is an if/else-if/else expression that produces a value.
+// Each branch has a body of statements and a tail expression.
+// The else clause is mandatory.
+type IfExpr struct {
+	Cond    Expr
+	Body    []Stmt
+	Tail    Expr // value of the if-true branch
+	ElseIfs []ElseIfExprClause
+	ElsBody []Stmt
+	ElsTail Expr // value of the else branch
+	Comment string
+}
+
+// ElseIfExprClause is an else-if branch in an if-expression.
+type ElseIfExprClause struct {
+	Cond Expr
+	Body []Stmt
+	Tail Expr
+}
+
 // exprTailStmt is an internal wrapper for a bare expression parsed at the end
-// of a mode block expression body. Never appears in the final AST —
-// parseBhvModeBlockExpr / parseFnBodyModeBlockExpr extract the expr and
-// discard the wrapper.
+// of an expression block body. Never appears in the final AST —
+// parseBhvModeBlockExpr / parseFnBodyModeBlockExpr / parseBhvIfExpr /
+// parseFnBodyIfExpr extract the expr and discard the wrapper.
 type exprTailStmt struct {
 	Expr Expr
 }
@@ -247,3 +267,4 @@ func (*ConstructorExpr) exprNode()  {}
 func (*AmpersandExpr) exprNode()    {}
 func (*ExprListExpr) exprNode()     {}
 func (*ModeBlockExpr) exprNode()    {}
+func (*IfExpr) exprNode()           {}

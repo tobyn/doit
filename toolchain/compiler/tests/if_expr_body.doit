@@ -1,0 +1,9 @@
+# AI-generated test
+# If expression with statements in branch body before tail
+behavior if_expr_body {
+    @name "If Expr Body"
+    @param in a "A"
+    @param inout v "V"
+    let x = if $a > 1 { $v = 10; 5 } else { $v = 20; 3 }
+    notify "done", value: x
+}
