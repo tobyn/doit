@@ -7,8 +7,12 @@
     "op": "set_number"
   },
   "1": {
-    "txt": "Loop iteration",
-    "op": "notify"
+    "0": 6,
+    "2": "i",
+    "3": {
+      "num": 10
+    },
+    "op": "check_number"
   },
   "2": {
     "1": 5,
@@ -30,12 +34,12 @@
       "num": 1
     },
     "2": "i",
-    "op": "add",
-    "next": 2
+    "next": 2,
+    "op": "add"
   },
   "5": {
-    "txt": "Loop finished",
-    "op": "notify"
+    "op": "notify",
+    "txt": "Done"
   },
-  "name": "Loop"
+  "name": "Break In While"
 }

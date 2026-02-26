@@ -1,0 +1,15 @@
+# AI-generated test
+# Break inside while loop at behavior level
+behavior break_in_while {
+    @name "Break In While"
+
+    var i = 1
+    while i <= 10 {
+        if i >= 5 {
+            break
+        }
+        i += 1
+    }
+
+    notify "Done"
+}

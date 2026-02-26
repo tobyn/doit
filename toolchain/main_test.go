@@ -1639,6 +1639,32 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("break_in_while_compiles", func(t *testing.T) {
+		src := `behavior a { var i = 1; while i <= 5 { if i >= 3 { break }; i += 1 } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("counted_loop_missing_brace", func(t *testing.T) {
+		src := `behavior a { loop 5 notify "hi" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		// Should fail because 'notify' is not '{'
+	})
+
+	t.Run("fn_body_counted_loop_missing_brace", func(t *testing.T) {
+		src := `behavior a { f } fn f() { loop 5 notify "hi" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		// Should fail because 'notify' is not '{'
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

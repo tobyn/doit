@@ -1,0 +1,15 @@
+# AI-generated test
+# Counted loop with early break at behavior level
+behavior counted_loop_with_break {
+    @name "Counted Loop Break"
+
+    var i = 0
+    loop 10 {
+        i += 1
+        if i >= 3 {
+            break
+        }
+    }
+
+    notify "Done"
+}

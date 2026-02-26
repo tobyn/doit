@@ -1,0 +1,16 @@
+# AI-generated test
+# Break inside while loop in fn body
+fn count_up(inout x) {
+    while x <= 10 {
+        if x >= 5 {
+            break
+        }
+        x += 1
+    }
+}
+
+behavior fn_body_break_in_while {
+    @name "Fn Body Break In While"
+    @param inout val "Val"
+    count_up inout $val
+}

@@ -1,0 +1,37 @@
+{
+  "0": {
+    "0": {
+      "num": 0
+    },
+    "1": "@loop",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 5,
+    "2": "@loop",
+    "3": {
+      "num": 5
+    },
+    "next": 5,
+    "op": "check_number"
+  },
+  "2": {
+    "next": 4,
+    "op": "notify",
+    "txt": "Iteration"
+  },
+  "3": {
+    "0": "@loop",
+    "1": {
+      "num": 1
+    },
+    "2": "@loop",
+    "next": 2,
+    "op": "add"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "Done"
+  },
+  "name": "Counted Loop"
+}

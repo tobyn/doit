@@ -71,6 +71,7 @@ output format.
   fn body AST emission (`emitFnBody`, `emitExprGetValue`, `emitExprTo`,
   `emitFnArithTo`, `emitFnArithNode`, `emitFnBoolExprTo`,
   `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnWhileStmt`, `emitFnLoopStmt`,
+  `emitFnCountedLoop`,
   `emitFnModeBlockExpr`, `emitFnModeBlockExprMulti`,
   `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
   `collectASTOutputVars`, `resolveVarName`, `tryResolveConstructorLiteral`,
@@ -99,8 +100,10 @@ output format.
   control flow/break; accepts variadic `exprTail` for mode block expression
   tail detection), `parseBhvModeBlockExpr`, `modeBlockExprArity`.
   Emitter functions: `emitBehaviorStmts` (top-level
-  behavior emitter with deferred body management, break target patching,
-  and mode tracking), `emitBhvStmtSimple` (non-control-flow statements),
+  behavior emitter returning `(int, error)` where int is mainFrameCount,
+  with deferred body management, `@break`/`BreakStmt` handling,
+  if/break detection via `isIfBreak`, and mode tracking),
+  `emitBhvStmtSimple` (non-control-flow statements),
   `emitBhvExprTo`/`emitBhvExprGetValue` (expression emission),
   `emitBhvArithTo`/`emitBhvArithNode` (arithmetic with per-tree
   `arithCounter`), `emitBhvBoolExprTo` (boolean expression emission with
@@ -109,8 +112,9 @@ output format.
   `emitBhvModeBlock` (mode block statement emission with on-the-fly
   transitions), `emitBhvModeBlockExpr`/`emitBhvModeBlockExprMulti`
   (mode block expression emission),
-  `emitBhvIfStmt`/`emitBhvWhileStmt`/`emitBhvLoopStmt` (control flow
-  emission). Internal types: `resolvedBoolExpr` (pre-resolved boolean
+  `emitBhvIfStmt`/`emitBhvIfBreak`/`emitBhvWhileStmt`/
+  `emitBhvLoopStmt`/`emitBhvCountedLoop` (control flow emission).
+  Internal types: `resolvedBoolExpr` (pre-resolved boolean
   tree for emission)
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
   `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +

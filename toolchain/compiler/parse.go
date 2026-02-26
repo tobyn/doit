@@ -1149,6 +1149,8 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 		p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, comment)
 	}
 
+	origLen := len(b.frames)
+
 	// Emit body
 	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
 		return err
@@ -1169,12 +1171,25 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 	}
 
 	// Patch false branches to after the loop
-	falseTarget := frameRef(b.pos())
+	afterLoop := frameRef(b.pos())
 	for j := checkStart; j < checkStart+checkCount; j++ {
 		f := b.get(j)
 		for k, v := range f {
 			if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-				f[k] = falseTarget
+				f[k] = afterLoop
+			}
+		}
+	}
+
+	// Patch @break placeholders
+	for j := origLen; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": afterLoop,
 			}
 		}
 	}
@@ -1184,23 +1199,18 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 
 // emitFnLoopStmt emits a loop/break in a fn body.
 func (p *parser) emitFnLoopStmt(s *LoopStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	if s.Count != nil {
+		return p.emitFnCountedLoop(s, b, paramMap, usedVars, comment, pos)
+	}
+
 	loopStart := b.pos()
 
 	// Track break frame indices for patching
-	var breakFrames []int
 	origLen := len(b.frames)
 
 	// Emit body
 	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
 		return err
-	}
-
-	// Scan for break placeholder frames (BreakStmt emits a recognizable pattern)
-	for j := origLen; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			breakFrames = append(breakFrames, j)
-		}
 	}
 
 	// Jump back to loop start
@@ -1222,12 +1232,89 @@ func (p *parser) emitFnLoopStmt(s *LoopStmt, b *frameBuilder, paramMap map[strin
 
 	// Patch break frames to point after the loop
 	afterLoop := frameRef(b.pos())
-	for _, idx := range breakFrames {
-		b.frames[idx] = map[string]any{
-			"op":   "set_reg",
-			"1":    false,
-			"2":    false,
-			"next": afterLoop,
+	for j := origLen; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": afterLoop,
+			}
+		}
+	}
+
+	return nil
+}
+
+// emitFnCountedLoop emits a counted loop in a fn body.
+func (p *parser) emitFnCountedLoop(s *LoopStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	counterVar := allocUniqueVar("@loop", usedVars)
+
+	// Resolve count expression
+	limit, err := p.emitExprGetValue(s.Count, b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+
+	// INIT: set_number 0 → counter
+	b.emit(map[string]any{
+		"op": "set_number",
+		"1":  map[string]any{"num": 0},
+		"2":  counterVar,
+	})
+
+	// CHECK: check_number counter vs limit
+	checkFrame := b.emit(map[string]any{
+		"op":        "check_number",
+		checkValue:  counterVar,
+		checkTarget: limit,
+	})
+	setComment(b.get(checkFrame), comment)
+
+	// Track body start for @break scanning
+	origLen := len(b.frames)
+
+	// Emit body
+	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+
+	// INCR: add counter + 1 → counter, next → CHECK
+	incrFrame := b.emit(map[string]any{
+		"op":   "add",
+		"1":    counterVar,
+		"2":    map[string]any{"num": 1},
+		"3":    counterVar,
+		"next": frameRef(checkFrame),
+	})
+
+	// Set last body frame's "next" to incr
+	if b.pos()-1 > origLen-1 {
+		lastBodyFrame := b.get(incrFrame - 1)
+		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
+			if _, hasNext := lastBodyFrame["next"]; !hasNext {
+				lastBodyFrame["next"] = frameRef(incrFrame)
+			}
+		}
+	}
+
+	// Patch CHECK exits: larger and equal → afterLoop
+	afterLoop := frameRef(b.pos())
+	check := b.get(checkFrame)
+	check[checkLarger] = afterLoop
+	check["next"] = afterLoop
+
+	// Patch @break placeholders
+	for j := origLen; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": afterLoop,
+			}
 		}
 	}
 
@@ -2447,8 +2534,54 @@ func (p *parser) parseFnBodyWhileStmt(ctx *fnBodyContext, comment string) (*Whil
 	return &WhileStmt{Cond: cond, Body: body, Comment: comment}, nil
 }
 
-// parseFnBodyLoopStmt parses a loop { ... } block in a fn body.
+// parseFnBodyLoopStmt parses a loop { ... } or loop N { ... } block in a fn body.
 func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string) (*LoopStmt, error) {
+	// Peek for count expression
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	if peek.kind == tokLBrace {
+		// Infinite loop: loop { ... }
+		body, err := p.parseFnBodyStmts(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &LoopStmt{Body: body, Comment: comment}, nil
+	}
+
+	// Counted loop: parse count expression
+	var count Expr
+	switch peek.kind {
+	case tokNumber:
+		num, _ := strconv.Atoi(peek.val)
+		count = &LiteralExpr{Value: map[string]any{"num": num}}
+		count, err = p.parseArithExprFromFull(count, ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+	case tokLParen:
+		count, err = p.parseArithExpr(ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+	case tokIdent:
+		resolved, err := ctx.resolve(peek)
+		if err != nil {
+			return nil, err
+		}
+		count, err = p.parseArithExprFromFull(resolved, ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, p.errorf(peek.pos, "expected '{' or count expression after 'loop', got %s", peek.describe())
+	}
+
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
@@ -2456,7 +2589,7 @@ func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string) (*LoopS
 	if err != nil {
 		return nil, err
 	}
-	return &LoopStmt{Body: body, Comment: comment}, nil
+	return &LoopStmt{Count: count, Body: body, Comment: comment}, nil
 }
 
 // checkFnBodyInstructionDirections verifies that non-@N slots in an instruction

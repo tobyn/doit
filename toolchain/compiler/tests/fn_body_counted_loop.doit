@@ -1,0 +1,14 @@
+# AI-generated test
+# Counted loop in fn body with variable count
+fn repeat(n, inout x) {
+    loop n {
+        x += 1
+    }
+}
+
+behavior fn_body_counted_loop {
+    @name "Fn Body Counted Loop"
+    @param in count "Count"
+    @param inout val "Val"
+    repeat $count, inout $val
+}

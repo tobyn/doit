@@ -1117,7 +1117,7 @@ func (p *parser) parseBhvWhileStmt(syms *symbolTable) (*WhileStmt, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	body, err := p.parseBhvStmtBlock(syms)
+	body, err := p.parseBhvStmtBlockInner(syms, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1125,9 +1125,58 @@ func (p *parser) parseBhvWhileStmt(syms *symbolTable) (*WhileStmt, error) {
 	return &WhileStmt{Cond: cond, Body: body, Comment: comment}, nil
 }
 
-// parseBhvLoopStmt parses a loop { ... } block.
+// parseBhvLoopStmt parses a loop { ... } or loop N { ... } block.
 func (p *parser) parseBhvLoopStmt(syms *symbolTable) (*LoopStmt, error) {
 	comment := p.docComment
+
+	// Peek for count expression
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	var count Expr
+	if peek.kind == tokLBrace {
+		// Infinite loop: loop { ... }
+		body, err := p.parseBhvLoopBody(syms)
+		if err != nil {
+			return nil, err
+		}
+		return &LoopStmt{Body: body, Comment: comment}, nil
+	}
+
+	// Counted loop: parse count expression
+	resolve := p.bhvResolver(syms)
+	switch peek.kind {
+	case tokNumber:
+		num, _ := strconv.Atoi(peek.val)
+		count = &LiteralExpr{Value: map[string]any{"num": num}}
+		// Check for arithmetic continuation
+		count, err = p.parseArithExprFromFull(count, resolve)
+		if err != nil {
+			return nil, err
+		}
+	case tokLParen:
+		count, err = p.parseArithExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+	case tokIdent:
+		resolved, err := resolve(peek)
+		if err != nil {
+			return nil, err
+		}
+		count, err = p.parseArithExprFromFull(resolved, resolve)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, p.errorf(peek.pos, "expected '{' or count expression after 'loop', got %s", peek.describe())
+	}
+
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
@@ -1135,7 +1184,7 @@ func (p *parser) parseBhvLoopStmt(syms *symbolTable) (*LoopStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &LoopStmt{Body: body, Comment: comment}, nil
+	return &LoopStmt{Count: count, Body: body, Comment: comment}, nil
 }
 
 // parseBhvLoopBody parses loop body statements. Supports the full statement
@@ -2129,59 +2178,45 @@ func (p *parser) emitResolvedBoolFrames(expr *resolvedBoolExpr, trueTarget, fals
 // transitions are emitted on-the-fly via frameBuilder.mode tracking —
 // ModeBlockStmt blocks emit transitions only when needed and restore mode
 // on exit.
-func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTable) error {
+func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTable) (int, error) {
 	var deferred []deferredBody
-	breakTargetFrame := -1
-	resumeFrame := -1
 
-	for i, stmt := range stmts {
+	for _, stmt := range stmts {
 		switch s := stmt.(type) {
 		case *ModeBlockStmt:
 			if err := p.emitBhvModeBlock(s, b, syms); err != nil {
-				return err
+				return 0, err
 			}
 
 		case *IfStmt:
-			if err := p.emitBhvIfStmt(s, b, syms, &deferred); err != nil {
-				return err
+			// Check for if/break pattern inside a loop body
+			if p.isIfBreak(s) {
+				if err := p.emitBhvIfBreak(s, b, syms); err != nil {
+					return 0, err
+				}
+			} else {
+				if err := p.emitBhvIfStmt(s, b, syms, &deferred); err != nil {
+					return 0, err
+				}
 			}
 
 		case *WhileStmt:
 			if err := p.emitBhvWhileStmt(s, b, syms); err != nil {
-				return err
+				return 0, err
 			}
 
 		case *LoopStmt:
-			checkFrame, err := p.emitBhvLoopStmt(s, b, syms)
-			if err != nil {
-				return err
+			if err := p.emitBhvLoopStmt(s, b, syms); err != nil {
+				return 0, err
 			}
-			if checkFrame >= 0 {
-				breakTargetFrame = checkFrame + 1
-				resumeFrame = b.pos()
-				b.seek(breakTargetFrame)
-			}
+
+		case *BreakStmt:
+			b.emit(map[string]any{"op": "@break"})
 
 		default:
 			if err := p.emitBhvStmtSimple(stmt, b, syms); err != nil {
-				return err
+				return 0, err
 			}
-		}
-
-		// Break target patching: after a loop emits, the cursor is at the
-		// break target position. The next statement overwrites it. Once that
-		// statement has emitted, patch the break target's "next" to either
-		// false (last statement) or frameRef(resumeFrame) (skip loop body).
-		if breakTargetFrame >= 0 && b.pos()-1 == breakTargetFrame {
-			instr := b.get(breakTargetFrame)
-			if i == len(stmts)-1 {
-				instr["next"] = false
-			} else {
-				instr["next"] = frameRef(resumeFrame)
-			}
-			b.seek(resumeFrame)
-			breakTargetFrame = -1
-			resumeFrame = -1
 		}
 	}
 
@@ -2223,6 +2258,115 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 			checkInstr[d.slot] = frameRef(bodyFrame)
 		}
 	}
+
+	return mainFrameCount, nil
+}
+
+// isIfBreak detects the if/break pattern: IfStmt with a single BreakStmt
+// body and no else/else-if.
+func (p *parser) isIfBreak(s *IfStmt) bool {
+	if len(s.ElseIfs) > 0 || s.Else != nil {
+		return false
+	}
+	if len(s.Body) != 1 {
+		return false
+	}
+	_, isBreak := s.Body[0].(*BreakStmt)
+	return isBreak
+}
+
+// emitBhvIfBreak emits a check frame + @break placeholder for the
+// if/break pattern inside a loop. The check branches: condition-true
+// falls through to @break, condition-false jumps to continue (patched later
+// by the enclosing loop emitter).
+func (p *parser) emitBhvIfBreak(s *IfStmt, b *frameBuilder, syms *symbolTable) error {
+	cmp, ok := s.Cond.(*CompareExpr)
+	if !ok {
+		return fmt.Errorf("if/break condition must be CompareExpr, got %T", s.Cond)
+	}
+
+	lhs, err := p.emitBhvExprGetValue(cmp.LHS, syms, b, "")
+	if err != nil {
+		return err
+	}
+	rhs, err := p.emitBhvExprGetValue(cmp.RHS, syms, b, "")
+	if err != nil {
+		return err
+	}
+
+	breakTarget := frameRef(b.pos() + 1) // @break placeholder
+	continueTarget := frameRef(b.pos() + 2) // first frame after @break
+
+	switch cmp.Op {
+	case tokGreaterEquals:
+		// break when >= : larger falls through to @break, equal falls through to @break, smaller continues
+		f := map[string]any{
+			"op":        "check_number",
+			checkValue:  lhs,
+			checkTarget: rhs,
+			checkSmaller: continueTarget,
+		}
+		setComment(f, s.Comment)
+		b.emit(f)
+	case tokGreater:
+		// break when > : larger falls through to @break, equal+smaller continue
+		f := map[string]any{
+			"op":        "check_number",
+			checkValue:  lhs,
+			checkTarget: rhs,
+			checkSmaller: continueTarget,
+			"next":       continueTarget,
+		}
+		setComment(f, s.Comment)
+		b.emit(f)
+	case tokLess:
+		// break when < : smaller falls through to @break, equal+larger continue
+		f := map[string]any{
+			"op":        "check_number",
+			checkValue:  lhs,
+			checkTarget: rhs,
+			checkLarger: continueTarget,
+			"next":      continueTarget,
+		}
+		setComment(f, s.Comment)
+		b.emit(f)
+	case tokLessEquals:
+		// break when <= : smaller falls through to @break, equal falls through to @break, larger continues
+		f := map[string]any{
+			"op":        "check_number",
+			checkValue:  lhs,
+			checkTarget: rhs,
+			checkLarger: continueTarget,
+		}
+		setComment(f, s.Comment)
+		b.emit(f)
+	case tokDoubleEquals:
+		// break when == : equal falls through to @break, different continues
+		f := map[string]any{
+			"op":                "compare_register",
+			compareRegValue1:    lhs,
+			compareRegValue2:    rhs,
+			compareRegDifferent: continueTarget,
+		}
+		setComment(f, s.Comment)
+		b.emit(f)
+	case tokNotEquals:
+		// break when != : different falls through to @break, equal continues
+		f := map[string]any{
+			"op":                "compare_register",
+			compareRegValue1:    lhs,
+			compareRegValue2:    rhs,
+			"next":              continueTarget,
+		}
+		setComment(f, s.Comment)
+		b.emit(f)
+	default:
+		return fmt.Errorf("unsupported if/break comparison operator %v", cmp.Op)
+	}
+
+	// Emit @break placeholder
+	b.emit(map[string]any{"op": "@break"})
+	_ = breakTarget // used via frame position calculation above
 
 	return nil
 }
@@ -2394,7 +2538,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 // body, then restores the mode on exit (if needed).
 func (p *parser) emitBhvModeBlock(s *ModeBlockStmt, b *frameBuilder, syms *symbolTable) error {
 	saved := emitModeEntry(b, s.Unlock, s.Comment)
-	if err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
+	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}
 	emitModeExit(b, saved)
@@ -2410,7 +2554,7 @@ func (p *parser) emitBhvModeBlockExpr(e *ModeBlockExpr, target any, syms *symbol
 		mbeComment = comment
 	}
 	saved := emitModeEntry(b, e.Unlock, mbeComment)
-	if err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
+	if _, err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
 		return err
 	}
 	if err := p.emitBhvExprTo(e.Tail, target, syms, b, mbeComment); err != nil {
@@ -2428,7 +2572,7 @@ func (p *parser) emitBhvModeBlockExprMulti(e *ModeBlockExpr, retVals []any, syms
 		mbeComment = comment
 	}
 	saved := emitModeEntry(b, e.Unlock, mbeComment)
-	if err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
+	if _, err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
 		return err
 	}
 	// Tail must be a CallExpr for multi-return
@@ -2478,7 +2622,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 
 	// Compile body into separate builder
 	bodyBuilder := &frameBuilder{mode: b.mode}
-	if err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms); err != nil {
+	if _, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms); err != nil {
 		return err
 	}
 	bodyFrames := bodyBuilder.frames
@@ -2500,7 +2644,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 		}
 		if s.Else != nil {
 			elseBuilder := &frameBuilder{mode: b.mode}
-			if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
+			if _, err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 				return err
 			}
 			*deferred = append(*deferred, deferredBody{
@@ -2532,7 +2676,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 				return fmt.Errorf("unsupported else-if operator")
 			}
 			eiBuilder := &frameBuilder{mode: b.mode}
-			if err := p.emitBehaviorStmts(ei.Body, eiBuilder, syms); err != nil {
+			if _, err := p.emitBehaviorStmts(ei.Body, eiBuilder, syms); err != nil {
 				return err
 			}
 			*deferred = append(*deferred, deferredBody{
@@ -2548,7 +2692,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 					elseSlot = checkLarger
 				}
 				elseBuilder := &frameBuilder{mode: b.mode}
-				if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
+				if _, err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 					return err
 				}
 				*deferred = append(*deferred, deferredBody{
@@ -2559,7 +2703,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 			}
 		} else if s.Else != nil {
 			elseBuilder := &frameBuilder{mode: b.mode}
-			if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
+			if _, err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 				return err
 			}
 			// For == with plain else: both slots go to the else body
@@ -2595,7 +2739,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 	return nil
 }
 
-// emitBhvWhileStmt emits a while loop.
+// emitBhvWhileStmt emits a while loop with optional break support.
 func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTable) error {
 	cmp, ok := s.Cond.(*CompareExpr)
 	if !ok {
@@ -2621,79 +2765,159 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 
 	// Compile body
 	bodyBuilder := &frameBuilder{mode: b.mode}
-	if err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms); err != nil {
+	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
+	if err != nil {
 		return err
 	}
 
-	rebased := rebaseFrameRefs(bodyBuilder.frames, b.pos())
+	bodyStart := b.pos()
+	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
 	for _, f := range rebased {
 		b.emit(f)
 	}
 
-	// Loop back
-	lastBody := b.get(b.pos() - 1)
-	lastBody["next"] = frameRef(checkFrame)
+	// Loop back: set main-line last frame's "next" to check
+	if mainCount > 0 {
+		lastMainBody := b.get(bodyStart + mainCount - 1)
+		lastMainBody["next"] = frameRef(checkFrame)
+	}
 
 	// Exit when larger
-	check[checkLarger] = frameRef(b.pos())
+	afterLoop := frameRef(b.pos())
+	check[checkLarger] = afterLoop
+
+	// Patch @break placeholders
+	for j := bodyStart; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": afterLoop,
+			}
+		}
+	}
 
 	return nil
 }
 
-// emitBhvLoopStmt emits an unconditional loop with if/break.
-// Returns the check frame index (for break target patching) or -1.
-func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable) (int, error) {
+// emitBhvLoopStmt emits a loop with optional break support.
+func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable) error {
+	if s.Count != nil {
+		return p.emitBhvCountedLoop(s, b, syms)
+	}
+
 	loopStart := b.pos()
-	checkFrame := -1
-	for _, stmt := range s.Body {
-		if ifStmt, ok := stmt.(*IfStmt); ok {
-			if len(ifStmt.Body) == 1 {
-				if _, isBreak := ifStmt.Body[0].(*BreakStmt); isBreak {
-					// This is the if/break pattern
-					cmp, ok := ifStmt.Cond.(*CompareExpr)
-					if !ok {
-						return -1, fmt.Errorf("if/break condition must be CompareExpr")
-					}
-					lhs, err := p.emitBhvExprGetValue(cmp.LHS, syms, b, "")
-					if err != nil {
-						return -1, err
-					}
-					rhs, err := p.emitBhvExprGetValue(cmp.RHS, syms, b, "")
-					if err != nil {
-						return -1, err
-					}
-					f := map[string]any{
-						"op":        "check_number",
-						checkValue:  lhs,
-						checkTarget: rhs,
-					}
-					setComment(f, ifStmt.Comment)
-					checkFrame = b.emit(f)
-					// Reserve break target frame
-					b.emit(nil)
-					// Set if_smaller to skip past break target
-					f[checkSmaller] = frameRef(b.pos())
-					continue
-				}
-			}
-		}
-		// Regular statement
-		if ms, ok := stmt.(*ModeBlockStmt); ok {
-			if err := p.emitBhvModeBlock(ms, b, syms); err != nil {
-				return -1, err
-			}
-		} else {
-			if err := p.emitBhvStmtSimple(stmt, b, syms); err != nil {
-				return -1, err
+
+	// Compile body
+	bodyBuilder := &frameBuilder{mode: b.mode}
+	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
+	if err != nil {
+		return err
+	}
+
+	bodyStart := b.pos()
+	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+	for _, f := range rebased {
+		b.emit(f)
+	}
+
+	// Loop back: set main-line last frame's "next" to loop start
+	if mainCount > 0 {
+		lastMainBody := b.get(bodyStart + mainCount - 1)
+		lastMainBody["next"] = frameRef(loopStart)
+	}
+
+	// Patch @break placeholders
+	afterLoop := frameRef(b.pos())
+	for j := bodyStart; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": afterLoop,
 			}
 		}
 	}
 
-	// Loop back
-	if checkFrame >= 0 {
-		lastInstr := b.get(b.pos() - 1)
-		lastInstr["next"] = frameRef(loopStart)
+	return nil
+}
+
+// emitBhvCountedLoop emits a counted loop: loop N { ... }
+// Frame layout: INIT → CHECK → BODY → INCR → (back to CHECK)
+func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTable) error {
+	counterVar := allocUniqueVar("@loop", syms.usedVars)
+
+	// Resolve count expression
+	limit, err := p.emitBhvExprGetValue(s.Count, syms, b, "")
+	if err != nil {
+		return err
 	}
 
-	return checkFrame, nil
+	// INIT: set_number 0 → counter
+	b.emit(map[string]any{
+		"op": "set_number",
+		"1":  map[string]any{"num": 0},
+		"2":  counterVar,
+	})
+
+	// CHECK: check_number counter vs limit
+	checkFrame := b.emit(map[string]any{
+		"op":        "check_number",
+		checkValue:  counterVar,
+		checkTarget: limit,
+	})
+	setComment(b.get(checkFrame), s.Comment)
+
+	// Compile body
+	bodyBuilder := &frameBuilder{mode: b.mode}
+	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
+	if err != nil {
+		return err
+	}
+
+	bodyStart := b.pos()
+	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+	for _, f := range rebased {
+		b.emit(f)
+	}
+
+	// INCR: add counter + 1 → counter, next → CHECK
+	incrFrame := b.emit(map[string]any{
+		"op":   "add",
+		"1":    counterVar,
+		"2":    map[string]any{"num": 1},
+		"3":    counterVar,
+		"next": frameRef(checkFrame),
+	})
+
+	// Set main-line last body frame's "next" to incr
+	if mainCount > 0 {
+		lastMainBody := b.get(bodyStart + mainCount - 1)
+		lastMainBody["next"] = frameRef(incrFrame)
+	}
+
+	// Patch CHECK exits: larger and equal → afterLoop
+	afterLoop := frameRef(b.pos())
+	check := b.get(checkFrame)
+	check[checkLarger] = afterLoop
+	check["next"] = afterLoop
+
+	// Patch @break placeholders
+	for j := bodyStart; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": afterLoop,
+			}
+		}
+	}
+
+	return nil
 }

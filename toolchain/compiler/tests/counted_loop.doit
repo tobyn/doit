@@ -1,0 +1,11 @@
+# AI-generated test
+# Counted loop at behavior level
+behavior counted_loop {
+    @name "Counted Loop"
+
+    loop 5 {
+        notify "Iteration"
+    }
+
+    notify "Done"
+}

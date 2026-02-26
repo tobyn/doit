@@ -1,0 +1,61 @@
+{
+  "0": {
+    "1": {
+      "num": 0
+    },
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "0": {
+      "num": 0
+    },
+    "1": "@loop",
+    "op": "set_number"
+  },
+  "2": {
+    "0": 8,
+    "2": "@loop",
+    "3": {
+      "num": 10
+    },
+    "next": 8,
+    "op": "check_number"
+  },
+  "3": {
+    "0": "i",
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "op": "add"
+  },
+  "4": {
+    "1": 7,
+    "2": "i",
+    "3": {
+      "num": 3
+    },
+    "op": "check_number"
+  },
+  "5": {
+    "0": false,
+    "1": false,
+    "next": 8,
+    "op": "set_reg"
+  },
+  "6": {
+    "0": "@loop",
+    "1": {
+      "num": 1
+    },
+    "2": "@loop",
+    "next": 3,
+    "op": "add"
+  },
+  "7": {
+    "op": "notify",
+    "txt": "Done"
+  },
+  "name": "Counted Loop Break"
+}

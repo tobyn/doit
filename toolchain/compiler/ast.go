@@ -111,8 +111,9 @@ type WhileStmt struct {
 	Comment string
 }
 
-// LoopStmt is an unconditional loop.
+// LoopStmt is a loop. If Count is nil, infinite; otherwise counted.
 type LoopStmt struct {
+	Count   Expr   // nil = infinite, non-nil = counted
 	Body    []Stmt
 	Comment string
 }

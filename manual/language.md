@@ -704,6 +704,18 @@ while i <= 5 {
 
 The body executes as long as `i <= 5`, then execution continues past the loop.
 
+`break` can exit a `while` loop early:
+
+```doit
+var i = 1
+while i <= 10 {
+    if i >= 5 {
+        break
+    }
+    i += 1
+}
+```
+
 ### `loop` and `break`
 
 `loop` creates an infinite loop. Use `break` to exit:
@@ -720,6 +732,24 @@ loop {
     i += 1
 }
 ```
+
+`loop` also accepts a count expression to execute a fixed number of times:
+
+```doit
+loop 5 {
+    notify "Iteration"
+}
+```
+
+The count can be a variable or arithmetic expression:
+
+```doit
+loop n {
+    x += 1
+}
+```
+
+`break` works in counted loops too, exiting before all iterations complete.
 
 ## Execution Mode
 

@@ -527,16 +527,81 @@ Emission uses inline forward-jump patching:
 - **IfStmt**: Emit check frame with placeholder false target → emit body
   → emit jump-to-continuation → patch false target → emit else/else-if.
 - **WhileStmt**: Record loop start → emit check → emit body → last
-  frame's `"next"` points back to start → patch false branches past body.
-- **LoopStmt**: Record loop start → emit body → scan for `@break`
-  placeholder frames → last frame's `"next"` points to loop start →
-  patch `@break` frames to point after loop.
+  frame's `"next"` points back to start → patch false branches past
+  body → scan for `@break` and patch to afterLoop.
+- **LoopStmt**: If counted, delegate to `emitFnCountedLoop`. Otherwise,
+  record loop start → emit body → scan for `@break` placeholder
+  frames → last frame's `"next"` points to loop start → patch `@break`
+  frames to point after loop.
 - **BreakStmt**: Emits `{"op": "@break"}` placeholder, patched by the
-  enclosing `emitFnLoopStmt`.
+  enclosing loop or while emitter.
 - **ReturnStmt**: Emits values to `@retK` targets, zeros remaining
   slots, then emits `{"op": "@return"}` placeholder. `expandCall`
   patches `@return` frames to jump past the entire function expansion
   (same pattern as `@break` in loops).
+
+## `break` in `while` loops
+
+`break` works in both `loop` and `while` at behavior level and in fn
+bodies. At behavior level, `parseBhvWhileStmt` parses the body with
+`parseBhvStmtBlockInner(syms, true)` (inLoop=true, enabling `break`).
+`emitBhvWhileStmt` uses the child builder pattern and scans for `@break`
+placeholders after body emission, same as `emitBhvLoopStmt`.
+
+At behavior level, `emitBehaviorStmts` handles `BreakStmt` directly
+(emitting `{"op": "@break"}`), and detects the if/break pattern
+(`IfStmt` with single `BreakStmt` body, no else) to route through
+`emitBhvIfBreak` instead of `emitBhvIfStmt`. This avoids the issue
+where `emitBhvIfStmt` uses deferred bodies with unset branch slots
+inside loop bodies (which would cause behavior restart instead of
+continuation).
+
+`emitBhvIfBreak` emits a check frame with the break-condition-true
+path falling through to `@break`, and the break-condition-false path
+explicitly jumping to continue. All 6 comparison operators are handled.
+
+In fn bodies, `emitFnWhileStmt` scans body frames for `@break` after
+emission and patches them to point after the loop, same pattern as
+`emitFnLoopStmt`.
+
+## Counted loops (`loop N { ... }`)
+
+`loop` accepts an optional count expression: `loop 5 { ... }`,
+`loop n { ... }`, `loop (a + b) { ... }`. When count is nil, the loop
+is infinite (existing behavior). When count is non-nil, a counted loop
+is emitted.
+
+**AST**: `LoopStmt.Count Expr` — nil for infinite, non-nil for counted.
+
+**Parsing**: Both `parseBhvLoopStmt` and `parseFnBodyLoopStmt` peek
+after `loop`. If `{`, infinite. Otherwise parse count: number →
+literal + arithmetic continuation, `(` → parenthesized arithmetic,
+ident → resolve + arithmetic continuation.
+
+**Counted loop frame layout**:
+```
+INIT:  set_number 0 → @loop       (counter = 0)
+CHECK: check_number @loop vs limit (smaller falls through to body)
+       checkLarger → EXIT, "next" → EXIT
+BODY:  ... user body ...
+INCR:  add @loop + 1 → @loop, next → CHECK
+EXIT:  ... after loop ...
+```
+
+The counter variable `@loop` is allocated via `allocUniqueVar` to avoid
+collisions. The check frame uses `checkSmaller` as the fall-through to
+body (counter < limit means keep going), while `checkLarger` and `"next"`
+(equal) both exit. `break` inside counted loops is patched to `EXIT`
+the same way as infinite loops.
+
+**Behavior level**: `emitBhvCountedLoop` uses `emitBehaviorStmts` with
+a child builder for body emission, then rebases and copies. The
+`mainFrameCount` return from `emitBehaviorStmts` is used to set the
+main-line last frame's `"next"` to the increment frame (avoiding
+deferred body interference).
+
+**Fn body**: `emitFnCountedLoop` uses `emitFnBody` directly, sets the
+last body frame's `"next"` to the increment frame.
 
 ## Enhanced `return` in fn bodies
 
