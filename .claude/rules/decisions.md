@@ -538,9 +538,51 @@ Emission uses inline forward-jump patching:
   patch `@break` frames to point after loop.
 - **BreakStmt**: Emits `{"op": "@break"}` placeholder, patched by the
   enclosing `emitFnLoopStmt`.
+- **ReturnStmt**: Emits values to `@retK` targets, zeros remaining
+  slots, then emits `{"op": "@return"}` placeholder. `expandCall`
+  patches `@return` frames to jump past the entire function expansion
+  (same pattern as `@break` in loops).
 
-`return` is not allowed inside control flow blocks in fn bodies
-(validated at parse time with `inBlock` flag).
+## Enhanced `return` in fn bodies
+
+`return` can appear anywhere in a function body, including inside control
+flow blocks (`if`, `while`, `loop`). The compiler uses three paths based
+on post-parse analysis of `ReturnStmt` nodes in the AST:
+
+1. **Return-instruction path**: Single `return instruction` at end of
+   top-level body. Converts to `InstructionStmt` + `rets` form with
+   `@retK` names. Supports `fnDef.frame` promotion for pure instruction
+   wrappers. Unchanged behavior from before.
+
+2. **Zero-copy path**: Single `return` at end of top-level body with
+   all `IdentExpr` values. Extracts ident names as `fn.rets`, removes
+   `ReturnStmt` from body. Unchanged behavior from before.
+
+3. **Emit-and-jump path**: Everything else — multiple returns, returns
+   in blocks, returns with literals/calls. Sets `rets = ["@ret1", ...,
+   "@retN"]` where N = max arity across all returns. `ReturnStmt` nodes
+   stay in the body for `emitFnBody` to handle. Each `ReturnStmt` emits
+   values to `@retK` targets, zeros remaining slots (for branches with
+   fewer returns than max arity), then emits `{"op": "@return"}`.
+   `expandCall` patches `@return` to jump past the function expansion.
+
+**Max-arity rule**: The function's return count is the maximum arity
+across all `ReturnStmt` nodes. Branches that return fewer values fill
+remaining slots with `false` (null). This allows mixed arities like
+`return separate_coordinate coord` (arity 2) in one branch and
+`return coord, null` (arity 2) in another.
+
+**Return item parsing**: `parseFnBodyReturnItem` parses each item in a
+return list. If the item is a known function with returns, it's parsed
+as a `CallExpr` via `parseFnBodyCallArgs`. Otherwise, it falls back to
+`parseFnBodyExpr` (handles idents, numbers, null, constructors, `&`,
+`$register`).
+
+**Comma consumption fix**: `parseFnBodyCallArgs` only enters the keyword
+argument parsing loop when the callee actually has keyword parameters
+(`callee.positionalCount() < len(callee.params)`). This prevents the
+trailing comma in `return my_fn arg, 5` from being consumed as a keyword
+separator.
 
 ## Parenthesized boolean expressions
 

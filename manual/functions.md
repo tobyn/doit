@@ -226,8 +226,7 @@ read it). `inout` parameters can appear in either position.
 
 ### The `return` statement
 
-The `return` statement declares which local name is the function's return
-value:
+The `return` statement declares the function's return value:
 
 ```doit
 fn locate_self() {
@@ -237,11 +236,38 @@ fn locate_self() {
 }
 ```
 
-The `return` statement is a compile-time binding, not a runtime instruction.
-It tells the compiler that the named local maps to the caller's return target.
-This means instructions that write to the returned name write directly into
-the caller's destination with no copies. At call sites, the caller provides
-the return target via assignment syntax (`let loc = locate_self`).
+When `return` appears at the end of the function body and all return values
+are variable names, it is a zero-copy compile-time binding — the compiler
+maps the named locals directly to the caller's return targets with no extra
+instructions. At call sites, the caller provides the return target via
+assignment syntax (`let loc = locate_self`).
+
+`return` can also appear inside control flow blocks for early exit:
+
+```doit
+fn pick(x) {
+    if x > 5 {
+        return x
+    }
+    return null
+}
+```
+
+When there are multiple `return` statements, or `return` appears inside
+a block, the compiler emits jump instructions to transfer control to the
+end of the function body.
+
+`return` accepts function calls as values:
+
+```doit
+fn locate() {
+    return get_self
+}
+```
+
+The maximum return arity across all `return` statements in a function
+determines the function's return count. Branches that return fewer values
+fill the remaining slots with `null`.
 
 ### Expressions in function bodies
 
@@ -321,8 +347,9 @@ Control flow conditions support the same expressions as behavior-level
 conditions: comparisons, type checks, boolean chains, and parenthesized
 grouping.
 
-`return` is not allowed inside control flow blocks (`if`, `while`, `loop`).
-It must appear at the top level of the function body.
+`return` can appear inside control flow blocks (`if`, `while`, `loop`)
+for early exit. When there are multiple `return` paths, the compiler
+emits jump instructions to ensure control reaches the end of the function.
 
 ### Private Functions
 

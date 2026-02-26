@@ -1,0 +1,14 @@
+# AI-generated test
+# branches with different return arities
+fn maybe_split(coord, flag) {
+    if flag > 0 {
+        return separate_coordinate coord
+    }
+    return coord, null
+}
+
+behavior return_mixed_arity {
+    @name "Return Mixed Arity"
+    let x, y = maybe_split Coordinate(3, 7), 1
+    notify "Done", value: x
+}

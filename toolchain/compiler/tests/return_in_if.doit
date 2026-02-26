@@ -1,0 +1,14 @@
+# AI-generated test
+# return inside if/else branches (emit-and-jump path)
+fn pick(x) {
+    if x > 5 {
+        return x
+    }
+    return null
+}
+
+behavior return_in_if {
+    @name "Return In If"
+    let r = pick 10
+    notify "Done", value: r
+}

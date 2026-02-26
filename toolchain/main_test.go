@@ -1524,17 +1524,6 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("fn_body_return_in_block", func(t *testing.T) {
-		src := "fn bad(x) { if x > 1 { return x } }\nbehavior a { bad 1 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "not allowed inside control flow blocks") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("bhv_break_outside_loop", func(t *testing.T) {
 		src := "behavior a { break }"
 		_, err := compiler.CompileString(src, stdlib, "", "")

@@ -1,0 +1,11 @@
+# AI-generated test
+# function call as return value
+fn locate() {
+    return get_self
+}
+
+behavior return_fn_call {
+    @name "Return Fn Call"
+    let me = locate
+    notify "Done", value: me
+}

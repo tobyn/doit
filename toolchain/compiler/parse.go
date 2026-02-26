@@ -203,7 +203,7 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, paramDirs m
 				"too many positional arguments for %s (remaining parameters are keyword-only)", calleeTok.val)
 		}
 		p.unget(peek)
-	} else if peek.kind == tokComma {
+	} else if peek.kind == tokComma && callee.positionalCount() < len(callee.params) {
 		kwArgs = map[string]Expr{}
 		for {
 			dirOrKw, err := p.expect(tokIdent)
@@ -881,6 +881,63 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			b.emit(map[string]any{
 				"op": "@break",
 			})
+
+		case *ReturnStmt:
+			// Emit values to @retK targets, then emit @return jump placeholder
+			retOffset := 0
+			for _, val := range s.Values {
+				switch e := val.(type) {
+				case *CallExpr:
+					callee := p.fns[e.Name]
+					rc := callee.returnCount()
+					retVals := make([]any, rc)
+					for j := 0; j < rc; j++ {
+						retVals[j] = resolveVarName("@ret"+strconv.Itoa(retOffset+j+1), paramMap)
+					}
+					resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(e.Args, e.KwArgs, b, paramMap, usedVars, pos)
+					if err != nil {
+						return err
+					}
+					if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, comment, usedVars); err != nil {
+						return err
+					}
+					retOffset += rc
+				case *InstructionExpr:
+					rc := frameReturnCount(e.Frame)
+					retVals := make([]any, rc)
+					for j := 0; j < rc; j++ {
+						retVals[j] = resolveVarName("@ret"+strconv.Itoa(retOffset+j+1), paramMap)
+					}
+					resolved := resolveInstructionFrame(e.Frame, retVals, paramMap, nil, comment)
+					b.emit(resolved)
+					retOffset += rc
+				default:
+					target := resolveVarName("@ret"+strconv.Itoa(retOffset+1), paramMap)
+					if err := p.emitExprTo(val, target, b, paramMap, usedVars, comment, pos); err != nil {
+						return err
+					}
+					retOffset++
+				}
+			}
+			// Zero remaining @retK slots
+			totalRets := 0
+			for k := range paramMap {
+				if strings.HasPrefix(k, "@ret") {
+					n, err := strconv.Atoi(k[4:])
+					if err == nil && n > totalRets {
+						totalRets = n
+					}
+				}
+			}
+			for i := retOffset + 1; i <= totalRets; i++ {
+				target := resolveVarName("@ret"+strconv.Itoa(i), paramMap)
+				f := map[string]any{"op": "set_reg", "1": false, "2": target}
+				b.emit(f)
+			}
+			// Emit @return jump placeholder
+			b.emit(map[string]any{
+				"op": "@return",
+			})
 		}
 	}
 	return nil
@@ -1352,93 +1409,247 @@ func (p *parser) parseUserFn() error {
 		resolve:   p.fnBodyResolver(paramDirs),
 	}
 
-	astBody, rets, err := p.parseFnBodyStmts(ctx, false)
+	astBody, err := p.parseFnBodyStmts(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Pure-instruction optimization: if the function body is a single
-	// instruction frame, promote it to fnDef.frame for the fast direct-frame
-	// expansion path.
+	// Pure-instruction promotion (no return): if the function body is a
+	// single instruction frame, promote it to fnDef.frame for the fast
+	// direct-frame expansion path.
 	if len(astBody) == 1 {
 		if instrStmt, ok := astBody[0].(*InstructionStmt); ok {
-			frame := instrStmt.Frame
-			canPromote := true
-			opVal, _ := frame["op"].(string)
-			for _, v := range frame {
-				s, ok := v.(string)
-				if !ok {
-					continue
-				}
-				if s == opVal {
-					continue
-				}
-				isParam := false
-				for _, pd := range params {
-					if pd.name == s {
-						isParam = true
-						break
-					}
-				}
-				if isParam {
-					continue
-				}
-				isRet := false
-				for _, r := range rets {
-					if r == s {
-						isRet = true
-						break
-					}
-				}
-				if isRet {
-					continue
-				}
-				canPromote = false
-				break
-			}
-			if canPromote {
-				promoted := maps.Clone(frame)
-				for k, v := range promoted {
-					if s, ok := v.(string); ok {
-						for i, r := range rets {
-							if s == r {
-								promoted[k] = returnSlot(i + 1)
-								break
-							}
-						}
-					}
-				}
+			if promoted := tryPromoteInstruction(instrStmt.Frame, params, nil); promoted != nil {
 				p.fns[nameTok.val] = &fnDef{params: params, frame: promoted}
 				return nil
 			}
 		}
 	}
 
+	// Post-parse analysis: determine return path from ReturnStmt nodes
+	returns := collectReturnStmts(astBody)
+	var rets []string
+
+	if len(returns) == 0 {
+		// No return: rets stays nil
+	} else {
+		// Check if single return at end of top-level body
+		lastStmt := astBody[len(astBody)-1]
+		_, lastIsReturn := lastStmt.(*ReturnStmt)
+		singleTopLevel := len(returns) == 1 && lastIsReturn
+
+		if singleTopLevel {
+			ret := returns[0]
+			// Return-instruction path: single return instruction at end
+			if len(ret.Values) == 1 {
+				if instrExpr, ok := ret.Values[0].(*InstructionExpr); ok {
+					frame := instrExpr.Frame
+					maxSlot := 0
+					for _, v := range frame {
+						if rs, ok := v.(returnSlot); ok {
+							if int(rs) > maxSlot {
+								maxSlot = int(rs)
+							}
+						}
+					}
+					modifiedFrame := maps.Clone(frame)
+					for i := 1; i <= maxSlot; i++ {
+						synthName := "@ret" + strconv.Itoa(i)
+						rets = append(rets, synthName)
+					}
+					for k, v := range modifiedFrame {
+						if rs, ok := v.(returnSlot); ok {
+							modifiedFrame[k] = "@ret" + strconv.Itoa(int(rs))
+						}
+					}
+					instrStmt := &InstructionStmt{Frame: modifiedFrame}
+					astBody[len(astBody)-1] = instrStmt
+
+					// Pure-instruction promotion
+					if len(astBody) == 1 {
+						if canPromote := tryPromoteInstruction(modifiedFrame, params, rets); canPromote != nil {
+							p.fns[nameTok.val] = &fnDef{params: params, frame: canPromote}
+							return nil
+						}
+					}
+
+					p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
+					return nil
+				}
+			}
+
+			// Zero-copy path: all values are IdentExpr
+			allIdent := true
+			for _, v := range ret.Values {
+				if _, ok := v.(*IdentExpr); !ok {
+					allIdent = false
+					break
+				}
+			}
+			if allIdent {
+				for _, v := range ret.Values {
+					rets = append(rets, v.(*IdentExpr).Name)
+				}
+				// Remove the ReturnStmt from the body
+				astBody = astBody[:len(astBody)-1]
+				p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
+				return nil
+			}
+		}
+
+		// Emit-and-jump path: multiple returns, returns in blocks,
+		// or returns with literals/calls
+		maxArity := 0
+		for _, ret := range returns {
+			a := returnStmtArity(ret, p.fns)
+			if a > maxArity {
+				maxArity = a
+			}
+		}
+		for i := 1; i <= maxArity; i++ {
+			rets = append(rets, "@ret"+strconv.Itoa(i))
+		}
+		// Leave ReturnStmt nodes in the body for emitFnBody to handle
+	}
+
 	p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
 	return nil
 }
 
+// tryPromoteInstruction checks whether an instruction frame can be promoted
+// to the fast fnDef.frame path. Returns the promoted frame, or nil.
+func tryPromoteInstruction(frame map[string]any, params []paramDef, rets []string) map[string]any {
+	opVal, _ := frame["op"].(string)
+	for _, v := range frame {
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+		if s == opVal {
+			continue
+		}
+		isParam := false
+		for _, pd := range params {
+			if pd.name == s {
+				isParam = true
+				break
+			}
+		}
+		if isParam {
+			continue
+		}
+		isRet := false
+		for _, r := range rets {
+			if r == s {
+				isRet = true
+				break
+			}
+		}
+		if isRet {
+			continue
+		}
+		return nil
+	}
+	promoted := maps.Clone(frame)
+	for k, v := range promoted {
+		if s, ok := v.(string); ok {
+			for i, r := range rets {
+				if s == r {
+					promoted[k] = returnSlot(i + 1)
+					break
+				}
+			}
+		}
+	}
+	return promoted
+}
+
+// collectReturnStmts recursively collects all ReturnStmt nodes from an AST.
+func collectReturnStmts(stmts []Stmt) []*ReturnStmt {
+	var result []*ReturnStmt
+	for _, stmt := range stmts {
+		switch s := stmt.(type) {
+		case *ReturnStmt:
+			result = append(result, s)
+		case *IfStmt:
+			result = append(result, collectReturnStmts(s.Body)...)
+			for _, elif := range s.ElseIfs {
+				result = append(result, collectReturnStmts(elif.Body)...)
+			}
+			result = append(result, collectReturnStmts(s.Else)...)
+		case *WhileStmt:
+			result = append(result, collectReturnStmts(s.Body)...)
+		case *LoopStmt:
+			result = append(result, collectReturnStmts(s.Body)...)
+		}
+	}
+	return result
+}
+
+// returnStmtArity computes the return arity of a single ReturnStmt.
+func returnStmtArity(ret *ReturnStmt, fns map[string]*fnDef) int {
+	arity := 0
+	for _, v := range ret.Values {
+		switch e := v.(type) {
+		case *CallExpr:
+			if fn, ok := fns[e.Name]; ok {
+				arity += fn.returnCount()
+			} else {
+				arity++
+			}
+		case *InstructionExpr:
+			arity += frameReturnCount(e.Frame)
+		default:
+			arity++
+		}
+	}
+	return arity
+}
+
+// parseFnBodyReturnItem parses a single item in a return statement.
+// Handles function calls (with return values), identifiers, numbers,
+// null, constructors, &, and $register references.
+func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	// Function call: known function with a return value
+	if tok.kind == tokIdent && !isConstructor(tok.val) && tok.val != "null" && !strings.HasPrefix(tok.val, "$") {
+		callee := p.fns[tok.val]
+		if callee != nil && callee.hasReturn() {
+			args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, ctx.fnVars)
+			if err != nil {
+				return nil, err
+			}
+			return &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs}, nil
+		}
+	}
+
+	// Otherwise, parse as a simple expression
+	p.unget(tok)
+	return p.parseFnBodyExpr()
+}
+
 // parseFnBodyStmts parses fn body statements until '}'. The opening '{'
-// has been consumed. If inBlock is true, this is a nested block (if/while/
-// loop body) and 'return' is not allowed.
-// Returns the parsed statements and any return names.
-func (p *parser) parseFnBodyStmts(ctx *fnBodyContext, inBlock bool) ([]Stmt, []string, error) {
+// has been consumed. Returns the parsed statements.
+func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
 	// For backward compatibility, letVars is a view into ctx.fnVars
 	// (parseFnBodyCallArgs still uses letVars map[string]bool).
 	letVars := ctx.fnVars
 
 	var astBody []Stmt
-	var rets []string
 	for {
 		tok, err := p.next()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if tok.kind == tokRBrace {
 			break
 		}
 		if tok.kind != tokIdent {
-			return nil, nil, p.errorf(tok.pos, "expected statement or '}', got %s", tok.describe())
+			return nil, p.errorf(tok.pos, "expected statement or '}', got %s", tok.describe())
 		}
 		comment := p.docComment
 
@@ -1452,129 +1663,74 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext, inBlock bool) ([]Stmt, []s
 		case "instruction":
 			frame, err := p.parseInstruction()
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, tok.pos); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			astBody = append(astBody, &InstructionStmt{Frame: frame, Comment: comment})
 
 		case "return":
-			if inBlock {
-				return nil, nil, p.errorf(tok.pos, "'return' not allowed inside control flow blocks in fn bodies")
-			}
 			retPeek, err := p.next()
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			if retPeek.kind == tokIdent && retPeek.val == "instruction" {
 				frame, err := p.parseInstruction()
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, retPeek.pos); err != nil {
-					return nil, nil, err
+					return nil, err
 				}
-				maxSlot := 0
-				for _, v := range frame {
-					if rs, ok := v.(returnSlot); ok {
-						if int(rs) > maxSlot {
-							maxSlot = int(rs)
-						}
-					}
-				}
-				rets = nil
-				modifiedFrame := maps.Clone(frame)
-				for i := 1; i <= maxSlot; i++ {
-					synthName := "@ret" + strconv.Itoa(i)
-					rets = append(rets, synthName)
-				}
-				for k, v := range modifiedFrame {
-					if rs, ok := v.(returnSlot); ok {
-						modifiedFrame[k] = "@ret" + strconv.Itoa(int(rs))
-					}
-				}
-				astBody = append(astBody, &InstructionStmt{Frame: modifiedFrame, Comment: comment})
+				astBody = append(astBody, &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame}}})
 			} else {
 				p.unget(retPeek)
-				rets = nil
-				retIdx := 0
+				var values []Expr
 				for {
-					retTok, err := p.next()
+					item, err := p.parseFnBodyReturnItem(ctx)
 					if err != nil {
-						return nil, nil, err
+						return nil, err
 					}
-					switch retTok.kind {
-					case tokIdent:
-						if retTok.val == "null" {
-							retIdx++
-							synthName := "@ret" + strconv.Itoa(retIdx)
-							astBody = append(astBody, &LetStmt{
-								Name: synthName,
-								Value: &CallExpr{
-									Name: "set_reg",
-									Args: []Expr{&LiteralExpr{Value: false}},
-								},
-							})
-							rets = append(rets, synthName)
-						} else {
-							rets = append(rets, retTok.val)
-						}
-					case tokNumber:
-						retIdx++
-						synthName := "@ret" + strconv.Itoa(retIdx)
-						num, _ := strconv.Atoi(retTok.val)
-						astBody = append(astBody, &LetStmt{
-							Name: synthName,
-							Value: &CallExpr{
-								Name: "set_number",
-								Args: []Expr{
-									&LiteralExpr{Value: false},
-									&LiteralExpr{Value: map[string]any{"num": num}},
-								},
-							},
-						})
-						rets = append(rets, synthName)
-					default:
-						return nil, nil, p.errorf(retTok.pos, "expected identifier, number, or null in return list, got %s", retTok.describe())
-					}
+					values = append(values, item)
 					sep, err := p.next()
 					if err != nil {
-						return nil, nil, err
+						return nil, err
 					}
 					if sep.kind != tokComma {
 						p.unget(sep)
 						break
 					}
 				}
+				astBody = append(astBody, &ReturnStmt{Values: values})
 			}
 
 		case "let", "var":
 			mutable := tok.val == "var"
 			stmt, err := p.parseFnBodyLetVar(ctx, mutable, comment)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			astBody = append(astBody, stmt...)
 
 		case "if":
 			stmt, err := p.parseFnBodyIfStmt(ctx, comment)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			astBody = append(astBody, stmt)
 
 		case "while":
 			stmt, err := p.parseFnBodyWhileStmt(ctx, comment)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			astBody = append(astBody, stmt)
 
 		case "loop":
 			stmt, err := p.parseFnBodyLoopStmt(ctx, comment)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			astBody = append(astBody, stmt)
 
@@ -1585,36 +1741,36 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext, inBlock bool) ([]Stmt, []s
 			// Check for assignment, compound assignment, ++/--, or bare call
 			peek, err := p.next()
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			if peek.kind == tokEquals {
 				// Assignment: x = <expr>
 				if err := ctx.canAssign(tok.val, p, tok.pos); err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				expr, err := p.parseFnBodyRHSExpr(ctx)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				astBody = append(astBody, &AssignStmt{Target: tok.val, Value: expr, Comment: comment})
 			} else if isCompoundAssignOp(peek.kind) {
 				// Compound assignment: x += <expr>
 				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				rhs, err := p.parseArithExpr(ctx.resolve)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				astBody = append(astBody, &CompoundAssignStmt{Target: tok.val, Op: peek.kind, Value: rhs, Comment: comment})
 			} else if peek.kind == tokPlusPlus {
 				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokPlusPlus, Comment: comment})
 			} else if peek.kind == tokMinusMinus {
 				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment})
 			} else {
@@ -1622,11 +1778,11 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext, inBlock bool) ([]Stmt, []s
 				p.unget(peek)
 				callee := p.fns[tok.val]
 				if callee == nil {
-					return nil, nil, p.errorf(tok.pos, "unknown function %q", tok.val)
+					return nil, p.errorf(tok.pos, "unknown function %q", tok.val)
 				}
 				args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, letVars)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				astBody = append(astBody, &CallStmt{
 					Name:    tok.val,
@@ -1637,7 +1793,7 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext, inBlock bool) ([]Stmt, []s
 			}
 		}
 	}
-	return astBody, rets, nil
+	return astBody, nil
 }
 
 // parseFnBodyLetVar parses a let or var declaration in a fn body.
@@ -1848,7 +2004,7 @@ func (p *parser) parseFnBodyIfStmt(ctx *fnBodyContext, comment string) (*IfStmt,
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	body, _, err := p.parseFnBodyStmts(ctx, true)
+	body, err := p.parseFnBodyStmts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1874,7 +2030,7 @@ func (p *parser) parseFnBodyIfStmt(ctx *fnBodyContext, comment string) (*IfStmt,
 			if _, err := p.expect(tokLBrace); err != nil {
 				return nil, err
 			}
-			elseBody, _, err := p.parseFnBodyStmts(ctx, true)
+			elseBody, err := p.parseFnBodyStmts(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -1900,7 +2056,7 @@ func (p *parser) parseFnBodyElseIfChain(ctx *fnBodyContext, stmt *IfStmt) error 
 	if _, err := p.expect(tokLBrace); err != nil {
 		return err
 	}
-	body, _, err := p.parseFnBodyStmts(ctx, true)
+	body, err := p.parseFnBodyStmts(ctx)
 	if err != nil {
 		return err
 	}
@@ -1922,7 +2078,7 @@ func (p *parser) parseFnBodyElseIfChain(ctx *fnBodyContext, stmt *IfStmt) error 
 		if _, err := p.expect(tokLBrace); err != nil {
 			return err
 		}
-		elseBody, _, err := p.parseFnBodyStmts(ctx, true)
+		elseBody, err := p.parseFnBodyStmts(ctx)
 		if err != nil {
 			return err
 		}
@@ -1946,7 +2102,7 @@ func (p *parser) parseFnBodyWhileStmt(ctx *fnBodyContext, comment string) (*Whil
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	body, _, err := p.parseFnBodyStmts(ctx, true)
+	body, err := p.parseFnBodyStmts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1958,7 +2114,7 @@ func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string) (*LoopS
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	body, _, err := p.parseFnBodyStmts(ctx, true)
+	body, err := p.parseFnBodyStmts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -2135,6 +2291,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		return nil
 	}
 
+	origPos := b.pos()
 	if err := p.emitFnBody(fn.astBody, b, paramMap, usedVars, comment, pos); err != nil {
 		return err
 	}
@@ -2142,6 +2299,19 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		f := map[string]any{"op": "set_reg", "1": rc.from, "2": rc.to}
 		setComment(f, comment)
 		b.emit(f)
+	}
+	// Patch @return placeholders to jump past the entire function expansion
+	afterAll := b.pos()
+	for j := origPos; j < afterAll; j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@return" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": frameRef(afterAll),
+			}
+		}
 	}
 	return nil
 }

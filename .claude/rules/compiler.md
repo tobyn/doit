@@ -55,11 +55,14 @@ output format.
   file-level parsing, function definitions with `instruction` support,
   `fnBodyResolver` (operandResolver for fn bodies),
   `fnBodyContext` (tracks paramDirs, fnVars, resolve for fn body parsing),
-  fn body AST parsing (`parseFnBodyStmts`, `parseFnBodyLetVar`,
-  `parseFnBodyRHSExpr`, `parseFnBodyIfStmt`, `parseFnBodyElseIfChain`,
-  `parseFnBodyWhileStmt`, `parseFnBodyLoopStmt`,
-  `parseFnBodyExpr`, `parseFnBodyConstructorExpr`,
-  `parseFnBodyCallArgs`, `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
+  fn body AST parsing (`parseFnBodyStmts`, `parseFnBodyReturnItem`,
+  `parseFnBodyLetVar`, `parseFnBodyRHSExpr`, `parseFnBodyIfStmt`,
+  `parseFnBodyElseIfChain`, `parseFnBodyWhileStmt`,
+  `parseFnBodyLoopStmt`, `parseFnBodyExpr`,
+  `parseFnBodyConstructorExpr`, `parseFnBodyCallArgs`,
+  `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
+  post-parse analysis (`collectReturnStmts`, `returnStmtArity`,
+  `tryPromoteInstruction`),
   fn body AST emission (`emitFnBody`, `emitExprGetValue`, `emitExprTo`,
   `emitFnArithTo`, `emitFnArithNode`, `emitFnBoolExprTo`,
   `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnWhileStmt`, `emitFnLoopStmt`,
@@ -259,21 +262,37 @@ at the call site when the wrapper is called as a regular function.
 
 **Return values**: Functions can produce one or more return values.
 
-The `return` statement in a function body declares which local names are
-the function's return values. Single return:
-`fn locate_self() { let me = get_self; let coord = get_location me; return coord }`.
+`return` is always parsed into `ReturnStmt` AST nodes by
+`parseFnBodyStmts`. Post-parse analysis in `parseUserFn` determines one
+of three paths:
+
+1. **Return-instruction path**: Single `return instruction` at end of
+   top-level body. Converted to `InstructionStmt` with `@retK` slot
+   replacement. Supports `fnDef.frame` promotion via
+   `tryPromoteInstruction`.
+
+2. **Zero-copy path**: Single `return` at end of top-level body with
+   all `IdentExpr` values. Ident names extracted as `fn.rets`,
+   `ReturnStmt` removed from body. In `expandCall`, each `fn.rets[i]`
+   is added to `paramMap` with `retVals[i]` as its value, so body calls
+   write directly into caller's return targets with no copies.
+
+3. **Emit-and-jump path**: Multiple returns, returns in blocks, or
+   returns with literals/calls. Sets `fn.rets = ["@ret1", ..., "@retN"]`
+   where N = max arity across all returns. `ReturnStmt` nodes stay in
+   the body. During `emitFnBody`, each `ReturnStmt` emits values to
+   `@retK` targets (via `emitExprTo` for simple values, `expandCall`
+   for `CallExpr`, `resolveInstructionFrame` for `InstructionExpr`),
+   zeros remaining slots, then emits `{"op": "@return"}` placeholder.
+   `expandCall` patches `@return` frames to jump past the function
+   expansion (same pattern as `@break` in loops).
+
+Return items are parsed by `parseFnBodyReturnItem`: function calls with
+returns become `CallExpr`, everything else goes through `parseFnBodyExpr`.
 Multi-value return uses comma-separated items:
 `fn get_xy(coord) { let x, y = separate_coordinate coord; return x, y }`.
-Return items can be identifiers, number literals, or `null`. Literals are
-desugared into synthetic `LetStmt` AST nodes (`set_number` for numbers,
-`set_reg` for null) with `@retK` synthetic names that can't collide with
-user identifiers. Return names are stored in `fnDef.rets` (a `[]string`;
-nil/empty = no return). `returnCount()` returns `len(rets)` for body-based
-functions. In `expandCall`, each `fn.rets[i]` is added to `paramMap` with
-`retVals[i]` as its value, so body calls that reference the returned names
-write directly into the caller's return targets with no copies. The
-`return` statement is a compile-time binding — it does not emit a runtime
-instruction.
+Return names are stored in `fnDef.rets` (a `[]string`; nil/empty = no
+return). `returnCount()` returns `len(rets)` for body-based functions.
 
 The `@N` syntax inside an `instruction` block marks output slots as
 return values:

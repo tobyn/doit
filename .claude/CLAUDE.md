@@ -42,6 +42,13 @@ conclusions to rules files promptly rather than waiting until the end.
 Context from earlier in the conversation may be compressed, so anything
 worth remembering should be persisted to files before it's needed later.
 
+## Scratch Directory
+
+The `scratch/` directory in the project root is a shared collaboration area
+for passing large or unwieldy data between the developer and Claude Code.
+It is excluded from Git and may not always exist — recreate it if needed.
+Do not overwrite existing files in it.
+
 ## Architecture
 
 - **`toolchain/`** — The doit language's Go-based toolchain implementation
