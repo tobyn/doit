@@ -706,3 +706,51 @@ behavior level and in fn bodies.
 
 **Deferred**: expression lists in assignment (`x, y = 1, 2`) and
 `return` statements.
+
+## Mode block expressions (`locked`/`unlocked` as expressions)
+
+`locked { ... }` and `unlocked { ... }` work as expressions where the
+last item in the block is the value-producing tail. This extends the
+existing statement-only mode blocks.
+
+**AST representation**: `ModeBlockExpr` has `Unlock bool`, `Body []Stmt`
+(leading statements), `Tail Expr` (the value-producing expression), and
+`Comment string`. The internal `exprTailStmt` wrapper carries a bare
+expression parsed at the end of a mode block body; it never appears in
+the final AST.
+
+**Parsing**: `parseBhvModeBlockExpr` and `parseFnBodyModeBlockExpr`
+parse mode block expressions. They delegate to the existing statement
+block parsers (`parseBhvStmtBlockInner` / `parseFnBodyStmtsInner`) with
+an `exprTail` flag. When `exprTail` is true, the last item may be a
+bare expression (function call, variable, number, constructor) wrapped
+in `exprTailStmt`. The parser extracts the expression and discards the
+wrapper.
+
+**Arity**: Determined by `modeBlockExprArity(tail)`: if `CallExpr` →
+`fn.returnCount()`, otherwise 1. Multi-return mode block expressions
+work like multi-return function calls — `let x, y = unlocked {
+separate_coordinate coord }`.
+
+**Mode transition helpers**: `emitModeEntry(b, unlock, comment)` and
+`emitModeExit(b, saved)` encapsulate the save/check/emit/restore
+pattern. Both `ModeBlockStmt` and `ModeBlockExpr` emission use these
+helpers.
+
+**Emission**: `emitBhvModeBlockExpr` / `emitFnModeBlockExpr` handle
+single-return cases (mode entry → body → tail to target → mode exit).
+`emitBhvModeBlockExprMulti` / `emitFnModeBlockExprMulti` handle
+multi-return cases where the tail is a `CallExpr` expanded with
+`retVals`.
+
+**Expression list support**: `ModeBlockExpr` is handled alongside
+`CallExpr` in the `ExprListExpr` emission loops in both
+`emitBhvStmtSimple` and `emitFnBody`, routing to single or multi
+emitter based on arity.
+
+**Supported contexts**: `let`/`var` init and assignment RHS at behavior
+level and in fn bodies. Expression lists in multi-binding declarations.
+
+**Deferred**: continuation after mode block (`locked { get_number v } + 1`),
+mode blocks in function call arguments, mode blocks in `return` statement
+items.

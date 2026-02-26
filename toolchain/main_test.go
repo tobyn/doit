@@ -1595,6 +1595,50 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("mode_block_expr_empty", func(t *testing.T) {
+		src := `behavior a { let x = unlocked { } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty mode block expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("mode_block_expr_non_value_tail", func(t *testing.T) {
+		src := `behavior a { let x = unlocked { notify "hi" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "last item in mode block expression must be a value-producing expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("mode_block_expr_fn_body_empty", func(t *testing.T) {
+		src := `behavior a { let x = f } fn f() { let x = unlocked { }; return x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty mode block expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("mode_block_expr_fn_body_non_value_tail", func(t *testing.T) {
+		src := `behavior a { let x = f } fn f() { let x = unlocked { notify "hi" }; return x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "last item in mode block expression must be a value-producing expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

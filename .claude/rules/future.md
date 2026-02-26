@@ -44,13 +44,17 @@ Potential optimization passes (would need a new optimization file):
 - **Dead code elimination**: Remove unreachable statements after
   `return`/`break`.
 
-## Expression form for `locked`/`unlocked`
+## Mode block expression extensions
 
-`locked { ... }` and `unlocked { ... }` are currently statement-only.
-An expression form could allow mode blocks in expression contexts
-(e.g., `let x = unlocked { get_self }`) where the last expression's
-value becomes the block's value. This would parallel the statement
-form but return a value.
+The expression form for `locked`/`unlocked` is implemented (see
+decisions.md "Mode block expressions"). These extensions are deferred:
+
+- **Continuation after mode block**: `locked { get_number v } + 1` —
+  using the mode block expression result in a larger expression.
+- **Mode blocks in function call arguments**: `my_fn unlocked { get_self }` —
+  requires parsing mode blocks in argument position.
+- **Mode blocks in `return` statement items**: `return unlocked { get_self }` —
+  requires parsing mode blocks in return item position.
 
 ## Extended comparison and type check expressions
 

@@ -570,6 +570,17 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		return nil, err
 	}
 
+	// Mode block expression RHS: let x = unlocked { ... }
+	if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
+		mbe, err := p.parseBhvModeBlockExpr(rhsTok.val == "unlocked", syms, comment)
+		if err != nil {
+			return nil, err
+		}
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
+		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: mbe, Comment: comment}}, nil
+	}
+
 	if rhsTok.kind == tokNumber {
 		num, _ := strconv.Atoi(rhsTok.val)
 		// Check for & after number (error)
@@ -762,6 +773,15 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		rhsTok, err := p.next()
 		if err != nil {
 			return nil, err
+		}
+
+		// Mode block expression RHS: x = unlocked { ... }
+		if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
+			mbe, err := p.parseBhvModeBlockExpr(rhsTok.val == "unlocked", syms, comment)
+			if err != nil {
+				return nil, err
+			}
+			return []Stmt{&AssignStmt{Target: tok.val, Value: mbe, Comment: comment}}, nil
 		}
 
 		if rhsTok.kind == tokNumber {
@@ -1279,6 +1299,16 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 			return nil, err
 		}
 
+		if tok.kind == tokIdent && (tok.val == "locked" || tok.val == "unlocked") {
+			mbe, err := p.parseBhvModeBlockExpr(tok.val == "unlocked", syms, comment)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, mbe)
+			bindingsConsumed += p.modeBlockExprArity(mbe.Tail)
+			continue
+		}
+
 		if tok.kind == tokIdent {
 			if fn := p.fns[tok.val]; fn != nil {
 				if !fn.hasReturn() {
@@ -1359,15 +1389,55 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 	}}, nil
 }
 
+// modeBlockExprArity returns the arity of a ModeBlockExpr's tail expression.
+func (p *parser) modeBlockExprArity(expr Expr) int {
+	if ce, ok := expr.(*CallExpr); ok {
+		if fn := p.fns[ce.Name]; fn != nil {
+			return fn.returnCount()
+		}
+	}
+	return 1
+}
+
+// parseBhvModeBlockExpr parses a locked/unlocked block used as an expression.
+// The keyword has been consumed. Expects '{', body statements, a tail
+// expression, and '}'. Returns a ModeBlockExpr.
+func (p *parser) parseBhvModeBlockExpr(unlock bool, syms *symbolTable, comment string) (*ModeBlockExpr, error) {
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+	stmts, err := p.parseBhvStmtBlockInner(syms, false, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, p.errorf(0, "empty mode block expression")
+	}
+	// The last statement must be an exprTailStmt
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, p.errorf(0, "last item in mode block expression must be a value-producing expression")
+	}
+	return &ModeBlockExpr{
+		Unlock:  unlock,
+		Body:    stmts[:len(stmts)-1],
+		Tail:    tail.Expr,
+		Comment: comment,
+	}, nil
+}
+
 // parseBhvStmtBlock parses a brace-delimited block of statements.
 // The opening '{' has been consumed. Reads until '}'.
 func (p *parser) parseBhvStmtBlock(syms *symbolTable) ([]Stmt, error) {
-	return p.parseBhvStmtBlockInner(syms, false)
+	return p.parseBhvStmtBlockInner(syms, false, false)
 }
 
 // parseBhvStmtBlockInner parses a brace-delimited block of statements.
-// If inLoop is true, 'break' is allowed.
-func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool) ([]Stmt, error) {
+// If inLoop is true, 'break' is allowed. If exprTail is true, the last
+// item may be a bare expression (wrapped in exprTailStmt).
+func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool, exprTail ...bool) ([]Stmt, error) {
+	allowExprTail := len(exprTail) > 0 && exprTail[0]
 	var stmts []Stmt
 	for {
 		tok, err := p.next()
@@ -1381,6 +1451,38 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool) ([]Stmt,
 			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
 		}
 		if tok.kind != tokIdent {
+			if allowExprTail && tok.kind == tokNumber {
+				// Number as expression tail in a mode block expression
+				resolve := p.bhvResolver(syms)
+				num, _ := strconv.Atoi(tok.val)
+				numExpr := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
+				result, err := p.parseArithExprFromFull(numExpr, resolve)
+				if err != nil {
+					return nil, err
+				}
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &exprTailStmt{Expr: result})
+				return stmts, nil
+			}
+			if allowExprTail && tok.kind == tokLParen {
+				// Parenthesized expression tail
+				resolve := p.bhvResolver(syms)
+				p.unget(tok)
+				expr, err := p.parseBoolExpr(resolve)
+				if err != nil {
+					return nil, err
+				}
+				if truthy, ok := expr.(*TruthyExpr); ok {
+					expr = truthy.Value
+				}
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &exprTailStmt{Expr: expr})
+				return stmts, nil
+			}
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
 		comment := p.docComment
@@ -1554,6 +1656,81 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool) ([]Stmt,
 			}
 			stmts = append(stmts, &BreakStmt{Comment: comment})
 		default:
+			if allowExprTail {
+				fn := p.fns[tok.val]
+				peek, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				p.unget(peek)
+
+				// Constructor as tail expression
+				if isConstructor(tok.val) {
+					ctor, err := p.parseBhvConstructorExpr(tok, syms)
+					if err != nil {
+						return nil, err
+					}
+					if _, err := p.expect(tokRBrace); err != nil {
+						return nil, err
+					}
+					stmts = append(stmts, &exprTailStmt{Expr: ctor})
+					return stmts, nil
+				}
+
+				// null as tail expression
+				if tok.val == "null" {
+					if _, err := p.expect(tokRBrace); err != nil {
+						return nil, err
+					}
+					stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
+					return stmts, nil
+				}
+
+				isExprTail := false
+				if fn != nil && fn.hasReturn() && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
+					isExprTail = true
+				} else if fn == nil && !isConstructor(tok.val) && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
+					isExprTail = true
+				}
+
+				if isExprTail {
+					resolve := p.bhvResolver(syms)
+					if fn != nil && fn.hasReturn() {
+						// Function call as tail expression
+						args, kwArgs, err := p.parseBhvCallArgs(fn, tok, syms)
+						if err != nil {
+							return nil, err
+						}
+						if _, err := p.expect(tokRBrace); err != nil {
+							return nil, err
+						}
+						stmts = append(stmts, &exprTailStmt{Expr: &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs}})
+						return stmts, nil
+					}
+					// Variable or value expression as tail
+					resolved, err := resolve(tok)
+					if err != nil {
+						return nil, err
+					}
+					result, err := p.parseArithExprFromFull(resolved, resolve)
+					if err != nil {
+						return nil, err
+					}
+					final, handled, err := p.maybeBhvExprContinuation(result, syms)
+					if err != nil {
+						return nil, err
+					}
+					if handled {
+						result = final
+					}
+					if _, err := p.expect(tokRBrace); err != nil {
+						return nil, err
+					}
+					stmts = append(stmts, &exprTailStmt{Expr: result})
+					return stmts, nil
+				}
+			}
+
 			parsed, err := p.parseBhvDefaultStmt(tok, syms)
 			if err != nil {
 				return nil, err
@@ -1611,6 +1788,12 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 			return nil, err
 		}
 		if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{tmp}, b, 0, comment, syms.usedVars); err != nil {
+			return nil, err
+		}
+		return tmp, nil
+	case *ModeBlockExpr:
+		tmp := allocUniqueVar("@mode", syms.usedVars)
+		if err := p.emitBhvModeBlockExpr(e, tmp, syms, b, comment); err != nil {
 			return nil, err
 		}
 		return tmp, nil
@@ -1689,6 +1872,8 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 		return p.emitBhvBoolExprTo(expr, target, syms, b, comment)
 	case *BoolChainExpr:
 		return p.emitBhvBoolExprTo(expr, target, syms, b, comment)
+	case *ModeBlockExpr:
+		return p.emitBhvModeBlockExpr(e, target, syms, b, comment)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitBhvExprTo", expr)
 }
@@ -2137,6 +2322,8 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 				return err
 			}
 			return p.expandCall(v.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, s.Comment, syms.usedVars)
+		case *ModeBlockExpr:
+			return p.emitBhvModeBlockExprMulti(v, retVals, syms, b, s.Comment)
 		case *InstructionExpr:
 			resolved := resolveInstructionFrame(v.Frame, retVals, nil, nil, s.Comment)
 			b.emit(resolved)
@@ -2165,6 +2352,26 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 						return err
 					}
 					bindIdx += callArity
+				case *ModeBlockExpr:
+					arity := p.modeBlockExprArity(e.Tail)
+					remaining := len(s.Bindings) - bindIdx
+					mbeArity := arity
+					if mbeArity > remaining {
+						mbeArity = remaining
+					}
+					if mbeArity == 1 {
+						if !s.Bindings[bindIdx].Discard {
+							if err := p.emitBhvModeBlockExpr(e, retVals[bindIdx], syms, b, s.Comment); err != nil {
+								return err
+							}
+						}
+					} else {
+						mbeRetVals := retVals[bindIdx : bindIdx+mbeArity]
+						if err := p.emitBhvModeBlockExprMulti(e, mbeRetVals, syms, b, s.Comment); err != nil {
+							return err
+						}
+					}
+					bindIdx += mbeArity
 				default:
 					if !s.Bindings[bindIdx].Discard {
 						if err := p.emitBhvExprTo(expr, retVals[bindIdx], syms, b, s.Comment); err != nil {
@@ -2186,32 +2393,61 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 // It emits a mode transition frame on entry (if needed), recurses into the
 // body, then restores the mode on exit (if needed).
 func (p *parser) emitBhvModeBlock(s *ModeBlockStmt, b *frameBuilder, syms *symbolTable) error {
-	target := modeLocked
-	if s.Unlock {
-		target = modeUnlocked
-	}
-	saved := b.mode
-	if b.mode != target {
-		op := "lock"
-		if s.Unlock {
-			op = "unlock"
-		}
-		f := map[string]any{"op": op}
-		setComment(f, s.Comment)
-		b.emit(f)
-		b.mode = target
-	}
+	saved := emitModeEntry(b, s.Unlock, s.Comment)
 	if err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}
-	if b.mode != saved {
-		op := "lock"
-		if saved == modeUnlocked {
-			op = "unlock"
-		}
-		b.emit(map[string]any{"op": op})
-		b.mode = saved
+	emitModeExit(b, saved)
+	return nil
+}
+
+// emitBhvModeBlockExpr emits a locked/unlocked block expression, writing
+// the tail expression's result to target. Handles multi-return tails via
+// retVals slice when target is a slice.
+func (p *parser) emitBhvModeBlockExpr(e *ModeBlockExpr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
+	mbeComment := e.Comment
+	if mbeComment == "" {
+		mbeComment = comment
 	}
+	saved := emitModeEntry(b, e.Unlock, mbeComment)
+	if err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
+		return err
+	}
+	if err := p.emitBhvExprTo(e.Tail, target, syms, b, mbeComment); err != nil {
+		return err
+	}
+	emitModeExit(b, saved)
+	return nil
+}
+
+// emitBhvModeBlockExprMulti emits a mode block expression with multi-return
+// tail, directing return values to the given retVals slice.
+func (p *parser) emitBhvModeBlockExprMulti(e *ModeBlockExpr, retVals []any, syms *symbolTable, b *frameBuilder, comment string) error {
+	mbeComment := e.Comment
+	if mbeComment == "" {
+		mbeComment = comment
+	}
+	saved := emitModeEntry(b, e.Unlock, mbeComment)
+	if err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
+		return err
+	}
+	// Tail must be a CallExpr for multi-return
+	ce, ok := e.Tail.(*CallExpr)
+	if !ok {
+		return fmt.Errorf("multi-return mode block expression tail must be a call, got %T", e.Tail)
+	}
+	resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(ce.Args, ce.KwArgs, syms, b)
+	if err != nil {
+		return err
+	}
+	fn := p.fns[ce.Name]
+	if err := p.checkCallDirections(fn, ce.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+		return err
+	}
+	if err := p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, mbeComment, syms.usedVars); err != nil {
+		return err
+	}
+	emitModeExit(b, saved)
 	return nil
 }
 

@@ -1,0 +1,7 @@
+# AI-generated test
+# Mode block expression in assignment
+behavior mode_block_expr_assign {
+    @name "Mode Block Expr Assign"
+    var me = get_self
+    me = unlocked { get_self }
+}

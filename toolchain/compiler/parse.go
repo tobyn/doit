@@ -344,6 +344,8 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 		case *LoopStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
+		case *ModeBlockStmt:
+			collectASTOutputVars(s.Body, paramMap, usedVars)
 		}
 	}
 }
@@ -532,8 +534,53 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 		return p.emitFnArithTo(e, target, b, paramMap, usedVars, comment, pos)
 	case *CompareExpr, *TypeCheckExpr, *TruthyExpr, *BoolChainExpr:
 		return p.emitFnBoolExprTo(expr, target, b, paramMap, usedVars, comment, pos)
+	case *ModeBlockExpr:
+		return p.emitFnModeBlockExpr(e, target, b, paramMap, usedVars, comment, pos)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitExprTo", expr)
+}
+
+// emitFnModeBlockExpr emits a mode block expression in a fn body context.
+func (p *parser) emitFnModeBlockExpr(e *ModeBlockExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	mbeComment := e.Comment
+	if mbeComment == "" {
+		mbeComment = comment
+	}
+	saved := emitModeEntry(b, e.Unlock, mbeComment)
+	if err := p.emitFnBody(e.Body, b, paramMap, usedVars, comment, pos); err != nil {
+		return err
+	}
+	if err := p.emitExprTo(e.Tail, target, b, paramMap, usedVars, mbeComment, pos); err != nil {
+		return err
+	}
+	emitModeExit(b, saved)
+	return nil
+}
+
+// emitFnModeBlockExprMulti emits a mode block expression with a multi-return
+// tail, directing return values to the given retVals slice.
+func (p *parser) emitFnModeBlockExprMulti(e *ModeBlockExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	mbeComment := e.Comment
+	if mbeComment == "" {
+		mbeComment = comment
+	}
+	saved := emitModeEntry(b, e.Unlock, mbeComment)
+	if err := p.emitFnBody(e.Body, b, paramMap, usedVars, comment, pos); err != nil {
+		return err
+	}
+	ce, ok := e.Tail.(*CallExpr)
+	if !ok {
+		return fmt.Errorf("multi-return mode block expression tail must be a call, got %T", e.Tail)
+	}
+	resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(ce.Args, ce.KwArgs, b, paramMap, usedVars, pos)
+	if err != nil {
+		return err
+	}
+	if err := p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, mbeComment, usedVars); err != nil {
+		return err
+	}
+	emitModeExit(b, saved)
+	return nil
 }
 
 // emitConstructorTo emits a type constructor writing the result to target.
@@ -739,36 +786,15 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			b.emit(resolved)
 
 		case *ModeBlockStmt:
-			target := modeLocked
-			if s.Unlock {
-				target = modeUnlocked
-			}
-			saved := b.mode
 			callComment := s.Comment
 			if callComment == "" {
 				callComment = comment
 			}
-			if b.mode != target {
-				op := "lock"
-				if s.Unlock {
-					op = "unlock"
-				}
-				f := map[string]any{"op": op}
-				setComment(f, callComment)
-				b.emit(f)
-				b.mode = target
-			}
+			saved := emitModeEntry(b, s.Unlock, callComment)
 			if err := p.emitFnBody(s.Body, b, paramMap, usedVars, comment, pos); err != nil {
 				return err
 			}
-			if b.mode != saved {
-				op := "lock"
-				if saved == modeUnlocked {
-					op = "unlock"
-				}
-				b.emit(map[string]any{"op": op})
-				b.mode = saved
-			}
+			emitModeExit(b, saved)
 
 		case *CallStmt:
 			resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(s.Args, s.KwArgs, b, paramMap, usedVars, pos)
@@ -815,6 +841,10 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 				if err := p.expandCall(v.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, callComment, usedVars); err != nil {
 					return err
 				}
+			case *ModeBlockExpr:
+				if err := p.emitFnModeBlockExprMulti(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
+					return err
+				}
 			case *InstructionExpr:
 				resolved := resolveInstructionFrame(v.Frame, retVals, paramMap, nil, callComment)
 				b.emit(resolved)
@@ -839,6 +869,26 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 							return err
 						}
 						bindIdx += callArity
+					case *ModeBlockExpr:
+						arity := p.modeBlockExprArity(e.Tail)
+						remaining := len(s.Bindings) - bindIdx
+						mbeArity := arity
+						if mbeArity > remaining {
+							mbeArity = remaining
+						}
+						if mbeArity == 1 {
+							if !s.Bindings[bindIdx].Discard {
+								if err := p.emitFnModeBlockExpr(e, retVals[bindIdx], b, paramMap, usedVars, callComment, pos); err != nil {
+									return err
+								}
+							}
+						} else {
+							mbeRetVals := retVals[bindIdx : bindIdx+mbeArity]
+							if err := p.emitFnModeBlockExprMulti(e, mbeRetVals, b, paramMap, usedVars, callComment, pos); err != nil {
+								return err
+							}
+						}
+						bindIdx += mbeArity
 					default:
 						if !s.Bindings[bindIdx].Discard {
 							if err := p.emitExprTo(expr, retVals[bindIdx], b, paramMap, usedVars, callComment, pos); err != nil {
@@ -1630,6 +1680,8 @@ func collectReturnStmts(stmts []Stmt) []*ReturnStmt {
 			result = append(result, collectReturnStmts(s.Body)...)
 		case *LoopStmt:
 			result = append(result, collectReturnStmts(s.Body)...)
+		case *ModeBlockStmt:
+			result = append(result, collectReturnStmts(s.Body)...)
 		}
 	}
 	return result
@@ -1681,9 +1733,41 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 	return p.parseFnBodyExpr()
 }
 
+// parseFnBodyModeBlockExpr parses a locked/unlocked block used as an
+// expression in a fn body context. The keyword has been consumed.
+func (p *parser) parseFnBodyModeBlockExpr(unlock bool, ctx *fnBodyContext, comment string) (*ModeBlockExpr, error) {
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+	stmts, err := p.parseFnBodyStmtsInner(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, p.errorf(0, "empty mode block expression")
+	}
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, p.errorf(0, "last item in mode block expression must be a value-producing expression")
+	}
+	return &ModeBlockExpr{
+		Unlock:  unlock,
+		Body:    stmts[:len(stmts)-1],
+		Tail:    tail.Expr,
+		Comment: comment,
+	}, nil
+}
+
 // parseFnBodyStmts parses fn body statements until '}'. The opening '{'
 // has been consumed. Returns the parsed statements.
 func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
+	return p.parseFnBodyStmtsInner(ctx, false)
+}
+
+// parseFnBodyStmtsInner parses fn body statements until '}'. If exprTail is
+// true, the last item may be a bare expression (wrapped in exprTailStmt).
+func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stmt, error) {
 	// For backward compatibility, letVars is a view into ctx.fnVars
 	// (parseFnBodyCallArgs still uses letVars map[string]bool).
 	letVars := ctx.fnVars
@@ -1698,6 +1782,34 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
 			break
 		}
 		if tok.kind != tokIdent {
+			if exprTail && tok.kind == tokNumber {
+				num, _ := strconv.Atoi(tok.val)
+				numExpr := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
+				result, err := p.parseArithExprFromFull(numExpr, ctx.resolve)
+				if err != nil {
+					return nil, err
+				}
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				astBody = append(astBody, &exprTailStmt{Expr: result})
+				return astBody, nil
+			}
+			if exprTail && tok.kind == tokLParen {
+				p.unget(tok)
+				expr, err := p.parseBoolExpr(ctx.resolve)
+				if err != nil {
+					return nil, err
+				}
+				if truthy, ok := expr.(*TruthyExpr); ok {
+					expr = truthy.Value
+				}
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				astBody = append(astBody, &exprTailStmt{Expr: expr})
+				return astBody, nil
+			}
 			return nil, p.errorf(tok.pos, "expected statement or '}', got %s", tok.describe())
 		}
 		comment := p.docComment
@@ -1831,9 +1943,74 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
 				}
 				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment})
 			} else {
-				// Bare function call
 				p.unget(peek)
 				callee := p.fns[tok.val]
+
+				if exprTail {
+					// In exprTail mode, check for expr tail before treating as statement
+					if isConstructor(tok.val) {
+						ctor, err := p.parseFnBodyConstructorExpr(tok)
+						if err != nil {
+							return nil, err
+						}
+						// Check for & after constructor
+						peek2, err := p.next()
+						if err != nil {
+							return nil, err
+						}
+						var tailExpr Expr = ctor
+						if peek2.kind == tokAmpersand {
+							numExpr, err := p.parseFnBodyExpr()
+							if err != nil {
+								return nil, err
+							}
+							tailExpr = &AmpersandExpr{Value: ctor, Num: numExpr}
+						} else {
+							p.unget(peek2)
+						}
+						if _, err := p.expect(tokRBrace); err != nil {
+							return nil, err
+						}
+						astBody = append(astBody, &exprTailStmt{Expr: tailExpr})
+						return astBody, nil
+					}
+					if tok.val == "null" {
+						if _, err := p.expect(tokRBrace); err != nil {
+							return nil, err
+						}
+						astBody = append(astBody, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
+						return astBody, nil
+					}
+					if callee != nil && callee.hasReturn() {
+						args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, letVars)
+						if err != nil {
+							return nil, err
+						}
+						if _, err := p.expect(tokRBrace); err != nil {
+							return nil, err
+						}
+						astBody = append(astBody, &exprTailStmt{Expr: &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs}})
+						return astBody, nil
+					}
+					if callee == nil {
+						// Variable reference as tail
+						resolved, err := ctx.resolve(tok)
+						if err != nil {
+							return nil, err
+						}
+						result, err := p.parseArithExprFromFull(resolved, ctx.resolve)
+						if err != nil {
+							return nil, err
+						}
+						if _, err := p.expect(tokRBrace); err != nil {
+							return nil, err
+						}
+						astBody = append(astBody, &exprTailStmt{Expr: result})
+						return astBody, nil
+					}
+				}
+
+				// Bare function call
 				if callee == nil {
 					return nil, p.errorf(tok.pos, "unknown function %q", tok.val)
 				}
@@ -1957,6 +2134,16 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 				return nil, err
 			}
 
+			if tok.kind == tokIdent && (tok.val == "locked" || tok.val == "unlocked") {
+				mbe, err := p.parseFnBodyModeBlockExpr(tok.val == "unlocked", ctx, comment)
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, mbe)
+				bindingsConsumed += p.modeBlockExprArity(mbe.Tail)
+				continue
+			}
+
 			if tok.kind == tokIdent {
 				if callee := p.fns[tok.val]; callee != nil {
 					if !callee.hasReturn() {
@@ -2067,6 +2254,11 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 	rhsTok, err := p.next()
 	if err != nil {
 		return nil, err
+	}
+
+	// Mode block expression RHS
+	if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
+		return p.parseFnBodyModeBlockExpr(rhsTok.val == "unlocked", ctx, "")
 	}
 
 	// Instruction RHS

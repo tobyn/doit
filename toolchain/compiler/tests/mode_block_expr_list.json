@@ -1,0 +1,8 @@
+{
+    "0": { "op": "unlock" },
+    "1": { "0": "a", "op": "get_self" },
+    "2": { "op": "lock" },
+    "3": { "1": { "num": 1 }, "2": "b", "op": "set_number" },
+    "4": { "1": { "num": 2 }, "2": "c", "op": "set_number" },
+    "name": "Mode Block Expr List"
+}

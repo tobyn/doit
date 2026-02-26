@@ -1,0 +1,7 @@
+# AI-generated test
+# Mode block expression with multi-return tail
+behavior mode_block_expr_multi {
+    @name "Mode Block Expr Multi"
+    @param in coord "Coord"
+    let x, y = unlocked { separate_coordinate $coord }
+}

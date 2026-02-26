@@ -196,6 +196,23 @@ type ExprListExpr struct {
 	Exprs []Expr // each is arity 1, except CallExpr (arity = returnCount)
 }
 
+// ModeBlockExpr is a locked { ... } or unlocked { ... } used as an expression.
+// The last item in the block is the value-producing tail expression.
+type ModeBlockExpr struct {
+	Unlock  bool   // false=locked, true=unlocked
+	Body    []Stmt // leading statements (side effects, may be empty)
+	Tail    Expr   // the value-producing expression
+	Comment string
+}
+
+// exprTailStmt is an internal wrapper for a bare expression parsed at the end
+// of a mode block expression body. Never appears in the final AST —
+// parseBhvModeBlockExpr / parseFnBodyModeBlockExpr extract the expr and
+// discard the wrapper.
+type exprTailStmt struct {
+	Expr Expr
+}
+
 // --- Interface implementations ---
 
 func (*CallStmt) stmtNode()           {}
@@ -211,6 +228,7 @@ func (*IfStmt) stmtNode()             {}
 func (*WhileStmt) stmtNode()          {}
 func (*LoopStmt) stmtNode()           {}
 func (*BreakStmt) stmtNode()          {}
+func (*exprTailStmt) stmtNode()       {}
 
 func (*LiteralExpr) exprNode()      {}
 func (*IdentExpr) exprNode()        {}
@@ -224,3 +242,4 @@ func (*BoolChainExpr) exprNode()    {}
 func (*ConstructorExpr) exprNode()  {}
 func (*AmpersandExpr) exprNode()    {}
 func (*ExprListExpr) exprNode()     {}
+func (*ModeBlockExpr) exprNode()    {}

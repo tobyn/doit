@@ -1,0 +1,6 @@
+# AI-generated test
+# Mode block expression in expression list
+behavior mode_block_expr_list {
+    @name "Mode Block Expr List"
+    let a, b, c = unlocked { get_self }, 1, 2
+}

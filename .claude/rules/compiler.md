@@ -12,13 +12,14 @@ output format.
 ## Architecture
 
 - **`compiler/ast.go`** — AST node type definitions: `Stmt` interface
-  (13 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
+  (14 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
   `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
   `InstructionStmt`, `ModeBlockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
-  `LoopStmt`, `BreakStmt`) and `Expr` interface (12 concrete types:
-  `LiteralExpr`, `IdentExpr`, `CallExpr`, `InstructionExpr`,
-  `ArithExpr`, `CompareExpr`, `TypeCheckExpr`, `TruthyExpr`,
-  `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`, `ExprListExpr`)
+  `LoopStmt`, `BreakStmt`, `exprTailStmt`) and `Expr` interface
+  (13 concrete types: `LiteralExpr`, `IdentExpr`, `CallExpr`,
+  `InstructionExpr`, `ArithExpr`, `CompareExpr`, `TypeCheckExpr`,
+  `TruthyExpr`, `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`,
+  `ExprListExpr`, `ModeBlockExpr`)
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
   (`fnDef`, `symbolTable`, `unitRegisters`),
   `paramDef` (with `direction` field, `effectiveDirection()`)
@@ -37,7 +38,9 @@ output format.
   the `setComment` helper for setting `"cmt"` on frames,
   `allocUniqueVar` helper for inline variable renaming,
   `execMode` type with `modeLocked`/`modeUnlocked`
-  constants for compile-time execution mode tracking
+  constants for compile-time execution mode tracking,
+  `emitModeEntry`/`emitModeExit` helpers for structured mode transitions
+  (used by both statement and expression mode blocks)
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types (including `tokAmpersand` for `&`,
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
@@ -55,7 +58,9 @@ output format.
   file-level parsing, function definitions with `instruction` support,
   `fnBodyResolver` (operandResolver for fn bodies),
   `fnBodyContext` (tracks paramDirs, fnVars, resolve for fn body parsing),
-  fn body AST parsing (`parseFnBodyStmts`, `parseFnBodyReturnItem`,
+  fn body AST parsing (`parseFnBodyStmts`/`parseFnBodyStmtsInner`
+  (with `exprTail` parameter for mode block expression tail detection),
+  `parseFnBodyModeBlockExpr`, `parseFnBodyReturnItem`,
   `parseFnBodyLetVar`, `parseFnBodyRHSExpr`, `parseFnBodyIfStmt`,
   `parseFnBodyElseIfChain`, `parseFnBodyWhileStmt`,
   `parseFnBodyLoopStmt`, `parseFnBodyExpr`,
@@ -66,6 +71,7 @@ output format.
   fn body AST emission (`emitFnBody`, `emitExprGetValue`, `emitExprTo`,
   `emitFnArithTo`, `emitFnArithNode`, `emitFnBoolExprTo`,
   `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnWhileStmt`, `emitFnLoopStmt`,
+  `emitFnModeBlockExpr`, `emitFnModeBlockExprMulti`,
   `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
   `collectASTOutputVars`, `resolveVarName`, `tryResolveConstructorLiteral`,
   `tryResolveAmpersandLiteral`),
@@ -90,7 +96,9 @@ output format.
   `WhileStmt`, `parseBhvLoopStmt` → `LoopStmt`, `parseBhvMultiReturn`
   → `MultiReturnStmt`, `parseBhvStmtBlock`/`parseBhvStmtBlockInner`
   (full statement set in inner blocks including var/let/instruction/
-  control flow/break). Emitter functions: `emitBehaviorStmts` (top-level
+  control flow/break; accepts variadic `exprTail` for mode block expression
+  tail detection), `parseBhvModeBlockExpr`, `modeBlockExprArity`.
+  Emitter functions: `emitBehaviorStmts` (top-level
   behavior emitter with deferred body management, break target patching,
   and mode tracking), `emitBhvStmtSimple` (non-control-flow statements),
   `emitBhvExprTo`/`emitBhvExprGetValue` (expression emission),
@@ -98,7 +106,9 @@ output format.
   `arithCounter`), `emitBhvBoolExprTo` (boolean expression emission with
   single-leaf delegation to `emitComparison`/`emitTypeCheck`/
   `emitTruthyCheck`), `emitBhvCallStmt` (function call emission),
-  `emitBhvModeBlock` (mode block emission with on-the-fly transitions),
+  `emitBhvModeBlock` (mode block statement emission with on-the-fly
+  transitions), `emitBhvModeBlockExpr`/`emitBhvModeBlockExprMulti`
+  (mode block expression emission),
   `emitBhvIfStmt`/`emitBhvWhileStmt`/`emitBhvLoopStmt` (control flow
   emission). Internal types: `resolvedBoolExpr` (pre-resolved boolean
   tree for emission)

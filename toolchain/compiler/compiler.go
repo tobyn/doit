@@ -275,6 +275,40 @@ func (c *arithCounter) next(usedVars map[string]bool) string {
 	return allocUniqueVar(name, usedVars)
 }
 
+// emitModeEntry emits a mode transition frame if needed and returns the saved
+// mode for later restoration via emitModeExit.
+func emitModeEntry(b *frameBuilder, unlock bool, comment string) execMode {
+	target := modeLocked
+	if unlock {
+		target = modeUnlocked
+	}
+	saved := b.mode
+	if b.mode != target {
+		op := "lock"
+		if unlock {
+			op = "unlock"
+		}
+		f := map[string]any{"op": op}
+		setComment(f, comment)
+		b.emit(f)
+		b.mode = target
+	}
+	return saved
+}
+
+// emitModeExit restores the execution mode to saved, emitting a transition
+// frame if the current mode differs.
+func emitModeExit(b *frameBuilder, saved execMode) {
+	if b.mode != saved {
+		op := "lock"
+		if saved == modeUnlocked {
+			op = "unlock"
+		}
+		b.emit(map[string]any{"op": op})
+		b.mode = saved
+	}
+}
+
 type deferredBody struct {
 	frames       []map[string]any
 	checkFrame   int    // index of the check_number frame to patch

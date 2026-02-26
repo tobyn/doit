@@ -779,6 +779,36 @@ When a function containing mode blocks is inlined at a call site, the
 compiler tracks mode through the inlined body. If the caller is already in
 the target mode, no transition frame is emitted.
 
+### Mode block expressions
+
+`locked { ... }` and `unlocked { ... }` can also be used as expressions.
+The last item in the block becomes the value of the expression:
+
+```doit
+let me = unlocked { get_self }
+```
+
+The block can contain statements before the tail expression:
+
+```doit
+let me = unlocked { notify "getting self"; get_self }
+```
+
+Multi-return tail expressions work like multi-return function calls:
+
+```doit
+let x, y = unlocked { separate_coordinate coord }
+```
+
+Mode block expressions can appear in expression lists:
+
+```doit
+let a, b, c = unlocked { get_self }, 1, 2
+```
+
+Mode block expressions are supported in `let`/`var` declarations and
+assignments, at both behavior level and in function bodies.
+
 ## Localization
 
 The `localize` construct provides locale-aware strings at compile time. It

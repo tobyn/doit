@@ -1,0 +1,8 @@
+{
+    "0": { "op": "unlock" },
+    "1": { "0": 1, "1": "x", "2": "y", "op": "separate_coordinate" },
+    "2": { "op": "lock" },
+    "name": "Mode Block Expr Multi",
+    "parameters": [false],
+    "pnames": ["Coord"]
+}

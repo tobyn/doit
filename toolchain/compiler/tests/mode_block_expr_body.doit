@@ -1,0 +1,6 @@
+# AI-generated test
+# Mode block expression with body statements + tail
+behavior mode_block_expr_body {
+    @name "Mode Block Expr Body"
+    let me = unlocked { notify "x"; get_self }
+}
