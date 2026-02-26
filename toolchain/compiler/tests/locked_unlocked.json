@@ -3,5 +3,5 @@
     "1": { "op": "notify", "txt": "Running fast" },
     "2": { "op": "lock" },
     "3": { "op": "notify", "txt": "Running slow" },
-    "name": "lock_unlock"
+    "name": "locked_unlocked"
 }

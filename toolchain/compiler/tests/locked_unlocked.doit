@@ -1,0 +1,8 @@
+# AI-generated test
+# locked and unlocked blocks emit the correct frames
+behavior locked_unlocked {
+    unlocked {
+        notify "Running fast"
+    }
+    notify "Running slow"
+}

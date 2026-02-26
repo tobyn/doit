@@ -1,0 +1,11 @@
+{
+    "0": { "op": "unlock" },
+    "1": { "op": "notify", "txt": "outer unlocked" },
+    "2": { "op": "lock" },
+    "3": { "op": "notify", "txt": "inner locked" },
+    "4": { "op": "unlock" },
+    "5": { "op": "notify", "txt": "back to unlocked" },
+    "6": { "op": "lock" },
+    "7": { "op": "notify", "txt": "back to locked" },
+    "name": "locked_unlocked_nested"
+}

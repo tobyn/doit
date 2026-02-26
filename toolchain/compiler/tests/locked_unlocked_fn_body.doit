@@ -1,0 +1,11 @@
+# AI-generated test
+# locked/unlocked inside user-defined function, inlined correctly
+fn fast_notify(txt) {
+    unlocked {
+        notify txt
+    }
+}
+
+behavior locked_unlocked_fn_body {
+    fast_notify "Speedy"
+}

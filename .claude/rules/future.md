@@ -30,22 +30,27 @@ not currently handle `(` after a function name. See F13 in
 
 Both fn bodies and behavior bodies use an AST approach with shared
 expression parsers (parameterized via `operandResolver`). Phase 3
-enabled fn body parity. Phase 4 added AST-level optimization:
-`optimizeLockUnlock` in `optimize.go` removes redundant `LockStmt`
-nodes before emission, replacing the old frame-scanning mode tracker.
-It supports cross-branch analysis (all branches end in `lock` → mode
-is `locked` after `if`) and cross-function analysis (walks inlined
-function AST bodies to determine mode effects).
+enabled fn body parity. Phase 4 replaced imperative `lock`/`unlock`
+with structured `locked { ... }` / `unlocked { ... }` blocks, tracked
+via `frameBuilder.mode`. The old `optimize.go` file was deleted — mode
+transitions are now emitted on-the-fly during frame emission, with no
+separate optimization pass needed.
 
 ### Future AST optimizations
 
-Potential optimization passes to add to `optimize.go`:
+Potential optimization passes (would need a new optimization file):
 
 - **Constant folding**: Evaluate compile-time-computable expressions.
 - **Dead code elimination**: Remove unreachable statements after
   `return`/`break`.
-- **Fn body lock/unlock optimization**: Extend `optimizeLockUnlock`
-  to fn body paths (currently only behavior-level).
+
+## Expression form for `locked`/`unlocked`
+
+`locked { ... }` and `unlocked { ... }` are currently statement-only.
+An expression form could allow mode blocks in expression contexts
+(e.g., `let x = unlocked { get_self }`) where the last expression's
+value becomes the block's value. This would parallel the statement
+form but return a value.
 
 ## Extended comparison and type check expressions
 

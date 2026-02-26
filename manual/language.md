@@ -72,7 +72,7 @@ statement terminates at the end of the line. Semicolons can be used to
 separate multiple statements on a single line:
 
 ```doit
-lock; notify "Hello"; unlock
+var x = 1; notify "Hello"; x++
 ```
 
 Exceptions to end-of-line termination:
@@ -683,25 +683,26 @@ loop {
 ## Execution Mode
 
 Behavior controllers start each execution cycle in **locked** mode, running
-one instruction per tick. Use `unlock` to switch to unlocked mode (runs as
-many instructions as possible per tick) and `lock` to switch back:
+one instruction per tick. Use `unlocked { ... }` to run a block in unlocked
+mode (runs as many instructions as possible per tick) and `locked { ... }`
+to run a block in locked mode:
 
 ```doit
-unlock
-notify "Fast"
-lock
+unlocked {
+    notify "Fast"
+}
 notify "Slow"
 ```
 
-`lock` and `unlock` are keywords, not function calls. They can be used in
-behavior bodies, control flow blocks (`if`/`while`/`loop`), and function
-bodies:
+Mode blocks are lexically scoped — the mode is set on entry and restored
+on exit. They can be used in behavior bodies, control flow blocks
+(`if`/`while`/`loop`), and function bodies:
 
 ```doit
 fn go_fast(txt) {
-    unlock
-    notify txt
-    lock
+    unlocked {
+        notify txt
+    }
 }
 
 behavior runner {
@@ -709,23 +710,33 @@ behavior runner {
 }
 ```
 
+Mode blocks can be nested:
+
+```doit
+unlocked {
+    notify "Fast"
+    locked {
+        notify "Slow"
+    }
+    notify "Fast again"
+}
+```
+
 ### Redundant mode change elimination
 
-The compiler tracks the current execution mode at compile time and eliminates
-redundant mode changes before emitting any frames. Since behaviors always
-start locked:
+The compiler tracks the current execution mode via `frameBuilder.mode` and
+only emits transition frames when the mode actually changes:
 
-- `lock` at the start of a behavior is a no-op (already locked)
-- Two consecutive `unlock` statements emit only one `unlock` frame
-- After control flow (`if`/`while`/`loop`), the mode resets to unknown, so
-  a subsequent `lock` or `unlock` is always emitted
-- If all branches of an `if`/`else` end in the same mode, that mode is
-  known after the `if` (enabling further elimination)
+- `locked { ... }` at the start of a behavior emits no transition (already
+  locked)
+- Nested `unlocked { ... }` inside an `unlocked` block emits no transition
+  (already unlocked)
+- Mode is always statically known at every program point — no conservative
+  fallback needed
 
-When `lock` or `unlock` appears inside a function called from the behavior,
-the compiler analyzes the function's body to determine its effect on the
-execution mode and uses that to eliminate redundant lock/unlock at the call
-site.
+When a function containing mode blocks is inlined at a call site, the
+compiler tracks mode through the inlined body. If the caller is already in
+the target mode, no transition frame is emitted.
 
 ## Localization
 

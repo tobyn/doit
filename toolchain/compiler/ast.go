@@ -77,9 +77,10 @@ type InstructionStmt struct {
 	Comment string
 }
 
-// LockStmt is a lock or unlock statement.
-type LockStmt struct {
-	Unlock  bool // false=lock, true=unlock
+// ModeBlockStmt is a locked { ... } or unlocked { ... } block.
+type ModeBlockStmt struct {
+	Unlock  bool   // false=locked, true=unlocked
+	Body    []Stmt
 	Comment string
 }
 
@@ -199,7 +200,7 @@ func (*CompoundAssignStmt) stmtNode() {}
 func (*IncrDecrStmt) stmtNode()       {}
 func (*MultiReturnStmt) stmtNode()    {}
 func (*InstructionStmt) stmtNode()    {}
-func (*LockStmt) stmtNode()           {}
+func (*ModeBlockStmt) stmtNode()      {}
 func (*ReturnStmt) stmtNode()         {}
 func (*IfStmt) stmtNode()             {}
 func (*WhileStmt) stmtNode()          {}

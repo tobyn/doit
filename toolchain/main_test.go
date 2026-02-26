@@ -1321,8 +1321,8 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("lock_as_variable_name", func(t *testing.T) {
-		src := `behavior a { let lock = 5 }`
+	t.Run("locked_as_variable_name", func(t *testing.T) {
+		src := `behavior a { let locked = 5 }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -1332,8 +1332,8 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("unlock_as_variable_name", func(t *testing.T) {
-		src := `behavior a { let unlock = 5 }`
+	t.Run("unlocked_as_variable_name", func(t *testing.T) {
+		src := `behavior a { let unlocked = 5 }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -1341,6 +1341,24 @@ func TestCompileErrors(t *testing.T) {
 		if !strings.Contains(err.Error(), "reserved keyword") {
 			t.Fatalf("unexpected error: %v", err)
 		}
+	})
+
+	t.Run("bare_lock_not_valid", func(t *testing.T) {
+		src := `behavior a { lock }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			return // error expected — "lock" is no longer a keyword
+		}
+		t.Fatal("expected error for bare 'lock'")
+	})
+
+	t.Run("bare_unlock_not_valid", func(t *testing.T) {
+		src := `behavior a { unlock }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			return // error expected — "unlock" is no longer a keyword
+		}
+		t.Fatal("expected error for bare 'unlock'")
 	})
 
 	t.Run("arith_string_rhs", func(t *testing.T) {

@@ -287,7 +287,6 @@ type execMode int
 const (
 	modeLocked   execMode = iota
 	modeUnlocked
-	modeUnknown
 )
 
 // frameRef marks an integer as a reference to a 0-based index in a
@@ -297,6 +296,7 @@ type frameRef int
 type frameBuilder struct {
 	frames []map[string]any
 	cursor int
+	mode   execMode
 }
 
 func (b *frameBuilder) emit(f map[string]any) int {

@@ -738,18 +738,37 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			resolved := resolveInstructionFrame(s.Frame, nil, paramMap, nil, callComment)
 			b.emit(resolved)
 
-		case *LockStmt:
-			op := "lock"
+		case *ModeBlockStmt:
+			target := modeLocked
 			if s.Unlock {
-				op = "unlock"
+				target = modeUnlocked
 			}
+			saved := b.mode
 			callComment := s.Comment
 			if callComment == "" {
 				callComment = comment
 			}
-			f := map[string]any{"op": op}
-			setComment(f, callComment)
-			b.emit(f)
+			if b.mode != target {
+				op := "lock"
+				if s.Unlock {
+					op = "unlock"
+				}
+				f := map[string]any{"op": op}
+				setComment(f, callComment)
+				b.emit(f)
+				b.mode = target
+			}
+			if err := p.emitFnBody(s.Body, b, paramMap, usedVars, comment, pos); err != nil {
+				return err
+			}
+			if b.mode != saved {
+				op := "lock"
+				if saved == modeUnlocked {
+					op = "unlock"
+				}
+				b.emit(map[string]any{"op": op})
+				b.mode = saved
+			}
 
 		case *CallStmt:
 			resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(s.Args, s.KwArgs, b, paramMap, usedVars, pos)
@@ -1654,9 +1673,17 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
 		comment := p.docComment
 
 		switch tok.val {
-		case "lock", "unlock":
-			astBody = append(astBody, &LockStmt{
-				Unlock:  tok.val == "unlock",
+		case "locked", "unlocked":
+			if _, err := p.expect(tokLBrace); err != nil {
+				return nil, err
+			}
+			body, err := p.parseFnBodyStmts(ctx)
+			if err != nil {
+				return nil, err
+			}
+			astBody = append(astBody, &ModeBlockStmt{
+				Unlock:  tok.val == "unlocked",
+				Body:    body,
 				Comment: comment,
 			})
 

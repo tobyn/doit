@@ -1305,10 +1305,24 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool) ([]Stmt,
 		comment := p.docComment
 
 		switch tok.val {
-		case "lock":
-			stmts = append(stmts, &LockStmt{Unlock: false, Comment: comment})
-		case "unlock":
-			stmts = append(stmts, &LockStmt{Unlock: true, Comment: comment})
+		case "locked":
+			if _, err := p.expect(tokLBrace); err != nil {
+				return nil, err
+			}
+			body, err := p.parseBhvStmtBlockInner(syms, inLoop)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &ModeBlockStmt{Unlock: false, Body: body, Comment: comment})
+		case "unlocked":
+			if _, err := p.expect(tokLBrace); err != nil {
+				return nil, err
+			}
+			body, err := p.parseBhvStmtBlockInner(syms, inLoop)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &ModeBlockStmt{Unlock: true, Body: body, Comment: comment})
 		case "instruction":
 			rawFrame, err := p.parseInstruction()
 			if err != nil {
@@ -1845,9 +1859,10 @@ func (p *parser) emitResolvedBoolFrames(expr *resolvedBoolExpr, trueTarget, fals
 }
 
 // emitBehaviorStmts walks a []Stmt list and emits frames, handling deferred
-// bodies from if statements and break target patching from loops. Lock/unlock
-// optimization is performed at the AST level before this function is called
-// (see optimizeLockUnlock), so every LockStmt in the input is emitted.
+// bodies from if statements and break target patching from loops. Mode
+// transitions are emitted on-the-fly via frameBuilder.mode tracking —
+// ModeBlockStmt blocks emit transitions only when needed and restore mode
+// on exit.
 func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTable) error {
 	var deferred []deferredBody
 	breakTargetFrame := -1
@@ -1855,14 +1870,10 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 
 	for i, stmt := range stmts {
 		switch s := stmt.(type) {
-		case *LockStmt:
-			op := "lock"
-			if s.Unlock {
-				op = "unlock"
+		case *ModeBlockStmt:
+			if err := p.emitBhvModeBlock(s, b, syms); err != nil {
+				return err
 			}
-			f := map[string]any{"op": op}
-			setComment(f, s.Comment)
-			b.emit(f)
 
 		case *IfStmt:
 			if err := p.emitBhvIfStmt(s, b, syms, &deferred); err != nil {
@@ -2056,6 +2067,39 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 	return fmt.Errorf("unsupported statement type %T", stmt)
 }
 
+// emitBhvModeBlock emits a locked { ... } or unlocked { ... } block.
+// It emits a mode transition frame on entry (if needed), recurses into the
+// body, then restores the mode on exit (if needed).
+func (p *parser) emitBhvModeBlock(s *ModeBlockStmt, b *frameBuilder, syms *symbolTable) error {
+	target := modeLocked
+	if s.Unlock {
+		target = modeUnlocked
+	}
+	saved := b.mode
+	if b.mode != target {
+		op := "lock"
+		if s.Unlock {
+			op = "unlock"
+		}
+		f := map[string]any{"op": op}
+		setComment(f, s.Comment)
+		b.emit(f)
+		b.mode = target
+	}
+	if err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
+		return err
+	}
+	if b.mode != saved {
+		op := "lock"
+		if saved == modeUnlocked {
+			op = "unlock"
+		}
+		b.emit(map[string]any{"op": op})
+		b.mode = saved
+	}
+	return nil
+}
+
 // emitBhvIfStmt emits an if/else-if/else statement, appending deferred bodies
 // to the caller's deferred list for emission after all main-line frames.
 func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, deferred *[]deferredBody) error {
@@ -2082,7 +2126,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 	checkFrame := b.emit(check)
 
 	// Compile body into separate builder
-	bodyBuilder := &frameBuilder{}
+	bodyBuilder := &frameBuilder{mode: b.mode}
 	if err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms); err != nil {
 		return err
 	}
@@ -2104,7 +2148,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 			b.emit(f)
 		}
 		if s.Else != nil {
-			elseBuilder := &frameBuilder{}
+			elseBuilder := &frameBuilder{mode: b.mode}
 			if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 				return err
 			}
@@ -2136,7 +2180,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 			default:
 				return fmt.Errorf("unsupported else-if operator")
 			}
-			eiBuilder := &frameBuilder{}
+			eiBuilder := &frameBuilder{mode: b.mode}
 			if err := p.emitBehaviorStmts(ei.Body, eiBuilder, syms); err != nil {
 				return err
 			}
@@ -2152,7 +2196,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 				} else {
 					elseSlot = checkLarger
 				}
-				elseBuilder := &frameBuilder{}
+				elseBuilder := &frameBuilder{mode: b.mode}
 				if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 					return err
 				}
@@ -2163,7 +2207,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 				})
 			}
 		} else if s.Else != nil {
-			elseBuilder := &frameBuilder{}
+			elseBuilder := &frameBuilder{mode: b.mode}
 			if err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
 				return err
 			}
@@ -2225,7 +2269,7 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 	checkFrame := b.emit(check)
 
 	// Compile body
-	bodyBuilder := &frameBuilder{}
+	bodyBuilder := &frameBuilder{mode: b.mode}
 	if err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms); err != nil {
 		return err
 	}
@@ -2282,15 +2326,11 @@ func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable
 				}
 			}
 		}
-		// Regular statement — lock/unlock already optimized at AST level
-		if ls, ok := stmt.(*LockStmt); ok {
-			op := "lock"
-			if ls.Unlock {
-				op = "unlock"
+		// Regular statement
+		if ms, ok := stmt.(*ModeBlockStmt); ok {
+			if err := p.emitBhvModeBlock(ms, b, syms); err != nil {
+				return -1, err
 			}
-			f := map[string]any{"op": op}
-			setComment(f, ls.Comment)
-			b.emit(f)
 		} else {
 			if err := p.emitBhvStmtSimple(stmt, b, syms); err != nil {
 				return -1, err

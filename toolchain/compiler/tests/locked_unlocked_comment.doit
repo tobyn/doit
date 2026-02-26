@@ -1,0 +1,8 @@
+# AI-generated test
+# Doc comments attach to mode transition frames
+behavior locked_unlocked_comment {
+    #! Switch to fast mode
+    unlocked {
+        notify "Fast"
+    }
+}

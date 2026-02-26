@@ -1,0 +1,12 @@
+# AI-generated test
+# Nested mode blocks restore mode correctly
+behavior locked_unlocked_nested {
+    unlocked {
+        notify "outer unlocked"
+        locked {
+            notify "inner locked"
+        }
+        notify "back to unlocked"
+    }
+    notify "back to locked"
+}

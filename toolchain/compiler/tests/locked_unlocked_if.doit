@@ -1,0 +1,12 @@
+# AI-generated test
+# Mode blocks inside if/else branches (uses >= which inlines body)
+behavior locked_unlocked_if {
+    @param in count "Count"
+    if $count >= 5 {
+        unlocked {
+            notify "Fast path"
+        }
+    } else {
+        notify "Slow path"
+    }
+}

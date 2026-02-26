@@ -2,5 +2,5 @@
     "0": { "op": "unlock" },
     "1": { "op": "notify", "txt": "Speedy" },
     "2": { "op": "lock" },
-    "name": "lock_unlock_fn_body"
+    "name": "locked_unlocked_fn_body"
 }

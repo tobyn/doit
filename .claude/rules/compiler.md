@@ -14,7 +14,7 @@ output format.
 - **`compiler/ast.go`** — AST node type definitions: `Stmt` interface
   (13 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
   `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
-  `InstructionStmt`, `LockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
+  `InstructionStmt`, `ModeBlockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
   `LoopStmt`, `BreakStmt`) and `Expr` interface (11 concrete types:
   `LiteralExpr`, `IdentExpr`, `CallExpr`, `InstructionExpr`,
   `ArithExpr`, `CompareExpr`, `TypeCheckExpr`, `TruthyExpr`,
@@ -36,7 +36,7 @@ output format.
   `typeCheckSlot` helper (maps constructor names to slot keys),
   the `setComment` helper for setting `"cmt"` on frames,
   `allocUniqueVar` helper for inline variable renaming,
-  `execMode` type with `modeLocked`/`modeUnlocked`/`modeUnknown`
+  `execMode` type with `modeLocked`/`modeUnlocked`
   constants for compile-time execution mode tracking
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), token types (including `tokAmpersand` for `&`,
@@ -47,7 +47,7 @@ output format.
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),
   `Keywords` map (includes `"is"`)
-  (includes type constructor names, direction keywords, and `lock`/`unlock`), `isConstructor`
+  (includes type constructor names, direction keywords, and `locked`/`unlocked`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
   `#!` comments
@@ -98,20 +98,14 @@ output format.
   `arithCounter`), `emitBhvBoolExprTo` (boolean expression emission with
   single-leaf delegation to `emitComparison`/`emitTypeCheck`/
   `emitTruthyCheck`), `emitBhvCallStmt` (function call emission),
+  `emitBhvModeBlock` (mode block emission with on-the-fly transitions),
   `emitBhvIfStmt`/`emitBhvWhileStmt`/`emitBhvLoopStmt` (control flow
   emission). Internal types: `resolvedBoolExpr` (pre-resolved boolean
   tree for emission)
-- **`compiler/optimize.go`** — AST-level optimization passes run between
-  parsing and emission. `optimizeLockUnlock` walks `[]Stmt`, tracks
-  `execMode`, and removes redundant `LockStmt` nodes. Handles control
-  flow (`optimizeLockIf` with cross-branch mode analysis via
-  `computeModeAfterIf`, `optimizeLockWhile`, `optimizeLockLoop`).
-  Cross-function analysis via `stmtModeEffect`/`fnModeEffect` which
-  walk inlined function AST bodies to determine mode effects of calls.
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
-  `parseBehaviorBody` (three-phase: parse `@name`/`@param` attributes +
-  statements into `[]Stmt` via `parseBhv*` functions, optimize AST via
-  `optimizeLockUnlock`, then emit via `emitBehaviorStmts`),
+  `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +
+  statements into `[]Stmt` via `parseBhv*` functions, then emit via
+  `emitBehaviorStmts` with `frameBuilder.mode` tracking),
   `resolveInstructionFrame` (0→1 key conversion
   and slot substitution), `frameHasReturnSlot`/`frameReturnCount`,
   direction enforcement (`argDirection`, `checkReadable`,
@@ -133,9 +127,8 @@ recursive-descent `parser`. The scanner tokenizes the source into identifiers
 braces, parentheses, colons, commas, `@`, and comparison/assignment
 operators, skipping whitespace and `#` line comments. Both function bodies
 and behavior bodies use an AST approach: parse into `[]Stmt` with
-`Expr` nodes (defined in `ast.go`), then emit frames. Behavior bodies
-add an optimization phase between parsing and emission (see
-`optimize.go`). For fn bodies,
+`Expr` nodes (defined in `ast.go`), then emit frames. Both paths use
+`frameBuilder.mode` for on-the-fly execution mode tracking. For fn bodies,
 `emitFnBody` runs during `expandCall` inlining. For behavior bodies,
 `parseBehaviorBody` collects statements into `[]Stmt` using `parseBhv*`
 parsers (in `bhvast.go`), then `emitBehaviorStmts` walks the AST to emit

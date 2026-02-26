@@ -249,11 +249,27 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			}
 			stmts = append(stmts, &InstructionStmt{Frame: rawFrame, Comment: p.docComment})
 
-		case "lock":
-			stmts = append(stmts, &LockStmt{Unlock: false, Comment: p.docComment})
+		case "locked":
+			comment := p.docComment
+			if _, err := p.expect(tokLBrace); err != nil {
+				return nil, err
+			}
+			body, err := p.parseBhvStmtBlockInner(syms, false)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &ModeBlockStmt{Unlock: false, Body: body, Comment: comment})
 
-		case "unlock":
-			stmts = append(stmts, &LockStmt{Unlock: true, Comment: p.docComment})
+		case "unlocked":
+			comment := p.docComment
+			if _, err := p.expect(tokLBrace); err != nil {
+				return nil, err
+			}
+			body, err := p.parseBhvStmtBlockInner(syms, false)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &ModeBlockStmt{Unlock: true, Body: body, Comment: comment})
 
 		case "var":
 			nameTok, err := p.expect(tokIdent)
@@ -406,10 +422,8 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		}
 	}
 
-	// Phase 2: Optimize AST (remove redundant lock/unlock).
-	stmts, _ = p.optimizeLockUnlock(stmts, modeLocked)
-
-	// Phase 3: Emit frames from AST.
+	// Phase 2: Emit frames from AST.
+	b.mode = modeLocked
 	if err := p.emitBehaviorStmts(stmts, b, syms); err != nil {
 		return nil, err
 	}

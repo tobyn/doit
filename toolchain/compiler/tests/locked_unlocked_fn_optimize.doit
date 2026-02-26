@@ -1,0 +1,14 @@
+# AI-generated test
+# Fn with unlocked block called from unlocked context;
+# outer unlocked block wraps the call, so the fn's inner unlocked is a no-op
+fn fast_work(txt) {
+    unlocked {
+        notify txt
+    }
+}
+
+behavior locked_unlocked_fn_optimize {
+    unlocked {
+        fast_work "Fast"
+    }
+}

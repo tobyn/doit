@@ -1,7 +1,0 @@
-# AI-generated test
-# Doc comments attach to lock/unlock frames
-behavior lock_unlock_comment {
-    #! Switch to fast mode
-    unlock
-    notify "Fast"
-}

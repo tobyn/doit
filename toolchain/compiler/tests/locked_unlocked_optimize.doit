@@ -1,0 +1,19 @@
+# AI-generated test
+# No-op when already in correct mode; nested same-mode is a no-op
+behavior locked_unlocked_optimize {
+    locked {
+        notify "Already locked"
+    }
+    unlocked {
+        notify "Now unlocked"
+        unlocked {
+            notify "Still unlocked"
+        }
+    }
+    locked {
+        notify "Back to locked"
+        locked {
+            notify "Still locked"
+        }
+    }
+}

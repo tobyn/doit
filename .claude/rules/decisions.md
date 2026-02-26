@@ -23,10 +23,10 @@ increment/decrement, and control flow (`if`/`else if`/`else`, `while`,
 **Compiler architecture**: Parsing produces `[]Stmt` with `Expr`
 nodes (defined in `ast.go`), then a separate emitter walks the AST
 and emits frames via `frameBuilder`. For behavior bodies,
-`parseBehaviorBody` uses a three-phase pipeline: parse statements,
-run AST optimizations (`optimizeLockUnlock` in `optimize.go`), then
-emit via `emitBehaviorStmts`. For fn bodies, `emitFnBody` runs during
-`expandCall` inlining (no optimization phase yet).
+`parseBehaviorBody` uses a two-phase pipeline: parse statements,
+then emit via `emitBehaviorStmts`. For fn bodies, `emitFnBody` runs
+during `expandCall` inlining. Both paths use `frameBuilder.mode` for
+on-the-fly execution mode tracking (no separate optimization pass).
 Expression parsers are shared between both paths via the
 `operandResolver` callback — behavior-level resolution goes through
 `bhvResolver` (resolves `$register`/parameters via `symbolTable`),
@@ -367,42 +367,37 @@ section below). Implicit precedence (without parens) is not supported.
 
 **Deferred**: logical expressions in function call arguments.
 
-## Lock/unlock as keywords with AST-level optimization
+## Structured locking with `locked`/`unlocked` blocks
 
-**Keywords, not stdlib functions**: `lock` and `unlock` are language
-keywords, not stdlib function wrappers. They were removed from
-`instructions.doit` and are now handled directly by the compiler. This
-enables compile-time optimization that stdlib functions cannot provide.
+**Lexically scoped mode blocks**: `locked { ... }` and `unlocked { ... }`
+are block statements that set execution mode on entry and restore it on
+exit. This replaces the old imperative `lock`/`unlock` keywords.
 
-**AST-level redundant elimination**: The `optimizeLockUnlock` pass
-(in `optimize.go`) walks the `[]Stmt` AST before emission and removes
-redundant `LockStmt` nodes. It tracks an `execMode` (locked, unlocked,
-or unknown) starting at `modeLocked` for behavior top level. A `lock`
-when already locked or `unlock` when already unlocked is removed from
-the AST. After control flow (`if`/`while`/`loop`), mode resets to
-`modeUnknown` (conservative). This replaced the earlier frame-scanning
-approach that tracked mode post-emission.
+**Static mode tracking via `frameBuilder.mode`**: The `frameBuilder`
+carries an `execMode` field (initially `modeLocked` for behaviors). Mode
+transitions are emitted on-the-fly: `ModeBlockStmt` emission checks if
+a transition is needed, emits the body, then restores mode. No post-parse
+optimization pass is needed — `optimize.go` was deleted entirely.
 
-**Cross-function mode analysis**: The optimizer walks inlined function
-AST bodies via `stmtModeEffect`/`fnModeEffect` to determine the mode
-effect of function calls. For example, calling a function that ends
-with `unlock` updates the tracked mode to `modeUnlocked`, making a
-subsequent `unlock` at the call site redundant.
+**No `modeUnknown`**: Because mode blocks always restore, mode is
+statically known at every program point. The `modeUnknown` constant was
+removed. Mode after any statement = mode before it (since mode blocks
+restore).
 
-**Cross-branch analysis**: For `if`/`else` statements, the optimizer
-uses `computeModeAfterIf` to determine mode after the if: if all
-branches (including else) agree on the final mode, that mode is used;
-otherwise `modeUnknown`. For loops (`while`/`loop`), the body is
-optimized starting at `modeUnknown` (conservative, since the body may
-iterate multiple times).
+**No-op elimination**: When already in the target mode (e.g.,
+`locked { ... }` when already locked), no transition frame is emitted.
+Nested same-mode blocks (`unlocked { unlocked { ... } }`) emit no
+transitions for the inner block.
 
-**Uniform handling**: `lock`/`unlock` work in behavior bodies
+**Cross-function tracking**: fn body mode blocks use the caller's
+`frameBuilder`, so mode tracking flows naturally through inlined
+function bodies. No cross-function analysis needed.
+
+**Uniform handling**: `locked`/`unlocked` work in behavior bodies
 (including if/else, while, and loop bodies) and fn bodies. They are
-represented as `LockStmt` AST nodes. At behavior level, the optimizer
-removes redundant nodes before `emitBehaviorStmts`, which then emits
-every remaining `LockStmt` unconditionally. In fn bodies, `emitFnBody`
-emits lock/unlock frames via `resolveInstructionFrame` (no optimization
-pass yet — fn body optimization is a future enhancement).
+represented as `ModeBlockStmt` AST nodes with a `Body []Stmt` field.
+Local `frameBuilder`s in `emitBhvIfStmt` and `emitBhvWhileStmt` are
+initialized with `mode: b.mode` to inherit the enclosing mode.
 
 ## Control flow stubs
 

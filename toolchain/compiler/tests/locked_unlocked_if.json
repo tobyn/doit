@@ -1,0 +1,10 @@
+{
+    "0": { "op": "check_number", "1": 5, "2": "$count", "3": {"num": 5} },
+    "1": { "op": "unlock" },
+    "2": { "op": "notify", "txt": "Fast path" },
+    "3": { "op": "lock", "next": false },
+    "4": { "op": "notify", "txt": "Slow path", "next": false },
+    "name": "locked_unlocked_if",
+    "parameters": [false],
+    "pnames": ["Count"]
+}
