@@ -941,8 +941,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 }
 
 // parseBhvIfStmt parses an if/else-if/else statement.
-func (p *parser) parseBhvIfStmt(syms *symbolTable, inLoop ...bool) (*IfStmt, error) {
-	loop := len(inLoop) > 0 && inLoop[0]
+func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
 	comment := p.docComment
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
@@ -973,7 +972,7 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable, inLoop ...bool) (*IfStmt, err
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	body, err := p.parseBhvStmtBlockInner(syms, loop)
+	body, err := p.parseBhvStmtBlockInner(syms)
 	if err != nil {
 		return nil, err
 	}
@@ -996,7 +995,7 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable, inLoop ...bool) (*IfStmt, err
 		}
 		if peek.kind == tokIdent && peek.val == "if" {
 			// else if
-			err := p.parseBhvElseIfChain(stmt, syms, loop)
+			err := p.parseBhvElseIfChain(stmt, syms)
 			if err != nil {
 				return nil, err
 			}
@@ -1006,7 +1005,7 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable, inLoop ...bool) (*IfStmt, err
 			if _, err := p.expect(tokLBrace); err != nil {
 				return nil, err
 			}
-			elseBody, err := p.parseBhvStmtBlockInner(syms, loop)
+			elseBody, err := p.parseBhvStmtBlockInner(syms)
 			if err != nil {
 				return nil, err
 			}
@@ -1021,7 +1020,7 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable, inLoop ...bool) (*IfStmt, err
 
 // parseBhvElseIfChain parses the else-if / else chain and attaches them
 // to the given IfStmt.
-func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable, inLoop bool) error {
+func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable) error {
 	// Parse condition for "else if"
 	lhsTok, err := p.expect(tokIdent)
 	if err != nil {
@@ -1052,7 +1051,7 @@ func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable, inLoop boo
 	if _, err := p.expect(tokLBrace); err != nil {
 		return err
 	}
-	body, err := p.parseBhvStmtBlockInner(syms, inLoop)
+	body, err := p.parseBhvStmtBlockInner(syms)
 	if err != nil {
 		return err
 	}
@@ -1070,14 +1069,14 @@ func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable, inLoop boo
 			return err
 		}
 		if peek.kind == tokIdent && peek.val == "if" {
-			return p.parseBhvElseIfChain(stmt, syms, inLoop)
+			return p.parseBhvElseIfChain(stmt, syms)
 		}
 		// Plain else
 		p.unget(peek)
 		if _, err := p.expect(tokLBrace); err != nil {
 			return err
 		}
-		elseBody, err := p.parseBhvStmtBlockInner(syms, inLoop)
+		elseBody, err := p.parseBhvStmtBlockInner(syms)
 		if err != nil {
 			return err
 		}
@@ -1090,7 +1089,11 @@ func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable, inLoop boo
 }
 
 // parseBhvWhileStmt parses a while loop.
-func (p *parser) parseBhvWhileStmt(syms *symbolTable) (*WhileStmt, error) {
+func (p *parser) parseBhvWhileStmt(syms *symbolTable, label ...string) (*WhileStmt, error) {
+	lbl := ""
+	if len(label) > 0 {
+		lbl = label[0]
+	}
 	comment := p.docComment
 	varTok, err := p.expect(tokIdent)
 	if err != nil {
@@ -1117,16 +1120,22 @@ func (p *parser) parseBhvWhileStmt(syms *symbolTable) (*WhileStmt, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	body, err := p.parseBhvStmtBlockInner(syms, true)
+	p.enterLoop(lbl)
+	body, err := p.parseBhvStmtBlockInner(syms)
+	p.exitLoop(lbl)
 	if err != nil {
 		return nil, err
 	}
 
-	return &WhileStmt{Cond: cond, Body: body, Comment: comment}, nil
+	return &WhileStmt{Label: lbl, Cond: cond, Body: body, Comment: comment}, nil
 }
 
 // parseBhvLoopStmt parses a loop { ... } or loop N { ... } block.
-func (p *parser) parseBhvLoopStmt(syms *symbolTable) (*LoopStmt, error) {
+func (p *parser) parseBhvLoopStmt(syms *symbolTable, label ...string) (*LoopStmt, error) {
+	lbl := ""
+	if len(label) > 0 {
+		lbl = label[0]
+	}
 	comment := p.docComment
 
 	// Peek for count expression
@@ -1138,11 +1147,13 @@ func (p *parser) parseBhvLoopStmt(syms *symbolTable) (*LoopStmt, error) {
 	var count Expr
 	if peek.kind == tokLBrace {
 		// Infinite loop: loop { ... }
-		body, err := p.parseBhvLoopBody(syms)
+		p.enterLoop(lbl)
+		body, err := p.parseBhvStmtBlockInner(syms)
+		p.exitLoop(lbl)
 		if err != nil {
 			return nil, err
 		}
-		return &LoopStmt{Body: body, Comment: comment}, nil
+		return &LoopStmt{Label: lbl, Body: body, Comment: comment}, nil
 	}
 
 	// Counted loop: parse count expression
@@ -1180,17 +1191,13 @@ func (p *parser) parseBhvLoopStmt(syms *symbolTable) (*LoopStmt, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	body, err := p.parseBhvLoopBody(syms)
+	p.enterLoop(lbl)
+	body, err := p.parseBhvStmtBlockInner(syms)
+	p.exitLoop(lbl)
 	if err != nil {
 		return nil, err
 	}
-	return &LoopStmt{Count: count, Body: body, Comment: comment}, nil
-}
-
-// parseBhvLoopBody parses loop body statements. Supports the full statement
-// set including break, var/let, nested control flow, etc.
-func (p *parser) parseBhvLoopBody(syms *symbolTable) ([]Stmt, error) {
-	return p.parseBhvStmtBlockInner(syms, true)
+	return &LoopStmt{Label: lbl, Count: count, Body: body, Comment: comment}, nil
 }
 
 // parseBhvMultiReturn parses a multi-return binding list.
@@ -1455,7 +1462,7 @@ func (p *parser) parseBhvModeBlockExpr(unlock bool, syms *symbolTable, comment s
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	stmts, err := p.parseBhvStmtBlockInner(syms, false, true)
+	stmts, err := p.parseBhvStmtBlockInner(syms, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1479,13 +1486,13 @@ func (p *parser) parseBhvModeBlockExpr(unlock bool, syms *symbolTable, comment s
 // parseBhvStmtBlock parses a brace-delimited block of statements.
 // The opening '{' has been consumed. Reads until '}'.
 func (p *parser) parseBhvStmtBlock(syms *symbolTable) ([]Stmt, error) {
-	return p.parseBhvStmtBlockInner(syms, false, false)
+	return p.parseBhvStmtBlockInner(syms, false)
 }
 
 // parseBhvStmtBlockInner parses a brace-delimited block of statements.
-// If inLoop is true, 'break' is allowed. If exprTail is true, the last
+// 'break' is allowed when p.loopDepth > 0. If exprTail is true, the last
 // item may be a bare expression (wrapped in exprTailStmt).
-func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool, exprTail ...bool) ([]Stmt, error) {
+func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]Stmt, error) {
 	allowExprTail := len(exprTail) > 0 && exprTail[0]
 	var stmts []Stmt
 	for {
@@ -1541,7 +1548,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool, exprTail
 			if _, err := p.expect(tokLBrace); err != nil {
 				return nil, err
 			}
-			body, err := p.parseBhvStmtBlockInner(syms, inLoop)
+			body, err := p.parseBhvStmtBlockInner(syms)
 			if err != nil {
 				return nil, err
 			}
@@ -1550,7 +1557,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool, exprTail
 			if _, err := p.expect(tokLBrace); err != nil {
 				return nil, err
 			}
-			body, err := p.parseBhvStmtBlockInner(syms, inLoop)
+			body, err := p.parseBhvStmtBlockInner(syms)
 			if err != nil {
 				return nil, err
 			}
@@ -1682,7 +1689,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool, exprTail
 				return nil, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
 			}
 		case "if":
-			ifStmt, err := p.parseBhvIfStmt(syms, inLoop)
+			ifStmt, err := p.parseBhvIfStmt(syms)
 			if err != nil {
 				return nil, err
 			}
@@ -1700,11 +1707,57 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, inLoop bool, exprTail
 			}
 			stmts = append(stmts, loopStmt)
 		case "break":
-			if !inLoop {
+			if p.loopDepth == 0 {
 				return nil, p.errorf(tok.pos, "'break' outside of loop")
 			}
-			stmts = append(stmts, &BreakStmt{Comment: comment})
+			label := ""
+			peek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if peek.kind == tokIdent && p.loopLabels[peek.val] {
+				label = peek.val
+			} else {
+				p.unget(peek)
+			}
+			stmts = append(stmts, &BreakStmt{Label: label, Comment: comment})
 		default:
+			// Check for labeled loop/while: `ident: loop { ... }` or `ident: while ...`
+			if !isConstructor(tok.val) && tok.val != "null" {
+				peek, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if peek.kind == tokColon {
+					peek2, err := p.next()
+					if err != nil {
+						return nil, err
+					}
+					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while") {
+						label := tok.val
+						if p.loopLabels[label] {
+							return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
+						}
+						if peek2.val == "loop" {
+							loopStmt, err := p.parseBhvLoopStmt(syms, label)
+							if err != nil {
+								return nil, err
+							}
+							stmts = append(stmts, loopStmt)
+						} else {
+							whileStmt, err := p.parseBhvWhileStmt(syms, label)
+							if err != nil {
+								return nil, err
+							}
+							stmts = append(stmts, whileStmt)
+						}
+						continue
+					}
+					p.unget(peek2)
+				}
+				p.unget(peek)
+			}
+
 			if allowExprTail {
 				fn := p.fns[tok.val]
 				peek, err := p.next()
@@ -2211,7 +2264,11 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 			}
 
 		case *BreakStmt:
-			b.emit(map[string]any{"op": "@break"})
+			f := map[string]any{"op": "@break"}
+			if s.Label != "" {
+				f["label"] = s.Label
+			}
+			b.emit(f)
 
 		default:
 			if err := p.emitBhvStmtSimple(stmt, b, syms); err != nil {
@@ -2365,7 +2422,12 @@ func (p *parser) emitBhvIfBreak(s *IfStmt, b *frameBuilder, syms *symbolTable) e
 	}
 
 	// Emit @break placeholder
-	b.emit(map[string]any{"op": "@break"})
+	breakFrame := map[string]any{"op": "@break"}
+	breakLabel := s.Body[0].(*BreakStmt).Label
+	if breakLabel != "" {
+		breakFrame["label"] = breakLabel
+	}
+	b.emit(breakFrame)
 	_ = breakTarget // used via frame position calculation above
 
 	return nil
@@ -2790,11 +2852,14 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 	for j := bodyStart; j < len(b.frames); j++ {
 		f := b.frames[j]
 		if op, _ := f["op"].(string); op == "@break" {
-			b.frames[j] = map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": afterLoop,
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == s.Label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": afterLoop,
+				}
 			}
 		}
 	}
@@ -2834,11 +2899,14 @@ func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable
 	for j := bodyStart; j < len(b.frames); j++ {
 		f := b.frames[j]
 		if op, _ := f["op"].(string); op == "@break" {
-			b.frames[j] = map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": afterLoop,
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == s.Label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": afterLoop,
+				}
 			}
 		}
 	}
@@ -2910,11 +2978,14 @@ func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTa
 	for j := bodyStart; j < len(b.frames); j++ {
 		f := b.frames[j]
 		if op, _ := f["op"].(string); op == "@break" {
-			b.frames[j] = map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": afterLoop,
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == s.Label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": afterLoop,
+				}
 			}
 		}
 	}

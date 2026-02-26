@@ -1,0 +1,17 @@
+# AI-generated test
+# Labeled break from inner loop at behavior level
+behavior labeled_break {
+    @name "Labeled Break"
+
+    var i = 0
+    outer: loop {
+        loop {
+            if i >= 5 {
+                break outer
+            }
+            i += 1
+        }
+    }
+
+    notify "Done"
+}

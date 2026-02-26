@@ -1665,6 +1665,66 @@ func TestCompileErrors(t *testing.T) {
 		// Should fail because 'notify' is not '{'
 	})
 
+	t.Run("break_outside_loop_behavior", func(t *testing.T) {
+		src := `behavior a { var i = 0 if i >= 1 { break } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'break' outside of loop") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("break_outside_loop_fn_body", func(t *testing.T) {
+		src := `behavior a { f } fn f() { break }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'break' outside of loop") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("duplicate_loop_label_behavior", func(t *testing.T) {
+		src := `behavior a { x: loop { x: loop { break } } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate loop label") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("duplicate_loop_label_fn_body", func(t *testing.T) {
+		src := `behavior a { f } fn f() { x: loop { x: loop { break } } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate loop label") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("labeled_break_compiles", func(t *testing.T) {
+		src := `behavior a { var i = 0 outer: loop { loop { if i >= 5 { break outer } i += 1 } } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("labeled_break_fn_body_compiles", func(t *testing.T) {
+		src := `behavior a { f } fn f() { var i = 0 outer: loop { loop { if i >= 5 { break outer } i += 1 } } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

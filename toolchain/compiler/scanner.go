@@ -104,6 +104,25 @@ type parser struct {
 	fns         map[string]*fnDef
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
+	loopDepth   int              // >0 when inside a loop body
+	loopLabels  map[string]bool  // labels of enclosing loops
+}
+
+// enterLoop records entry into a loop body. If label is non-empty, it is
+// registered so that `break label` can target this loop.
+func (p *parser) enterLoop(label string) {
+	p.loopDepth++
+	if label != "" {
+		p.loopLabels[label] = true
+	}
+}
+
+// exitLoop records exit from a loop body and unregisters the label.
+func (p *parser) exitLoop(label string) {
+	p.loopDepth--
+	if label != "" {
+		delete(p.loopLabels, label)
+	}
 }
 
 func (s *scanner) errorf(pos int, format string, args ...any) error {

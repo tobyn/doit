@@ -1,0 +1,19 @@
+# AI-generated test
+# Labeled break from inner loop in fn body
+fn nested_break(inout a) {
+    outer: loop {
+        loop {
+            if a >= 5 {
+                break outer
+            }
+            a += 1
+        }
+    }
+}
+
+behavior fn_body_labeled_break {
+    @name "Fn Body Labeled Break"
+    @param inout x "x"
+
+    nested_break inout $x
+}

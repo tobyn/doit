@@ -976,10 +976,12 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			}
 
 		case *BreakStmt:
-			// Emit placeholder frame that emitFnLoopStmt will patch
-			b.emit(map[string]any{
-				"op": "@break",
-			})
+			// Emit placeholder frame that emitFnLoopStmt/emitFnWhileStmt will patch
+			f := map[string]any{"op": "@break"}
+			if s.Label != "" {
+				f["label"] = s.Label
+			}
+			b.emit(f)
 
 		case *ReturnStmt:
 			// Emit values to @retK targets, then emit @return jump placeholder
@@ -1185,11 +1187,14 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 	for j := origLen; j < len(b.frames); j++ {
 		f := b.frames[j]
 		if op, _ := f["op"].(string); op == "@break" {
-			b.frames[j] = map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": afterLoop,
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == s.Label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": afterLoop,
+				}
 			}
 		}
 	}
@@ -1235,11 +1240,14 @@ func (p *parser) emitFnLoopStmt(s *LoopStmt, b *frameBuilder, paramMap map[strin
 	for j := origLen; j < len(b.frames); j++ {
 		f := b.frames[j]
 		if op, _ := f["op"].(string); op == "@break" {
-			b.frames[j] = map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": afterLoop,
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == s.Label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": afterLoop,
+				}
 			}
 		}
 	}
@@ -1309,11 +1317,14 @@ func (p *parser) emitFnCountedLoop(s *LoopStmt, b *frameBuilder, paramMap map[st
 	for j := origLen; j < len(b.frames); j++ {
 		f := b.frames[j]
 		if op, _ := f["op"].(string); op == "@break" {
-			b.frames[j] = map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": afterLoop,
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == s.Label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": afterLoop,
+				}
 			}
 		}
 	}
@@ -1991,9 +2002,58 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			astBody = append(astBody, stmt)
 
 		case "break":
-			astBody = append(astBody, &BreakStmt{Comment: comment})
+			if p.loopDepth == 0 {
+				return nil, p.errorf(tok.pos, "'break' outside of loop")
+			}
+			label := ""
+			peek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if peek.kind == tokIdent && p.loopLabels[peek.val] {
+				label = peek.val
+			} else {
+				p.unget(peek)
+			}
+			astBody = append(astBody, &BreakStmt{Label: label, Comment: comment})
 
 		default:
+			// Check for labeled loop/while: `ident: loop { ... }` or `ident: while ...`
+			if !isConstructor(tok.val) && tok.val != "null" {
+				peek, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if peek.kind == tokColon {
+					peek2, err := p.next()
+					if err != nil {
+						return nil, err
+					}
+					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while") {
+						label := tok.val
+						if p.loopLabels[label] {
+							return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
+						}
+						if peek2.val == "loop" {
+							loopStmt, err := p.parseFnBodyLoopStmt(ctx, comment, label)
+							if err != nil {
+								return nil, err
+							}
+							astBody = append(astBody, loopStmt)
+						} else {
+							whileStmt, err := p.parseFnBodyWhileStmt(ctx, comment, label)
+							if err != nil {
+								return nil, err
+							}
+							astBody = append(astBody, whileStmt)
+						}
+						continue
+					}
+					p.unget(peek2)
+				}
+				p.unget(peek)
+			}
+
 			// Check for assignment, compound assignment, ++/--, or bare call
 			peek, err := p.next()
 			if err != nil {
@@ -2515,7 +2575,11 @@ func (p *parser) parseFnBodyElseIfChain(ctx *fnBodyContext, stmt *IfStmt) error 
 }
 
 // parseFnBodyWhileStmt parses a while loop in a fn body.
-func (p *parser) parseFnBodyWhileStmt(ctx *fnBodyContext, comment string) (*WhileStmt, error) {
+func (p *parser) parseFnBodyWhileStmt(ctx *fnBodyContext, comment string, label ...string) (*WhileStmt, error) {
+	lbl := ""
+	if len(label) > 0 {
+		lbl = label[0]
+	}
 	cond, err := p.parseBoolPrimary(ctx.resolve)
 	if err != nil {
 		return nil, err
@@ -2527,15 +2591,22 @@ func (p *parser) parseFnBodyWhileStmt(ctx *fnBodyContext, comment string) (*Whil
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
+	p.enterLoop(lbl)
 	body, err := p.parseFnBodyStmts(ctx)
+	p.exitLoop(lbl)
 	if err != nil {
 		return nil, err
 	}
-	return &WhileStmt{Cond: cond, Body: body, Comment: comment}, nil
+	return &WhileStmt{Label: lbl, Cond: cond, Body: body, Comment: comment}, nil
 }
 
 // parseFnBodyLoopStmt parses a loop { ... } or loop N { ... } block in a fn body.
-func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string) (*LoopStmt, error) {
+func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string, label ...string) (*LoopStmt, error) {
+	lbl := ""
+	if len(label) > 0 {
+		lbl = label[0]
+	}
+
 	// Peek for count expression
 	peek, err := p.next()
 	if err != nil {
@@ -2544,11 +2615,13 @@ func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string) (*LoopS
 
 	if peek.kind == tokLBrace {
 		// Infinite loop: loop { ... }
+		p.enterLoop(lbl)
 		body, err := p.parseFnBodyStmts(ctx)
+		p.exitLoop(lbl)
 		if err != nil {
 			return nil, err
 		}
-		return &LoopStmt{Body: body, Comment: comment}, nil
+		return &LoopStmt{Label: lbl, Body: body, Comment: comment}, nil
 	}
 
 	// Counted loop: parse count expression
@@ -2585,11 +2658,13 @@ func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string) (*LoopS
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
+	p.enterLoop(lbl)
 	body, err := p.parseFnBodyStmts(ctx)
+	p.exitLoop(lbl)
 	if err != nil {
 		return nil, err
 	}
-	return &LoopStmt{Count: count, Body: body, Comment: comment}, nil
+	return &LoopStmt{Label: lbl, Count: count, Body: body, Comment: comment}, nil
 }
 
 // checkFnBodyInstructionDirections verifies that non-@N slots in an instruction

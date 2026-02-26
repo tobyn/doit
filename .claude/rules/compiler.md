@@ -42,7 +42,10 @@ output format.
   `emitModeEntry`/`emitModeExit` helpers for structured mode transitions
   (used by both statement and expression mode blocks)
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
-  field), token types (including `tokAmpersand` for `&`,
+  field), `parser` struct (embeds `scanner`, adds `fns`, `target`,
+  `behaviorIDs`, `loopDepth int` for nesting depth, `loopLabels
+  map[string]bool` for active loop labels; `enterLoop(label)`/
+  `exitLoop(label)` helpers manage loop state), token types (including `tokAmpersand` for `&`,
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
   `tokNotEquals` for `!=`, `tokPlus`/`tokMinus`/`tokStar`/`tokSlash`
   for arithmetic operators, `tokMinusMinus`/`tokMinusEquals`/
@@ -59,11 +62,15 @@ output format.
   `fnBodyResolver` (operandResolver for fn bodies),
   `fnBodyContext` (tracks paramDirs, fnVars, resolve for fn body parsing),
   fn body AST parsing (`parseFnBodyStmts`/`parseFnBodyStmtsInner`
-  (with `exprTail` parameter for mode block expression tail detection),
+  (with `exprTail` parameter for mode block expression tail detection;
+  uses `p.loopDepth > 0` for break validation; detects
+  `ident: loop`/`ident: while` label syntax in default case),
   `parseFnBodyModeBlockExpr`, `parseFnBodyReturnItem`,
   `parseFnBodyLetVar`, `parseFnBodyRHSExpr`, `parseFnBodyIfStmt`,
-  `parseFnBodyElseIfChain`, `parseFnBodyWhileStmt`,
-  `parseFnBodyLoopStmt`, `parseFnBodyExpr`,
+  `parseFnBodyElseIfChain`, `parseFnBodyWhileStmt`
+  (variadic `label ...string`),
+  `parseFnBodyLoopStmt` (variadic `label ...string`),
+  `parseFnBodyExpr`,
   `parseFnBodyConstructorExpr`, `parseFnBodyCallArgs`,
   `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
   post-parse analysis (`collectReturnStmts`, `returnStmtArity`,
@@ -93,11 +100,14 @@ output format.
   `parseBhvAmpersandExpr`. Statement parsers:
   `parseBhvVarInit` → `LetStmt`/`AssignStmt`,
   `parseBhvDefaultStmt` → `CallStmt`/`AssignStmt`/`CompoundAssignStmt`/
-  `IncrDecrStmt`, `parseBhvIfStmt` → `IfStmt`, `parseBhvWhileStmt` →
-  `WhileStmt`, `parseBhvLoopStmt` → `LoopStmt`, `parseBhvMultiReturn`
+  `IncrDecrStmt`, `parseBhvIfStmt` → `IfStmt`, `parseBhvWhileStmt`
+  (variadic `label ...string`) → `WhileStmt`, `parseBhvLoopStmt`
+  (variadic `label ...string`) → `LoopStmt`, `parseBhvMultiReturn`
   → `MultiReturnStmt`, `parseBhvStmtBlock`/`parseBhvStmtBlockInner`
   (full statement set in inner blocks including var/let/instruction/
-  control flow/break; accepts variadic `exprTail` for mode block expression
+  control flow/break; uses `p.loopDepth > 0` for break validation;
+  detects `ident: loop`/`ident: while` label syntax in default case;
+  accepts variadic `exprTail` for mode block expression
   tail detection), `parseBhvModeBlockExpr`, `modeBlockExprArity`.
   Emitter functions: `emitBehaviorStmts` (top-level
   behavior emitter returning `(int, error)` where int is mainFrameCount,
@@ -118,7 +128,8 @@ output format.
   tree for emission)
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
   `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +
-  statements into `[]Stmt` via `parseBhv*` functions, then emit via
+  statements into `[]Stmt` via `parseBhv*` functions — default case
+  detects `ident: loop`/`ident: while` label syntax — then emit via
   `emitBehaviorStmts` with `frameBuilder.mode` tracking),
   `resolveInstructionFrame` (0→1 key conversion
   and slot substitution), `frameHasReturnSlot`/`frameReturnCount`,

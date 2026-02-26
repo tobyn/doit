@@ -533,8 +533,9 @@ Emission uses inline forward-jump patching:
   record loop start → emit body → scan for `@break` placeholder
   frames → last frame's `"next"` points to loop start → patch `@break`
   frames to point after loop.
-- **BreakStmt**: Emits `{"op": "@break"}` placeholder, patched by the
-  enclosing loop or while emitter.
+- **BreakStmt**: Emits `{"op": "@break"}` placeholder (with optional
+  `"label"` field for labeled breaks), patched by the enclosing loop
+  or while emitter using label-aware matching.
 - **ReturnStmt**: Emits values to `@retK` targets, zeros remaining
   slots, then emits `{"op": "@return"}` placeholder. `expandCall`
   patches `@return` frames to jump past the entire function expansion
@@ -543,26 +544,72 @@ Emission uses inline forward-jump patching:
 ## `break` in `while` loops
 
 `break` works in both `loop` and `while` at behavior level and in fn
-bodies. At behavior level, `parseBhvWhileStmt` parses the body with
-`parseBhvStmtBlockInner(syms, true)` (inLoop=true, enabling `break`).
-`emitBhvWhileStmt` uses the child builder pattern and scans for `@break`
-placeholders after body emission, same as `emitBhvLoopStmt`.
+bodies.
 
 At behavior level, `emitBehaviorStmts` handles `BreakStmt` directly
-(emitting `{"op": "@break"}`), and detects the if/break pattern
-(`IfStmt` with single `BreakStmt` body, no else) to route through
-`emitBhvIfBreak` instead of `emitBhvIfStmt`. This avoids the issue
-where `emitBhvIfStmt` uses deferred bodies with unset branch slots
-inside loop bodies (which would cause behavior restart instead of
-continuation).
+(emitting `{"op": "@break"}` with optional `"label"` field), and
+detects the if/break pattern (`IfStmt` with single `BreakStmt` body,
+no else) to route through `emitBhvIfBreak` instead of `emitBhvIfStmt`.
+This avoids the issue where `emitBhvIfStmt` uses deferred bodies with
+unset branch slots inside loop bodies (which would cause behavior
+restart instead of continuation).
 
 `emitBhvIfBreak` emits a check frame with the break-condition-true
 path falling through to `@break`, and the break-condition-false path
 explicitly jumping to continue. All 6 comparison operators are handled.
+The break label is propagated from the `BreakStmt` to the `@break`
+placeholder frame.
 
 In fn bodies, `emitFnWhileStmt` scans body frames for `@break` after
 emission and patches them to point after the loop, same pattern as
 `emitFnLoopStmt`.
+
+## Labeled loops and breaks
+
+**Syntax**: `label: loop { ... }`, `label: while cond { ... }`,
+`break label`. Labels follow identifier naming rules.
+
+**Parser state**: Loop tracking uses `parser.loopDepth` (int, >0 when
+inside a loop body) and `parser.loopLabels` (map of active labels).
+This replaced the `inLoop bool` parameter that was previously threaded
+through `parseBhvStmtBlockInner` and related functions. The parser
+struct fields enable centralized validation without passing loop state
+through every function signature. `enterLoop(label)` increments depth
+and registers the label; `exitLoop(label)` decrements and unregisters.
+
+**Label detection**: In all three parsing entry points
+(`parseBehaviorBody` in codegen.go, `parseBhvStmtBlockInner` in
+bhvast.go, `parseFnBodyStmtsInner` in parse.go), the default case
+checks for the `ident: loop` / `ident: while` pattern via a
+three-token lookahead (ident, colon, loop/while keyword). If detected,
+the labeled loop/while parser is called; otherwise tokens are ungotten
+and the default parsing logic continues.
+
+**Duplicate label detection**: If a label is already in
+`p.loopLabels`, it's a compile error (`"duplicate loop label %q"`).
+This catches `x: loop { x: loop { } }`.
+
+**Break with label parsing**: After scanning `break`, the parser peeks
+at the next token. If it's an identifier that matches a label in
+`p.loopLabels`, it's consumed as the break target. Otherwise the token
+is ungotten and the break targets the innermost loop (empty label).
+
+**@break placeholder with label**: `BreakStmt` emission produces
+`{"op": "@break"}` for unlabeled breaks and
+`{"op": "@break", "label": "name"}` for labeled breaks.
+
+**Label-aware patching**: All 6 loop/while emitters (3 behavior-level:
+`emitBhvWhileStmt`, `emitBhvLoopStmt`, `emitBhvCountedLoop`; 3 fn
+body: `emitFnWhileStmt`, `emitFnLoopStmt`, `emitFnCountedLoop`) use
+the same patching condition:
+```
+fLabel == "" || fLabel == myLabel
+```
+Unlabeled `@break` (fLabel == "") is always claimed by the innermost
+loop. Labeled `@break` is claimed only by the matching loop. This
+works with nesting because inner loops patch first during recursive
+emission — by the time an outer loop scans for `@break`, all inner
+breaks have already been resolved.
 
 ## Counted loops (`loop N { ... }`)
 

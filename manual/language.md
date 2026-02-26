@@ -409,7 +409,7 @@ set_number null, 5, x
 All control flow constructs work in both behavior bodies and function bodies.
 In behavior bodies, control flow blocks support the full statement set
 including `let`/`var` declarations, nested control flow, and `break` (inside
-`loop`).
+`loop` and `while`).
 
 ### `if` / `else if` / `else`
 
@@ -750,6 +750,59 @@ loop n {
 ```
 
 `break` works in counted loops too, exiting before all iterations complete.
+
+### Labeled loops and `break`
+
+Both `loop` and `while` can be labeled with a `label:` prefix. `break`
+can target a specific label to exit an outer loop from within a nested
+loop:
+
+```doit
+var i = 0
+outer: loop {
+    loop {
+        if i >= 5 {
+            break outer
+        }
+        i += 1
+    }
+}
+```
+
+Without a label, `break` exits the innermost enclosing loop:
+
+```doit
+outer: loop {
+    var j = 0
+    inner: while j < 10 {
+        if j >= 5 {
+            break inner   # exits inner while loop
+        }
+        j += 1
+    }
+    # execution continues here after break inner
+}
+```
+
+Labels work with `loop`, counted `loop`, and `while`:
+
+```doit
+scan: while has_targets {
+    loop 10 {
+        if done {
+            break scan   # exits the while loop
+        }
+        process_next
+    }
+}
+```
+
+Label names follow the same rules as variable names (letters, digits,
+underscores; must start with a letter or underscore). Duplicate labels
+on nested loops are a compile error. `break` with an unknown label is
+not an error — the label is treated as the next statement (which will
+likely produce its own error). `break` outside of any loop is a compile
+error.
 
 ## Execution Mode
 

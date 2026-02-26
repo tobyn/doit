@@ -28,7 +28,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string) (*codec.
 	if err != nil {
 		return nil, fmt.Errorf("stdlib: %w", err)
 	}
-	p := &parser{scanner: scanner{src: src, locale: locale}, fns: fns, target: behaviorID}
+	p := &parser{scanner: scanner{src: src, locale: locale}, fns: fns, target: behaviorID, loopLabels: map[string]bool{}}
 	return p.parseFile()
 }
 

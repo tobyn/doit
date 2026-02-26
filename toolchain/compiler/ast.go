@@ -106,6 +106,7 @@ type ElseIfClause struct {
 
 // WhileStmt is a while loop.
 type WhileStmt struct {
+	Label   string // "" for unlabeled
 	Cond    Expr
 	Body    []Stmt
 	Comment string
@@ -113,6 +114,7 @@ type WhileStmt struct {
 
 // LoopStmt is a loop. If Count is nil, infinite; otherwise counted.
 type LoopStmt struct {
+	Label   string // "" for unlabeled
 	Count   Expr   // nil = infinite, non-nil = counted
 	Body    []Stmt
 	Comment string
@@ -120,6 +122,7 @@ type LoopStmt struct {
 
 // BreakStmt is a break from a loop.
 type BreakStmt struct {
+	Label   string // "" for unlabeled (breaks innermost)
 	Comment string
 }
 
