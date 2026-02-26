@@ -650,3 +650,59 @@ level and in fn bodies. Compound assignment RHS. Function call
 arguments.
 
 **Deferred**: function calls in non-first boolean position.
+
+## Multi-arity expression lists
+
+`let a, b, c = 1, 2, 3` declares multiple variables from a comma-separated
+expression list. Each expression contributes its arity: 1 for simple
+expressions (numbers, variables, constructors, arithmetic), and
+`returnCount()` for function calls. The sum of arities must equal the
+binding count, with one exception: the last item supports prefix matching
+if it is a function call (same as standalone multi-return calls).
+
+**Detection logic**: The expression list parser peeks at each item. If
+the next token is an identifier that resolves to a known function with
+returns (`p.fns[name] != nil && fn.hasReturn()`), it's parsed as a
+`CallExpr` via `parseBhvCallArgs` / `parseFnBodyCallArgs`. Otherwise,
+it's parsed as a simple expression via `parseBhvArgExpr` (behavior
+level) or `parseFnBodyExpr` with arithmetic wrapping (fn bodies).
+
+**AST representation**: When the RHS is a single item (function call
+or simple expression), the existing `MultiReturnStmt{Value: CallExpr}`
+representation is used directly. When there are multiple items, they
+are wrapped in `ExprListExpr{Exprs: []Expr}`. This preserves backward
+compatibility for the common single-function-call case.
+
+**Variable registration timing**: Variables are registered in the
+symbol table after all RHS parsing completes, except when the RHS
+contains a function call — then variables are registered before
+parsing call args (matching the existing behavior for single function
+calls).
+
+**Trailing comma fix**: `parseBhvCallArgs` now guards keyword arg
+parsing with `fn.positionalCount() < len(fn.params)` (matching the
+existing fn body version). This prevents expression list separator
+commas from being consumed as keyword arg separators for functions
+with no keyword params.
+
+**Prefix matching on last item**: If the last expression list item is
+a function call whose return count exceeds the remaining bindings,
+the excess returns are silently discarded (same as standalone prefix
+matching). Non-last items must have all their values consumed.
+
+**Error diagnostics**: When a single function call doesn't fill all
+bindings and no more items follow, the parser gives the specific
+"too many bindings (N) for function X which returns M values" error
+rather than a generic "expected comma" message.
+
+**Emission**: `ExprListExpr` is emitted by iterating items. For each
+`CallExpr`, `expandCall` is called with a slice of `retVals` covering
+that call's arity. For simple expressions, `emitBhvExprTo` /
+`emitExprTo` writes to the corresponding binding target. Discarded
+bindings (`_`) skip emission for simple expressions.
+
+**Supported contexts**: `let`/`var` multi-binding declarations at
+behavior level and in fn bodies.
+
+**Deferred**: expression lists in assignment (`x, y = 1, 2`) and
+`return` statements.

@@ -60,7 +60,7 @@ type IncrDecrStmt struct {
 // MultiReturnStmt is a multi-return binding: `let x, y = fn args`
 type MultiReturnStmt struct {
 	Bindings []MultiBinding
-	Value    Expr // CallExpr or InstructionExpr
+	Value    Expr // CallExpr, InstructionExpr, or ExprListExpr
 	Comment  string
 }
 
@@ -191,6 +191,11 @@ type AmpersandExpr struct {
 	Num   Expr
 }
 
+// ExprListExpr is a comma-separated list of expressions: `1, my_fn args, 3`
+type ExprListExpr struct {
+	Exprs []Expr // each is arity 1, except CallExpr (arity = returnCount)
+}
+
 // --- Interface implementations ---
 
 func (*CallStmt) stmtNode()           {}
@@ -218,3 +223,4 @@ func (*TruthyExpr) exprNode()       {}
 func (*BoolChainExpr) exprNode()    {}
 func (*ConstructorExpr) exprNode()  {}
 func (*AmpersandExpr) exprNode()    {}
+func (*ExprListExpr) exprNode()     {}

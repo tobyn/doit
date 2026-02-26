@@ -1,0 +1,6 @@
+# AI-generated test
+# Expression list with mixed modifiers (behavior level)
+behavior expr_list_modifiers {
+    @name "Expr List Modifiers"
+    var a, let b, _, var c = 1, 2, 3, 4
+}

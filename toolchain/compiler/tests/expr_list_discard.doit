@@ -1,0 +1,6 @@
+# AI-generated test
+# Expression list with discard
+behavior expr_list_discard {
+    @name "Expr List Discard"
+    let _, b = null, 5
+}

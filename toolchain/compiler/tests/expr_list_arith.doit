@@ -1,0 +1,7 @@
+# AI-generated test
+# Expression list with arithmetic
+behavior expr_list_arith {
+    @name "Expr List Arith"
+    var x = 10
+    let a, b = x + 1, x + 2
+}

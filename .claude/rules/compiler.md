@@ -15,10 +15,10 @@ output format.
   (13 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
   `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
   `InstructionStmt`, `ModeBlockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
-  `LoopStmt`, `BreakStmt`) and `Expr` interface (11 concrete types:
+  `LoopStmt`, `BreakStmt`) and `Expr` interface (12 concrete types:
   `LiteralExpr`, `IdentExpr`, `CallExpr`, `InstructionExpr`,
   `ArithExpr`, `CompareExpr`, `TypeCheckExpr`, `TruthyExpr`,
-  `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`)
+  `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`, `ExprListExpr`)
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
   (`fnDef`, `symbolTable`, `unitRegisters`),
   `paramDef` (with `direction` field, `effectiveDirection()`)
@@ -346,10 +346,15 @@ lists support mixed modifiers:
   compile error.
 
 The `parseBhvMultiReturn` helper in bhvast.go handles behavior-level
-binding list parsing, producing `MultiReturnStmt` AST nodes. During
-emission, `emitBhvStmtSimple` builds a `retVals []any` slice (name
-strings for new bindings, resolved targets for existing-var assignments,
-`false` for `_`) and passes it to `expandCall`. The `retVals []any`
+binding list parsing, producing `MultiReturnStmt` AST nodes. The RHS
+can be a single function call, an `instruction` block, or a
+comma-separated expression list (`ExprListExpr`). The expression list
+parser detects function calls by checking `p.fns[name]` and falls back
+to `parseBhvArgExpr` for simple expressions. During emission,
+`emitBhvStmtSimple` builds a `retVals []any` slice (name strings for
+new bindings, resolved targets for existing-var assignments, `false`
+for `_`) and passes it to `expandCall` (for single calls) or iterates
+`ExprListExpr.Exprs` (for expression lists). The `retVals []any`
 parameter on `expandCall` carries return targets through the call chain.
 
 **fn body multi-return**: In function bodies, `let` supports multi-return
@@ -357,7 +362,8 @@ binding with `_` discards: `let x, y = separate_coordinate coord` and
 `let _, y = separate_coordinate coord`. No modifier switching — all names
 are `let` locals. Each binding becomes a `MultiBinding` in
 `MultiReturnStmt.Bindings` (with `Name` for idents, `Discard: true` for
-`_`). During emission, `emitFnBody` resolves bindings through `paramMap`
+`_`). The RHS supports expression lists (same as behavior level).
+During emission, `emitFnBody` resolves bindings through `paramMap`
 and passes the result slice as `retVals` to the recursive `expandCall`.
 `var` is supported in fn bodies for mutable local variables. `let` is
 immutable. Multi-return binding lists in fn bodies use the modifier of

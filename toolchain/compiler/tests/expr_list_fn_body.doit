@@ -1,0 +1,11 @@
+# AI-generated test
+# Expression list inside a function body
+fn setup() {
+    let a, b = 1, 2
+    notify "Done", value: a
+}
+
+behavior expr_list_fn_body {
+    @name "Expr List Fn Body"
+    setup
+}

@@ -1,0 +1,6 @@
+# AI-generated test
+# Expression list with a function call mixed with simple expressions
+behavior expr_list_fn_call {
+    @name "Expr List Fn Call"
+    let a, b, c = get_self, 1, 2
+}

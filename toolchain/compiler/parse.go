@@ -818,6 +818,36 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			case *InstructionExpr:
 				resolved := resolveInstructionFrame(v.Frame, retVals, paramMap, nil, callComment)
 				b.emit(resolved)
+			case *ExprListExpr:
+				bindIdx := 0
+				for _, expr := range v.Exprs {
+					switch e := expr.(type) {
+					case *CallExpr:
+						fn := p.fns[e.Name]
+						arity := fn.returnCount()
+						remaining := len(s.Bindings) - bindIdx
+						callArity := arity
+						if callArity > remaining {
+							callArity = remaining
+						}
+						callRetVals := retVals[bindIdx : bindIdx+callArity]
+						resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(e.Args, e.KwArgs, b, paramMap, usedVars, pos)
+						if err != nil {
+							return err
+						}
+						if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, callRetVals, b, pos, callComment, usedVars); err != nil {
+							return err
+						}
+						bindIdx += callArity
+					default:
+						if !s.Bindings[bindIdx].Discard {
+							if err := p.emitExprTo(expr, retVals[bindIdx], b, paramMap, usedVars, callComment, pos); err != nil {
+								return err
+							}
+						}
+						bindIdx++
+					}
+				}
 			}
 
 		case *AssignStmt:
@@ -1863,23 +1893,26 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 				return nil, p.errorf(next.pos, "expected ',' or '=' in binding list, got %s", next.describe())
 			}
 		}
-		calleeTok, err := p.expect(tokIdent)
+		// Parse the RHS: expression list
+		firstTok, err := p.next()
 		if err != nil {
 			return nil, err
 		}
-		if calleeTok.val == "instruction" {
+
+		// Instruction is only valid as the sole RHS item
+		if firstTok.kind == tokIdent && firstTok.val == "instruction" {
 			frame, err := p.parseInstruction()
 			if err != nil {
 				return nil, err
 			}
 			retCount := frameReturnCount(frame)
 			if retCount == 0 {
-				return nil, p.errorf(calleeTok.pos, "instruction has no return slots (@N); cannot assign its result")
+				return nil, p.errorf(firstTok.pos, "instruction has no return slots (@N); cannot assign its result")
 			}
 			if len(bindings) > retCount {
-				return nil, p.errorf(calleeTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
+				return nil, p.errorf(firstTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
 			}
-			if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, calleeTok.pos); err != nil {
+			if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, firstTok.pos); err != nil {
 				return nil, err
 			}
 			for _, bind := range bindings {
@@ -1893,33 +1926,119 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 				Comment:  comment,
 			}}, nil
 		}
-		callee := p.fns[calleeTok.val]
-		if callee == nil {
-			return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+
+		// Parse expression list items
+		p.unget(firstTok)
+		var items []Expr
+		bindingsConsumed := 0
+
+		for bindingsConsumed < len(bindings) {
+			if len(items) > 0 {
+				comma, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if comma.kind != tokComma {
+					p.unget(comma)
+					// If we have a single function call that doesn't fill all bindings,
+					// give the specific "too many bindings" error.
+					if len(items) == 1 {
+						if ce, ok := items[0].(*CallExpr); ok {
+							callee := p.fns[ce.Name]
+							return nil, p.errorf(firstTok.pos, "too many bindings (%d) for function %q which returns %d values", len(bindings), ce.Name, callee.returnCount())
+						}
+					}
+					return nil, p.errorf(comma.pos, "expected ',' between expression list items, got %s", comma.describe())
+				}
+			}
+
+			tok, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+
+			if tok.kind == tokIdent {
+				if callee := p.fns[tok.val]; callee != nil {
+					if !callee.hasReturn() {
+						return nil, p.errorf(tok.pos, "function %q has no return value", tok.val)
+					}
+					args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, ctx.fnVars)
+					if err != nil {
+						return nil, err
+					}
+					items = append(items, &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs})
+					bindingsConsumed += callee.returnCount()
+					continue
+				}
+			}
+
+			// Simple expression (with arithmetic support)
+			p.unget(tok)
+			expr, err := p.parseFnBodyExpr()
+			if err != nil {
+				return nil, err
+			}
+			// Wrap with arithmetic parsing for numbers and identifiers
+			if _, ok := expr.(*LiteralExpr); ok {
+				if m, isMap := expr.(*LiteralExpr).Value.(map[string]any); isMap {
+					if _, hasNum := m["num"]; hasNum && len(m) == 1 {
+						arith, err := p.parseArithExprFromFull(expr, ctx.resolve)
+						if err != nil {
+							return nil, err
+						}
+						expr = arith
+					}
+				}
+			} else if _, ok := expr.(*IdentExpr); ok {
+				arith, err := p.parseArithExprFromFull(expr, ctx.resolve)
+				if err != nil {
+					return nil, err
+				}
+				expr = arith
+			}
+			items = append(items, expr)
+			bindingsConsumed++
 		}
-		if !callee.hasReturn() {
-			return nil, p.errorf(calleeTok.pos, "function %q has no return value", calleeTok.val)
+
+		// Handle prefix matching on last item
+		if bindingsConsumed > len(bindings) {
+			if _, ok := items[len(items)-1].(*CallExpr); !ok {
+				return nil, p.errorf(firstTok.pos, "too many values for %d bindings", len(bindings))
+			}
+			bindingsConsumed = len(bindings)
 		}
-		if len(bindings) > callee.returnCount() {
-			return nil, p.errorf(calleeTok.pos, "too many bindings (%d) for function %q which returns %d values", len(bindings), calleeTok.val, callee.returnCount())
-		}
-		args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx.paramDirs, ctx.fnVars)
+
+		// Check no trailing expressions
+		peek, err := p.next()
 		if err != nil {
 			return nil, err
 		}
+		if peek.kind == tokComma {
+			return nil, p.errorf(peek.pos, "too many expressions for %d bindings", len(bindings))
+		}
+		p.unget(peek)
+
+		// Register variables
 		for _, bind := range bindings {
 			if !bind.Discard {
 				ctx.fnVars[bind.Name] = mutable
 			}
 		}
+
+		// If single item, use existing representation directly
+		if len(items) == 1 {
+			return []Stmt{&MultiReturnStmt{
+				Bindings: bindings,
+				Value:    items[0],
+				Comment:  comment,
+			}}, nil
+		}
+
+		// Multiple items: wrap in ExprListExpr
 		return []Stmt{&MultiReturnStmt{
 			Bindings: bindings,
-			Value: &CallExpr{
-				Name:   calleeTok.val,
-				Args:   args,
-				KwArgs: kwArgs,
-			},
-			Comment: comment,
+			Value:    &ExprListExpr{Exprs: items},
+			Comment:  comment,
 		}}, nil
 	}
 

@@ -1,0 +1,7 @@
+# AI-generated test
+# Expression list mixing numbers and variables
+behavior expr_list_mixed {
+    @name "Expr List Mixed"
+    let me = get_self
+    var a, b = 5, me
+}

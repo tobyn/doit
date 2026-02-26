@@ -1,0 +1,6 @@
+# AI-generated test
+# Expression list with number literals
+behavior expr_list_numbers {
+    @name "Expr List Numbers"
+    let a, b, c = 1, 2, 3
+}

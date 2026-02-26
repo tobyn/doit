@@ -1,0 +1,24 @@
+{
+    "0": {
+        "1": {
+            "num": 1
+        },
+        "2": "a",
+        "op": "set_number"
+    },
+    "1": {
+        "1": {
+            "num": 2
+        },
+        "2": "b",
+        "op": "set_number"
+    },
+    "2": {
+        "1": {
+            "num": 3
+        },
+        "2": "c",
+        "op": "set_number"
+    },
+    "name": "Expr List Numbers"
+}

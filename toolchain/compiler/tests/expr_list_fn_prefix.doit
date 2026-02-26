@@ -1,0 +1,7 @@
+# AI-generated test
+# Expression list with prefix matching on last function call
+behavior expr_list_fn_prefix {
+    @name "Expr List Fn Prefix"
+    let coord = get_location get_self
+    let a, b = 1, separate_coordinate coord
+}

@@ -1,0 +1,6 @@
+# AI-generated test
+# Expression list with type constructors
+behavior expr_list_constructors {
+    @name "Expr List Constructors"
+    var x, y = Item("metalbar"), Item("circuit")
+}

@@ -1,0 +1,19 @@
+{
+    "0": {
+        "0": "me",
+        "op": "get_self"
+    },
+    "1": {
+        "1": {
+            "num": 5
+        },
+        "2": "a",
+        "op": "set_number"
+    },
+    "2": {
+        "0": "me",
+        "1": "b",
+        "op": "set_reg"
+    },
+    "name": "Expr List Mixed"
+}

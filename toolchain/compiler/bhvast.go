@@ -459,7 +459,7 @@ func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) (
 		return nil, nil, p.errorf(peek.pos,
 			"too many positional arguments for %s (remaining parameters are keyword-only)", nameTok.val)
 	}
-	if peek.kind == tokComma {
+	if peek.kind == tokComma && fn.positionalCount() < len(fn.params) {
 		kwArgs = map[string]Expr{}
 		for {
 			dirOrKw, err := p.expect(tokIdent)
@@ -1200,8 +1200,8 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		}
 	}
 
-	// Parse the RHS: function call or instruction
-	calleeTok, err := p.expect(tokIdent)
+	// Parse the RHS: expression list
+	firstTok, err := p.next()
 	if err != nil {
 		return nil, err
 	}
@@ -1211,25 +1211,26 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		if bind.Discard {
 			continue
 		}
-		if err := p.checkVarName(bind.Name, syms, calleeTok.pos); err != nil {
+		if err := p.checkVarName(bind.Name, syms, firstTok.pos); err != nil {
 			return nil, err
 		}
 	}
 
-	if calleeTok.val == "instruction" {
+	// Instruction is only valid as the sole RHS item
+	if firstTok.kind == tokIdent && firstTok.val == "instruction" {
 		rawFrame, err := p.parseInstruction()
 		if err != nil {
 			return nil, err
 		}
-		if err := p.checkInstructionDirections(rawFrame, syms, calleeTok.pos); err != nil {
+		if err := p.checkInstructionDirections(rawFrame, syms, firstTok.pos); err != nil {
 			return nil, err
 		}
 		retCount := frameReturnCount(rawFrame)
 		if retCount == 0 {
-			return nil, p.errorf(calleeTok.pos, "instruction has no return slots (@N); cannot assign its result")
+			return nil, p.errorf(firstTok.pos, "instruction has no return slots (@N); cannot assign its result")
 		}
 		if len(bindings) > retCount {
-			return nil, p.errorf(calleeTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
+			return nil, p.errorf(firstTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
 		}
 
 		// Register new variables
@@ -1247,33 +1248,113 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		}}, nil
 	}
 
-	fn := p.fns[calleeTok.val]
-	if fn == nil {
-		return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
-	}
-	if !fn.hasReturn() {
-		return nil, p.errorf(calleeTok.pos, "function %q has no return value", calleeTok.val)
-	}
-	if len(bindings) > fn.returnCount() {
-		return nil, p.errorf(calleeTok.pos, "too many bindings (%d) for function %q which returns %d values", len(bindings), calleeTok.val, fn.returnCount())
-	}
+	// Parse expression list items
+	p.unget(firstTok)
+	var items []Expr
+	bindingsConsumed := 0
+	varsRegistered := false
 
-	// Register new variables before parsing args (they may be referenced)
-	for _, bind := range bindings {
-		if !bind.Discard {
-			syms.vars[bind.Name] = varInfo{mutable: bind.Mutable}
-			syms.usedVars[bind.Name] = true
+	for bindingsConsumed < len(bindings) {
+		if len(items) > 0 {
+			comma, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if comma.kind != tokComma {
+				p.unget(comma)
+				// If we have a single function call that doesn't fill all bindings,
+				// give the specific "too many bindings" error.
+				if len(items) == 1 {
+					if ce, ok := items[0].(*CallExpr); ok {
+						fn := p.fns[ce.Name]
+						return nil, p.errorf(firstTok.pos, "too many bindings (%d) for function %q which returns %d values", len(bindings), ce.Name, fn.returnCount())
+					}
+				}
+				return nil, p.errorf(comma.pos, "expected ',' between expression list items, got %s", comma.describe())
+			}
 		}
+
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+
+		if tok.kind == tokIdent {
+			if fn := p.fns[tok.val]; fn != nil {
+				if !fn.hasReturn() {
+					return nil, p.errorf(tok.pos, "function %q has no return value", tok.val)
+				}
+				// Register variables before parsing args (they may be referenced)
+				if !varsRegistered {
+					for _, bind := range bindings {
+						if !bind.Discard {
+							syms.vars[bind.Name] = varInfo{mutable: bind.Mutable}
+							syms.usedVars[bind.Name] = true
+						}
+					}
+					varsRegistered = true
+				}
+				args, kwArgs, err := p.parseBhvCallArgs(fn, tok, syms)
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs})
+				bindingsConsumed += fn.returnCount()
+				continue
+			}
+		}
+
+		// Simple expression
+		p.unget(tok)
+		expr, err := p.parseBhvArgExpr(syms)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, expr)
+		bindingsConsumed++
 	}
 
-	args, kwArgs, err := p.parseBhvCallArgs(fn, calleeTok, syms)
+	// Handle prefix matching on last item
+	if bindingsConsumed > len(bindings) {
+		if _, ok := items[len(items)-1].(*CallExpr); !ok {
+			return nil, p.errorf(firstTok.pos, "too many values for %d bindings", len(bindings))
+		}
+		bindingsConsumed = len(bindings)
+	}
+
+	// Check no trailing expressions
+	peek, err := p.next()
 	if err != nil {
 		return nil, err
 	}
+	if peek.kind == tokComma {
+		return nil, p.errorf(peek.pos, "too many expressions for %d bindings", len(bindings))
+	}
+	p.unget(peek)
 
+	// Register variables (if not already done for function call args)
+	if !varsRegistered {
+		for _, bind := range bindings {
+			if !bind.Discard {
+				syms.vars[bind.Name] = varInfo{mutable: bind.Mutable}
+				syms.usedVars[bind.Name] = true
+			}
+		}
+	}
+
+	// If single item, use existing representation directly
+	if len(items) == 1 {
+		return []Stmt{&MultiReturnStmt{
+			Bindings: bindings,
+			Value:    items[0],
+			Comment:  comment,
+		}}, nil
+	}
+
+	// Multiple items: wrap in ExprListExpr
 	return []Stmt{&MultiReturnStmt{
 		Bindings: bindings,
-		Value:    &CallExpr{Name: calleeTok.val, Args: args, KwArgs: kwArgs},
+		Value:    &ExprListExpr{Exprs: items},
 		Comment:  comment,
 	}}, nil
 }
@@ -2059,6 +2140,40 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		case *InstructionExpr:
 			resolved := resolveInstructionFrame(v.Frame, retVals, nil, nil, s.Comment)
 			b.emit(resolved)
+			return nil
+		case *ExprListExpr:
+			bindIdx := 0
+			for _, expr := range v.Exprs {
+				switch e := expr.(type) {
+				case *CallExpr:
+					fn := p.fns[e.Name]
+					arity := fn.returnCount()
+					remaining := len(s.Bindings) - bindIdx
+					callArity := arity
+					if callArity > remaining {
+						callArity = remaining
+					}
+					callRetVals := retVals[bindIdx : bindIdx+callArity]
+					resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(e.Args, e.KwArgs, syms, b)
+					if err != nil {
+						return err
+					}
+					if err := p.checkCallDirections(fn, e.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+						return err
+					}
+					if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, callRetVals, b, 0, s.Comment, syms.usedVars); err != nil {
+						return err
+					}
+					bindIdx += callArity
+				default:
+					if !s.Bindings[bindIdx].Discard {
+						if err := p.emitBhvExprTo(expr, retVals[bindIdx], syms, b, s.Comment); err != nil {
+							return err
+						}
+					}
+					bindIdx++
+				}
+			}
 			return nil
 		}
 		return fmt.Errorf("unsupported multi-return value type %T", s.Value)

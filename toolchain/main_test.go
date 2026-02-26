@@ -1551,6 +1551,50 @@ func TestCompileErrors(t *testing.T) {
 		// At behavior level, break outside loop should fail
 	})
 
+	t.Run("expr_list_too_many_expressions", func(t *testing.T) {
+		src := `behavior a { let a, b = 1, 2, 3 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many expressions") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("expr_list_fn_no_return", func(t *testing.T) {
+		src := `behavior a { let a, b = notify "hi", 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no return value") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("expr_list_fn_body_too_many_expressions", func(t *testing.T) {
+		src := "fn bad() { let a, b = 1, 2, 3 }\nbehavior a { bad }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many expressions") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("expr_list_fn_body_fn_no_return", func(t *testing.T) {
+		src := "fn bad() { let a, b = notify \"hi\", 5 }\nbehavior a { bad }"
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no return value") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

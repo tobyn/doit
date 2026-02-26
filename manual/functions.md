@@ -287,6 +287,15 @@ Arithmetic (`+`, `-`, `*`, `/`), comparison (`>`, `<`, `>=`, `<=`, `==`,
 `!=`), type checks (`is`), boolean operators (`&&`, `||`), and
 parenthesized grouping all work inside `fn` bodies.
 
+Multi-binding expression lists also work in function bodies:
+
+```doit
+fn setup() {
+    let a, b = 1, 2
+    let me, coord = get_self, get_location me
+}
+```
+
 ### Mutable variables (`var`)
 
 Use `var` to declare a mutable local variable in a function body:

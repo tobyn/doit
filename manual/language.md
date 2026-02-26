@@ -333,6 +333,47 @@ x -= a * 2
 
 Assignment targets can also be unit registers (`$store = 5`) or parameters.
 
+### Multi-binding expression lists
+
+Multiple variables can be declared from a comma-separated list of
+expressions:
+
+```doit
+let a, b, c = 1, 2, 3
+var x, y = Item("metalbar"), Item("circuit")
+let sum, diff = a + 1, a - 1
+```
+
+Each expression on the right contributes one value, and the total must
+match the number of bindings on the left.
+
+Function calls can appear as expression list items. A function call
+contributes as many values as its return count:
+
+```doit
+let a, b, c = get_self, 1, 2        # get_self returns 1 value
+let a, b, c, d, e = 1, my_fn, 5     # my_fn returns 3 values (1+3+1=5)
+```
+
+The last item in an expression list supports **prefix matching**: if it is
+a function call, the caller can bind fewer values than the function returns.
+Extra return values are silently discarded:
+
+```doit
+let a, b = 1, separate_coordinate coord   # separate_coordinate returns 2,
+                                           # but only first is bound to b
+```
+
+At behavior level, binding lists support mixed `let`/`var` modifiers and
+`_` discards (same syntax as multi-return function calls):
+
+```doit
+var a, let b, _, var c = 1, 2, 3, 4
+```
+
+In function bodies, all bindings inherit the leading `let` or `var`
+modifier.
+
 ## Unit Registers
 
 Four special registers are available via the `$` prefix:

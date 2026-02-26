@@ -1,0 +1,10 @@
+{
+    "0": {
+        "1": {
+            "num": 5
+        },
+        "2": "b",
+        "op": "set_number"
+    },
+    "name": "Expr List Discard"
+}
