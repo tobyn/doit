@@ -2142,6 +2142,64 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 		}
 	})
 
+	// --- Unary minus / negative number tests ---
+
+	t.Run("neg_let_literal_compiles", func(t *testing.T) {
+		src := `behavior a { let x = -5; set_reg x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("neg_let_variable_compiles", func(t *testing.T) {
+		src := `behavior a { @param in p "P"; let x = -$p; set_reg x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("neg_assign_compiles", func(t *testing.T) {
+		src := `behavior a { var x = 0; x = -5; set_reg x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("neg_fn_body_compiles", func(t *testing.T) {
+		src := `fn neg(p) { let x = -p; return x }; behavior a { @param in p "P"; let x = neg $p; set_reg x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("neg_in_call_arg_compiles", func(t *testing.T) {
+		src := `behavior a { @param in p "P"; set_reg -$p }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("neg_in_comparison_compiles", func(t *testing.T) {
+		src := `behavior a { @param in p "P"; let x = $p > -5; set_reg x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("neg_string_error", func(t *testing.T) {
+		src := `behavior a { let x = -"hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error for negating a string")
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

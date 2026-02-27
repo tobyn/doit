@@ -40,13 +40,14 @@ For chains, `negateResolved` applies De Morgan's law to push negation
 to leaves. Works in `let`/`var` init, assignment, `if`/`while`
 conditions, fn bodies, and parenthesized call arguments.
 
-### 3. Negative number literals in variable init/assignment
+### ~~3. Negative number literals and unary minus~~ (Done)
 
-`let x = -5` and `x = -5` fail because the RHS parsers don't handle
-a leading `tokMinus`. Negative literals work in function call arguments
-and `Range()` constructor args (where `parseBhvArgExpr`/
-`parseFnBodyExpr` handle them). Unary minus on variables (`-x`) is
-also unsupported everywhere.
+Unary minus (`-expr`) works everywhere: `let`/`var` init, assignment,
+function call arguments, comparison operands, compound assignment RHS,
+and fn bodies. For number literals, compile-time fold (`-5` →
+`LiteralExpr{-5}`). For variables/expressions, desugar to `0 - expr`
+(`ArithExpr{sub, 0, x}`). Implemented in `parseArithPrimary` as the
+single source of truth. Call sites simplified to delegate through it.
 
 ### 4. Nested function calls in arguments
 

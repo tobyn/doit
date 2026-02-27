@@ -108,7 +108,9 @@ output format.
   used by both behavior and fn body paths): `parseArithExpr`/
   `parseArithExprFrom`/`parseArithExprFromFull`/`parseArithTerm`/
   `parseArithTermFrom`/`parseArithPrimary` (PEMDAS arithmetic →
-  `ArithExpr`), `parseBoolExpr`/`parseBoolPrimary` (with
+  `ArithExpr`; handles `tokMinus` for unary minus with compile-time
+  fold for literals and `0-expr` desugar for variables),
+  `parseBoolExpr`/`parseBoolPrimary` (with
   `callExprParser` support for function calls in boolean position)/
   `parseBoolChain` (boolean expressions → `BoolChainExpr`/`CompareExpr`/
   `TypeCheckExpr`/`TruthyExpr`),

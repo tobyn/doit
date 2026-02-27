@@ -1,0 +1,6 @@
+# AI-generated test
+behavior test {
+  @param in a "A"
+  let y = -$a
+  set_reg y
+}

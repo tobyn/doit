@@ -68,16 +68,23 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 	case tokString:
 		base = &LiteralExpr{Value: tok.val}
 	case tokMinus:
-		// Unary minus: -<number>
-		numTok, err := p.next()
+		// Unary minus: -<number> or -<variable>
+		innerTok, err := p.next()
 		if err != nil {
 			return nil, err
 		}
-		if numTok.kind != tokNumber {
-			return nil, p.errorf(tok.pos, "expected number after '-'")
+		if innerTok.kind == tokNumber {
+			num, _ := strconv.Atoi(innerTok.val)
+			base = &LiteralExpr{Value: map[string]any{"num": -num}}
+		} else if innerTok.kind == tokIdent && !isConstructor(innerTok.val) && innerTok.val != "null" && innerTok.val != "false" && innerTok.val != "true" {
+			base = &ArithExpr{
+				Op:  tokMinus,
+				LHS: &LiteralExpr{Value: map[string]any{"num": 0}},
+				RHS: &IdentExpr{Name: innerTok.val},
+			}
+		} else {
+			return nil, p.errorf(tok.pos, "expected number or variable after '-'")
 		}
-		num, _ := strconv.Atoi(numTok.val)
-		base = &LiteralExpr{Value: map[string]any{"num": -num}}
 	case tokNumber:
 		num, _ := strconv.Atoi(tok.val)
 		base = &LiteralExpr{Value: map[string]any{"num": num}}

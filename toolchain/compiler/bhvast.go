@@ -31,7 +31,8 @@ func (p *parser) bhvResolver(syms *symbolTable) operandResolver {
 }
 
 // parseArithPrimary parses an arithmetic atom: number literal, null,
-// variable, $register, constructor, or a parenthesized sub-expression.
+// variable, $register, constructor, unary minus, or a parenthesized
+// sub-expression.
 func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 	tok, err := p.next()
 	if err != nil {
@@ -41,6 +42,25 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 	case tokNumber:
 		num, _ := strconv.Atoi(tok.val)
 		return &LiteralExpr{Value: map[string]any{"num": num}}, nil
+	case tokMinus:
+		inner, err := p.parseArithPrimary(resolve)
+		if err != nil {
+			return nil, err
+		}
+		// Compile-time fold for number literals
+		if lit, ok := inner.(*LiteralExpr); ok {
+			if m, ok := lit.Value.(map[string]any); ok {
+				if n, ok := m["num"]; ok {
+					return &LiteralExpr{Value: map[string]any{"num": -(n.(int))}}, nil
+				}
+			}
+		}
+		// Desugar -expr to 0 - expr
+		return &ArithExpr{
+			Op:  tokMinus,
+			LHS: &LiteralExpr{Value: map[string]any{"num": 0}},
+			RHS: inner,
+		}, nil
 	case tokLParen:
 		val, err := p.parseArithExpr(resolve)
 		if err != nil {
@@ -297,10 +317,9 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 	}
 
 	var lhs Expr
-	if tok.kind == tokNumber {
-		num, _ := strconv.Atoi(tok.val)
-		val := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
-		lhs, err = p.parseArithExprFromFull(val, resolve)
+	if tok.kind == tokNumber || tok.kind == tokMinus {
+		p.unget(tok)
+		lhs, err = p.parseArithExpr(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -453,26 +472,9 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 	switch tok.kind {
 	case tokString:
 		base = &LiteralExpr{Value: tok.val}
-	case tokMinus:
-		// Unary minus: -<number>
-		numTok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if numTok.kind != tokNumber {
-			return nil, p.errorf(tok.pos, "expected number after '-'")
-		}
-		num, _ := strconv.Atoi(numTok.val)
-		val := Expr(&LiteralExpr{Value: map[string]any{"num": -num}})
-		result, err := p.parseArithExprFromFull(val, resolve)
-		if err != nil {
-			return nil, err
-		}
-		base = result
-	case tokNumber:
-		num, _ := strconv.Atoi(tok.val)
-		val := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
-		result, err := p.parseArithExprFromFull(val, resolve)
+	case tokMinus, tokNumber:
+		p.unget(tok)
+		result, err := p.parseArithExpr(resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -1127,7 +1129,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: expr, Comment: comment}}, nil
 	}
 
-	if rhsTok.kind == tokBang {
+	if rhsTok.kind == tokBang || rhsTok.kind == tokMinus {
 		p.unget(rhsTok)
 		expr, err := p.parseBoolExpr(resolve)
 		if err != nil {
@@ -1135,6 +1137,20 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		}
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
 		syms.usedVars[nameTok.val] = true
+
+		// Unary minus produces TruthyExpr wrapping arithmetic — unwrap it
+		if truthy, ok := expr.(*TruthyExpr); ok {
+			result := truthy.Value
+			final, handled, err := p.maybeBhvExprContinuation(result, syms)
+			if err != nil {
+				return nil, err
+			}
+			if handled {
+				return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
+			}
+			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
+		}
+
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: expr, Comment: comment}}, nil
 	}
 
@@ -1338,12 +1354,26 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment}}, nil
 		}
 
-		if rhsTok.kind == tokBang {
+		if rhsTok.kind == tokBang || rhsTok.kind == tokMinus {
 			p.unget(rhsTok)
 			expr, err := p.parseBoolExpr(resolve)
 			if err != nil {
 				return nil, err
 			}
+
+			// Unary minus produces TruthyExpr wrapping arithmetic — unwrap it
+			if truthy, ok := expr.(*TruthyExpr); ok {
+				result := truthy.Value
+				final, handled, err := p.maybeBhvExprContinuation(result, syms)
+				if err != nil {
+					return nil, err
+				}
+				if handled {
+					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+				}
+				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
+			}
+
 			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment}}, nil
 		}
 

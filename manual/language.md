@@ -609,6 +609,22 @@ var result = a + b
 result = a - b
 ```
 
+#### Unary minus
+
+The `-` prefix negates a number or variable. For number literals, the
+negation is resolved at compile time. For variables, the compiler emits
+`sub(0, x)`:
+
+```doit
+let x = -5          # compile-time: {"num": -5}
+let y = -x          # runtime: 0 - x
+var z = 10
+z = -z              # runtime: 0 - z
+set_reg -x          # in function arguments
+x += -3             # in compound assignment
+let a = $p > -5     # in comparison RHS
+```
+
 #### PEMDAS precedence
 
 Chained arithmetic follows standard PEMDAS rules — `*`, `/`, and `%` are

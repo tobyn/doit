@@ -222,6 +222,30 @@ value (the game's semantics). Number literal LHS supported.
 low-priority. Intermediate results use `@arith`-prefixed temp variables.
 The outermost operation writes directly to target.
 
+## Unary minus (`-expr`)
+
+Unary minus negates a number or variable. Handled in
+`parseArithPrimary` as the single source of truth — all expression
+contexts (let/var init, assignment, call args, comparison operands,
+compound assignment RHS, fn bodies) benefit automatically.
+
+- **Number literals**: compile-time fold. `-5` → `LiteralExpr{-5}`.
+  No instruction emitted.
+- **Variables/expressions**: desugar to `0 - expr`. `-x` →
+  `ArithExpr{tokMinus, LiteralExpr{0}, IdentExpr{x}}`. Emits a single
+  `sub` instruction at runtime.
+- **Double negation**: `--x` folds or chains correctly via recursive
+  `parseArithPrimary` calls.
+- **`parseBoolPrimary`**: `tokNumber` and `tokMinus` both unget and
+  delegate to `parseArithExpr`, eliminating duplicated number handling.
+- **`parseBhvVarInit`/`parseBhvDefaultStmt`**: `tokMinus` shares the
+  `tokBang` path through `parseBoolExpr`, with `TruthyExpr` unwrapping
+  for plain arithmetic results.
+- **`parseBhvArgExpr`**: `tokMinus` and `tokNumber` merged into one
+  case that ungets and delegates to `parseArithExpr`.
+- **`parseFnBodyExpr`**: `tokMinus` extended to accept `-variable`
+  (produces `ArithExpr{0-x}`), not just `-number`.
+
 ## Compound assignment and increment/decrement
 
 `+=`, `-=`, `*=`, `/=`, `%=` compile to a single instruction frame where

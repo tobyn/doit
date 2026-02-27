@@ -1,0 +1,12 @@
+# AI-generated test
+fn negate(p) {
+  let x = -5
+  let y = -p
+  return x, y
+}
+behavior test {
+  @param in a "A"
+  let x, y = negate $a
+  set_reg x
+  set_reg y
+}
