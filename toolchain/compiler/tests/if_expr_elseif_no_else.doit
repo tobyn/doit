@@ -1,0 +1,8 @@
+# AI-generated test
+# If expression with else-if but no final else
+behavior if_expr_elseif_no_else {
+    @name "If Expr Elseif No Else"
+    @param in a "A"
+    let x = if $a > 10 { 20 } else if $a < 10 { 5 }
+    notify "done", value: x
+}

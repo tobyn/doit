@@ -438,7 +438,7 @@ if a == 1 {
 `if`/`else if`/`else` can be used as an expression to produce a value.
 Each branch block contains optional statements followed by a
 value-producing tail expression (the last item). The `else` clause is
-mandatory.
+optional — when absent, uncovered branches produce `null`.
 
 ```doit
 let x = if a > 1 { 5 } else { 3 }
@@ -450,6 +450,14 @@ let y = if a > 10 {
 } else {
     3
 }
+```
+
+When `else` is omitted, the expression evaluates to `null` if no branch
+matches:
+
+```doit
+let x = if a > 10 { 20 }               # x is null when a <= 10
+let y = if a > 10 { 20 } else if a < 5 { 5 }  # y is null when 5 <= a <= 10
 ```
 
 Branches can contain statements before the tail expression:

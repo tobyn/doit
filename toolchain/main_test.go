@@ -1725,14 +1725,11 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("if_expr_missing_else", func(t *testing.T) {
-		src := `behavior a { @param in x "X" let r = if $x > 1 { 5 } }`
+	t.Run("if_expr_no_else_compiles", func(t *testing.T) {
+		src := `behavior a { @param in x "X" let r = if $x > 1 { 5 } notify "done", value: r }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "if-expression requires an else clause") {
-			t.Fatalf("unexpected error: %v", err)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
 		}
 	})
 
@@ -1758,14 +1755,11 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("if_expr_fn_body_missing_else", func(t *testing.T) {
+	t.Run("if_expr_fn_body_no_else_compiles", func(t *testing.T) {
 		src := `behavior a { let r = f } fn f() { let x = if 1 > 0 { 5 }; return x }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "if-expression requires an else clause") {
-			t.Fatalf("unexpected error: %v", err)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
 		}
 	})
 

@@ -293,13 +293,18 @@ arguments, mode blocks in `return` items.
 ## If-expressions
 
 `if`/`else if`/`else` as expressions. Each branch has optional
-statements + tail expression. `else` is mandatory. `IfExpr` has
-recursive structure with `ElseIfExprClause` list.
+statements + tail expression. `else` is optional — when absent,
+uncovered branches produce `null`. `IfExpr` has recursive structure
+with `ElseIfExprClause` list; `ElsBody`/`ElsTail` are nil when no
+else clause is present.
 
-Arity = max across all branches (via `exprArity` helper). Mixed-arity
-branches zero remaining slots. Conditions use the full boolean
-expression parser. At behavior level, uses child `frameBuilder` per
-branch (same as `emitBhvIfStmt`).
+Arity = max across all branches (via `exprArity` helper); nil `ElsTail`
+contributes arity 1 (the implicit null). Mixed-arity branches zero
+remaining slots. Conditions use the full boolean expression parser.
+At behavior level, uses child `frameBuilder` per branch (same as
+`emitBhvIfStmt`). When `ElsTail` is nil, emitters emit
+`set_reg false, target` (single) or `set_reg false, retVals[i]` for
+each slot (multi) instead of emitting the else body/tail.
 
 **Deferred**: if-expressions in function arguments, in `return` items,
 continuation after if-expression.

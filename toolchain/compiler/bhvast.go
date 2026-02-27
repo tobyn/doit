@@ -1649,8 +1649,10 @@ func (p *parser) ifExprArity(e *IfExpr) int {
 			max = a
 		}
 	}
-	if a := p.exprArity(e.ElsTail); a > max {
-		max = a
+	if e.ElsTail != nil {
+		if a := p.exprArity(e.ElsTail); a > max {
+			max = a
+		}
 	}
 	return max
 }
@@ -1732,15 +1734,16 @@ func (p *parser) parseBhvIfExpr(syms *symbolTable, comment string) (*IfExpr, err
 		Comment: comment,
 	}
 
-	// Parse else-if / else chain
+	// Parse else-if / else chain (else is optional)
 	for {
 		tok, err := p.next()
 		if err != nil {
 			return nil, err
 		}
 		if tok.kind != tokIdent || tok.val != "else" {
+			// No else clause — uncovered branches produce null
 			p.unget(tok)
-			return nil, p.errorf(tok.pos, "if-expression requires an else clause")
+			return expr, nil
 		}
 		peek, err := p.next()
 		if err != nil {
@@ -3121,27 +3124,35 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 		}
 	}
 
-	// Emit else body via child builder
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
-	if err != nil {
-		return err
-	}
-	if len(bodyBuilder.frames) > 0 {
-		bodyStart := b.pos()
-		rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-		for _, f := range rebased {
-			b.emit(f)
+	// Emit else body + tail (or null for missing else)
+	if e.ElsTail != nil {
+		bodyBuilder := &frameBuilder{mode: b.mode}
+		mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
+		if err != nil {
+			return err
 		}
-		if mainCount > 0 {
-			lastMain := b.get(bodyStart + mainCount - 1)
-			lastMain["next"] = frameRef(b.pos())
+		if len(bodyBuilder.frames) > 0 {
+			bodyStart := b.pos()
+			rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+			for _, f := range rebased {
+				b.emit(f)
+			}
+			if mainCount > 0 {
+				lastMain := b.get(bodyStart + mainCount - 1)
+				lastMain["next"] = frameRef(b.pos())
+			}
 		}
-	}
 
-	// Emit else tail to target
-	if err := p.emitBhvExprTo(e.ElsTail, target, syms, b, ""); err != nil {
-		return err
+		if err := p.emitBhvExprTo(e.ElsTail, target, syms, b, ""); err != nil {
+			return err
+		}
+	} else {
+		// No else clause — assign null to target
+		b.emit(map[string]any{
+			"op": "set_reg",
+			"1":  false,
+			"2":  target,
+		})
 	}
 
 	// Patch all jumps-to-continuation
@@ -3232,27 +3243,37 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 		}
 	}
 
-	// Else body
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
-	if err != nil {
-		return err
-	}
-	if len(bodyBuilder.frames) > 0 {
-		bodyStart := b.pos()
-		rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-		for _, f := range rebased {
-			b.emit(f)
+	// Else body + tail (or null for missing else)
+	if e.ElsTail != nil {
+		bodyBuilder := &frameBuilder{mode: b.mode}
+		mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
+		if err != nil {
+			return err
 		}
-		if mainCount > 0 {
-			lastMain := b.get(bodyStart + mainCount - 1)
-			lastMain["next"] = frameRef(b.pos())
+		if len(bodyBuilder.frames) > 0 {
+			bodyStart := b.pos()
+			rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+			for _, f := range rebased {
+				b.emit(f)
+			}
+			if mainCount > 0 {
+				lastMain := b.get(bodyStart + mainCount - 1)
+				lastMain["next"] = frameRef(b.pos())
+			}
 		}
-	}
 
-	// Else tail to retVals
-	if err := p.emitBhvIfExprTailMulti(e.ElsTail, retVals, syms, b); err != nil {
-		return err
+		if err := p.emitBhvIfExprTailMulti(e.ElsTail, retVals, syms, b); err != nil {
+			return err
+		}
+	} else {
+		// No else clause — zero all retVal slots
+		for _, rv := range retVals {
+			b.emit(map[string]any{
+				"op": "set_reg",
+				"1":  false,
+				"2":  rv,
+			})
+		}
 	}
 
 	afterAll := frameRef(b.pos())

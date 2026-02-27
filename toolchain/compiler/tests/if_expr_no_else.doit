@@ -1,0 +1,8 @@
+# AI-generated test
+# If expression without else: uncovered branch produces null
+behavior if_expr_no_else {
+    @name "If Expr No Else"
+    @param in a "A"
+    let x = if $a > 1 { 5 }
+    notify "done", value: x
+}

@@ -220,7 +220,7 @@ type ModeBlockExpr struct {
 
 // IfExpr is an if/else-if/else expression that produces a value.
 // Each branch has a body of statements and a tail expression.
-// The else clause is mandatory.
+// The else clause is optional; when absent, uncovered branches produce null.
 type IfExpr struct {
 	Cond    Expr
 	Body    []Stmt

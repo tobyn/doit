@@ -1370,12 +1370,21 @@ func (p *parser) emitFnIfExpr(e *IfExpr, target any, b *frameBuilder, paramMap m
 		}
 	}
 
-	// Else body + tail
-	if err := p.emitFnBody(e.ElsBody, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-	if err := p.emitExprTo(e.ElsTail, target, b, paramMap, usedVars, "", pos); err != nil {
-		return err
+	// Else body + tail (or null for missing else)
+	if e.ElsTail != nil {
+		if err := p.emitFnBody(e.ElsBody, b, paramMap, usedVars, "", pos); err != nil {
+			return err
+		}
+		if err := p.emitExprTo(e.ElsTail, target, b, paramMap, usedVars, "", pos); err != nil {
+			return err
+		}
+	} else {
+		// No else clause — assign null to target
+		b.emit(map[string]any{
+			"op": "set_reg",
+			"1":  false,
+			"2":  target,
+		})
 	}
 
 	// Patch jumps
@@ -1452,11 +1461,23 @@ func (p *parser) emitFnIfExprMulti(e *IfExpr, retVals []any, b *frameBuilder, pa
 		}
 	}
 
-	if err := p.emitFnBody(e.ElsBody, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-	if err := p.emitFnIfExprTailMulti(e.ElsTail, retVals, b, paramMap, usedVars, pos); err != nil {
-		return err
+	// Else body + tail (or null for missing else)
+	if e.ElsTail != nil {
+		if err := p.emitFnBody(e.ElsBody, b, paramMap, usedVars, "", pos); err != nil {
+			return err
+		}
+		if err := p.emitFnIfExprTailMulti(e.ElsTail, retVals, b, paramMap, usedVars, pos); err != nil {
+			return err
+		}
+	} else {
+		// No else clause — zero all retVal slots
+		for _, rv := range retVals {
+			b.emit(map[string]any{
+				"op": "set_reg",
+				"1":  false,
+				"2":  rv,
+			})
+		}
 	}
 
 	afterAll := frameRef(b.pos())
@@ -2370,8 +2391,10 @@ func ifExprArityStatic(e *IfExpr, fns map[string]*fnDef) int {
 			max = a
 		}
 	}
-	if a := exprArityStatic(e.ElsTail, fns); a > max {
-		max = a
+	if e.ElsTail != nil {
+		if a := exprArityStatic(e.ElsTail, fns); a > max {
+			max = a
+		}
 	}
 	return max
 }
@@ -2510,14 +2533,16 @@ func (p *parser) parseFnBodyIfExpr(ctx *fnBodyContext, comment string) (*IfExpr,
 		Comment: comment,
 	}
 
+	// Parse else-if / else chain (else is optional)
 	for {
 		tok, err := p.next()
 		if err != nil {
 			return nil, err
 		}
 		if tok.kind != tokIdent || tok.val != "else" {
+			// No else clause — uncovered branches produce null
 			p.unget(tok)
-			return nil, p.errorf(tok.pos, "if-expression requires an else clause")
+			return expr, nil
 		}
 		peek, err := p.next()
 		if err != nil {
