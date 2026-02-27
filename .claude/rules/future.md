@@ -46,8 +46,6 @@ These extensions are deferred:
 
 - **Comparison in function arguments**: `notify (a > 5)` — needs
   parenthesized expressions to disambiguate from `notify a, ...`.
-- **Constructor RHS**: `a == Item("metalbar")` — requires parsing
-  type constructors in comparison RHS position.
 - **`is Number`**: `value_type` cannot distinguish numbers from null
   (both fall through to "No Match"), so `is Number` is not available.
   Could potentially be implemented with `check_number` against itself

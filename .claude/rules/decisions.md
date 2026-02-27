@@ -106,9 +106,10 @@ true-set pattern.
 - **`null` as RHS**: `a == null` and `a != null` supported. `null`
   resolves to `false` (empty register).
 - **Supported**: `let`/`var` init and assignment RHS. Number literal
-  LHS. Arithmetic sub-expressions on both sides.
-- **Deferred**: comparison in function call arguments; constructor RHS
-  (`a == Item("metalbar")`).
+  LHS. Arithmetic sub-expressions on both sides. Constructor RHS
+  (`a == Item("metalbar")`) via `parseArithConstructor` in
+  `parseArithPrimary`.
+- **Deferred**: comparison in function call arguments.
 
 ## Type check operator (`is`)
 

@@ -1,0 +1,8 @@
+# AI-generated test
+# Comparison with constructor RHS: a == Item("metalbar")
+behavior cmp_constructor_rhs {
+    @name "Constructor RHS"
+    var a = 5
+    let r = a == Item("metalbar")
+    notify "done"
+}

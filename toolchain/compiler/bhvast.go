@@ -32,7 +32,7 @@ func (p *parser) bhvResolver(syms *symbolTable) operandResolver {
 }
 
 // parseArithPrimary parses an arithmetic atom: number literal, null,
-// variable, $register, or a parenthesized sub-expression.
+// variable, $register, constructor, or a parenthesized sub-expression.
 func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 	tok, err := p.next()
 	if err != nil {
@@ -58,9 +58,128 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 		if tok.val == "true" {
 			return &LiteralExpr{Value: map[string]any{"num": 1}}, nil
 		}
+		if isConstructor(tok.val) {
+			return p.parseArithConstructor(tok, resolve)
+		}
 		return resolve(tok)
 	default:
 		return nil, p.errorf(tok.pos, "expected number, variable, or '(' in arithmetic expression, got %s", tok.describe())
+	}
+}
+
+// parseArithConstructor parses a type constructor in arithmetic/comparison
+// context. Produces a LiteralExpr (all-literal args) or ConstructorExpr.
+func (p *parser) parseArithConstructor(nameTok token, resolve operandResolver) (Expr, error) {
+	if _, err := p.expect(tokLParen); err != nil {
+		return nil, p.errorf(nameTok.pos, "expected '(' after %s", nameTok.val)
+	}
+	switch nameTok.val {
+	case "Item", "Component", "Technology", "Value":
+		argTok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if argTok.kind != tokString {
+			return nil, p.errorf(argTok.pos, "expected string argument, got %s", argTok.describe())
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		ctor := &ConstructorExpr{
+			TypeName: nameTok.val,
+			Args:     []Expr{&LiteralExpr{Value: argTok.val}},
+		}
+		if val, ok := tryResolveConstructorLiteral(ctor); ok {
+			return &LiteralExpr{Value: val}, nil
+		}
+		return ctor, nil
+	case "Coordinate":
+		x, err := p.parseArithExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokComma); err != nil {
+			return nil, err
+		}
+		y, err := p.parseArithExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		ctor := &ConstructorExpr{
+			TypeName: "Coordinate",
+			Args:     []Expr{x, y},
+		}
+		if val, ok := tryResolveConstructorLiteral(ctor); ok {
+			return &LiteralExpr{Value: val}, nil
+		}
+		return ctor, nil
+	case "Range":
+		arg1, err := p.parseArithExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokRParen {
+			ctor := &ConstructorExpr{
+				TypeName: "Range",
+				Args: []Expr{
+					&LiteralExpr{Value: map[string]any{"num": 0}},
+					arg1,
+					&LiteralExpr{Value: map[string]any{"num": 1}},
+				},
+			}
+			if val, ok := tryResolveConstructorLiteral(ctor); ok {
+				return &LiteralExpr{Value: val}, nil
+			}
+			return ctor, nil
+		}
+		if peek.kind != tokComma {
+			return nil, p.errorf(peek.pos, "expected ',' or ')' after Range argument, got %s", peek.describe())
+		}
+		arg2, err := p.parseArithExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		peek, err = p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokRParen {
+			ctor := &ConstructorExpr{
+				TypeName: "Range",
+				Args:     []Expr{arg1, arg2, &LiteralExpr{Value: map[string]any{"num": 1}}},
+			}
+			if val, ok := tryResolveConstructorLiteral(ctor); ok {
+				return &LiteralExpr{Value: val}, nil
+			}
+			return ctor, nil
+		}
+		if peek.kind != tokComma {
+			return nil, p.errorf(peek.pos, "expected ',' or ')' after Range argument, got %s", peek.describe())
+		}
+		arg3, err := p.parseArithExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		ctor := &ConstructorExpr{
+			TypeName: "Range",
+			Args:     []Expr{arg1, arg2, arg3},
+		}
+		if val, ok := tryResolveConstructorLiteral(ctor); ok {
+			return &LiteralExpr{Value: val}, nil
+		}
+		return ctor, nil
+	default:
+		return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
 	}
 }
 

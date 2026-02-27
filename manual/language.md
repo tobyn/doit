@@ -619,8 +619,8 @@ result = a < b
 ```
 
 The left operand can be a variable, register, or number literal. The right
-operand can be a number literal, a variable, or `null`. Both sides can
-include arithmetic:
+operand can be a number literal, a variable, `null`, or a type constructor.
+Both sides can include arithmetic:
 
 ```doit
 let gt_num = x > 5         # compare with number
@@ -630,6 +630,8 @@ let is_empty = x == null    # compare with null
 let has_value = x != null   # not-null check
 let num_lhs = 5 > b         # number literal on left
 let arith = x + 1 > y - 2   # arithmetic on both sides
+let is_metal = x == Item("metalbar")    # compare with constructor
+let is_bot = x != Component("behavior") # constructor with !=
 ```
 
 **Numeric vs equality comparisons:** `>`, `<`, `>=`, and `<=` compare only
@@ -757,8 +759,7 @@ var r = (a > 1 || b < 2) && c > 3
 r = (a > 1 || b < 2) && c > 3
 ```
 
-> **Not yet supported:** Constructor values on the right side
-> (`a == Item("metalbar")`); function calls in non-first boolean position
+> **Not yet supported:** Function calls in non-first boolean position
 > (`d || my_fn x`); `is Number` (cannot distinguish from null).
 
 ### `while`
