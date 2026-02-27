@@ -85,18 +85,25 @@ Exceptions to end-of-line termination:
 
 ## Function Calls
 
-Functions are called without parentheses:
+Functions can be called with or without parentheses:
 
 ```doit
 notify "Hello"
+notify("Hello")
 ```
 
-> **Not yet implemented:** Parenthesized calls (`notify("Hello")`) are planned
-> but not yet supported by the compiler. Currently, only the unparenthesized
-> form works.
+Both forms are equivalent. The unparenthesized form is preferred for
+statement-level calls. In parenthesized form, arguments are separated by
+commas:
 
-For calls with multiple arguments, a trailing comma continues the argument
-list onto the next line:
+```doit
+add(a, b)
+notify("Hello", value: x)
+let me = get_self()
+```
+
+For unparenthesized calls with multiple arguments, a trailing comma
+continues the argument list onto the next line:
 
 ```doit
 my_function "arg1",

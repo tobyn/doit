@@ -1,0 +1,16 @@
+{
+    "0": {
+        "op": "notify",
+        "txt": "Hello"
+    },
+    "1": {
+        "0": "me",
+        "op": "get_self"
+    },
+    "2": {
+        "0": "me",
+        "op": "notify",
+        "txt": "Hi"
+    },
+    "name": "Paren Call"
+}

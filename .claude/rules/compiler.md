@@ -197,8 +197,10 @@ whitespace; implementing these rules will require newline awareness.
 
 **Function calls**: Parentheses are optional. `notify "Hello"` and
 `notify("Hello")` are equivalent. The no-parens style is preferred for
-statement-level calls. Parenthesized calls will become useful for argument
-grouping in complex expressions.
+statement-level calls. Parenthesized mode is detected at the start of
+`parseBhvCallArgs` and `parseFnBodyCallArgs` by peeking for `tokLParen`.
+When present, commas between positional args are mandatory and `tokRParen`
+is expected after all arguments (positional + keyword).
 
 **Doc comments** (`#!`): The scanner collects `#!` lines into a
 `docComment` field, reset on each `skipWhitespaceAndComments` call and

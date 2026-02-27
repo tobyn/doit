@@ -495,17 +495,37 @@ func (p *parser) parseBhvConstructorExpr(nameTok token, syms *symbolTable) (Expr
 }
 
 // parseBhvCallArgs parses a function call's argument list into AST Exprs.
+// Supports both unparenthesized (notify "Hello") and parenthesized
+// (notify("Hello")) forms.
 func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) ([]Expr, map[string]Expr, error) {
+	// Detect parenthesized call syntax
+	paren := false
+	peek, err := p.next()
+	if err != nil {
+		return nil, nil, err
+	}
+	if peek.kind == tokLParen {
+		paren = true
+	} else {
+		p.unget(peek)
+	}
+
 	posCount := fn.positionalCount()
 	args := make([]Expr, posCount)
 	for i := 0; i < posCount; i++ {
 		if i > 0 {
-			sep, err := p.next()
-			if err != nil {
-				return nil, nil, err
-			}
-			if sep.kind != tokComma {
-				p.unget(sep)
+			if paren {
+				if _, err := p.expect(tokComma); err != nil {
+					return nil, nil, err
+				}
+			} else {
+				sep, err := p.next()
+				if err != nil {
+					return nil, nil, err
+				}
+				if sep.kind != tokComma {
+					p.unget(sep)
+				}
 			}
 		}
 
@@ -535,7 +555,7 @@ func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) (
 
 	// Parse optional keyword args
 	var kwArgs map[string]Expr
-	peek, err := p.next()
+	peek, err = p.next()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -590,6 +610,12 @@ func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) (
 		}
 	} else {
 		p.unget(peek)
+	}
+
+	if paren {
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return args, kwArgs, nil

@@ -1933,6 +1933,36 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("paren_call_missing_rparen", func(t *testing.T) {
+		src := `behavior a { notify("Hello" }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unexpected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("paren_call_missing_rparen_fn_body", func(t *testing.T) {
+		src := `fn f() { notify("Hello" } behavior a { f }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unexpected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("paren_call_compiles", func(t *testing.T) {
+		src := `behavior a { notify("Hello"); let me = get_self(); notify("Hi", value: me) }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

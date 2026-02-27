@@ -1,0 +1,8 @@
+# AI-generated test
+# Parenthesized function calls
+behavior paren_call {
+    @name "Paren Call"
+    notify("Hello")
+    let me = get_self()
+    notify("Hi", value: me)
+}

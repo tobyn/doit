@@ -1,0 +1,11 @@
+# AI-generated test
+# Parenthesized function calls in function body
+fn greet() {
+    notify("Hello")
+    notify("World")
+}
+
+behavior fn_body_paren_call {
+    @name "Fn Body Paren Call"
+    greet()
+}

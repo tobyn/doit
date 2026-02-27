@@ -10,11 +10,6 @@ have their own `#!` comments, it might be useful to build compound
 comments that combine both levels (e.g., `"Greeting sequence / Says
 hello"`). The syntax for this hasn't been decided yet.
 
-## Parenthesized function calls
-
-`notify("Hello")` as equivalent to `notify "Hello"`. The parser does
-not currently handle `(` after a function name.
-
 ## AST optimizations
 
 Potential optimization passes (would need a new optimization file):

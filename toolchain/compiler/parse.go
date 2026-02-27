@@ -231,10 +231,29 @@ func (p *parser) parseFnBodyConstructorExpr(nameTok token) (Expr, error) {
 
 // parseFnBodyCallArgs parses positional and keyword arguments for a
 // function call in a fn body, returning AST-typed expressions.
+// Supports both unparenthesized and parenthesized call syntax.
 func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, paramDirs map[string]string, letVars map[string]bool) ([]Expr, map[string]Expr, error) {
+	// Detect parenthesized call syntax
+	paren := false
+	peek, err := p.next()
+	if err != nil {
+		return nil, nil, err
+	}
+	if peek.kind == tokLParen {
+		paren = true
+	} else {
+		p.unget(peek)
+	}
+
 	posCount := callee.positionalCount()
 	args := make([]Expr, posCount)
 	for i := 0; i < posCount; i++ {
+		if paren && i > 0 {
+			if _, err := p.expect(tokComma); err != nil {
+				return nil, nil, err
+			}
+		}
+
 		// Peek for direction annotation
 		dirTok, err := p.next()
 		if err != nil {
@@ -263,7 +282,7 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, paramDirs m
 
 	// Parse optional keyword args
 	var kwArgs map[string]Expr
-	peek, err := p.next()
+	peek, err = p.next()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -319,6 +338,12 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, paramDirs m
 		}
 	} else {
 		p.unget(peek)
+	}
+
+	if paren {
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	if err := p.checkFnBodyCallDirectionsExpr(callee, calleeTok.val, args, kwArgs, paramDirs, letVars, calleeTok.pos); err != nil {
