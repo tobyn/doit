@@ -1,0 +1,10 @@
+# AI-generated test
+# Behavior-level if with is type check condition
+behavior bhv_if_is {
+    @param in x "X"
+    if $x is Unit {
+        notify "it's a unit"
+    } else {
+        notify "not a unit"
+    }
+}

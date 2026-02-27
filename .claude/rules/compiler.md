@@ -135,8 +135,10 @@ output format.
   `parseBhvIfExprBranch`/`parseBhvIfExpr` → `IfExpr`.
   Emitter functions: `emitBehaviorStmts` (top-level
   behavior emitter returning `(int, error)` where int is mainFrameCount,
-  with deferred body management, `@break`/`BreakStmt` handling,
+  with `@break`/`BreakStmt` handling,
   if/break detection via `isIfBreak`, and mode tracking),
+  `stripFallThrough` (removes redundant frameRef branch slots pointing
+  to natural fall-through position),
   `emitBhvStmtSimple` (non-control-flow statements),
   `emitBhvExprTo`/`emitBhvExprGetValue` (expression emission),
   `emitBhvArithTo`/`emitBhvArithNode` (arithmetic with per-tree
@@ -575,9 +577,10 @@ comparison/is/&&/|| after a computed value; `maybeBhvExprContinuation`
 wraps it with `bhvResolver(syms)`.
 
 **`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
-values shifted by an offset. Non-destructive (creates copies). Called at
-body transplant sites in `emitBhvIfStmt`, `emitBhvWhileStmt`, and the
-deferred body loop in `emitBehaviorStmts`.
+values shifted by an offset. Non-destructive (creates copies). Used when
+transplanting body frames compiled with a local `frameBuilder` into a
+parent builder at a non-zero position (e.g., if-expression branches,
+mode block expression bodies).
 
 ## Test Case Format
 

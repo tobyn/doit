@@ -1,0 +1,9 @@
+# AI-generated test
+# Behavior-level if with arithmetic in condition
+behavior bhv_if_arith {
+    @param in a "A"
+    @param in b "B"
+    if $a + 1 >= $b - 2 {
+        notify "a+1 >= b-2"
+    }
+}

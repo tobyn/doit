@@ -8,7 +8,6 @@ package compiler
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -1344,33 +1343,18 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 	return []Stmt{&CallStmt{Name: tok.val, Args: args, KwArgs: kwArgs, Comment: comment}}, nil
 }
 
-// parseBhvIfStmt parses an if/else-if/else statement.
+// parseBhvIfStmt parses an if/else-if/else statement with full boolean
+// expression support (comparisons, &&/||, is, truthy, function calls).
 func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
 	comment := p.docComment
-	lhsTok, err := p.expect(tokIdent)
+	resolve := p.bhvResolver(syms)
+	cond, err := p.parseBoolPrimary(resolve)
 	if err != nil {
 		return nil, err
 	}
-	if err := p.checkReadable(lhsTok.val, syms, lhsTok.pos); err != nil {
-		return nil, err
-	}
-	opTok, err := p.next()
+	cond, err = p.parseBoolChain(cond, resolve)
 	if err != nil {
 		return nil, err
-	}
-	if !isComparisonOp(opTok.kind) {
-		return nil, p.errorf(opTok.pos, "unsupported comparison operator %s", opTok.describe())
-	}
-	rhsTok, err := p.expect(tokNumber)
-	if err != nil {
-		return nil, err
-	}
-	rhsNum, _ := strconv.Atoi(rhsTok.val)
-
-	cond := &CompareExpr{
-		Op:  opTok.kind,
-		LHS: &IdentExpr{Name: lhsTok.val},
-		RHS: &LiteralExpr{Value: map[string]any{"num": rhsNum}},
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -1425,31 +1409,14 @@ func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
 // parseBhvElseIfChain parses the else-if / else chain and attaches them
 // to the given IfStmt.
 func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable) error {
-	// Parse condition for "else if"
-	lhsTok, err := p.expect(tokIdent)
+	resolve := p.bhvResolver(syms)
+	cond, err := p.parseBoolPrimary(resolve)
 	if err != nil {
 		return err
 	}
-	if err := p.checkReadable(lhsTok.val, syms, lhsTok.pos); err != nil {
-		return err
-	}
-	opTok, err := p.next()
+	cond, err = p.parseBoolChain(cond, resolve)
 	if err != nil {
 		return err
-	}
-	if !isComparisonOp(opTok.kind) {
-		return p.errorf(opTok.pos, "unsupported comparison operator %s", opTok.describe())
-	}
-	rhsTok, err := p.expect(tokNumber)
-	if err != nil {
-		return err
-	}
-	rhsNum, _ := strconv.Atoi(rhsTok.val)
-
-	cond := &CompareExpr{
-		Op:  opTok.kind,
-		LHS: &IdentExpr{Name: lhsTok.val},
-		RHS: &LiteralExpr{Value: map[string]any{"num": rhsNum}},
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -1492,33 +1459,21 @@ func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable) error {
 	return nil
 }
 
-// parseBhvWhileStmt parses a while loop.
+// parseBhvWhileStmt parses a while loop with full boolean expression support.
 func (p *parser) parseBhvWhileStmt(syms *symbolTable, label ...string) (*WhileStmt, error) {
 	lbl := ""
 	if len(label) > 0 {
 		lbl = label[0]
 	}
 	comment := p.docComment
-	varTok, err := p.expect(tokIdent)
+	resolve := p.bhvResolver(syms)
+	cond, err := p.parseBoolPrimary(resolve)
 	if err != nil {
 		return nil, err
 	}
-	if err := p.checkReadable(varTok.val, syms, varTok.pos); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(tokLessEquals); err != nil {
-		return nil, err
-	}
-	limitTok, err := p.expect(tokNumber)
+	cond, err = p.parseBoolChain(cond, resolve)
 	if err != nil {
 		return nil, err
-	}
-	limitNum, _ := strconv.Atoi(limitTok.val)
-
-	cond := &CompareExpr{
-		Op:  tokLessEquals,
-		LHS: &IdentExpr{Name: varTok.val},
-		RHS: &LiteralExpr{Value: map[string]any{"num": limitNum}},
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -2980,14 +2935,28 @@ func (p *parser) emitResolvedBoolFrames(expr *resolvedBoolExpr, trueTarget, fals
 	}
 }
 
-// emitBehaviorStmts walks a []Stmt list and emits frames, handling deferred
-// bodies from if statements and break target patching from loops. Mode
+// stripFallThrough removes frameRef branch slots from check frames at
+// positions [start, start+count) that point to the natural fall-through
+// (the immediately following frame). This produces minimal check frame
+// output matching the VM's default fall-through behavior.
+func stripFallThrough(b *frameBuilder, start, count int) {
+	for i := start; i < start+count; i++ {
+		f := b.get(i)
+		nextPos := frameRef(i + 1)
+		for k, v := range f {
+			if ref, ok := v.(frameRef); ok && ref == nextPos {
+				delete(f, k)
+			}
+		}
+	}
+}
+
+// emitBehaviorStmts walks a []Stmt list and emits frames. Mode
 // transitions are emitted on-the-fly via frameBuilder.mode tracking —
 // ModeBlockStmt blocks emit transitions only when needed and restore mode
-// on exit.
+// on exit. Returns the total frame count (for compatibility with callers
+// that use child builders with rebaseFrameRefs).
 func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTable) (int, error) {
-	var deferred []deferredBody
-
 	for _, stmt := range stmts {
 		switch s := stmt.(type) {
 		case *ModeBlockStmt:
@@ -3002,7 +2971,7 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 					return 0, err
 				}
 			} else {
-				if err := p.emitBhvIfStmt(s, b, syms, &deferred); err != nil {
+				if err := p.emitBhvIfStmt(s, b, syms); err != nil {
 					return 0, err
 				}
 			}
@@ -3041,46 +3010,7 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 		}
 	}
 
-	// Emit deferred bodies after all main-line frames.
-	mainFrameCount := b.pos()
-	if len(deferred) > 0 {
-		// Prevent the last main-line frame from falling into deferred frames.
-		if mainFrameCount > 0 {
-			lastInstr := b.get(mainFrameCount - 1)
-			if _, hasNext := lastInstr["next"]; !hasNext {
-				lastInstr["next"] = false
-			}
-		}
-
-		// Sort: reverse chronological by check frame, slot "1" before "2".
-		sort.SliceStable(deferred, func(i, j int) bool {
-			if deferred[i].checkFrame != deferred[j].checkFrame {
-				return deferred[i].checkFrame > deferred[j].checkFrame
-			}
-			return deferred[i].slot < deferred[j].slot
-		})
-
-		for i := range deferred {
-			d := &deferred[i]
-			bodyFrame := b.pos()
-			rebased := rebaseFrameRefs(d.frames, bodyFrame)
-			for _, f := range rebased {
-				b.emit(f)
-			}
-			// Set "next" on the body's last frame.
-			lastBody := b.get(b.pos() - 1)
-			if d.continuation < mainFrameCount {
-				lastBody["next"] = frameRef(d.continuation)
-			} else {
-				lastBody["next"] = false
-			}
-			// Patch the check_number's branch slot.
-			checkInstr := b.get(d.checkFrame)
-			checkInstr[d.slot] = frameRef(bodyFrame)
-		}
-	}
-
-	return mainFrameCount, nil
+	return b.pos(), nil
 }
 
 // isIfBreak detects the if/break pattern: IfStmt with a single BreakStmt
@@ -3096,94 +3026,29 @@ func (p *parser) isIfBreak(s *IfStmt) bool {
 	return isBreak
 }
 
-// emitBhvIfBreak emits a check frame + @break placeholder for the
-// if/break pattern inside a loop. The check branches: condition-true
-// falls through to @break, condition-false jumps to continue (patched later
-// by the enclosing loop emitter).
+// emitBhvIfBreak emits check frames + @break placeholder for the
+// if/break pattern inside a loop. Uses resolveBhvBoolTree for full
+// boolean expression support.
 func (p *parser) emitBhvIfBreak(s *IfStmt, b *frameBuilder, syms *symbolTable) error {
-	cmp, ok := s.Cond.(*CompareExpr)
-	if !ok {
-		return fmt.Errorf("if/break condition must be CompareExpr, got %T", s.Cond)
-	}
-
-	lhs, err := p.emitBhvExprGetValue(cmp.LHS, syms, b, "")
-	if err != nil {
-		return err
-	}
-	rhs, err := p.emitBhvExprGetValue(cmp.RHS, syms, b, "")
+	resolved, err := p.resolveBhvBoolTree(s.Cond, syms, b)
 	if err != nil {
 		return err
 	}
 
-	breakTarget := frameRef(b.pos() + 1) // @break placeholder
-	continueTarget := frameRef(b.pos() + 2) // first frame after @break
+	checkStart := b.pos()
+	checkCount := resolved.frameCount()
 
-	switch cmp.Op {
-	case tokGreaterEquals:
-		// break when >= : larger falls through to @break, equal falls through to @break, smaller continues
-		f := map[string]any{
-			"op":        "check_number",
-			checkValue:  lhs,
-			checkTarget: rhs,
-			checkSmaller: continueTarget,
-		}
-		setComment(f, s.Comment)
-		b.emit(f)
-	case tokGreater:
-		// break when > : larger falls through to @break, equal+smaller continue
-		f := map[string]any{
-			"op":        "check_number",
-			checkValue:  lhs,
-			checkTarget: rhs,
-			checkSmaller: continueTarget,
-			"next":       continueTarget,
-		}
-		setComment(f, s.Comment)
-		b.emit(f)
-	case tokLess:
-		// break when < : smaller falls through to @break, equal+larger continue
-		f := map[string]any{
-			"op":        "check_number",
-			checkValue:  lhs,
-			checkTarget: rhs,
-			checkLarger: continueTarget,
-			"next":      continueTarget,
-		}
-		setComment(f, s.Comment)
-		b.emit(f)
-	case tokLessEquals:
-		// break when <= : smaller falls through to @break, equal falls through to @break, larger continues
-		f := map[string]any{
-			"op":        "check_number",
-			checkValue:  lhs,
-			checkTarget: rhs,
-			checkLarger: continueTarget,
-		}
-		setComment(f, s.Comment)
-		b.emit(f)
-	case tokDoubleEquals:
-		// break when == : equal falls through to @break, different continues
-		f := map[string]any{
-			"op":                "compare_register",
-			compareRegValue1:    lhs,
-			compareRegValue2:    rhs,
-			compareRegDifferent: continueTarget,
-		}
-		setComment(f, s.Comment)
-		b.emit(f)
-	case tokNotEquals:
-		// break when != : different falls through to @break, equal continues
-		f := map[string]any{
-			"op":                "compare_register",
-			compareRegValue1:    lhs,
-			compareRegValue2:    rhs,
-			"next":              continueTarget,
-		}
-		setComment(f, s.Comment)
-		b.emit(f)
-	default:
-		return fmt.Errorf("unsupported if/break comparison operator %v", cmp.Op)
+	// true → @break placeholder (right after check frames)
+	trueBranch := frameRef(checkStart + checkCount)
+	// false → continuation (after @break placeholder)
+	falsePlaceholder := frameRef(checkStart + checkCount + 1)
+
+	if resolved.isLeaf() {
+		p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, s.Comment)
+	} else {
+		p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, s.Comment)
 	}
+	stripFallThrough(b, checkStart, checkCount)
 
 	// Emit @break placeholder
 	breakFrame := map[string]any{"op": "@break"}
@@ -3192,7 +3057,6 @@ func (p *parser) emitBhvIfBreak(s *IfStmt, b *frameBuilder, syms *symbolTable) e
 		breakFrame["label"] = breakLabel
 	}
 	b.emit(breakFrame)
-	_ = breakTarget // used via frame position calculation above
 
 	return nil
 }
@@ -3713,145 +3577,86 @@ func (p *parser) emitBhvIfExprTailMulti(tail Expr, retVals []any, syms *symbolTa
 	return nil
 }
 
-// emitBhvIfStmt emits an if/else-if/else statement, appending deferred bodies
-// to the caller's deferred list for emission after all main-line frames.
-func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, deferred *[]deferredBody) error {
-	cmp, ok := s.Cond.(*CompareExpr)
-	if !ok {
-		return fmt.Errorf("if condition must be a CompareExpr, got %T", s.Cond)
+// emitBhvIfStmt emits an if/else-if/else statement using forward-jump
+// patching (same pattern as emitBhvIfExpr and emitFnIfStmt).
+func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable) error {
+	// Collect all conditional branches
+	type branch struct {
+		cond Expr
+		body []Stmt
+	}
+	branches := []branch{{cond: s.Cond, body: s.Body}}
+	for _, elif := range s.ElseIfs {
+		branches = append(branches, branch{cond: elif.Cond, body: elif.Body})
 	}
 
-	lhs, err := p.emitBhvExprGetValue(cmp.LHS, syms, b, "")
-	if err != nil {
-		return err
-	}
-	rhs, err := p.emitBhvExprGetValue(cmp.RHS, syms, b, "")
-	if err != nil {
-		return err
-	}
+	var jumpsToPatch []int
 
-	check := map[string]any{
-		"op":        "check_number",
-		checkValue:  lhs,
-		checkTarget: rhs,
-	}
-	setComment(check, s.Comment)
-	checkFrame := b.emit(check)
-
-	// Compile body into separate builder
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	if _, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms); err != nil {
-		return err
-	}
-	bodyFrames := bodyBuilder.frames
-
-	switch cmp.Op {
-	case tokLess:
-		// a < N: body when smaller. Deferred.
-		*deferred = append(*deferred, deferredBody{
-			frames:     bodyFrames,
-			checkFrame: checkFrame,
-			slot:       checkSmaller,
-		})
-
-	case tokGreaterEquals:
-		// a >= N: body when larger or equal. Inline (both fall through).
-		rebased := rebaseFrameRefs(bodyFrames, b.pos())
-		for _, f := range rebased {
-			b.emit(f)
+	for i, br := range branches {
+		brComment := ""
+		if i == 0 {
+			brComment = s.Comment
 		}
-		if s.Else != nil {
-			elseBuilder := &frameBuilder{mode: b.mode}
-			if _, err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
-				return err
-			}
-			*deferred = append(*deferred, deferredBody{
-				frames:     elseBuilder.frames,
-				checkFrame: checkFrame,
-				slot:       checkSmaller,
+
+		// Resolve condition and emit check frames with placeholder false branch
+		resolved, err := p.resolveBhvBoolTree(br.cond, syms, b)
+		if err != nil {
+			return err
+		}
+
+		checkStart := b.pos()
+		checkCount := resolved.frameCount()
+		trueBranch := frameRef(checkStart + checkCount)
+		falsePlaceholder := frameRef(0)
+
+		if resolved.isLeaf() {
+			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
+		} else {
+			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
+		}
+		stripFallThrough(b, checkStart, checkCount)
+
+		// Emit body directly into b
+		if _, err := p.emitBehaviorStmts(br.body, b, syms); err != nil {
+			return err
+		}
+
+		// If there's more branches or an else, emit jump-to-continuation
+		hasMore := i < len(branches)-1 || len(s.Else) > 0
+		if hasMore {
+			jumpIdx := b.pos()
+			b.emit(map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": frameRef(0), // patched to after all branches
 			})
+			jumpsToPatch = append(jumpsToPatch, jumpIdx)
 		}
 
-	case tokDoubleEquals:
-		// a == N: body when equal. Inline (falls through).
-		rebased := rebaseFrameRefs(bodyFrames, b.pos())
-		for _, f := range rebased {
-			b.emit(f)
-		}
-		if len(s.ElseIfs) > 0 {
-			ei := s.ElseIfs[0]
-			eiCmp, ok := ei.Cond.(*CompareExpr)
-			if !ok {
-				return fmt.Errorf("else-if condition must be CompareExpr")
-			}
-			var slot string
-			switch eiCmp.Op {
-			case tokGreater:
-				slot = checkLarger
-			case tokLess:
-				slot = checkSmaller
-			default:
-				return fmt.Errorf("unsupported else-if operator")
-			}
-			eiBuilder := &frameBuilder{mode: b.mode}
-			if _, err := p.emitBehaviorStmts(ei.Body, eiBuilder, syms); err != nil {
-				return err
-			}
-			*deferred = append(*deferred, deferredBody{
-				frames:     eiBuilder.frames,
-				checkFrame: checkFrame,
-				slot:       slot,
-			})
-			if s.Else != nil {
-				var elseSlot string
-				if slot == checkLarger {
-					elseSlot = checkSmaller
-				} else {
-					elseSlot = checkLarger
+		// Patch false branches to here (next branch or else)
+		falseTarget := frameRef(b.pos())
+		for j := checkStart; j < checkStart+checkCount; j++ {
+			f := b.get(j)
+			for k, v := range f {
+				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
+					f[k] = falseTarget
 				}
-				elseBuilder := &frameBuilder{mode: b.mode}
-				if _, err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
-					return err
-				}
-				*deferred = append(*deferred, deferredBody{
-					frames:     elseBuilder.frames,
-					checkFrame: checkFrame,
-					slot:       elseSlot,
-				})
 			}
-		} else if s.Else != nil {
-			elseBuilder := &frameBuilder{mode: b.mode}
-			if _, err := p.emitBehaviorStmts(s.Else, elseBuilder, syms); err != nil {
-				return err
-			}
-			// For == with plain else: both slots go to the else body
-			*deferred = append(*deferred, deferredBody{
-				frames:     elseBuilder.frames,
-				checkFrame: checkFrame,
-				slot:       checkLarger,
-			})
-			*deferred = append(*deferred, deferredBody{
-				frames:     elseBuilder.frames,
-				checkFrame: checkFrame,
-				slot:       checkSmaller,
-			})
 		}
-
-	case tokGreater:
-		// a > N: body when larger. Deferred.
-		*deferred = append(*deferred, deferredBody{
-			frames:     bodyFrames,
-			checkFrame: checkFrame,
-			slot:       checkLarger,
-		})
 	}
 
-	// Set continuation on all deferred bodies from this check frame.
-	continuation := b.pos()
-	for i := range *deferred {
-		if (*deferred)[i].continuation == 0 && (*deferred)[i].checkFrame == checkFrame {
-			(*deferred)[i].continuation = continuation
+	// Emit else body if present
+	if len(s.Else) > 0 {
+		if _, err := p.emitBehaviorStmts(s.Else, b, syms); err != nil {
+			return err
 		}
+	}
+
+	// Patch all jumps-to-continuation to point to after everything
+	afterAll := frameRef(b.pos())
+	for _, idx := range jumpsToPatch {
+		b.get(idx)["next"] = afterAll
 	}
 
 	return nil
@@ -3939,55 +3744,62 @@ func (p *parser) emitBhvWaitStmt(s *WaitStmt, b *frameBuilder, syms *symbolTable
 	return nil
 }
 
-// emitBhvWhileStmt emits a while loop with optional break support.
+// emitBhvWhileStmt emits a while loop using forward-jump patching for
+// the condition (same pattern as emitFnWhileStmt).
 func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTable) error {
-	cmp, ok := s.Cond.(*CompareExpr)
-	if !ok {
-		return fmt.Errorf("while condition must be a CompareExpr, got %T", s.Cond)
-	}
+	loopStart := b.pos()
 
-	lhs, err := p.emitBhvExprGetValue(cmp.LHS, syms, b, "")
-	if err != nil {
-		return err
-	}
-	rhs, err := p.emitBhvExprGetValue(cmp.RHS, syms, b, "")
+	// Resolve condition and emit check frames
+	resolved, err := p.resolveBhvBoolTree(s.Cond, syms, b)
 	if err != nil {
 		return err
 	}
 
-	check := map[string]any{
-		"op":        "check_number",
-		checkValue:  lhs,
-		checkTarget: rhs,
-	}
-	setComment(check, s.Comment)
-	checkFrame := b.emit(check)
+	checkStart := b.pos()
+	checkCount := resolved.frameCount()
+	trueBranch := frameRef(checkStart + checkCount)
+	falsePlaceholder := frameRef(0)
 
-	// Compile body
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
-	if err != nil {
+	if resolved.isLeaf() {
+		p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, s.Comment)
+	} else {
+		p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, s.Comment)
+	}
+	stripFallThrough(b, checkStart, checkCount)
+
+	origLen := len(b.frames)
+
+	// Emit body directly into b
+	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}
 
-	bodyStart := b.pos()
-	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-	for _, f := range rebased {
-		b.emit(f)
+	// Jump back to loop start
+	lastFrame := b.get(b.pos() - 1)
+	if _, hasNext := lastFrame["next"]; !hasNext {
+		lastFrame["next"] = frameRef(loopStart)
+	} else {
+		b.emit(map[string]any{
+			"op":   "set_reg",
+			"1":    false,
+			"2":    false,
+			"next": frameRef(loopStart),
+		})
 	}
 
-	// Loop back: set main-line last frame's "next" to check
-	if mainCount > 0 {
-		lastMainBody := b.get(bodyStart + mainCount - 1)
-		lastMainBody["next"] = frameRef(checkFrame)
-	}
-
-	// Exit when larger
+	// Patch false branches to after the loop
 	afterLoop := frameRef(b.pos())
-	check[checkLarger] = afterLoop
+	for j := checkStart; j < checkStart+checkCount; j++ {
+		f := b.get(j)
+		for k, v := range f {
+			if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
+				f[k] = afterLoop
+			}
+		}
+	}
 
 	// Patch @break placeholders
-	for j := bodyStart; j < len(b.frames); j++ {
+	for j := origLen; j < len(b.frames); j++ {
 		f := b.frames[j]
 		if op, _ := f["op"].(string); op == "@break" {
 			fLabel, _ := f["label"].(string)

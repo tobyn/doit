@@ -438,15 +438,20 @@ including `let`/`var` declarations, nested control flow, and `break` (inside
 
 ### `if` / `else if` / `else`
 
+Conditions accept the full boolean expression language: comparisons with
+variables or literals on both sides, `&&`/`||` chains, `is` type checks,
+truthy (bare variable) checks, arithmetic sub-expressions, and function
+calls.
+
 ```doit
 if a < 9 {
     notify "a < 9!"
 }
 
-if a >= 3 {
-    notify "a >= 3"
+if a >= b {
+    notify "a >= b"
 } else {
-    notify "a < 3"
+    notify "a < b"
 }
 
 if a == 1 {
@@ -455,6 +460,31 @@ if a == 1 {
     notify "more than one"
 } else {
     notify "less than one"
+}
+
+# Boolean chains
+if a > 5 && b < 10 {
+    notify "in range"
+}
+
+# Type check
+if x is Unit {
+    notify "it's a unit"
+}
+
+# Truthy (non-empty) check
+if x {
+    notify "has value"
+}
+
+# Arithmetic in condition
+if a + 1 >= b - 2 {
+    notify "close enough"
+}
+
+# Function call in condition
+if get_count x > 5 {
+    notify "high count"
 }
 ```
 
@@ -804,7 +834,9 @@ r = (a > 1 || b < 2) && c > 3
 
 ### `while`
 
-`while` loops while a condition holds:
+`while` loops while a condition holds. Conditions accept the same full
+boolean expression language as `if` — comparisons, `&&`/`||` chains, `is`,
+truthy checks, arithmetic, and function calls.
 
 ```doit
 var i = 1
@@ -815,6 +847,19 @@ while i <= 5 {
 ```
 
 The body executes as long as `i <= 5`, then execution continues past the loop.
+
+```doit
+# Variable RHS
+while i < limit {
+    i++
+}
+
+# Boolean chain
+while i < 10 && active {
+    process i
+    i++
+}
+```
 
 `break` can exit a `while` loop early:
 

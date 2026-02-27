@@ -1,0 +1,37 @@
+{
+  "0": {
+    "0": 1,
+    "1": {
+      "num": 1
+    },
+    "2": "@arith1",
+    "op": "add"
+  },
+  "1": {
+    "0": 2,
+    "1": {
+      "num": 2
+    },
+    "2": "@arith1_2",
+    "op": "sub"
+  },
+  "2": {
+    "1": 5,
+    "2": "@arith1",
+    "3": "@arith1_2",
+    "op": "check_number"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "a+1 \u003e= b-2"
+  },
+  "name": "bhv_if_arith",
+  "parameters": [
+    false,
+    false
+  ],
+  "pnames": [
+    "A",
+    "B"
+  ]
+}

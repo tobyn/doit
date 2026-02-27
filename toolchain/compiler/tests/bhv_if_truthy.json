@@ -1,0 +1,29 @@
+{
+  "0": {
+    "1": 1,
+    "2": false,
+    "next": 4,
+    "op": "compare_register"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "has value"
+  },
+  "2": {
+    "0": false,
+    "1": false,
+    "next": 5,
+    "op": "set_reg"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "empty"
+  },
+  "name": "bhv_if_truthy",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "X"
+  ]
+}

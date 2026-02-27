@@ -1,0 +1,13 @@
+# AI-generated test
+# Behavior-level if with == and != conditions
+behavior bhv_if_equality {
+    @param in a "A"
+    @param in b "B"
+    if $a == $b {
+        notify "equal"
+    } else if $a != null {
+        notify "different and not null"
+    } else {
+        notify "a is null"
+    }
+}

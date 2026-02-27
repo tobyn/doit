@@ -1,0 +1,10 @@
+# AI-generated test
+# Behavior-level while with full expression (was previously limited to <= only)
+behavior bhv_while_full {
+    @param in limit "Limit"
+    var i = 0
+    while i < $limit {
+        notify "tick"
+        i++
+    }
+}

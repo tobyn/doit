@@ -1,0 +1,33 @@
+{
+  "0": {
+    "0": 1,
+    "1": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "next": 4,
+    "op": "value_type"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "it's a unit"
+  },
+  "2": {
+    "0": false,
+    "1": false,
+    "next": 5,
+    "op": "set_reg"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "not a unit"
+  },
+  "name": "bhv_if_is",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "X"
+  ]
+}

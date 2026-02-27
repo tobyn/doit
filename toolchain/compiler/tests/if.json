@@ -7,72 +7,94 @@
     "op": "set_number"
   },
   "1": {
-    "1": 12,
+    "0": 4,
     "2": "a",
     "3": {
       "num": 9
     },
+    "next": 4,
     "op": "check_number"
   },
   "2": {
+    "txt": "a < 9!",
+    "op": "notify"
+  },
+  "3": {
     "1": {
       "num": 2
     },
     "2": "a",
     "op": "set_number"
   },
-  "3": {
-    "1": 11,
+  "4": {
+    "1": 8,
     "2": "a",
     "3": {
       "num": 3
     },
     "op": "check_number"
   },
-  "4": {
+  "5": {
     "txt": "a >= 3?! Wrongo!",
     "op": "notify"
   },
-  "5": {
+  "6": {
+    "0": false,
+    "1": false,
+    "next": 9,
+    "op": "set_reg"
+  },
+  "7": {
+    "txt": "a < 3!",
+    "op": "notify"
+  },
+  "8": {
     "1": {
       "num": 5
     },
     "2": "a",
     "op": "set_number"
   },
-  "6": {
-    "0": 9,
-    "1": 10,
+  "9": {
+    "0": 13,
+    "1": "a",
+    "2": {
+      "num": 1
+    },
+    "op": "compare_register"
+  },
+  "10": {
+    "txt": "a == 1?! Wrongo!",
+    "op": "notify"
+  },
+  "11": {
+    "0": false,
+    "1": false,
+    "next": 17,
+    "op": "set_reg"
+  },
+  "12": {
+    "1": 16,
     "2": "a",
     "3": {
       "num": 1
     },
+    "next": 16,
     "op": "check_number"
   },
-  "7": {
-    "txt": "a == 1?! Wrongo!",
-    "op": "notify",
-    "next": false
-  },
-  "8": {
+  "13": {
     "txt": "a > 1!",
-    "op": "notify",
-    "next": false
+    "op": "notify"
   },
-  "9": {
+  "14": {
+    "0": false,
+    "1": false,
+    "next": 17,
+    "op": "set_reg"
+  },
+  "15": {
     "txt": "a < 1?! Wrongo!",
-    "op": "notify",
-    "next": false
-  },
-  "10": {
-    "txt": "a < 3!",
-    "op": "notify",
-    "next": 6
-  },
-  "11": {
-    "txt": "a < 9!",
-    "op": "notify",
-    "next": 3
+    "op": "notify"
   },
   "name": "If"
 }

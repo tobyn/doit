@@ -1,0 +1,32 @@
+{
+  "0": {
+    "0": 3,
+    "2": 1,
+    "3": {
+      "num": 10
+    },
+    "op": "check_number"
+  },
+  "1": {
+    "1": 4,
+    "2": 2,
+    "3": {
+      "num": 10
+    },
+    "next": 4,
+    "op": "check_number"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "at least one is big"
+  },
+  "name": "bhv_if_or",
+  "parameters": [
+    false,
+    false
+  ],
+  "pnames": [
+    "A",
+    "B"
+  ]
+}

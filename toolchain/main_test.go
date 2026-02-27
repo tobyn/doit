@@ -2004,6 +2004,91 @@ behavior a { @param in d "d"; let r = d || get_flag }
 		}
 	})
 
+	// --- Behavior-level if/while full expression tests ---
+
+	t.Run("bhv_if_var_rhs_compiles", func(t *testing.T) {
+		src := `behavior a { @param in x "X"; @param in y "Y"; if $x > $y { notify "yes" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_if_bool_chain_compiles", func(t *testing.T) {
+		src := `behavior a { @param in x "X"; @param in y "Y"; if $x > 5 && $y < 10 { notify "yes" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_if_is_compiles", func(t *testing.T) {
+		src := `behavior a { @param in x "X"; if $x is Unit { notify "unit" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_if_truthy_compiles", func(t *testing.T) {
+		src := `behavior a { @param in x "X"; if $x { notify "yes" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_if_equality_compiles", func(t *testing.T) {
+		src := `behavior a { @param in x "X"; if $x == null { notify "null" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_while_var_rhs_compiles", func(t *testing.T) {
+		src := `behavior a { @param in limit "Limit"; var i = 0; while i < $limit { notify "tick"; i++ } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_while_bool_chain_compiles", func(t *testing.T) {
+		src := `behavior a { var i = 0; var active = 1; while i < 10 && active { notify "tick"; i++ } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_if_fn_call_condition_compiles", func(t *testing.T) {
+		src := `
+fn get_count(in v) { return instruction "get_number" { 0: v; 1: @1 } }
+behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
+`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_if_arith_condition_compiles", func(t *testing.T) {
+		src := `behavior a { @param in x "X"; @param in y "Y"; if $x + 1 >= $y - 2 { notify "yes" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_if_break_chain_compiles", func(t *testing.T) {
+		src := `behavior a { var i = 0; var j = 0; loop { if i > 5 && j > 3 { break }; i++; j++ } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

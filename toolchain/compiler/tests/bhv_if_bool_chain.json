@@ -1,0 +1,33 @@
+{
+  "0": {
+    "1": 4,
+    "2": 1,
+    "3": {
+      "num": 5
+    },
+    "next": 4,
+    "op": "check_number"
+  },
+  "1": {
+    "0": 4,
+    "2": 2,
+    "3": {
+      "num": 10
+    },
+    "next": 4,
+    "op": "check_number"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "in range"
+  },
+  "name": "bhv_if_bool_chain",
+  "parameters": [
+    false,
+    false
+  ],
+  "pnames": [
+    "A",
+    "B"
+  ]
+}

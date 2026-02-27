@@ -309,13 +309,6 @@ func emitModeExit(b *frameBuilder, saved execMode) {
 	}
 }
 
-type deferredBody struct {
-	frames       []map[string]any
-	checkFrame   int    // index of the check_number frame to patch
-	slot         string // checkLarger or checkSmaller
-	continuation int    // frame index of the statement after the if block
-}
-
 type execMode int
 
 const (

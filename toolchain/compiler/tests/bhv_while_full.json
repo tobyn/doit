@@ -1,0 +1,36 @@
+{
+  "0": {
+    "1": {
+      "num": 0
+    },
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 5,
+    "2": "i",
+    "3": 1,
+    "next": 5,
+    "op": "check_number"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "tick"
+  },
+  "3": {
+    "0": "i",
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "next": 2,
+    "op": "add"
+  },
+  "name": "bhv_while_full",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "Limit"
+  ]
+}

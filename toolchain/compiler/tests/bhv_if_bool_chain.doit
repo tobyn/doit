@@ -1,0 +1,9 @@
+# AI-generated test
+# Behavior-level if with && boolean chain condition
+behavior bhv_if_bool_chain {
+    @param in a "A"
+    @param in b "B"
+    if $a > 5 && $b < 10 {
+        notify "in range"
+    }
+}

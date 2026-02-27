@@ -17,9 +17,8 @@ as external registers, behavior-level `default` case dispatch).
 (in `ast.go`), then emitters walk the AST and emit frames via
 `frameBuilder`. Expression parsers are shared between behavior bodies
 and fn bodies via the `operandResolver` callback. Both paths share
-low-level frame emitters in `codegen.go`. Fn bodies use inline
-forward-jump patching for control flow (simpler than behavior-level
-deferred bodies with `rebaseFrameRefs`).
+low-level frame emitters in `codegen.go`. Both behavior-level and fn
+body control flow use inline forward-jump patching.
 
 ## Stdlib function signatures
 
@@ -208,21 +207,29 @@ literals and variables.
 `name → true` (mutable) or `name → false` (immutable). Assignment
 validation at parse time via `canAssign`/`canCompound`.
 
-## Fn body control flow
+## Control flow emission (unified)
 
-`if`/`else if`/`else`, `while`, `loop`/`break` work in fn bodies with
-the same syntax as behavior level. Emission uses inline forward-jump
-patching. `break` emits `{"op": "@break"}` placeholder. `return` emits
-values to `@retK` targets then `{"op": "@return"}` placeholder.
-`expandCall` patches `@return` frames to jump past the function
-expansion.
+Both behavior-level and fn body `if`/`else if`/`else`, `while`,
+`loop`/`break` use inline forward-jump patching. Condition check frames
+use `frameRef(0)` as a false-branch placeholder, patched after body
+emission. `stripFallThrough` removes redundant branch slots that point
+to the natural next frame. `break` emits `{"op": "@break"}` placeholder.
+In fn bodies, `return` emits values to `@retK` targets then
+`{"op": "@return"}` placeholder; `expandCall` patches these to jump
+past the function expansion.
+
+Behavior-level `if`/`while` conditions use `parseBoolPrimary` +
+`parseBoolChain` (same parsers as fn bodies and `let`/`var`
+expressions), accepting the full boolean expression language:
+comparisons with variable RHS, `&&`/`||` chains, `is` type checks,
+truthy checks, arithmetic sub-expressions, and function calls.
 
 ## `break` in `while` loops
 
 Works in both `loop` and `while` at behavior level and fn bodies. At
 behavior level, `emitBehaviorStmts` detects the if/break pattern
 (single `BreakStmt` body, no else) and routes through `emitBhvIfBreak`
-instead of `emitBhvIfStmt` to avoid deferred body issues inside loops.
+instead of `emitBhvIfStmt` for optimized break emission.
 
 ## Labeled loops and breaks
 

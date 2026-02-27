@@ -1,0 +1,9 @@
+# AI-generated test
+# Behavior-level if with variable RHS (was previously limited to number literals)
+behavior bhv_if_var_rhs {
+    @param in a "A"
+    @param in b "B"
+    if $a > $b {
+        notify "a is bigger"
+    }
+}

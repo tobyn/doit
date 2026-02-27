@@ -1,0 +1,10 @@
+# AI-generated test
+# Behavior-level if with truthy (bare variable) condition
+behavior bhv_if_truthy {
+    @param in x "X"
+    if $x {
+        notify "has value"
+    } else {
+        notify "empty"
+    }
+}
