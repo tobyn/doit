@@ -1,0 +1,7 @@
+# AI-generated test
+# Mode block expression with arithmetic continuation
+behavior mode_block_expr_cont {
+    @name "Mode Block Expr Cont"
+    @param in val "val"
+    let x = unlocked { add $val, 1 } + 2
+}

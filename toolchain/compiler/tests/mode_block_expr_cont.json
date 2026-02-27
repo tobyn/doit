@@ -1,0 +1,9 @@
+{
+    "0": { "op": "unlock" },
+    "1": { "0": 1, "1": {"num": 1}, "2": "@mode", "op": "add" },
+    "2": { "op": "lock" },
+    "3": { "0": "@mode", "1": {"num": 2}, "2": "x", "op": "add" },
+    "name": "Mode Block Expr Cont",
+    "parameters": [false],
+    "pnames": ["val"]
+}

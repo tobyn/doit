@@ -1,0 +1,10 @@
+# AI-generated test
+# Mode block expression in fn body return item
+fn get_unlocked() {
+    return unlocked { get_self }
+}
+
+behavior mode_block_expr_ret {
+    @name "Mode Block Expr Ret"
+    let me = get_unlocked
+}

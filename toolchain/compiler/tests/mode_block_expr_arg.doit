@@ -1,0 +1,6 @@
+# AI-generated test
+# Mode block expression in function call argument
+behavior mode_block_expr_arg {
+    @name "Mode Block Expr Arg"
+    notify unlocked { get_self }
+}

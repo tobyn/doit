@@ -1,0 +1,12 @@
+# AI-generated test
+# Mode block expression with continuation in fn body
+fn wrapper(a) {
+    let x = unlocked { add(a, 1) } + 2
+    return x
+}
+
+behavior mode_block_expr_fn_cont {
+    @name "Mode Block Expr Fn Cont"
+    @param in val "val"
+    let result = wrapper $val
+}

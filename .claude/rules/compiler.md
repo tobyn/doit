@@ -74,8 +74,10 @@ output format.
   `parseFnBodyLoopStmt` (variadic `label ...string`),
   `parseFnBodyForStmt` (variadic `label ...string`),
   `parseFnBodyWaitStmt`,
-  `parseFnBodyExpr`,
-  `parseFnBodyConstructorExpr`, `parseFnBodyCallArgs`,
+  `parseFnBodyExpr`, `parseFnBodyArgExpr` (extends `parseFnBodyExpr`
+  with mode block and if-expression detection for call arguments),
+  `parseFnBodyConstructorExpr`, `parseFnBodyCallArgs` (takes
+  `*fnBodyContext`),
   `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
   post-parse analysis (`collectReturnStmts`, `returnStmtArity`,
   `tryPromoteInstruction`),
@@ -104,7 +106,10 @@ output format.
   `parseArithTermFrom`/`parseArithPrimary` (PEMDAS arithmetic →
   `ArithExpr`), `parseBoolExpr`/`parseBoolPrimary`/`parseBoolChain`
   (boolean expressions → `BoolChainExpr`/`CompareExpr`/
-  `TypeCheckExpr`/`TruthyExpr`). Behavior-level argument parser:
+  `TypeCheckExpr`/`TruthyExpr`),
+  `maybeExprContinuation` (resolver-parameterized continuation
+  checker), `maybeBhvExprContinuation` (wraps with `bhvResolver`).
+  Behavior-level argument parser:
   `parseBhvArgExpr`. Constructor parsers: `parseBhvConstructorExpr`/
   `parseBhvAmpersandExpr`. Statement parsers:
   `parseBhvVarInit` → `LetStmt`/`AssignStmt`,
@@ -560,8 +565,9 @@ nesting levels: `(a > 1 || b < 2) && c > 3`. The recursive
 and `||` at the same parenthesization level is a compile error.
 Function call results can compose with boolean operators:
 `let a = my_fn x || d` (function call as first boolean term);
-`maybeBhvExprContinuation` handles peeking for comparison/is/&&/||
-after a computed value.
+`maybeExprContinuation` (resolver-parameterized) handles peeking for
+comparison/is/&&/|| after a computed value; `maybeBhvExprContinuation`
+wraps it with `bhvResolver(syms)`.
 
 **`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
 values shifted by an offset. Non-destructive (creates copies). Called at

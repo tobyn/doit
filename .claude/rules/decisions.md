@@ -300,8 +300,24 @@ the value-producing tail. `ModeBlockExpr` has `Body []Stmt` and
 Mode transitions use `emitModeEntry`/`emitModeExit` helpers shared
 with `ModeBlockStmt`.
 
-**Deferred**: continuation after mode block, mode blocks in function
-arguments, mode blocks in `return` items.
+**Continuation**: After parsing a mode block, `parseArithExprFromFull`
+tries arithmetic continuation, then `maybeExprContinuation` (or
+`maybeBhvExprContinuation`) tries comparison/boolean continuation.
+This enables `let x = unlocked { get_number v } + 1` and
+`let y = unlocked { get_self } == me`.
+
+**Call arguments**: Mode blocks are accepted in `parseBhvArgExpr`
+(behavior level) and `parseFnBodyArgExpr` (fn bodies). The
+`parseFnBodyArgExpr` helper extends `parseFnBodyExpr` with mode
+block and if-expression detection; used by `parseFnBodyCallArgs`.
+
+**Return items**: `parseFnBodyReturnItem` detects `locked`/`unlocked`
+before the function-call check.
+
+**Shared refactoring**: `maybeExprContinuation(valueExpr, resolve)` is
+the resolver-parameterized core; `maybeBhvExprContinuation` wraps it
+with `bhvResolver(syms)`. `parseFnBodyCallArgs` takes `*fnBodyContext`
+instead of separate `paramDirs`/`letVars` parameters.
 
 ## If-expressions
 

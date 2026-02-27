@@ -1048,8 +1048,30 @@ Mode block expressions can appear in expression lists:
 let a, b, c = unlocked { get_self }, 1, 2
 ```
 
-Mode block expressions are supported in `let`/`var` declarations and
-assignments, at both behavior level and in function bodies.
+Mode block expressions support arithmetic and comparison continuation:
+
+```doit
+let x = unlocked { add a, 1 } + 2
+let y = unlocked { get_self } == me
+```
+
+Mode block expressions can be used as function call arguments:
+
+```doit
+notify unlocked { get_self }
+```
+
+Mode block expressions can be used in `return` items in function bodies:
+
+```doit
+fn get_unlocked() {
+    return unlocked { get_self }
+}
+```
+
+Mode block expressions are supported in `let`/`var` declarations,
+assignments, function call arguments, and `return` items, at both
+behavior level and in function bodies.
 
 ## Localization
 

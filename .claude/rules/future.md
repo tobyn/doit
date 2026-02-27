@@ -18,18 +18,6 @@ Potential optimization passes (would need a new optimization file):
 - **Dead code elimination**: Remove unreachable statements after
   `return`/`break`.
 
-## Mode block expression extensions
-
-The expression form for `locked`/`unlocked` is implemented (see
-decisions.md "Mode block expressions"). These extensions are deferred:
-
-- **Continuation after mode block**: `locked { get_number v } + 1` —
-  using the mode block expression result in a larger expression.
-- **Mode blocks in function call arguments**: `my_fn unlocked { get_self }` —
-  requires parsing mode blocks in argument position.
-- **Mode blocks in `return` statement items**: `return unlocked { get_self }` —
-  requires parsing mode blocks in return item position.
-
 ## If-expression extensions
 
 If-expressions are implemented (see decisions.md "If-expressions").
@@ -46,10 +34,6 @@ These extensions are deferred:
 
 - **Comparison in function arguments**: `notify (a > 5)` — needs
   parenthesized expressions to disambiguate from `notify a, ...`.
-- **`is Number`**: `value_type` cannot distinguish numbers from null
-  (both fall through to "No Match"), so `is Number` is not available.
-  Could potentially be implemented with `check_number` against itself
-  (nonzero = number), but the null/0 ambiguity remains.
 - **Function calls in non-first boolean position**: `d || my_fn x`
   would require interleaved frame emission for proper short-circuit
   semantics.

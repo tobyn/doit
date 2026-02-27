@@ -1,0 +1,10 @@
+# AI-generated test
+# Mode block expression in fn body call argument
+fn wrapper() {
+    notify unlocked { get_self }
+}
+
+behavior mode_block_expr_fn_arg {
+    @name "Mode Block Expr Fn Arg"
+    wrapper
+}

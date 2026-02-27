@@ -127,6 +127,25 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 	return base, nil
 }
 
+// parseFnBodyArgExpr parses a single argument expression in a fn body call.
+// Handles mode block expressions and if-expressions in addition to the
+// standard parseFnBodyExpr types.
+func (p *parser) parseFnBodyArgExpr(ctx *fnBodyContext) (Expr, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind == tokIdent && (tok.val == "locked" || tok.val == "unlocked") {
+		mbe, err := p.parseFnBodyModeBlockExpr(tok.val == "unlocked", ctx, "")
+		if err != nil {
+			return nil, err
+		}
+		return p.parseArithExprFromFull(Expr(mbe), ctx.resolve)
+	}
+	p.unget(tok)
+	return p.parseFnBodyExpr()
+}
+
 // parseFnBodyConstructorExpr parses a type constructor in a fn body,
 // returning a ConstructorExpr AST node.
 func (p *parser) parseFnBodyConstructorExpr(nameTok token) (Expr, error) {
@@ -232,7 +251,9 @@ func (p *parser) parseFnBodyConstructorExpr(nameTok token) (Expr, error) {
 // parseFnBodyCallArgs parses positional and keyword arguments for a
 // function call in a fn body, returning AST-typed expressions.
 // Supports both unparenthesized and parenthesized call syntax.
-func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, paramDirs map[string]string, letVars map[string]bool) ([]Expr, map[string]Expr, error) {
+func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, ctx *fnBodyContext) ([]Expr, map[string]Expr, error) {
+	paramDirs := ctx.paramDirs
+	letVars := ctx.fnVars
 	// Detect parenthesized call syntax
 	paren := false
 	peek, err := p.next()
@@ -273,7 +294,7 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, paramDirs m
 			return nil, nil, err
 		}
 
-		arg, err := p.parseFnBodyExpr()
+		arg, err := p.parseFnBodyArgExpr(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -321,7 +342,7 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, paramDirs m
 			if _, err := p.expect(tokColon); err != nil {
 				return nil, nil, err
 			}
-			val, err := p.parseFnBodyExpr()
+			val, err := p.parseFnBodyArgExpr(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -2551,11 +2572,16 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 		return nil, err
 	}
 
+	// Mode block expression: return unlocked { get_self }
+	if tok.kind == tokIdent && (tok.val == "locked" || tok.val == "unlocked") {
+		return p.parseFnBodyModeBlockExpr(tok.val == "unlocked", ctx, "")
+	}
+
 	// Function call: known function with a return value
 	if tok.kind == tokIdent && !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" && !strings.HasPrefix(tok.val, "$") {
 		callee := p.fns[tok.val]
 		if callee != nil && callee.hasReturn() {
-			args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, ctx.fnVars)
+			args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -2695,10 +2721,6 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
 // parseFnBodyStmtsInner parses fn body statements until '}'. If exprTail is
 // true, the last item may be a bare expression (wrapped in exprTailStmt).
 func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stmt, error) {
-	// For backward compatibility, letVars is a view into ctx.fnVars
-	// (parseFnBodyCallArgs still uses letVars map[string]bool).
-	letVars := ctx.fnVars
-
 	var astBody []Stmt
 	for {
 		tok, err := p.next()
@@ -3002,7 +3024,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						return astBody, nil
 					}
 					if callee != nil && callee.hasReturn() {
-						args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, letVars)
+						args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx)
 						if err != nil {
 							return nil, err
 						}
@@ -3069,7 +3091,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				if callee == nil {
 					return nil, p.errorf(tok.pos, "unknown function %q", tok.val)
 				}
-				args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, letVars)
+				args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -3214,7 +3236,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 					if !callee.hasReturn() {
 						return nil, p.errorf(tok.pos, "function %q has no return value", tok.val)
 					}
-					args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, ctx.fnVars)
+					args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx)
 					if err != nil {
 						return nil, err
 					}
@@ -3322,8 +3344,24 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 	}
 
 	// Mode block expression RHS
+	// Supports continuation: let x = unlocked { get_number v } + 1
 	if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
-		return p.parseFnBodyModeBlockExpr(rhsTok.val == "unlocked", ctx, "")
+		mbe, err := p.parseFnBodyModeBlockExpr(rhsTok.val == "unlocked", ctx, "")
+		if err != nil {
+			return nil, err
+		}
+		result, err := p.parseArithExprFromFull(Expr(mbe), ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		final, handled, err := p.maybeExprContinuation(result, ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			return final, nil
+		}
+		return result, nil
 	}
 
 	// If-expression RHS
@@ -3374,7 +3412,7 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 			if !callee.hasReturn() {
 				return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
 			}
-			args, kwArgs, err := p.parseFnBodyCallArgs(callee, rhsTok, ctx.paramDirs, ctx.fnVars)
+			args, kwArgs, err := p.parseFnBodyCallArgs(callee, rhsTok, ctx)
 			if err != nil {
 				return nil, err
 			}

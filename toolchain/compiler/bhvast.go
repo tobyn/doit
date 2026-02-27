@@ -478,6 +478,16 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 				return nil, err
 			}
 			base = ctor
+		} else if tok.val == "locked" || tok.val == "unlocked" {
+			mbe, err := p.parseBhvModeBlockExpr(tok.val == "unlocked", syms, "")
+			if err != nil {
+				return nil, err
+			}
+			result, err := p.parseArithExprFromFull(Expr(mbe), resolve)
+			if err != nil {
+				return nil, err
+			}
+			base = result
 		} else if strings.HasPrefix(tok.val, "$") {
 			// Resolve $ without readability check — direction checks
 			// happen later via checkCallDirections during emission.
@@ -782,10 +792,9 @@ func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) (
 	return args, kwArgs, nil
 }
 
-// maybeBhvExprContinuation peeks for comparison/is/&&/|| after a value.
+// maybeExprContinuation peeks for comparison/is/&&/|| after a value.
 // Returns (expr, true) if continuation found, (original, false) otherwise.
-func (p *parser) maybeBhvExprContinuation(valueExpr Expr, syms *symbolTable) (Expr, bool, error) {
-	resolve := p.bhvResolver(syms)
+func (p *parser) maybeExprContinuation(valueExpr Expr, resolve operandResolver) (Expr, bool, error) {
 	peek, err := p.next()
 	if err != nil {
 		return nil, false, err
@@ -827,6 +836,12 @@ func (p *parser) maybeBhvExprContinuation(valueExpr Expr, syms *symbolTable) (Ex
 	return valueExpr, false, nil
 }
 
+// maybeBhvExprContinuation peeks for comparison/is/&&/|| after a value.
+// Returns (expr, true) if continuation found, (original, false) otherwise.
+func (p *parser) maybeBhvExprContinuation(valueExpr Expr, syms *symbolTable) (Expr, bool, error) {
+	return p.maybeExprContinuation(valueExpr, p.bhvResolver(syms))
+}
+
 // -----------------------------------------------------------------------
 // Statement parsers → Stmt nodes
 // -----------------------------------------------------------------------
@@ -842,14 +857,26 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 	}
 
 	// Mode block expression RHS: let x = unlocked { ... }
+	// Supports continuation: let x = unlocked { get_number v } + 1
 	if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
 		mbe, err := p.parseBhvModeBlockExpr(rhsTok.val == "unlocked", syms, comment)
 		if err != nil {
 			return nil, err
 		}
+		result, err := p.parseArithExprFromFull(Expr(mbe), resolve)
+		if err != nil {
+			return nil, err
+		}
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
 		syms.usedVars[nameTok.val] = true
-		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: mbe, Comment: comment}}, nil
+		final, handled, err := p.maybeBhvExprContinuation(result, syms)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
+		}
+		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
 	}
 
 	// If-expression RHS: let x = if cond { ... } else { ... }
@@ -1058,12 +1085,24 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		}
 
 		// Mode block expression RHS: x = unlocked { ... }
+		// Supports continuation: x = unlocked { get_number v } + 1
 		if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
 			mbe, err := p.parseBhvModeBlockExpr(rhsTok.val == "unlocked", syms, comment)
 			if err != nil {
 				return nil, err
 			}
-			return []Stmt{&AssignStmt{Target: tok.val, Value: mbe, Comment: comment}}, nil
+			result, err := p.parseArithExprFromFull(Expr(mbe), resolve)
+			if err != nil {
+				return nil, err
+			}
+			final, handled, err := p.maybeBhvExprContinuation(result, syms)
+			if err != nil {
+				return nil, err
+			}
+			if handled {
+				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+			}
+			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
 		}
 
 		// If-expression RHS: x = if cond { ... } else { ... }

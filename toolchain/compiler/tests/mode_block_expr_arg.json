@@ -1,0 +1,7 @@
+{
+    "0": { "op": "unlock" },
+    "1": { "0": "@mode", "op": "get_self" },
+    "2": { "op": "lock" },
+    "3": { "op": "notify", "txt": "@mode" },
+    "name": "Mode Block Expr Arg"
+}
