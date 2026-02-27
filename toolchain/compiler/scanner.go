@@ -41,6 +41,8 @@ const (
 	tokMinusEquals
 	tokStarEquals
 	tokSlashEquals
+	tokPercent
+	tokPercentEquals
 	tokIs     // internal-only: represents the 'is' operator in comparisonTerm.op
 	tokTruthy // internal-only: represents a truthy check in comparisonTerm.op
 )
@@ -306,6 +308,12 @@ func (s *scanner) next() (token, error) {
 	case c == '/':
 		s.pos++
 		return token{tokSlash, "/", start}, nil
+	case c == '%' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
+		s.pos += 2
+		return token{tokPercentEquals, "%=", start}, nil
+	case c == '%':
+		s.pos++
+		return token{tokPercent, "%", start}, nil
 	case c == '>' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
 		s.pos += 2
 		return token{tokGreaterEquals, ">=", start}, nil
@@ -485,6 +493,10 @@ func (t token) describe() string {
 		return "'*='"
 	case tokSlashEquals:
 		return "'/='"
+	case tokPercent:
+		return "'%'"
+	case tokPercentEquals:
+		return "'%='"
 	case tokIs:
 		return "'is'"
 	case tokTruthy:

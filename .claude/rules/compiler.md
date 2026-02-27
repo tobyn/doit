@@ -49,6 +49,7 @@ output format.
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
   `tokNotEquals` for `!=`, `tokPlus`/`tokMinus`/`tokStar`/`tokSlash`
   for arithmetic operators, `tokMinusMinus`/`tokMinusEquals`/
+  `tokPercent`/`tokPercentEquals` for modulo,
   `tokStarEquals`/`tokSlashEquals` for compound assignment/decrement,
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),

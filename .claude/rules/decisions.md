@@ -176,19 +176,20 @@ but explicit `in` is accepted). Mismatched annotations are compile
 errors. `in`, `out`, `inout` are fully reserved keywords. Enforcement
 is uniform across behavior level and fn bodies via `checkCallAnnotation`.
 
-## Arithmetic expression operators (+, -, *, /)
+## Arithmetic expression operators (+, -, *, /, %)
 
-Each maps to one stdlib opcode (`add`, `sub`, `mul`, `div`). Emitted
-directly as a single instruction frame. LHS preserves typed value (the
-game's semantics). Number literal LHS supported.
+Each maps to one stdlib opcode (`add`, `sub`, `mul`, `div`, `modulo`).
+Emitted directly as a single instruction frame. LHS preserves typed
+value (the game's semantics). Number literal LHS supported.
 
 **PEMDAS**: Chained arithmetic respects operator precedence via nested
-`ArithExpr` AST nodes. Intermediate results use `@arith`-prefixed temp
-variables. The outermost operation writes directly to target.
+`ArithExpr` AST nodes. `*`, `/`, `%` are high-priority; `+`, `-` are
+low-priority. Intermediate results use `@arith`-prefixed temp variables.
+The outermost operation writes directly to target.
 
 ## Compound assignment and increment/decrement
 
-`+=`, `-=`, `*=`, `/=` compile to a single instruction frame where
+`+=`, `-=`, `*=`, `/=`, `%=` compile to a single instruction frame where
 target appears in both input and output. RHS accepts both number
 literals and variables.
 

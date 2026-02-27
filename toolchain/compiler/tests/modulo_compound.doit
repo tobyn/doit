@@ -1,0 +1,7 @@
+# AI-generated test
+# Modulo compound assignment %=
+behavior modulo_compound {
+    @name "Modulo Compound"
+    var a = 10
+    a %= 3
+}

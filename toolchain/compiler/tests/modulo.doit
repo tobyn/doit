@@ -1,0 +1,8 @@
+# AI-generated test
+# Modulo operator %
+behavior modulo {
+    @name "Modulo"
+    var a = 10
+    var b = 3
+    let r = a % b
+}

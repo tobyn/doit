@@ -65,8 +65,3 @@ These extensions are deferred:
   would require interleaved frame emission for proper short-circuit
   semantics.
 
-## Extended arithmetic expressions
-
-- **Modulo operator**: `%` → `modulo` instruction. The instruction exists
-  in the stdlib but has no operator syntax yet.
-

@@ -614,7 +614,7 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 // isArithmeticOp reports whether the token kind is an arithmetic operator
 // (+, -, *, /).
 func isArithmeticOp(kind tokenKind) bool {
-	return kind == tokPlus || kind == tokMinus || kind == tokStar || kind == tokSlash
+	return kind == tokPlus || kind == tokMinus || kind == tokStar || kind == tokSlash || kind == tokPercent
 }
 
 // arithmeticOpName maps an arithmetic token kind to the stdlib function
@@ -629,6 +629,8 @@ func arithmeticOpName(kind tokenKind) string {
 		return "mul"
 	case tokSlash:
 		return "div"
+	case tokPercent:
+		return "modulo"
 	}
 	return ""
 }
@@ -636,7 +638,7 @@ func arithmeticOpName(kind tokenKind) string {
 // isHighPriorityArithOp reports whether the token kind is * or / (higher PEMDAS
 // precedence than + and -).
 func isHighPriorityArithOp(kind tokenKind) bool {
-	return kind == tokStar || kind == tokSlash
+	return kind == tokStar || kind == tokSlash || kind == tokPercent
 }
 
 // isLowPriorityArithOp reports whether the token kind is + or - (lower PEMDAS
@@ -648,7 +650,7 @@ func isLowPriorityArithOp(kind tokenKind) bool {
 // isCompoundAssignOp reports whether the token kind is a compound assignment
 // operator (+=, -=, *=, /=).
 func isCompoundAssignOp(kind tokenKind) bool {
-	return kind == tokPlusEquals || kind == tokMinusEquals || kind == tokStarEquals || kind == tokSlashEquals
+	return kind == tokPlusEquals || kind == tokMinusEquals || kind == tokStarEquals || kind == tokSlashEquals || kind == tokPercentEquals
 }
 
 // compoundAssignOpName maps a compound assignment token kind to the stdlib
@@ -663,6 +665,8 @@ func compoundAssignOpName(kind tokenKind) string {
 		return "mul"
 	case tokSlashEquals:
 		return "div"
+	case tokPercentEquals:
+		return "modulo"
 	}
 	return ""
 }

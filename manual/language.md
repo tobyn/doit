@@ -508,8 +508,8 @@ If-expressions work in both behavior bodies and function bodies.
 When multiple expression types appear in the same statement, they are
 evaluated in this priority order (highest first):
 
-1. **Arithmetic** (`*`, `/`, `+`, `-`) — PEMDAS rules: multiplication and
-   division bind tighter than addition and subtraction
+1. **Arithmetic** (`*`, `/`, `%`, `+`, `-`) — PEMDAS rules: multiplication,
+   division, and modulo bind tighter than addition and subtraction
 2. **Comparisons** (`>`, `<`, `>=`, `<=`, `==`, `!=`, `is`) — compare
    arithmetic results
 3. **Function calls** — consume arguments (which can contain arithmetic)
@@ -535,6 +535,7 @@ instruction:
 | `-`      | `sub`       | Subtraction |
 | `*`      | `mul`       | Multiplication |
 | `/`      | `div`       | Division    |
+| `%`      | `modulo`    | Modulo      |
 
 Operands can be variables, registers, number literals, or parenthesized
 sub-expressions:
@@ -551,7 +552,7 @@ result = a - b
 
 #### PEMDAS precedence
 
-Chained arithmetic follows standard PEMDAS rules — `*` and `/` are
+Chained arithmetic follows standard PEMDAS rules — `*`, `/`, and `%` are
 evaluated before `+` and `-`. The compiler emits intermediate results
 using temporary variables:
 
@@ -583,8 +584,7 @@ is the arithmetic result of both operands' number components. This means
 `Item("metalbar") & 3` followed by `item + 2` would produce
 `Item("metalbar") & 5` — the item type is preserved.
 
-> **Not yet supported:** Arithmetic expressions in function bodies; modulo
-> operator (`%`).
+> **Not yet supported:** Arithmetic expressions in function bodies.
 
 ### Comparison and Type Check Operators
 

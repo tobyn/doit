@@ -1,0 +1,13 @@
+# AI-generated test
+# Modulo operator in function body
+fn do_mod(a, b) {
+    let r = a % b
+    return r
+}
+
+behavior fn_body_modulo {
+    @name "Fn Body Modulo"
+    var a = 10
+    var b = 3
+    let r = do_mod a, b
+}
