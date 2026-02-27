@@ -404,6 +404,24 @@ set_number null, 5, x
 
 `null` compiles to `false` in the behavior JSON.
 
+## Boolean Literals
+
+`true` and `false` represent boolean values:
+
+```doit
+let t = true
+let f = false
+set_number true, 5
+```
+
+In the VM, `true` compiles to `{"num": 1}` (a register with numeric value
+1) and `false` compiles to `false` (an empty register, same as `null`).
+Boolean literals can be used anywhere a value is expected: variable
+initialization, function arguments, comparisons, and return values.
+
+`true` and `false` are reserved keywords and cannot be used as variable
+names.
+
 ## Control Flow
 
 All control flow constructs work in both behavior bodies and function bodies.

@@ -429,7 +429,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 
 		default:
 			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
-			if !isConstructor(tok.val) && tok.val != "null" {
+			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {
 				peek, err := p.next()
 				if err != nil {
 					return nil, err

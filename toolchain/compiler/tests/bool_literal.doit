@@ -1,0 +1,7 @@
+# AI-generated test
+# Boolean literals true and false
+behavior bool_literal {
+    @name "Bool Literal"
+    let t = set_number true, 5
+    let f = set_number false, 3
+}

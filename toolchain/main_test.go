@@ -1163,6 +1163,28 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("keyword_as_var_name_true", func(t *testing.T) {
+		src := `behavior a { var true = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("keyword_as_var_name_false", func(t *testing.T) {
+		src := `behavior a { var false = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("instruction_assign_no_return_slot", func(t *testing.T) {
 		src := `behavior a { var x = 5; x = instruction "test" { 0: x } }`
 		_, err := compiler.CompileString(src, stdlib, "", "")

@@ -13,20 +13,9 @@ hello"`). The syntax for this hasn't been decided yet.
 ## Parenthesized function calls
 
 `notify("Hello")` as equivalent to `notify "Hello"`. The parser does
-not currently handle `(` after a function name. See F13 in
-`analysis-findings.md`.
+not currently handle `(` after a function name.
 
-## AST unification plan (Phases 1-4 complete)
-
-Both fn bodies and behavior bodies use an AST approach with shared
-expression parsers (parameterized via `operandResolver`). Phase 3
-enabled fn body parity. Phase 4 replaced imperative `lock`/`unlock`
-with structured `locked { ... }` / `unlocked { ... }` blocks, tracked
-via `frameBuilder.mode`. The old `optimize.go` file was deleted — mode
-transitions are now emitted on-the-fly during frame emission, with no
-separate optimization pass needed.
-
-### Future AST optimizations
+## AST optimizations
 
 Potential optimization passes (would need a new optimization file):
 
@@ -60,8 +49,6 @@ These extensions are deferred:
 
 ## Extended comparison and type check expressions
 
-Natural extensions beyond fn body parity:
-
 - **Comparison in function arguments**: `notify (a > 5)` — needs
   parenthesized expressions to disambiguate from `notify a, ...`.
 - **Constructor RHS**: `a == Item("metalbar")` — requires parsing
@@ -80,19 +67,6 @@ Natural extensions beyond fn body parity:
 
 ## Extended arithmetic expressions
 
-Natural extensions beyond fn body parity:
-
 - **Modulo operator**: `%` → `modulo` instruction. The instruction exists
   in the stdlib but has no operator syntax yet.
 
-## Known blocking issues (from audit)
-
-These are known compiler bugs identified in `analysis-findings.md` that
-will cause incorrect compilation or prevent reasonable future features.
-
-### Boolean literals (F2)
-
-`true`/`false` are documented in `types.md` as planned syntax but are
-not implemented. They parse as variable names. Fix: add them to the
-`Keywords` map and handle in the parser, or defer and keep the
-documentation accurate.

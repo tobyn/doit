@@ -52,8 +52,11 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 		}
 		return val, nil
 	case tokIdent:
-		if tok.val == "null" {
+		if tok.val == "null" || tok.val == "false" {
 			return &LiteralExpr{Value: false}, nil
+		}
+		if tok.val == "true" {
+			return &LiteralExpr{Value: map[string]any{"num": 1}}, nil
 		}
 		return resolve(tok)
 	default:
@@ -176,8 +179,10 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 			return nil, err
 		}
 	} else if tok.kind == tokIdent {
-		if tok.val == "null" {
+		if tok.val == "null" || tok.val == "false" {
 			lhs = &LiteralExpr{Value: false}
+		} else if tok.val == "true" {
+			lhs = &LiteralExpr{Value: map[string]any{"num": 1}}
 		} else {
 			resolved, err := resolve(tok)
 			if err != nil {
@@ -302,8 +307,10 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 				return nil, err
 			}
 			base = &LiteralExpr{Value: resolved}
-		} else if tok.val == "null" {
+		} else if tok.val == "null" || tok.val == "false" {
 			base = &LiteralExpr{Value: false}
+		} else if tok.val == "true" {
+			base = &LiteralExpr{Value: map[string]any{"num": 1}}
 		} else if isConstructor(tok.val) {
 			ctor, err := p.parseBhvConstructorExpr(tok, syms)
 			if err != nil {
@@ -2125,7 +2132,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			stmts = append(stmts, &BreakStmt{Label: label, Comment: comment})
 		default:
 			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
-			if !isConstructor(tok.val) && tok.val != "null" {
+			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {
 				peek, err := p.next()
 				if err != nil {
 					return nil, err
@@ -2188,12 +2195,19 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 					return stmts, nil
 				}
 
-				// null as tail expression
-				if tok.val == "null" {
+				// null/true/false as tail expression
+				if tok.val == "null" || tok.val == "false" {
 					if _, err := p.expect(tokRBrace); err != nil {
 						return nil, err
 					}
 					stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
+					return stmts, nil
+				}
+				if tok.val == "true" {
+					if _, err := p.expect(tokRBrace); err != nil {
+						return nil, err
+					}
+					stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: map[string]any{"num": 1}}})
 					return stmts, nil
 				}
 

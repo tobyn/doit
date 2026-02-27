@@ -33,6 +33,17 @@ deferred bodies with `rebaseFrameRefs`).
 - **`"txt"` fields as positional strings**: Natural call-site syntax
   (`notify "Hello"`).
 
+## Boolean literals
+
+`true` → `map[string]any{"num": 1}`, `false` → `false` (Go bool).
+Matches comparison emitters (`emitComparison` sets true = `{"num": 1}`)
+and VM convention (truthy checks use `compare_register value, false`).
+Both are reserved keywords. `false` and `null` compile identically
+(empty register). Handled in `parseArithPrimary`, `parseBoolPrimary`,
+`parseBhvArgExpr`, `parseFnBodyExpr`, and expression tail sections.
+Label lookahead exclusions prevent `true:` and `false:` from being
+parsed as loop labels.
+
 ## Multiple return values
 
 `@N` markers in `instruction` blocks are positional return values.

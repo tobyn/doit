@@ -1,0 +1,12 @@
+# AI-generated test
+# Boolean literals true and false in function body
+fn use_bools() {
+    let t = true
+    let f = false
+    notify "done"
+}
+
+behavior fn_body_bool_literal {
+    @name "Fn Body Bool Literal"
+    use_bools
+}

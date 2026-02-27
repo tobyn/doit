@@ -88,8 +88,10 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 				return nil, err
 			}
 			base = &LiteralExpr{Value: resolved}
-		} else if tok.val == "null" {
+		} else if tok.val == "null" || tok.val == "false" {
 			base = &LiteralExpr{Value: false}
+		} else if tok.val == "true" {
+			base = &LiteralExpr{Value: map[string]any{"num": 1}}
 		} else if isConstructor(tok.val) {
 			ctor, err := p.parseFnBodyConstructorExpr(tok)
 			if err != nil {
@@ -2525,7 +2527,7 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 	}
 
 	// Function call: known function with a return value
-	if tok.kind == tokIdent && !isConstructor(tok.val) && tok.val != "null" && !strings.HasPrefix(tok.val, "$") {
+	if tok.kind == tokIdent && !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" && !strings.HasPrefix(tok.val, "$") {
 		callee := p.fns[tok.val]
 		if callee != nil && callee.hasReturn() {
 			args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx.paramDirs, ctx.fnVars)
@@ -2851,7 +2853,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 
 		default:
 			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
-			if !isConstructor(tok.val) && tok.val != "null" {
+			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {
 				peek, err := p.next()
 				if err != nil {
 					return nil, err
@@ -2960,11 +2962,18 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						astBody = append(astBody, &exprTailStmt{Expr: tailExpr})
 						return astBody, nil
 					}
-					if tok.val == "null" {
+					if tok.val == "null" || tok.val == "false" {
 						if _, err := p.expect(tokRBrace); err != nil {
 							return nil, err
 						}
 						astBody = append(astBody, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
+						return astBody, nil
+					}
+					if tok.val == "true" {
+						if _, err := p.expect(tokRBrace); err != nil {
+							return nil, err
+						}
+						astBody = append(astBody, &exprTailStmt{Expr: &LiteralExpr{Value: map[string]any{"num": 1}}})
 						return astBody, nil
 					}
 					if callee != nil && callee.hasReturn() {

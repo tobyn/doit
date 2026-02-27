@@ -52,7 +52,7 @@ output format.
   `tokStarEquals`/`tokSlashEquals` for compound assignment/decrement,
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),
-  `Keywords` map (includes `"is"`, `"wait"`)
+  `Keywords` map (includes `"is"`, `"wait"`, `"true"`, `"false"`)
   (includes type constructor names, direction keywords, and `locked`/`unlocked`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
