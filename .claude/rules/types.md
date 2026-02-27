@@ -53,9 +53,9 @@ dynamically typed within registers — any register can hold any register
 type.
 
 Constructor names (`Item`, `Component`, `Technology`, `Value`,
-`Coordinate`) are reserved keywords and cannot be used as variable or
-function names. `Unit` is also a reserved keyword — it has no
-constructor (units are produced by instructions at runtime) but is
+`Coordinate`, `Range`) are reserved keywords and cannot be used as
+variable or function names. `Unit` is also a reserved keyword — it has
+no constructor (units are produced by instructions at runtime) but is
 valid as a type operand in `is` expressions.
 
 ### Runtime type checking (`is`)
@@ -81,6 +81,19 @@ registers. The compiler resolves string values at compile time and bakes
 them into instruction text fields. However, strings are full values in
 the language: they can be assigned to variables, passed as function
 arguments, and used anywhere the language allows.
+
+### Range
+
+A numeric sequence used for `for` loop iteration. Constructor syntax:
+`Range(stop)`, `Range(start, stop)`, or `Range(start, stop, step)`.
+
+Range has no dedicated VM type — it is stored as a coordinate+number
+composite: `{"coord": {"x": start, "y": stop}, "num": step}`. With
+all-literal arguments, the Range resolves at compile time. With variable
+arguments, the compiler emits a `combine_register` instruction. `Range`
+is not distinguishable from `Coordinate` at runtime (`is Range` is not
+supported). The `&` operator is not supported on Range values (it would
+overwrite the step stored in the num field).
 
 ### Null
 

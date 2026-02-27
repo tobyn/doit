@@ -1,0 +1,11 @@
+# AI-generated test
+# For loop with Range(2, 8) - start and stop
+behavior for_range_start_stop {
+    @name "For Range Start Stop"
+
+    for i in Range(2, 8) {
+        notify "hello"
+    }
+
+    notify "done"
+}

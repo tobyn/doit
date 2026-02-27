@@ -1,0 +1,9 @@
+# AI-generated test
+# Range constructor with variable argument (runtime path)
+behavior range_runtime {
+    @name "Range Runtime"
+
+    let n = 5
+    let r = Range(n)
+    notify "done"
+}

@@ -1,0 +1,37 @@
+{
+  "0": {
+    "0": {
+      "num": 10
+    },
+    "1": "i",
+    "op": "set_reg"
+  },
+  "1": {
+    "1": 5,
+    "2": "i",
+    "3": {
+      "num": 0
+    },
+    "next": 5,
+    "op": "check_number"
+  },
+  "2": {
+    "next": 4,
+    "op": "notify",
+    "txt": "hello"
+  },
+  "3": {
+    "0": "i",
+    "1": {
+      "num": -2
+    },
+    "2": "i",
+    "next": 2,
+    "op": "add"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "For Range Step"
+}

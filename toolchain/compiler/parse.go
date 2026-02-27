@@ -67,6 +67,17 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 	switch tok.kind {
 	case tokString:
 		base = &LiteralExpr{Value: tok.val}
+	case tokMinus:
+		// Unary minus: -<number>
+		numTok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if numTok.kind != tokNumber {
+			return nil, p.errorf(tok.pos, "expected number after '-'")
+		}
+		num, _ := strconv.Atoi(numTok.val)
+		base = &LiteralExpr{Value: map[string]any{"num": -num}}
 	case tokNumber:
 		num, _ := strconv.Atoi(tok.val)
 		base = &LiteralExpr{Value: map[string]any{"num": num}}
@@ -154,6 +165,63 @@ func (p *parser) parseFnBodyConstructorExpr(nameTok token) (Expr, error) {
 		return &ConstructorExpr{
 			TypeName: "Coordinate",
 			Args:     []Expr{x, y},
+		}, nil
+	case "Range":
+		arg1, err := p.parseFnBodyExpr()
+		if err != nil {
+			return nil, err
+		}
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokRParen {
+			return &ConstructorExpr{
+				TypeName: "Range",
+				Args: []Expr{
+					&LiteralExpr{Value: map[string]any{"num": 0}},
+					arg1,
+					&LiteralExpr{Value: map[string]any{"num": 1}},
+				},
+			}, nil
+		}
+		if peek.kind != tokComma {
+			return nil, p.errorf(peek.pos, "expected ',' or ')' after Range argument, got %s", peek.describe())
+		}
+		arg2, err := p.parseFnBodyExpr()
+		if err != nil {
+			return nil, err
+		}
+		peek, err = p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokRParen {
+			return &ConstructorExpr{
+				TypeName: "Range",
+				Args:     []Expr{arg1, arg2, &LiteralExpr{Value: map[string]any{"num": 1}}},
+			}, nil
+		}
+		if peek.kind != tokComma {
+			return nil, p.errorf(peek.pos, "expected ',' or ')' after Range argument, got %s", peek.describe())
+		}
+		arg3, err := p.parseFnBodyExpr()
+		if err != nil {
+			return nil, err
+		}
+		if lit, ok := arg3.(*LiteralExpr); ok {
+			if m, ok := lit.Value.(map[string]any); ok {
+				if n, ok := m["num"]; ok && n == 0 {
+					return nil, p.errorf(nameTok.pos, "Range step cannot be zero")
+				}
+			}
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return &ConstructorExpr{
+			TypeName: "Range",
+			Args:     []Expr{arg1, arg2, arg3},
 		}, nil
 	}
 	return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
@@ -347,6 +415,8 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 		case *LoopStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
+		case *ForStmt:
+			collectASTOutputVars(s.Body, paramMap, usedVars)
 		case *ModeBlockStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 		}
@@ -446,6 +516,30 @@ func tryResolveConstructorLiteral(ctor *ConstructorExpr) (any, bool) {
 			return nil, false
 		}
 		return map[string]any{"coord": map[string]any{"x": xNum, "y": yNum}}, true
+	case "Range":
+		// Range has 3 args: start, stop, step (all normalized during parsing)
+		startLit, sOk := ctor.Args[0].(*LiteralExpr)
+		stopLit, eOk := ctor.Args[1].(*LiteralExpr)
+		stepLit, tOk := ctor.Args[2].(*LiteralExpr)
+		if !sOk || !eOk || !tOk {
+			return nil, false
+		}
+		startMap, sIsMap := startLit.Value.(map[string]any)
+		stopMap, eIsMap := stopLit.Value.(map[string]any)
+		stepMap, tIsMap := stepLit.Value.(map[string]any)
+		if !sIsMap || !eIsMap || !tIsMap {
+			return nil, false
+		}
+		startNum, sHas := startMap["num"]
+		stopNum, eHas := stopMap["num"]
+		stepNum, tHas := stepMap["num"]
+		if !sHas || !eHas || !tHas || len(startMap) != 1 || len(stopMap) != 1 || len(stepMap) != 1 {
+			return nil, false
+		}
+		return map[string]any{
+			"coord": map[string]any{"x": startNum, "y": stopNum},
+			"num":   stepNum,
+		}, true
 	}
 	return nil, false
 }
@@ -621,7 +715,7 @@ func (p *parser) emitConstructorTo(ctor *ConstructorExpr, target any, b *frameBu
 		return nil
 	}
 
-	// Runtime path — only Coordinate can be runtime (others always have literal args)
+	// Runtime path — Coordinate and Range can be runtime
 	if ctor.TypeName == "Coordinate" {
 		xVal, err := p.emitExprGetValue(ctor.Args[0], b, paramMap, usedVars, "", pos)
 		if err != nil {
@@ -632,6 +726,23 @@ func (p *parser) emitConstructorTo(ctor *ConstructorExpr, target any, b *frameBu
 			return err
 		}
 		return p.expandCall("combine_coordinate", []any{xVal, yVal}, nil, []any{target}, b, pos, comment, usedVars)
+	}
+	if ctor.TypeName == "Range" {
+		// combine_register step, false, x: start, y: stop
+		stepVal, err := p.emitExprGetValue(ctor.Args[2], b, paramMap, usedVars, "", pos)
+		if err != nil {
+			return err
+		}
+		startVal, err := p.emitExprGetValue(ctor.Args[0], b, paramMap, usedVars, "", pos)
+		if err != nil {
+			return err
+		}
+		stopVal, err := p.emitExprGetValue(ctor.Args[1], b, paramMap, usedVars, "", pos)
+		if err != nil {
+			return err
+		}
+		kwArgs := map[string]any{"x": startVal, "y": stopVal}
+		return p.expandCall("combine_register", []any{stepVal, false}, kwArgs, []any{target}, b, pos, comment, usedVars)
 	}
 	return fmt.Errorf("unknown constructor %q", ctor.TypeName)
 }
@@ -1024,6 +1135,15 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 				callComment = comment
 			}
 			if err := p.emitFnLoopStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
+				return err
+			}
+
+		case *ForStmt:
+			callComment := s.Comment
+			if callComment == "" {
+				callComment = comment
+			}
+			if err := p.emitFnForStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
 				return err
 			}
 
@@ -1568,6 +1688,223 @@ func (p *parser) emitFnCountedLoop(s *LoopStmt, b *frameBuilder, paramMap map[st
 	return nil
 }
 
+// emitFnForStmt emits a for-in loop in a fn body.
+func (p *parser) emitFnForStmt(s *ForStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	counterVar := allocUniqueVar(s.IterVar, usedVars)
+	paramMap[s.IterVar] = counterVar
+
+	ctor, isCtor := s.Range.(*ConstructorExpr)
+	if isCtor && ctor.TypeName == "Range" {
+		return p.emitFnForStmtRange(s, ctor, counterVar, b, paramMap, usedVars, comment, pos)
+	}
+	return p.emitFnForStmtRuntime(s, counterVar, b, paramMap, usedVars, comment, pos)
+}
+
+func (p *parser) emitFnForStmtRange(s *ForStmt, ctor *ConstructorExpr, counterVar string, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	stepLit, stepIsLit := ctor.Args[2].(*LiteralExpr)
+	var stepSign int
+	if stepIsLit {
+		if m, ok := stepLit.Value.(map[string]any); ok {
+			if n, ok := m["num"].(int); ok {
+				if n > 0 {
+					stepSign = 1
+				} else {
+					stepSign = -1
+				}
+			}
+		}
+	}
+
+	if !stepIsLit || stepSign == 0 {
+		return p.emitFnForStmtRuntime(s, counterVar, b, paramMap, usedVars, comment, pos)
+	}
+
+	startVal, err := p.emitExprGetValue(ctor.Args[0], b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+	stopVal, err := p.emitExprGetValue(ctor.Args[1], b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+	stepVal, err := p.emitExprGetValue(ctor.Args[2], b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+
+	// INIT
+	b.emit(map[string]any{
+		"op": "set_reg",
+		"1":  startVal,
+		"2":  counterVar,
+	})
+
+	// CHECK
+	check := map[string]any{
+		"op":        "check_number",
+		checkValue:  counterVar,
+		checkTarget: stopVal,
+	}
+	setComment(check, comment)
+	checkFrame := b.emit(check)
+
+	origLen := len(b.frames)
+
+	// Emit body
+	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+
+	// INCR
+	incrFrame := b.emit(map[string]any{
+		"op":   "add",
+		"1":    counterVar,
+		"2":    stepVal,
+		"3":    counterVar,
+		"next": frameRef(checkFrame),
+	})
+
+	// Set last body frame's "next" to incr
+	if b.pos()-1 > origLen-1 {
+		lastBodyFrame := b.get(incrFrame - 1)
+		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
+			if _, hasNext := lastBodyFrame["next"]; !hasNext {
+				lastBodyFrame["next"] = frameRef(incrFrame)
+			}
+		}
+	}
+
+	afterLoop := frameRef(b.pos())
+	if stepSign > 0 {
+		check[checkLarger] = afterLoop
+		check["next"] = afterLoop
+	} else {
+		check[checkSmaller] = afterLoop
+		check["next"] = afterLoop
+	}
+
+	for j := origLen; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == s.Label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": afterLoop,
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *parser) emitFnForStmtRuntime(s *ForStmt, counterVar string, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	rangeVal, err := p.emitExprGetValue(s.Range, b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+
+	stepVar := allocUniqueVar("@step", usedVars)
+	startVar := allocUniqueVar("@start", usedVars)
+	stopVar := allocUniqueVar("@stop", usedVars)
+	retVals := []any{stepVar, false, false, startVar, stopVar}
+	if err := p.expandCall("separate_register", []any{rangeVal}, nil, retVals, b, pos, "", usedVars); err != nil {
+		return err
+	}
+
+	// INIT
+	b.emit(map[string]any{
+		"op": "set_reg",
+		"1":  startVar,
+		"2":  counterVar,
+	})
+
+	// STEP_CHK
+	stepCheck := map[string]any{
+		"op":        "check_number",
+		checkValue:  stepVar,
+		checkTarget: map[string]any{"num": 0},
+	}
+	setComment(stepCheck, comment)
+	stepCheckFrame := b.emit(stepCheck)
+
+	// CHECK_POS
+	checkPos := map[string]any{
+		"op":        "check_number",
+		checkValue:  counterVar,
+		checkTarget: stopVar,
+	}
+	checkPosFrame := b.emit(checkPos)
+
+	// CHECK_NEG
+	checkNeg := map[string]any{
+		"op":        "check_number",
+		checkValue:  counterVar,
+		checkTarget: stopVar,
+	}
+	checkNegFrame := b.emit(checkNeg)
+
+	origLen := len(b.frames)
+
+	// Emit body
+	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+
+	// INCR
+	incrFrame := b.emit(map[string]any{
+		"op":   "add",
+		"1":    counterVar,
+		"2":    stepVar,
+		"3":    counterVar,
+		"next": frameRef(stepCheckFrame),
+	})
+
+	if b.pos()-1 > origLen-1 {
+		lastBodyFrame := b.get(incrFrame - 1)
+		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
+			if _, hasNext := lastBodyFrame["next"]; !hasNext {
+				lastBodyFrame["next"] = frameRef(incrFrame)
+			}
+		}
+	}
+
+	afterLoop := frameRef(b.pos())
+
+	stepCheck[checkLarger] = frameRef(checkPosFrame)
+	stepCheck[checkSmaller] = frameRef(checkNegFrame)
+	stepCheck["next"] = afterLoop
+
+	bodyStart := frameRef(origLen)
+	checkPos[checkSmaller] = bodyStart
+	checkPos[checkLarger] = afterLoop
+	checkPos["next"] = afterLoop
+
+	checkNeg[checkLarger] = bodyStart
+	checkNeg[checkSmaller] = afterLoop
+	checkNeg["next"] = afterLoop
+
+	for j := origLen; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == s.Label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": afterLoop,
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (p *parser) parseParamList() ([]paramDef, error) {
 	if _, err := p.expect(tokLParen); err != nil {
 		return nil, err
@@ -2014,6 +2351,8 @@ func collectReturnStmts(stmts []Stmt) []*ReturnStmt {
 			result = append(result, collectReturnStmts(s.Body)...)
 		case *LoopStmt:
 			result = append(result, collectReturnStmts(s.Body)...)
+		case *ForStmt:
+			result = append(result, collectReturnStmts(s.Body)...)
 		case *ModeBlockStmt:
 			result = append(result, collectReturnStmts(s.Body)...)
 		}
@@ -2375,6 +2714,13 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			}
 			astBody = append(astBody, stmt)
 
+		case "for":
+			stmt, err := p.parseFnBodyForStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			astBody = append(astBody, stmt)
+
 		case "break":
 			if p.loopDepth == 0 {
 				return nil, p.errorf(tok.pos, "'break' outside of loop")
@@ -2392,7 +2738,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			astBody = append(astBody, &BreakStmt{Label: label, Comment: comment})
 
 		default:
-			// Check for labeled loop/while: `ident: loop { ... }` or `ident: while ...`
+			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
 			if !isConstructor(tok.val) && tok.val != "null" {
 				peek, err := p.next()
 				if err != nil {
@@ -2403,23 +2749,30 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 					if err != nil {
 						return nil, err
 					}
-					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while") {
+					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while" || peek2.val == "for") {
 						label := tok.val
 						if p.loopLabels[label] {
 							return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
 						}
-						if peek2.val == "loop" {
+						switch peek2.val {
+						case "loop":
 							loopStmt, err := p.parseFnBodyLoopStmt(ctx, comment, label)
 							if err != nil {
 								return nil, err
 							}
 							astBody = append(astBody, loopStmt)
-						} else {
+						case "while":
 							whileStmt, err := p.parseFnBodyWhileStmt(ctx, comment, label)
 							if err != nil {
 								return nil, err
 							}
 							astBody = append(astBody, whileStmt)
+						case "for":
+							forStmt, err := p.parseFnBodyForStmt(ctx, comment, label)
+							if err != nil {
+								return nil, err
+							}
+							astBody = append(astBody, forStmt)
 						}
 						continue
 					}
@@ -3054,6 +3407,77 @@ func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string, label .
 		return nil, err
 	}
 	return &LoopStmt{Label: lbl, Count: count, Body: body, Comment: comment}, nil
+}
+
+// parseFnBodyForStmt parses a for i in <range> { ... } loop in a fn body.
+func (p *parser) parseFnBodyForStmt(ctx *fnBodyContext, comment string, label ...string) (*ForStmt, error) {
+	lbl := ""
+	if len(label) > 0 {
+		lbl = label[0]
+	}
+
+	iterTok, err := p.expect(tokIdent)
+	if err != nil {
+		return nil, err
+	}
+	if isConstructor(iterTok.val) {
+		return nil, p.errorf(iterTok.pos, "%q is a type constructor and cannot be used as a variable name", iterTok.val)
+	}
+	if Keywords[iterTok.val] {
+		return nil, p.errorf(iterTok.pos, "%q is a reserved keyword and cannot be used as a variable name", iterTok.val)
+	}
+
+	inTok, err := p.expect(tokIdent)
+	if err != nil {
+		return nil, err
+	}
+	if inTok.val != "in" {
+		return nil, p.errorf(inTok.pos, "expected 'in' after for variable, got %q", inTok.val)
+	}
+
+	rangeTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	var rangeExpr Expr
+	if rangeTok.kind == tokIdent && rangeTok.val == "Range" {
+		rangeExpr, err = p.parseFnBodyConstructorExpr(rangeTok)
+		if err != nil {
+			return nil, err
+		}
+	} else if rangeTok.kind == tokIdent {
+		resolved, err := ctx.resolve(rangeTok)
+		if err != nil {
+			return nil, err
+		}
+		rangeExpr = resolved
+	} else {
+		return nil, p.errorf(rangeTok.pos, "expected Range constructor or variable after 'in', got %s", rangeTok.describe())
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+
+	// Save/restore iter var for scoping
+	savedVar, hadVar := ctx.fnVars[iterTok.val]
+	ctx.fnVars[iterTok.val] = false // immutable
+
+	p.enterLoop(lbl)
+	body, err := p.parseFnBodyStmts(ctx)
+	p.exitLoop(lbl)
+
+	if hadVar {
+		ctx.fnVars[iterTok.val] = savedVar
+	} else {
+		delete(ctx.fnVars, iterTok.val)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ForStmt{Label: lbl, IterVar: iterTok.val, Range: rangeExpr, Body: body, Comment: comment}, nil
 }
 
 // checkFnBodyInstructionDirections verifies that non-@N slots in an instruction

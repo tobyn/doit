@@ -1,0 +1,14 @@
+# AI-generated test
+# For loop in a function body
+fn count_up(n) {
+    for i in Range(n) {
+        notify "tick"
+    }
+}
+
+behavior for_range_fn_body {
+    @name "For Range Fn Body"
+
+    count_up 3
+    notify "done"
+}

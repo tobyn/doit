@@ -848,6 +848,60 @@ not an error — the label is treated as the next statement (which will
 likely produce its own error). `break` outside of any loop is a compile
 error.
 
+### `for` loops
+
+`for` iterates over a `Range`:
+
+```doit
+for i in Range(5) {
+    notify "hello"      # runs 5 times, i = 0, 1, 2, 3, 4
+}
+```
+
+The iteration variable (`i`) is immutable — assigning to it inside the
+loop body is a compile error.
+
+`Range` accepts 1–3 arguments:
+
+| Form | Meaning |
+|------|---------|
+| `Range(stop)` | 0, 1, 2, …, stop−1 |
+| `Range(start, stop)` | start, start+1, …, stop−1 |
+| `Range(start, stop, step)` | start, start+step, …, up to (but not including) stop |
+
+Negative steps count downward:
+
+```doit
+for i in Range(10, 0, -2) {
+    notify "countdown"   # i = 10, 8, 6, 4, 2
+}
+```
+
+A literal step of `0` is a compile error.
+
+`Range` can also be stored in a variable and iterated later:
+
+```doit
+let r = Range(5)
+for i in r {
+    notify "hello"
+}
+```
+
+`for` loops support `break`, labeled `for`, and `break label`:
+
+```doit
+outer: for i in Range(5) {
+    for j in Range(3) {
+        if j == 1 {
+            break outer
+        }
+    }
+}
+```
+
+`for` loops work in both behavior bodies and function bodies.
+
 ## Execution Mode
 
 Behavior controllers start each execution cycle in **locked** mode, running

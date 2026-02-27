@@ -1,0 +1,8 @@
+# AI-generated test
+# Range constructor as a value assigned to a variable
+behavior range_literal {
+    @name "Range Literal"
+
+    let r = Range(5)
+    notify "done"
+}

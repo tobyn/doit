@@ -567,7 +567,8 @@ emission and patches them to point after the loop, same pattern as
 ## Labeled loops and breaks
 
 **Syntax**: `label: loop { ... }`, `label: while cond { ... }`,
-`break label`. Labels follow identifier naming rules.
+`label: for i in Range(5) { ... }`, `break label`. Labels follow
+identifier naming rules.
 
 **Parser state**: Loop tracking uses `parser.loopDepth` (int, >0 when
 inside a loop body) and `parser.loopLabels` (map of active labels).
@@ -581,7 +582,7 @@ and registers the label; `exitLoop(label)` decrements and unregisters.
 (`parseBehaviorBody` in codegen.go, `parseBhvStmtBlockInner` in
 bhvast.go, `parseFnBodyStmtsInner` in parse.go), the default case
 checks for the `ident: loop` / `ident: while` pattern via a
-three-token lookahead (ident, colon, loop/while keyword). If detected,
+three-token lookahead (ident, colon, loop/while/for keyword). If detected,
 the labeled loop/while parser is called; otherwise tokens are ungotten
 and the default parsing logic continues.
 
@@ -598,9 +599,11 @@ is ungotten and the break targets the innermost loop (empty label).
 `{"op": "@break"}` for unlabeled breaks and
 `{"op": "@break", "label": "name"}` for labeled breaks.
 
-**Label-aware patching**: All 6 loop/while emitters (3 behavior-level:
-`emitBhvWhileStmt`, `emitBhvLoopStmt`, `emitBhvCountedLoop`; 3 fn
-body: `emitFnWhileStmt`, `emitFnLoopStmt`, `emitFnCountedLoop`) use
+**Label-aware patching**: All 10 loop/while/for emitters (5 behavior-level:
+`emitBhvWhileStmt`, `emitBhvLoopStmt`, `emitBhvCountedLoop`,
+`emitBhvForStmtRange`, `emitBhvForStmtRuntime`; 5 fn body:
+`emitFnWhileStmt`, `emitFnLoopStmt`, `emitFnCountedLoop`,
+`emitFnForStmtRange`, `emitFnForStmtRuntime`) use
 the same patching condition:
 ```
 fLabel == "" || fLabel == myLabel
@@ -649,6 +652,68 @@ deferred body interference).
 
 **Fn body**: `emitFnCountedLoop` uses `emitFnBody` directly, sets the
 last body frame's `"next"` to the increment frame.
+
+## Range constructor and `for` loops
+
+**Range representation**: Range uses the VM's coordinate+number
+composite: `{"coord": {"x": start, "y": stop}, "num": step}`. This
+piggybacks on the existing register model without requiring a new VM
+type. `Range(stop)` defaults to start=0, step=1. `Range(start, stop)`
+defaults to step=1. `Range(start, stop, step)` uses all three values.
+Literal step=0 is a compile error.
+
+**Variable arity constructor**: Range is the only constructor that
+accepts 1–3 arguments (all others are fixed arity). The parser
+normalizes all forms to 3-arg `ConstructorExpr` AST nodes with defaults
+filled in.
+
+**Compile-time vs runtime**: With all-literal arguments, Range resolves
+at compile time (inline JSON). With variable arguments, the compiler
+emits `combine_register step, false, x: start, y: stop` at runtime.
+
+**No `&` on Range**: The `&` operator would overwrite the step (stored
+in the num field). The Range constructor parser does not check for `&`
+after the closing paren.
+
+**No `is Range`**: Range uses Coordinate at the VM level, so
+`value_type` can't distinguish them.
+
+**`for` loop syntax**: `for i in <range_expr> { body }`. The iteration
+variable is immutable (registered as `let`). `for` loops support labels
+and `break` (same infrastructure as `while`/`loop`).
+
+**Three emission paths**: The compiler picks a path based on
+compile-time knowledge of the step sign:
+
+- **Path A/B** (step sign known — `ConstructorExpr` with literal step):
+  INIT (set_reg start → iterVar) → CHECK (check_number iterVar vs stop;
+  for positive step: checkLarger and "next" → EXIT; for negative step:
+  checkSmaller and "next" → EXIT) → BODY → INCR (add iterVar + step →
+  iterVar, next → CHECK) → EXIT. Same frame layout as counted loops.
+
+- **Path C** (step sign unknown — variable range or no literal step):
+  Extracts start/stop/step from range via `separate_register`, then
+  STEP_CHK (check_number step vs 0; checkLarger → CHECK_POS,
+  checkSmaller → CHECK_NEG, "next"/zero → EXIT) → CHECK_POS/CHECK_NEG
+  (direction-aware check_number) → BODY → INCR → back to STEP_CHK.
+
+**Iteration variable scoping**: At behavior level, the iter var is
+saved/restored in the symbol table for proper block scoping. In fn
+bodies, it's added to `fnVars` as immutable and removed after body
+emission.
+
+**Labeled `for` detection**: Uses the same three-token lookahead as
+`loop`/`while`: `ident: for` pattern in all three statement parsers
+(`parseBehaviorBody`, `parseBhvStmtBlockInner`, `parseFnBodyStmtsInner`).
+
+**Label-aware patching**: The same `fLabel == "" || fLabel == myLabel`
+condition used by loop/while emitters is used by the 4 for loop
+emitters (`emitBhvForStmtRange`, `emitBhvForStmtRuntime`,
+`emitFnForStmtRange`, `emitFnForStmtRuntime`).
+
+**Unary minus in argument parsing**: `parseBhvArgExpr` and
+`parseFnBodyExpr` handle `tokMinus` followed by `tokNumber` as a
+negative number literal, enabling `Range(10, 0, -2)`.
 
 ## Enhanced `return` in fn bodies
 

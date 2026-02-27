@@ -40,7 +40,7 @@ Unit register and parameter references use the `$` prefix (e.g., `$store`,
 
 ### Type constructors
 
-Type constructors create typed game values. Five constructors are available:
+Type constructors create typed game values. Six constructors are available:
 
 | Constructor | Example | Compiled value |
 |-------------|---------|----------------|
@@ -49,6 +49,7 @@ Type constructors create typed game values. Five constructors are available:
 | `Technology("id")` | `Technology("signals2")` | `{"id": "t_signals2"}` |
 | `Value("id")` | `Value("pentagon")` | `{"id": "v_pentagon"}` |
 | `Coordinate(x, y)` | `Coordinate(3, 7)` | `{"coord": {"x": 3, "y": 7}}` |
+| `Range(stop)` | `Range(5)` | `{"coord": {"x": 0, "y": 5}, "num": 1}` |
 
 `Component`, `Technology`, and `Value` automatically add their namespace prefix
 (`c_`, `t_`, `v_`) — use the short id without the prefix.
@@ -56,6 +57,13 @@ Type constructors create typed game values. Five constructors are available:
 `Coordinate` accepts number literals or variables. With literals, the coordinate
 is resolved at compile time. With variables, the compiler emits a
 `combine_coordinate` instruction at runtime.
+
+`Range` accepts 1–3 arguments: `Range(stop)`, `Range(start, stop)`, or
+`Range(start, stop, step)`. The range value is stored as a coordinate+number
+composite where x=start, y=stop, num=step. With all-literal arguments, it
+resolves at compile time. With variable arguments, the compiler emits a
+`combine_register` instruction at runtime. `Range` is primarily used with
+`for` loops (see [Language](language.md#for-loops)).
 
 Constructor names are reserved — they cannot be used as variable or function
 names.

@@ -1,0 +1,11 @@
+# AI-generated test
+# For loop with Range(10, 0, -2) - negative step
+behavior for_range_step {
+    @name "For Range Step"
+
+    for i in Range(10, 0, -2) {
+        notify "hello"
+    }
+
+    notify "done"
+}

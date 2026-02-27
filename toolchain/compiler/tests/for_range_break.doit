@@ -1,0 +1,14 @@
+# AI-generated test
+# For loop with break
+behavior for_range_break {
+    @name "For Range Break"
+
+    for i in Range(10) {
+        if i == 3 {
+            break
+        }
+        notify "hello"
+    }
+
+    notify "done"
+}

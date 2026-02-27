@@ -12,10 +12,10 @@ output format.
 ## Architecture
 
 - **`compiler/ast.go`** — AST node type definitions: `Stmt` interface
-  (14 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
+  (15 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
   `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
   `InstructionStmt`, `ModeBlockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
-  `LoopStmt`, `BreakStmt`, `exprTailStmt`) and `Expr` interface
+  `LoopStmt`, `ForStmt`, `BreakStmt`, `exprTailStmt`) and `Expr` interface
   (14 concrete types: `LiteralExpr`, `IdentExpr`, `CallExpr`,
   `InstructionExpr`, `ArithExpr`, `CompareExpr`, `TypeCheckExpr`,
   `TruthyExpr`, `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`,
@@ -64,13 +64,14 @@ output format.
   fn body AST parsing (`parseFnBodyStmts`/`parseFnBodyStmtsInner`
   (with `exprTail` parameter for mode block expression tail detection;
   uses `p.loopDepth > 0` for break validation; detects
-  `ident: loop`/`ident: while` label syntax in default case),
+  `ident: loop`/`ident: while`/`ident: for` label syntax in default case),
   `parseFnBodyModeBlockExpr`, `parseFnBodyIfExprBranch`/
   `parseFnBodyIfExpr`, `parseFnBodyReturnItem`,
   `parseFnBodyLetVar`, `parseFnBodyRHSExpr`, `parseFnBodyIfStmt`,
   `parseFnBodyElseIfChain`, `parseFnBodyWhileStmt`
   (variadic `label ...string`),
   `parseFnBodyLoopStmt` (variadic `label ...string`),
+  `parseFnBodyForStmt` (variadic `label ...string`),
   `parseFnBodyExpr`,
   `parseFnBodyConstructorExpr`, `parseFnBodyCallArgs`,
   `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
@@ -81,7 +82,8 @@ output format.
   `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnIfExpr`/
   `emitFnIfExprMulti`/`emitFnIfExprTailMulti`,
   `emitFnWhileStmt`, `emitFnLoopStmt`,
-  `emitFnCountedLoop`,
+  `emitFnCountedLoop`, `emitFnForStmt`/`emitFnForStmtRange`/
+  `emitFnForStmtRuntime`,
   `emitFnModeBlockExpr`, `emitFnModeBlockExprMulti`,
   `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
   `collectASTOutputVars`, `collectExprOutputVars`,
@@ -107,11 +109,13 @@ output format.
   `parseBhvDefaultStmt` → `CallStmt`/`AssignStmt`/`CompoundAssignStmt`/
   `IncrDecrStmt`, `parseBhvIfStmt` → `IfStmt`, `parseBhvWhileStmt`
   (variadic `label ...string`) → `WhileStmt`, `parseBhvLoopStmt`
-  (variadic `label ...string`) → `LoopStmt`, `parseBhvMultiReturn`
+  (variadic `label ...string`) → `LoopStmt`, `parseBhvForStmt`
+  (variadic `label ...string`) → `ForStmt`, `parseBhvMultiReturn`
   → `MultiReturnStmt`, `parseBhvStmtBlock`/`parseBhvStmtBlockInner`
   (full statement set in inner blocks including var/let/instruction/
   control flow/break; uses `p.loopDepth > 0` for break validation;
-  detects `ident: loop`/`ident: while` label syntax in default case;
+  detects `ident: loop`/`ident: while`/`ident: for` label syntax in
+  default case;
   accepts variadic `exprTail` for mode block expression
   tail detection), `parseBhvModeBlockExpr`, `exprArity`/`ifExprArity`
   (generalized arity helper for `CallExpr`/`IfExpr`/`ModeBlockExpr`),
@@ -132,13 +136,14 @@ output format.
   `emitBhvIfExpr`/`emitBhvIfExprMulti`/`emitBhvIfExprTailMulti`
   (if-expression emission),
   `emitBhvIfStmt`/`emitBhvIfBreak`/`emitBhvWhileStmt`/
-  `emitBhvLoopStmt`/`emitBhvCountedLoop` (control flow emission).
+  `emitBhvLoopStmt`/`emitBhvCountedLoop`/`emitBhvForStmt`/
+  `emitBhvForStmtRange`/`emitBhvForStmtRuntime` (control flow emission).
   Internal types: `resolvedBoolExpr` (pre-resolved boolean
   tree for emission)
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
   `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +
   statements into `[]Stmt` via `parseBhv*` functions — default case
-  detects `ident: loop`/`ident: while` label syntax — then emit via
+  detects `ident: loop`/`ident: while`/`ident: for` label syntax — then emit via
   `emitBehaviorStmts` with `frameBuilder.mode` tracking),
   `resolveInstructionFrame` (0→1 key conversion
   and slot substitution), `frameHasReturnSlot`/`frameReturnCount`,

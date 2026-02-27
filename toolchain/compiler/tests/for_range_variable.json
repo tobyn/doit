@@ -1,0 +1,70 @@
+{
+  "0": {
+    "0": {
+      "coord": {
+        "x": 0,
+        "y": 5
+      },
+      "num": 1
+    },
+    "1": "r",
+    "op": "set_reg"
+  },
+  "1": {
+    "0": "r",
+    "1": "@step",
+    "2": false,
+    "3": false,
+    "4": "@start",
+    "5": "@stop",
+    "op": "separate_register"
+  },
+  "2": {
+    "0": "@start",
+    "1": "i",
+    "op": "set_reg"
+  },
+  "3": {
+    "0": 5,
+    "1": 6,
+    "2": "@step",
+    "3": {
+      "num": 0
+    },
+    "next": 9,
+    "op": "check_number"
+  },
+  "4": {
+    "0": 9,
+    "1": 7,
+    "2": "i",
+    "3": "@stop",
+    "next": 9,
+    "op": "check_number"
+  },
+  "5": {
+    "0": 7,
+    "1": 9,
+    "2": "i",
+    "3": "@stop",
+    "next": 9,
+    "op": "check_number"
+  },
+  "6": {
+    "next": 8,
+    "op": "notify",
+    "txt": "hello"
+  },
+  "7": {
+    "0": "i",
+    "1": "@step",
+    "2": "i",
+    "next": 4,
+    "op": "add"
+  },
+  "8": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "For Range Variable"
+}

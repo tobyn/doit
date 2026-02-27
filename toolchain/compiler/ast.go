@@ -120,6 +120,15 @@ type LoopStmt struct {
 	Comment string
 }
 
+// ForStmt is a for-in loop over a range: `for i in Range(5) { ... }`
+type ForStmt struct {
+	Label   string // "" for unlabeled
+	IterVar string // iteration variable name (let-bound)
+	Range   Expr   // range expression
+	Body    []Stmt
+	Comment string
+}
+
 // BreakStmt is a break from a loop.
 type BreakStmt struct {
 	Label   string // "" for unlabeled (breaks innermost)
@@ -251,6 +260,7 @@ func (*ReturnStmt) stmtNode()         {}
 func (*IfStmt) stmtNode()             {}
 func (*WhileStmt) stmtNode()          {}
 func (*LoopStmt) stmtNode()           {}
+func (*ForStmt) stmtNode()            {}
 func (*BreakStmt) stmtNode()          {}
 func (*exprTailStmt) stmtNode()       {}
 

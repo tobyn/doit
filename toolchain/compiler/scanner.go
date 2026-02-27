@@ -57,6 +57,7 @@ var Keywords = map[string]bool{
 	"break":       true,
 	"else":        true,
 	"fn":          true,
+	"for":         true,
 	"if":          true,
 	"in":          true,
 	"inout":       true,
@@ -77,6 +78,7 @@ var Keywords = map[string]bool{
 	"Coordinate": true,
 	"Component":  true,
 	"Item":       true,
+	"Range":      true,
 	"Technology": true,
 	"Value":      true,
 }
@@ -84,7 +86,7 @@ var Keywords = map[string]bool{
 // isConstructor reports whether an identifier is a type constructor name.
 func isConstructor(name string) bool {
 	switch name {
-	case "Coordinate", "Item", "Component", "Technology", "Value":
+	case "Coordinate", "Item", "Component", "Technology", "Value", "Range":
 		return true
 	}
 	return false

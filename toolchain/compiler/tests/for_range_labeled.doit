@@ -1,0 +1,16 @@
+# AI-generated test
+# Labeled for loop with break
+behavior for_range_labeled {
+    @name "For Range Labeled"
+
+    outer: for i in Range(5) {
+        for j in Range(3) {
+            if j == 1 {
+                break outer
+            }
+            notify "inner"
+        }
+    }
+
+    notify "done"
+}

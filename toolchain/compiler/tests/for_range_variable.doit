@@ -1,0 +1,12 @@
+# AI-generated test
+# For loop with range stored in a variable
+behavior for_range_variable {
+    @name "For Range Variable"
+
+    let r = Range(5)
+    for i in r {
+        notify "hello"
+    }
+
+    notify "done"
+}

@@ -1791,6 +1791,86 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	// --- Range and for loop errors ---
+
+	t.Run("range_step_zero", func(t *testing.T) {
+		src := `behavior a { for i in Range(0, 10, 0) { notify "hi" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "Range step cannot be zero") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("range_step_zero_fn_body", func(t *testing.T) {
+		src := `fn f() { for i in Range(0, 10, 0) { notify "hi" } } behavior a { f }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "Range step cannot be zero") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("for_missing_in", func(t *testing.T) {
+		src := `behavior a { for i Range(5) { notify "hi" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected 'in'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("for_non_ident_iter_var", func(t *testing.T) {
+		src := `behavior a { for "x" in Range(5) { notify "hi" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		// Parser expects an identifier for the iteration variable
+		if !strings.Contains(err.Error(), "unexpected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("for_keyword_iter_var", func(t *testing.T) {
+		src := `behavior a { for if in Range(5) { notify "hi" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("for_assign_to_iter_var", func(t *testing.T) {
+		src := `behavior a { for i in Range(5) { i = 3 } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "immutable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("for_duplicate_label", func(t *testing.T) {
+		src := `behavior a { x: for i in Range(5) { x: for j in Range(3) { notify "hi" } } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate loop label") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

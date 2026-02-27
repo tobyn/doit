@@ -1,0 +1,11 @@
+# AI-generated test
+# For loop with literal Range(5) - positive step
+behavior for_range_literal {
+    @name "For Range Literal"
+
+    for i in Range(5) {
+        notify "hello"
+    }
+
+    notify "done"
+}

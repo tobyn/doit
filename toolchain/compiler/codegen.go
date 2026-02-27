@@ -413,8 +413,15 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			}
 			stmts = append(stmts, whileStmt)
 
+		case "for":
+			forStmt, err := p.parseBhvForStmt(syms)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, forStmt)
+
 		default:
-			// Check for labeled loop/while: `ident: loop { ... }` or `ident: while ...`
+			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
 			if !isConstructor(tok.val) && tok.val != "null" {
 				peek, err := p.next()
 				if err != nil {
@@ -425,23 +432,30 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 					if err != nil {
 						return nil, err
 					}
-					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while") {
+					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while" || peek2.val == "for") {
 						label := tok.val
 						if p.loopLabels[label] {
 							return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
 						}
-						if peek2.val == "loop" {
+						switch peek2.val {
+						case "loop":
 							loopStmt, err := p.parseBhvLoopStmt(syms, label)
 							if err != nil {
 								return nil, err
 							}
 							stmts = append(stmts, loopStmt)
-						} else {
+						case "while":
 							whileStmt, err := p.parseBhvWhileStmt(syms, label)
 							if err != nil {
 								return nil, err
 							}
 							stmts = append(stmts, whileStmt)
+						case "for":
+							forStmt, err := p.parseBhvForStmt(syms, label)
+							if err != nil {
+								return nil, err
+							}
+							stmts = append(stmts, forStmt)
 						}
 						continue
 					}
