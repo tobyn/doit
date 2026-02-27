@@ -30,6 +30,16 @@ of work, not separate steps the developer must request:
 All three must be done before considering the task complete. Do not wait
 for the developer to ask for docs or memory updates.
 
+## Keeping Tests Green
+
+All tests must pass after every change. Run `go test ./...` from
+`toolchain/` before considering any change set done. If tests fail —
+whether from the current change or pre-existing — investigate and fix
+them as part of the work. If the fix is unrelated to the current task
+and significant enough to warrant its own commit, ask the developer
+whether to include it or split it out. Never dismiss failing tests as
+"pre-existing" without flagging them.
+
 ## Project Memory
 
 The `.claude/rules/` files are the source of truth for how the codebase

@@ -2445,6 +2445,8 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			stmts = append(stmts, &BreakStmt{Label: label, Comment: comment})
 		default:
 			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
+			// Save doc comment before label lookahead — p.next() resets it.
+			savedComment := p.docComment
 			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {
 				peek, err := p.next()
 				if err != nil {
@@ -2486,6 +2488,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				}
 				p.unget(peek)
 			}
+			p.docComment = savedComment
 
 			if allowExprTail {
 				fn := p.fns[tok.val]
