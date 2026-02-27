@@ -910,6 +910,39 @@ outer: for i in Range(5) {
 
 `for` loops work in both behavior bodies and function bodies.
 
+### `wait`
+
+Pauses execution for a number of ticks:
+
+```doit
+wait 5
+notify "done"
+```
+
+With a condition block, `wait` repeats until the condition is truthy.
+The ticks expression is evaluated once (snapshotted):
+
+```doit
+wait 5 { $a > 3 }
+notify "a is now greater than 3"
+```
+
+The condition block can contain statements before the condition
+expression. The condition is always the last item in the block:
+
+```doit
+wait 10 {
+    notify "checking"
+    $a > 5
+}
+```
+
+`wait` is not a loop — `break` and labels are not supported. The
+condition block is evaluated after each wait period, and the wait
+repeats only if the condition is falsy.
+
+`wait` works in both behavior bodies and function bodies.
+
 ## Execution Mode
 
 Behavior controllers start each execution cycle in **locked** mode, running

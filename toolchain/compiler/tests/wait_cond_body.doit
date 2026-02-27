@@ -1,0 +1,11 @@
+# AI-generated test
+# Wait with body statements and condition
+behavior wait_cond_body {
+    @name "Wait Cond Body"
+    @param in a "A"
+    wait 10 {
+        notify "checking"
+        $a > 5
+    }
+    notify "done"
+}

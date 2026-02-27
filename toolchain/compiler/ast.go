@@ -135,6 +135,14 @@ type BreakStmt struct {
 	Comment string
 }
 
+// WaitStmt is a wait statement: `wait <ticks>` or `wait <ticks> { body; cond }`.
+type WaitStmt struct {
+	Ticks   Expr   // ticks expression (evaluated once)
+	Body    []Stmt // optional: statements before condition (nil = simple wait)
+	Tail    Expr   // optional: condition expression (nil = simple wait)
+	Comment string
+}
+
 // --- Expression nodes ---
 
 // LiteralExpr is a compile-time value: number, string, null, or resolved
@@ -262,6 +270,7 @@ func (*WhileStmt) stmtNode()          {}
 func (*LoopStmt) stmtNode()           {}
 func (*ForStmt) stmtNode()            {}
 func (*BreakStmt) stmtNode()          {}
+func (*WaitStmt) stmtNode()           {}
 func (*exprTailStmt) stmtNode()       {}
 
 func (*LiteralExpr) exprNode()      {}

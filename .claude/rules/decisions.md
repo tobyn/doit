@@ -308,3 +308,36 @@ each slot (multi) instead of emitting the else body/tail.
 
 **Deferred**: if-expressions in function arguments, in `return` items,
 continuation after if-expression.
+
+## Wait keyword
+
+`wait` is a language keyword (not a stdlib function). Replaced the old
+`wait(time)` stdlib function. Syntax:
+
+- **Simple**: `wait <ticks>` — pauses execution for the given number of
+  ticks.
+- **Conditional**: `wait <ticks> { condition }` — waits, then evaluates
+  the condition. Repeats until the condition is truthy.
+- **Body + condition**: `wait <ticks> { stmts...; condition }` — the
+  last item in the block must be a value-producing expression (the
+  condition). Preceding statements execute each iteration.
+
+**Ticks snapshot**: The ticks expression is evaluated once and stored in
+a `@wait` temp variable (via `allocUniqueVar`). Pure number literals
+skip the snapshot (no temp needed). This prevents re-evaluation when
+the source variable changes during iteration.
+
+**Not a loop**: `wait` does not support `break` or labels. The condition
+block is a specialized construct, not a general loop body.
+
+**Frame layout** (conditional): WAIT → body → condition to `@wcond` →
+`compare_register @wcond, false` (Different → after wait, `"next"` →
+back to WAIT).
+
+**AST**: `WaitStmt` with `Ticks Expr`, `Body []Stmt`, `Tail Expr`,
+`Comment string`. Both Body and Tail are nil for simple wait.
+
+**Expression tails in fn body wait blocks**: The fn body parser's
+`exprTail` mode handles boolean expression continuations (comparisons,
+`is`, `&&`/`||`) after arithmetic expressions, matching the
+behavior-level `maybeBhvExprContinuation` pattern.

@@ -1861,14 +1861,7 @@ fn value_type(data) {
     #   "5": "Value" [exec], "6": "Coord" [exec], "next": "No Match"}
 }
 
-# Pauses execution until 1 or more ticks later (5 ticks = 1 second).
-#   time [in] - number of ticks to wait
-fn wait(time) {
-    # frame: {"op": "wait", "0": time [in]}
-    instruction "wait" {
-        0: time
-    }
-}
+# `wait` is a language keyword — see manual/language.md
 
 # Waits for a component before continuing.
 #   component [in] - component to wait for

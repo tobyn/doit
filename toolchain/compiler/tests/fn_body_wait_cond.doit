@@ -1,0 +1,12 @@
+# AI-generated test
+# Wait with condition in fn body
+behavior fn_body_wait_cond {
+    @name "Fn Body Wait Cond"
+    @param in a "A"
+    f $a
+}
+
+fn f(v) {
+    wait 5 { v > 3 }
+    notify "done"
+}

@@ -72,6 +72,7 @@ var Keywords = map[string]bool{
 	"return":      true,
 	"unlocked":    true,
 	"var":         true,
+	"wait":        true,
 	"is":          true,
 	"while":       true,
 	// Type constructors

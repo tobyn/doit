@@ -1,0 +1,9 @@
+# AI-generated test
+# Wait with variable ticks (snapshot)
+behavior wait_snapshot {
+    @name "Wait Snapshot"
+    @param in n "N"
+    @param in a "A"
+    wait $n { $a > 3 }
+    notify "done"
+}

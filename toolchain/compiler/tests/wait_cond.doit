@@ -1,0 +1,8 @@
+# AI-generated test
+# Wait with condition block
+behavior wait_cond {
+    @name "Wait Cond"
+    @param in a "A"
+    wait 5 { $a > 3 }
+    notify "done"
+}

@@ -1,0 +1,7 @@
+# AI-generated test
+# Simple wait statement
+behavior wait_simple {
+    @name "Wait Simple"
+    wait 5
+    notify "done"
+}

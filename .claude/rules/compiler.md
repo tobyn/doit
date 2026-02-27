@@ -12,10 +12,10 @@ output format.
 ## Architecture
 
 - **`compiler/ast.go`** — AST node type definitions: `Stmt` interface
-  (15 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
+  (16 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
   `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
   `InstructionStmt`, `ModeBlockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
-  `LoopStmt`, `ForStmt`, `BreakStmt`, `exprTailStmt`) and `Expr` interface
+  `LoopStmt`, `ForStmt`, `BreakStmt`, `WaitStmt`, `exprTailStmt`) and `Expr` interface
   (14 concrete types: `LiteralExpr`, `IdentExpr`, `CallExpr`,
   `InstructionExpr`, `ArithExpr`, `CompareExpr`, `TypeCheckExpr`,
   `TruthyExpr`, `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`,
@@ -52,7 +52,7 @@ output format.
   `tokStarEquals`/`tokSlashEquals` for compound assignment/decrement,
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),
-  `Keywords` map (includes `"is"`)
+  `Keywords` map (includes `"is"`, `"wait"`)
   (includes type constructor names, direction keywords, and `locked`/`unlocked`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
@@ -72,6 +72,7 @@ output format.
   (variadic `label ...string`),
   `parseFnBodyLoopStmt` (variadic `label ...string`),
   `parseFnBodyForStmt` (variadic `label ...string`),
+  `parseFnBodyWaitStmt`,
   `parseFnBodyExpr`,
   `parseFnBodyConstructorExpr`, `parseFnBodyCallArgs`,
   `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
@@ -83,7 +84,7 @@ output format.
   `emitFnIfExprMulti`/`emitFnIfExprTailMulti`,
   `emitFnWhileStmt`, `emitFnLoopStmt`,
   `emitFnCountedLoop`, `emitFnForStmt`/`emitFnForStmtRange`/
-  `emitFnForStmtRuntime`,
+  `emitFnForStmtRuntime`, `emitFnWaitStmt`,
   `emitFnModeBlockExpr`, `emitFnModeBlockExprMulti`,
   `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
   `collectASTOutputVars`, `collectExprOutputVars`,
@@ -110,7 +111,8 @@ output format.
   `IncrDecrStmt`, `parseBhvIfStmt` → `IfStmt`, `parseBhvWhileStmt`
   (variadic `label ...string`) → `WhileStmt`, `parseBhvLoopStmt`
   (variadic `label ...string`) → `LoopStmt`, `parseBhvForStmt`
-  (variadic `label ...string`) → `ForStmt`, `parseBhvMultiReturn`
+  (variadic `label ...string`) → `ForStmt`, `parseBhvWaitStmt`
+  → `WaitStmt`, `parseBhvMultiReturn`
   → `MultiReturnStmt`, `parseBhvStmtBlock`/`parseBhvStmtBlockInner`
   (full statement set in inner blocks including var/let/instruction/
   control flow/break; uses `p.loopDepth > 0` for break validation;
@@ -137,7 +139,8 @@ output format.
   (if-expression emission),
   `emitBhvIfStmt`/`emitBhvIfBreak`/`emitBhvWhileStmt`/
   `emitBhvLoopStmt`/`emitBhvCountedLoop`/`emitBhvForStmt`/
-  `emitBhvForStmtRange`/`emitBhvForStmtRuntime` (control flow emission).
+  `emitBhvForStmtRange`/`emitBhvForStmtRuntime`/
+  `emitBhvWaitStmt` (control flow emission).
   Internal types: `resolvedBoolExpr` (pre-resolved boolean
   tree for emission)
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:

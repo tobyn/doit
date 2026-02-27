@@ -419,6 +419,8 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 		case *ModeBlockStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
+		case *WaitStmt:
+			collectASTOutputVars(s.Body, paramMap, usedVars)
 		}
 	}
 }
@@ -1147,6 +1149,15 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 				return err
 			}
 
+		case *WaitStmt:
+			callComment := s.Comment
+			if callComment == "" {
+				callComment = comment
+			}
+			if err := p.emitFnWaitStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
+				return err
+			}
+
 		case *BreakStmt:
 			// Emit placeholder frame that emitFnLoopStmt/emitFnWhileStmt will patch
 			f := map[string]any{"op": "@break"}
@@ -1504,6 +1515,73 @@ func (p *parser) emitFnIfExprTailMulti(tail Expr, retVals []any, b *frameBuilder
 	for i := 1; i < len(retVals); i++ {
 		b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
 	}
+	return nil
+}
+
+// emitFnWaitStmt emits a wait statement in a fn body.
+func (p *parser) emitFnWaitStmt(s *WaitStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	// Resolve ticks expression
+	ticksVal, err := p.emitExprGetValue(s.Ticks, b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+
+	if s.Tail == nil {
+		// Simple wait: just emit the wait frame
+		f := map[string]any{"op": "wait", "1": ticksVal}
+		setComment(f, comment)
+		b.emit(f)
+		return nil
+	}
+
+	// Block wait: snapshot ticks if needed, then wait → body → cond → loop back
+
+	// Snapshot: copy ticks to temp var so they're only evaluated once.
+	// Skip for pure number literals (they can't change between iterations).
+	ticksVar := ticksVal
+	needsSnapshot := true
+	if lit, ok := s.Ticks.(*LiteralExpr); ok {
+		if _, isMap := lit.Value.(map[string]any); isMap {
+			needsSnapshot = false // pure number literal like {"num": 5}
+		}
+	}
+	if needsSnapshot {
+		tmp := allocUniqueVar("@wait", usedVars)
+		b.emit(map[string]any{
+			"op": "set_reg",
+			"1":  ticksVal,
+			"2":  tmp,
+		})
+		ticksVar = tmp
+	}
+
+	// Emit wait frame
+	waitFrame := map[string]any{"op": "wait", "1": ticksVar}
+	setComment(waitFrame, comment)
+	waitPos := b.emit(waitFrame)
+
+	// Emit body
+	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+
+	// Emit tail condition to temp var
+	condVar := allocUniqueVar("@wcond", usedVars)
+	if err := p.emitExprTo(s.Tail, condVar, b, paramMap, usedVars, "", pos); err != nil {
+		return err
+	}
+
+	// Emit truthy check: compare_register condVar, false
+	// Different (truthy) → afterWait, Equal (falsy / next) → waitPos
+	afterWait := frameRef(b.pos() + 1)
+	b.emit(map[string]any{
+		"op":                "compare_register",
+		compareRegDifferent: afterWait,
+		compareRegValue1:    condVar,
+		compareRegValue2:    false,
+		"next":              frameRef(waitPos),
+	})
+
 	return nil
 }
 
@@ -2376,6 +2454,8 @@ func collectReturnStmts(stmts []Stmt) []*ReturnStmt {
 			result = append(result, collectReturnStmts(s.Body)...)
 		case *ModeBlockStmt:
 			result = append(result, collectReturnStmts(s.Body)...)
+		case *WaitStmt:
+			result = append(result, collectReturnStmts(s.Body)...)
 		}
 	}
 	return result
@@ -2746,6 +2826,13 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			}
 			astBody = append(astBody, stmt)
 
+		case "wait":
+			stmt, err := p.parseFnBodyWaitStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			astBody = append(astBody, stmt)
+
 		case "break":
 			if p.loopDepth == 0 {
 				return nil, p.errorf(tok.pos, "'break' outside of loop")
@@ -2900,6 +2987,41 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						result, err := p.parseArithExprFromFull(resolved, ctx.resolve)
 						if err != nil {
 							return nil, err
+						}
+						// Check for boolean expression continuation (>, <, ==, !=, is, &&, ||)
+						peek2, err := p.next()
+						if err != nil {
+							return nil, err
+						}
+						if isComparisonOp(peek2.kind) {
+							rhs, err := p.parseArithExpr(ctx.resolve)
+							if err != nil {
+								return nil, err
+							}
+							cmp := Expr(&CompareExpr{Op: peek2.kind, LHS: result, RHS: rhs})
+							result, err = p.parseBoolChain(cmp, ctx.resolve)
+							if err != nil {
+								return nil, err
+							}
+						} else if peek2.kind == tokIdent && peek2.val == "is" {
+							slot, err := p.parseIsRHS()
+							if err != nil {
+								return nil, err
+							}
+							tc := Expr(&TypeCheckExpr{Value: result, TypeSlot: slot})
+							result, err = p.parseBoolChain(tc, ctx.resolve)
+							if err != nil {
+								return nil, err
+							}
+						} else if peek2.kind == tokDoubleAmpersand || peek2.kind == tokDoublePipe {
+							p.unget(peek2)
+							truthy := Expr(&TruthyExpr{Value: result})
+							result, err = p.parseBoolChain(truthy, ctx.resolve)
+							if err != nil {
+								return nil, err
+							}
+						} else {
+							p.unget(peek2)
 						}
 						if _, err := p.expect(tokRBrace); err != nil {
 							return nil, err
@@ -3432,6 +3554,76 @@ func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string, label .
 		return nil, err
 	}
 	return &LoopStmt{Label: lbl, Count: count, Body: body, Comment: comment}, nil
+}
+
+// parseFnBodyWaitStmt parses a wait statement in a fn body.
+func (p *parser) parseFnBodyWaitStmt(ctx *fnBodyContext, comment string) (*WaitStmt, error) {
+	// Parse ticks expression (same pattern as parseFnBodyLoopStmt count)
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	var ticks Expr
+	switch peek.kind {
+	case tokNumber:
+		num, _ := strconv.Atoi(peek.val)
+		ticks = &LiteralExpr{Value: map[string]any{"num": num}}
+		ticks, err = p.parseArithExprFromFull(ticks, ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+	case tokLParen:
+		ticks, err = p.parseArithExpr(ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+	case tokIdent:
+		resolved, err := ctx.resolve(peek)
+		if err != nil {
+			return nil, err
+		}
+		ticks, err = p.parseArithExprFromFull(resolved, ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, p.errorf(peek.pos, "expected ticks expression after 'wait', got %s", peek.describe())
+	}
+
+	// Check for optional condition block
+	peek2, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek2.kind != tokLBrace {
+		// Simple wait
+		p.unget(peek2)
+		return &WaitStmt{Ticks: ticks, Comment: comment}, nil
+	}
+
+	// Block wait: parse body + tail
+	stmts, err := p.parseFnBodyStmtsInner(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, p.errorf(peek2.pos, "empty wait block")
+	}
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, p.errorf(peek2.pos, "last item in wait block must be a value-producing expression")
+	}
+	return &WaitStmt{
+		Ticks:   ticks,
+		Body:    stmts[:len(stmts)-1],
+		Tail:    tail.Expr,
+		Comment: comment,
+	}, nil
 }
 
 // parseFnBodyForStmt parses a for i in <range> { ... } loop in a fn body.

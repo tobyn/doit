@@ -420,6 +420,13 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			}
 			stmts = append(stmts, forStmt)
 
+		case "wait":
+			waitStmt, err := p.parseBhvWaitStmt(syms)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, waitStmt)
+
 		default:
 			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
 			if !isConstructor(tok.val) && tok.val != "null" {

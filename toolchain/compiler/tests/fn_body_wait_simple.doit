@@ -1,0 +1,11 @@
+# AI-generated test
+# Simple wait in fn body
+behavior fn_body_wait_simple {
+    @name "Fn Body Wait Simple"
+    f
+}
+
+fn f() {
+    wait 5
+    notify "done"
+}

@@ -33,6 +33,10 @@ keywords handled directly by the compiler with compile-time mode tracking.
 The stdlib still contains `lock_slots` and `unlock_slots` (unrelated
 inventory slot functions).
 
+Note: `wait` is **not** in the stdlib. It was removed from the stdlib and
+is now a language keyword with optional condition block syntax. See
+`manual/language.md` for usage.
+
 Each function body contains a `# frame:` comment showing the inferred JSON structure of the
 compiled instruction. These were derived from `instructions.lua` by mapping:
 

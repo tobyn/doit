@@ -1297,6 +1297,79 @@ func (p *parser) parseBhvLoopStmt(syms *symbolTable, label ...string) (*LoopStmt
 	return &LoopStmt{Label: lbl, Count: count, Body: body, Comment: comment}, nil
 }
 
+// parseBhvWaitStmt parses a wait statement: `wait <ticks>` or `wait <ticks> { body; cond }`.
+func (p *parser) parseBhvWaitStmt(syms *symbolTable) (*WaitStmt, error) {
+	comment := p.docComment
+	resolve := p.bhvResolver(syms)
+
+	// Parse ticks expression (same pattern as parseBhvLoopStmt count)
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	var ticks Expr
+	switch peek.kind {
+	case tokNumber:
+		num, _ := strconv.Atoi(peek.val)
+		ticks = &LiteralExpr{Value: map[string]any{"num": num}}
+		ticks, err = p.parseArithExprFromFull(ticks, resolve)
+		if err != nil {
+			return nil, err
+		}
+	case tokLParen:
+		ticks, err = p.parseArithExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+	case tokIdent:
+		resolved, err := resolve(peek)
+		if err != nil {
+			return nil, err
+		}
+		ticks, err = p.parseArithExprFromFull(resolved, resolve)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, p.errorf(peek.pos, "expected ticks expression after 'wait', got %s", peek.describe())
+	}
+
+	// Check for optional condition block
+	peek2, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek2.kind != tokLBrace {
+		// Simple wait: wait <ticks>
+		p.unget(peek2)
+		return &WaitStmt{Ticks: ticks, Comment: comment}, nil
+	}
+
+	// Block wait: wait <ticks> { body; cond }
+	stmts, err := p.parseBhvStmtBlockInner(syms, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, p.errorf(peek2.pos, "empty wait block")
+	}
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, p.errorf(peek2.pos, "last item in wait block must be a value-producing expression")
+	}
+	return &WaitStmt{
+		Ticks:   ticks,
+		Body:    stmts[:len(stmts)-1],
+		Tail:    tail.Expr,
+		Comment: comment,
+	}, nil
+}
+
 // parseBhvForStmt parses a for i in <range> { ... } loop.
 func (p *parser) parseBhvForStmt(syms *symbolTable, label ...string) (*ForStmt, error) {
 	lbl := ""
@@ -2029,6 +2102,12 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				return nil, err
 			}
 			stmts = append(stmts, forStmt)
+		case "wait":
+			waitStmt, err := p.parseBhvWaitStmt(syms)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, waitStmt)
 		case "break":
 			if p.loopDepth == 0 {
 				return nil, p.errorf(tok.pos, "'break' outside of loop")
@@ -2620,6 +2699,11 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 
 		case *ForStmt:
 			if err := p.emitBhvForStmt(s, b, syms); err != nil {
+				return 0, err
+			}
+
+		case *WaitStmt:
+			if err := p.emitBhvWaitStmt(s, b, syms); err != nil {
 				return 0, err
 			}
 
@@ -3449,6 +3533,88 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable, de
 			(*deferred)[i].continuation = continuation
 		}
 	}
+
+	return nil
+}
+
+// emitBhvWaitStmt emits a wait statement.
+// Simple: emit wait frame. Block: wait → body → condition check → back-edge.
+func (p *parser) emitBhvWaitStmt(s *WaitStmt, b *frameBuilder, syms *symbolTable) error {
+	// Resolve ticks expression
+	ticksVal, err := p.emitBhvExprGetValue(s.Ticks, syms, b, "")
+	if err != nil {
+		return err
+	}
+
+	if s.Tail == nil {
+		// Simple wait: just emit the wait frame
+		f := map[string]any{"op": "wait", "1": ticksVal}
+		setComment(f, s.Comment)
+		b.emit(f)
+		return nil
+	}
+
+	// Block wait: snapshot ticks if needed, then wait → body → cond → loop back
+
+	// Snapshot: copy ticks to temp var so they're only evaluated once.
+	// Skip for pure number literals (they can't change between iterations).
+	ticksVar := ticksVal
+	needsSnapshot := true
+	if lit, ok := s.Ticks.(*LiteralExpr); ok {
+		if _, isMap := lit.Value.(map[string]any); isMap {
+			needsSnapshot = false // pure number literal like {"num": 5}
+		}
+	}
+	if needsSnapshot {
+		tmp := allocUniqueVar("@wait", syms.usedVars)
+		b.emit(map[string]any{
+			"op": "set_reg",
+			"1":  ticksVal,
+			"2":  tmp,
+		})
+		ticksVar = tmp
+	}
+
+	// Emit wait frame
+	waitFrame := map[string]any{"op": "wait", "1": ticksVar}
+	setComment(waitFrame, s.Comment)
+	waitPos := b.emit(waitFrame)
+
+	// Emit body via child builder
+	bodyBuilder := &frameBuilder{mode: b.mode}
+	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
+	if err != nil {
+		return err
+	}
+	if len(bodyBuilder.frames) > 0 {
+		bodyStart := b.pos()
+		rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
+		for _, f := range rebased {
+			b.emit(f)
+		}
+		// Patch last main-line frame's "next" to skip deferred → tail
+		if mainCount > 0 {
+			lastMain := b.get(bodyStart + mainCount - 1)
+			lastMain["next"] = frameRef(b.pos())
+		}
+	}
+
+	// Emit tail condition to temp var
+	condVar := allocUniqueVar("@wcond", syms.usedVars)
+	if err := p.emitBhvExprTo(s.Tail, condVar, syms, b, ""); err != nil {
+		return err
+	}
+
+	// Emit truthy check: compare_register condVar, false
+	// Different (truthy) → afterWait, Equal (falsy / next) → waitPos
+	afterWait := frameRef(b.pos() + 1)
+	b.emit(map[string]any{
+		"op":                 "compare_register",
+		compareRegDifferent:  afterWait,
+		compareRegValue1:     condVar,
+		compareRegValue2:     false,
+		"next":               frameRef(waitPos),
+	})
 
 	return nil
 }

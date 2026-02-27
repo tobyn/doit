@@ -1865,6 +1865,52 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	// --- Wait errors ---
+
+	t.Run("wait_empty_block", func(t *testing.T) {
+		src := `behavior a { wait 5 { } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty wait block") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("wait_non_value_tail", func(t *testing.T) {
+		src := `behavior a { wait 5 { notify "hi" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "last item in wait block must be a value-producing expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("wait_empty_block_fn_body", func(t *testing.T) {
+		src := `fn f() { wait 5 { } } behavior a { f }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty wait block") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("wait_non_value_tail_fn_body", func(t *testing.T) {
+		src := `fn f() { wait 5 { notify "hi" } } behavior a { f }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "last item in wait block must be a value-producing expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {
