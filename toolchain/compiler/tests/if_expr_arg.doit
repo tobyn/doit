@@ -1,0 +1,7 @@
+# AI-generated test
+# If-expression in function call argument
+behavior if_expr_arg {
+    @name "If Expr Arg"
+    @param in val "val"
+    set_reg if $val > 0 { 10 } else { 20 }
+}

@@ -508,6 +508,27 @@ let x, y = if a > 0 {
 }
 ```
 
+If-expressions support arithmetic and comparison continuation:
+
+```doit
+let x = if a > 0 { 10 } else { 20 } + 5
+let y = if a > 0 { 10 } else { 20 } > threshold
+```
+
+If-expressions can be used as function call arguments:
+
+```doit
+set_reg if a > 0 { 10 } else { 20 }
+```
+
+If-expressions can be used in `return` items in function bodies:
+
+```doit
+fn pick(a) {
+    return if a > 0 { 10 } else { 20 }
+}
+```
+
 If-expressions work in both behavior bodies and function bodies.
 
 ### Expression Priority

@@ -335,8 +335,16 @@ At behavior level, uses child `frameBuilder` per branch (same as
 `set_reg false, target` (single) or `set_reg false, retVals[i]` for
 each slot (multi) instead of emitting the else body/tail.
 
-**Deferred**: if-expressions in function arguments, in `return` items,
-continuation after if-expression.
+**Continuation**: After parsing an if-expression, `parseArithExprFromFull`
+tries arithmetic continuation, then `maybeExprContinuation` (or
+`maybeBhvExprContinuation`) tries comparison/boolean continuation.
+Same pattern as mode block expressions.
+
+**Call arguments**: If-expressions are accepted in `parseBhvArgExpr`
+(behavior level) and `parseFnBodyArgExpr` (fn bodies).
+
+**Return items**: `parseFnBodyReturnItem` detects `if` before the
+function-call check.
 
 ## Wait keyword
 

@@ -488,6 +488,16 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 				return nil, err
 			}
 			base = result
+		} else if tok.val == "if" {
+			ifExpr, err := p.parseBhvIfExpr(syms, "")
+			if err != nil {
+				return nil, err
+			}
+			result, err := p.parseArithExprFromFull(Expr(ifExpr), resolve)
+			if err != nil {
+				return nil, err
+			}
+			base = result
 		} else if strings.HasPrefix(tok.val, "$") {
 			// Resolve $ without readability check — direction checks
 			// happen later via checkCallDirections during emission.
@@ -880,14 +890,26 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 	}
 
 	// If-expression RHS: let x = if cond { ... } else { ... }
+	// Supports continuation: let x = if cond { a } else { b } + 1
 	if rhsTok.kind == tokIdent && rhsTok.val == "if" {
 		ifExpr, err := p.parseBhvIfExpr(syms, comment)
 		if err != nil {
 			return nil, err
 		}
+		result, err := p.parseArithExprFromFull(Expr(ifExpr), resolve)
+		if err != nil {
+			return nil, err
+		}
 		syms.vars[nameTok.val] = varInfo{mutable: mutable}
 		syms.usedVars[nameTok.val] = true
-		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: ifExpr, Comment: comment}}, nil
+		final, handled, err := p.maybeBhvExprContinuation(result, syms)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
+		}
+		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
 	}
 
 	if rhsTok.kind == tokNumber {
@@ -1106,12 +1128,24 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		}
 
 		// If-expression RHS: x = if cond { ... } else { ... }
+		// Supports continuation: x = if cond { a } else { b } + 1
 		if rhsTok.kind == tokIdent && rhsTok.val == "if" {
 			ifExpr, err := p.parseBhvIfExpr(syms, comment)
 			if err != nil {
 				return nil, err
 			}
-			return []Stmt{&AssignStmt{Target: tok.val, Value: ifExpr, Comment: comment}}, nil
+			result, err := p.parseArithExprFromFull(Expr(ifExpr), resolve)
+			if err != nil {
+				return nil, err
+			}
+			final, handled, err := p.maybeBhvExprContinuation(result, syms)
+			if err != nil {
+				return nil, err
+			}
+			if handled {
+				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+			}
+			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
 		}
 
 		if rhsTok.kind == tokNumber {

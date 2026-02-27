@@ -1,0 +1,12 @@
+# AI-generated test
+# If-expression in fn body call argument
+fn wrapper(a) {
+    let x = add(a, if a > 0 { 10 } else { 20 })
+    return x
+}
+
+behavior if_expr_fn_arg {
+    @name "If Expr Fn Arg"
+    @param in val "val"
+    let r = wrapper $val
+}

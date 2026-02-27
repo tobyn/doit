@@ -1,0 +1,12 @@
+# AI-generated test
+# If-expression with continuation in fn body
+fn pick_plus(a) {
+    let x = if a > 0 { 10 } else { 20 } + 5
+    return x
+}
+
+behavior if_expr_fn_cont {
+    @name "If Expr Fn Cont"
+    @param in val "val"
+    let r = pick_plus $val
+}

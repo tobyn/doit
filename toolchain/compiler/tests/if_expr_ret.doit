@@ -1,0 +1,11 @@
+# AI-generated test
+# If-expression in fn body return item
+fn pick(a) {
+    return if a > 0 { 10 } else { 20 }
+}
+
+behavior if_expr_ret {
+    @name "If Expr Ret"
+    @param in val "val"
+    let r = pick $val
+}

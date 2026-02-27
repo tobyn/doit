@@ -1,0 +1,7 @@
+# AI-generated test
+# If-expression with arithmetic continuation
+behavior if_expr_cont {
+    @name "If Expr Cont"
+    @param in val "val"
+    let x = if $val > 0 { 10 } else { 20 } + 5
+}

@@ -18,18 +18,6 @@ Potential optimization passes (would need a new optimization file):
 - **Dead code elimination**: Remove unreachable statements after
   `return`/`break`.
 
-## If-expression extensions
-
-If-expressions are implemented (see decisions.md "If-expressions").
-These extensions are deferred:
-
-- **Continuation after if-expression**: `if cond { a } else { b } + 1` —
-  using the if-expression result in a larger expression.
-- **If-expressions in function call arguments**: `my_fn if cond { a } else { b }` —
-  requires parsing if-expressions in argument position.
-- **If-expressions in `return` statement items**: `return if cond { a } else { b }` —
-  requires parsing if-expressions in return item position.
-
 ## Extended comparison and type check expressions
 
 - **Comparison in function arguments**: `notify (a > 5)` — needs

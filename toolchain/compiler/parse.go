@@ -142,6 +142,13 @@ func (p *parser) parseFnBodyArgExpr(ctx *fnBodyContext) (Expr, error) {
 		}
 		return p.parseArithExprFromFull(Expr(mbe), ctx.resolve)
 	}
+	if tok.kind == tokIdent && tok.val == "if" {
+		ifExpr, err := p.parseFnBodyIfExpr(ctx, "")
+		if err != nil {
+			return nil, err
+		}
+		return p.parseArithExprFromFull(Expr(ifExpr), ctx.resolve)
+	}
 	p.unget(tok)
 	return p.parseFnBodyExpr()
 }
@@ -2577,6 +2584,11 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 		return p.parseFnBodyModeBlockExpr(tok.val == "unlocked", ctx, "")
 	}
 
+	// If-expression: return if cond { a } else { b }
+	if tok.kind == tokIdent && tok.val == "if" {
+		return p.parseFnBodyIfExpr(ctx, "")
+	}
+
 	// Function call: known function with a return value
 	if tok.kind == tokIdent && !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" && !strings.HasPrefix(tok.val, "$") {
 		callee := p.fns[tok.val]
@@ -3365,8 +3377,24 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 	}
 
 	// If-expression RHS
+	// Supports continuation: let x = if cond { a } else { b } + 1
 	if rhsTok.kind == tokIdent && rhsTok.val == "if" {
-		return p.parseFnBodyIfExpr(ctx, "")
+		ifExpr, err := p.parseFnBodyIfExpr(ctx, "")
+		if err != nil {
+			return nil, err
+		}
+		result, err := p.parseArithExprFromFull(Expr(ifExpr), ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		final, handled, err := p.maybeExprContinuation(result, ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			return final, nil
+		}
+		return result, nil
 	}
 
 	// Instruction RHS
