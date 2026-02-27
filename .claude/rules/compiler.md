@@ -16,10 +16,10 @@ output format.
   `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
   `InstructionStmt`, `ModeBlockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
   `LoopStmt`, `ForStmt`, `BreakStmt`, `WaitStmt`, `exprTailStmt`) and `Expr` interface
-  (14 concrete types: `LiteralExpr`, `IdentExpr`, `CallExpr`,
+  (15 concrete types: `LiteralExpr`, `IdentExpr`, `CallExpr`,
   `InstructionExpr`, `ArithExpr`, `CompareExpr`, `TypeCheckExpr`,
-  `TruthyExpr`, `BoolChainExpr`, `ConstructorExpr`, `AmpersandExpr`,
-  `ExprListExpr`, `ModeBlockExpr`, `IfExpr`)
+  `TruthyExpr`, `BoolChainExpr`, `NotExpr`, `ConstructorExpr`,
+  `AmpersandExpr`, `ExprListExpr`, `ModeBlockExpr`, `IfExpr`)
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
   (`fnDef`, `symbolTable`, `unitRegisters`),
   `paramDef` (with `direction` field, `effectiveDirection()`)
@@ -53,6 +53,7 @@ output format.
   for arithmetic operators, `tokMinusMinus`/`tokMinusEquals`/
   `tokPercent`/`tokPercentEquals` for modulo,
   `tokStarEquals`/`tokSlashEquals` for compound assignment/decrement,
+  `tokBang` for `!` (negation prefix),
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),
   `Keywords` map (includes `"is"`, `"wait"`, `"true"`, `"false"`)
@@ -155,7 +156,8 @@ output format.
   `emitBhvForStmtRange`/`emitBhvForStmtRuntime`/
   `emitBhvWaitStmt` (control flow emission).
   Internal types: `resolvedBoolExpr` (pre-resolved boolean
-  tree for emission)
+  tree for emission), `negateResolved` helper (pushes negation to
+  leaves via De Morgan's law)
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
   `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +
   statements into `[]Stmt` via `parseBhv*` functions — default case
@@ -167,7 +169,8 @@ output format.
   `checkCallDirections`, `checkInstructionDirections`,
   `checkCallAnnotation`), `resolveAssignTarget`, single-expression
   emitters (`emitComparison`, `emitTypeCheck`, `emitTruthyCheck`,
-  `emitBoolCheckFrame`, `comparisonTerm` type), arithmetic/comparison
+  `emitBoolCheckFrame`, `comparisonTerm` type with `negated` field),
+  arithmetic/comparison
   op helpers (`isArithmeticOp`, `arithmeticOpName`, `isComparisonOp`,
   `isEqualityOp`, `isCompoundAssignOp`, `compoundAssignOpName`,
   `isHighPriorityArithOp`, `isLowPriorityArithOp`), type check helpers
@@ -608,6 +611,44 @@ should not be modified programmatically. When our implementation's output format
 differs from the reference (e.g., 1-based vs 0-based integer keys), the test
 code bridges the gap via the `refToNative` conversion routine in `main_test.go`
 rather than modifying the test data.
+
+### Writing test JSON: numbering conventions
+
+The test JSON uses two numbering systems simultaneously, which is
+confusing. Understanding the rules saves significant debugging time.
+
+**`refToNative`** only transforms **map keys** (adds +1 to numeric
+string keys). It does **not** touch integer values inside frames.
+
+This means:
+
+- **Frame keys** (top-level `"0"`, `"1"`, ...): 0-based in JSON.
+  `refToNative` converts to 1-based (`"0"` → `"1"`).
+- **Slot keys** within frames (`"0"`, `"1"`, ...): 0-based in JSON.
+  `refToNative` converts to 1-based.
+- **Frame reference values** (integers in slot values or `"next"`):
+  **1-based (native) in JSON**. `refToNative` does NOT change them.
+  The graph isomorphism matcher (`matchBehaviors`) compares integer
+  values directly between got and want sides.
+
+**Practical rule**: When writing a test `.json` file, use `compile -json`
+to get the compiler's native (1-based) output. Convert frame keys and
+slot keys to 0-based (subtract 1), but **leave integer frame reference
+values exactly as the compiler produced them** (1-based). Non-frame
+data like `"name"`, `"op"`, string slot values, `false`, and
+`{"num": N}` objects are unchanged.
+
+**Example**: If the compiler outputs native frame `"2"` with slot
+`"1": 3` (a frame reference to native frame 3), the test JSON should
+have frame key `"1"` (= 2-1) with slot key `"0"` (= 1-1) and value
+`3` (unchanged).
+
+**Why this works**: `matchBehaviors` uses BFS graph isomorphism. When
+it sees unequal integer values at the same slot position, it treats
+them as frame references and creates a mapping (e.g., got:3 → want:3).
+Equal integers are treated as data values. Since both sides use the
+same native numbering for frame refs, the mapping is identity and
+everything matches.
 
 ### Locale directive
 

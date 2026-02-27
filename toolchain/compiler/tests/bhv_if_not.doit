@@ -1,0 +1,9 @@
+# AI-generated test
+# Negation in if condition: if !x { ... }
+behavior bhv_if_not {
+    @name "If Not"
+    var x = 5
+    if !x {
+        notify "empty"
+    }
+}

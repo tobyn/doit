@@ -197,7 +197,12 @@ type TruthyExpr struct {
 // BoolChainExpr is a chain of boolean sub-expressions with && or ||.
 type BoolChainExpr struct {
 	Op       tokenKind // tokDoubleAmpersand or tokDoublePipe
-	Children []Expr    // each child is CompareExpr, TypeCheckExpr, TruthyExpr, or BoolChainExpr
+	Children []Expr    // each child is CompareExpr, TypeCheckExpr, TruthyExpr, NotExpr, or BoolChainExpr
+}
+
+// NotExpr is a negated boolean expression: `!expr`
+type NotExpr struct {
+	Value Expr
 }
 
 // ConstructorExpr is a type constructor: `Item("metalbar")`, `Coordinate(x, y)`
@@ -282,6 +287,7 @@ func (*CompareExpr) exprNode()      {}
 func (*TypeCheckExpr) exprNode()    {}
 func (*TruthyExpr) exprNode()       {}
 func (*BoolChainExpr) exprNode()    {}
+func (*NotExpr) exprNode()          {}
 func (*ConstructorExpr) exprNode()  {}
 func (*AmpersandExpr) exprNode()    {}
 func (*ExprListExpr) exprNode()     {}

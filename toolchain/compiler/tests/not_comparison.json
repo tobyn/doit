@@ -1,0 +1,27 @@
+{
+    "0": {
+        "op": "set_number",
+        "1": {"num": 10},
+        "2": "a"
+    },
+    "1": {
+        "op": "check_number",
+        "0": 3,
+        "1": 4,
+        "2": "a",
+        "3": {"num": 5},
+        "next": 4
+    },
+    "2": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 5
+    },
+    "3": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "name": "Not Comparison"
+}

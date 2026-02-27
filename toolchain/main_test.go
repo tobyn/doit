@@ -1306,13 +1306,66 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("bang_without_equals", func(t *testing.T) {
+	t.Run("negation_compiles", func(t *testing.T) {
 		src := `behavior a { var x = 5; let r = !x }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(err.Error(), "unexpected character") {
+	})
+
+	t.Run("double_negation_compiles", func(t *testing.T) {
+		src := `behavior a { var x = 5; let r = !!x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("negation_in_if_compiles", func(t *testing.T) {
+		src := `behavior a { var x = 5; if !x { notify "empty" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("negation_in_while_compiles", func(t *testing.T) {
+		src := `behavior a { var x = 5; while !x { notify "waiting" } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("negation_in_fn_body_compiles", func(t *testing.T) {
+		src := `fn check(v) { let r = !v; return r } behavior a { var x = 5; let r = check x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("negation_assign_compiles", func(t *testing.T) {
+		src := `behavior a { var x = 5; var r = 0; r = !x }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("negation_chain_compiles", func(t *testing.T) {
+		src := `behavior a { var x = 5; var y = 3; let r = !(x > 0 && y < 10) }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("negation_is_compiles", func(t *testing.T) {
+		src := `behavior a { let me = get_self; let r = !(me is Unit) }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

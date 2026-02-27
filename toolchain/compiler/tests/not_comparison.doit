@@ -1,0 +1,7 @@
+# AI-generated test
+# Negated comparison: let r = !(a > 5)
+behavior not_comparison {
+    @name "Not Comparison"
+    var a = 10
+    let r = !(a > 5)
+}

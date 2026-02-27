@@ -151,6 +151,35 @@ handled by `tokLParen` cases in `parseBhvArgExpr` and
 `parseFnBodyArgExpr`, plus `maybeExprContinuation` in paren-mode
 `parseBhvCallArgs` and `parseFnBodyCallArgs`.
 
+## Negation operator (`!`)
+
+`!expr` negates any boolean sub-expression. Implementation uses the
+swap-targets approach: the boolean emission system already routes
+through `trueTarget`/`falseTarget` parameters, so negation just swaps
+them. No new opcodes or frame types.
+
+**Parsing**: `tokBang` token in scanner. `parseBoolPrimary` checks for
+`tokBang` at the top and recursively calls itself, wrapping the result
+in `NotExpr`. This naturally handles `!!x`, `!a > 5`, `!(a && b)`,
+`!x is Unit`, `!x` (negated truthy).
+
+**Resolution**: `negateResolved` pushes negation to leaves via
+De Morgan's law. For leaves, toggles `comparisonTerm.negated`. For
+groups, swaps `chainOp` (`&&`↔`||`) and recurses. Both
+`resolveBhvBoolTree` and `resolveFnBoolTree` handle `*NotExpr` by
+resolving the inner expression then calling `negateResolved`.
+
+**Emission**: `emitBoolCheckFrame` swaps `trueTarget`/`falseTarget`
+when `term.negated` is true. The single-leaf backward-compat path in
+`emitBhvBoolExprTo`/`emitFnBoolExprTo` is guarded by
+`!resolved.term.negated` so negated single leaves fall through to the
+chain path which handles negation.
+
+**RHS parsing**: `parseBhvVarInit` and `parseBhvDefaultStmt` (assignment
+path) check for `tokBang` and route through `parseBoolExpr`. Fn body
+RHS (`parseFnBodyRHSExpr`) already falls through to `parseBoolExpr`
+for non-identifier tokens.
+
 ## Structured locking with `locked`/`unlocked` blocks
 
 Lexically scoped mode blocks that set execution mode on entry and
@@ -289,8 +318,9 @@ to existing 3-frame emitters for backward compatibility.
 
 ## Expression priority hierarchy
 
-Highest to lowest: arithmetic > comparisons > function calls > boolean
-operators. So `my_fn b + 1, c || d` parses as `(my_fn(b+1, c)) || d`.
+Highest to lowest: arithmetic > comparisons > function calls > negation
+(`!`) > boolean operators (`&&`/`||`). So `my_fn b + 1, c || d` parses
+as `(my_fn(b+1, c)) || d`. `!a > 5` parses as `!(a > 5)`.
 
 Function calls work in any boolean term position. First position uses
 the existing call-as-expression path. Non-first position uses the

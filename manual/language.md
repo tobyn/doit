@@ -571,7 +571,8 @@ evaluated in this priority order (highest first):
 2. **Comparisons** (`>`, `<`, `>=`, `<=`, `==`, `!=`, `is`) — compare
    arithmetic results
 3. **Function calls** — consume arguments (which can contain arithmetic)
-4. **Boolean** (`&&`, `||`) — chain comparisons, function results, or
+4. **Negation** (`!`) — prefix negation of any boolean sub-expression
+5. **Boolean** (`&&`, `||`) — chain comparisons, function results, or
    truthy values
 
 This means you can write combined expressions naturally:
@@ -829,6 +830,24 @@ let r = (a > 1 || b < 2) && c > 3
 var r = (a > 1 || b < 2) && c > 3
 r = (a > 1 || b < 2) && c > 3
 ```
+
+#### Negation operator (`!`)
+
+The `!` prefix operator negates a boolean expression:
+
+```doit
+let not_empty = !x              # true if x is empty
+let not_big = !(a > 100)        # true if a <= 100
+let outside = !(a > 0 && a < 100)  # true if a <= 0 or a >= 100
+let not_unit = !(me is Unit)    # true if me is not a Unit
+```
+
+`!` works with any boolean sub-expression: comparisons, type checks,
+truthy checks, and `&&`/`||` chains. Double negation (`!!x`) is
+allowed.
+
+For chains, `!` applies De Morgan's law internally — `!(a && b)`
+becomes `!a || !b`, and `!(a || b)` becomes `!a && !b`.
 
 > **Not supported:** `is Number` (cannot distinguish from null).
 

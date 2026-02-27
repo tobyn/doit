@@ -744,7 +744,7 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 		return nil
 	case *ArithExpr:
 		return p.emitFnArithTo(e, target, b, paramMap, usedVars, comment, pos)
-	case *CompareExpr, *TypeCheckExpr, *TruthyExpr, *BoolChainExpr:
+	case *CompareExpr, *TypeCheckExpr, *TruthyExpr, *BoolChainExpr, *NotExpr:
 		return p.emitFnBoolExprTo(expr, target, b, paramMap, usedVars, comment, pos)
 	case *ModeBlockExpr:
 		return p.emitFnModeBlockExpr(e, target, b, paramMap, usedVars, comment, pos)
@@ -922,8 +922,10 @@ func (p *parser) emitFnBoolExprTo(expr Expr, target any, b *frameBuilder, paramM
 		return err
 	}
 
-	// Single-leaf: delegate to specialized emitters (matching old behavior)
-	if resolved.isLeaf() {
+	// Single non-negated leaf: delegate to specialized emitters (matching old behavior).
+	// Negated leaves fall through to the chain/group path which handles
+	// negation via emitBoolCheckFrame's target swap.
+	if resolved.isLeaf() && !resolved.term.negated {
 		t := resolved.term
 		switch {
 		case isTypeCheckOp(t.op):
@@ -987,6 +989,13 @@ func (p *parser) resolveFnBoolTree(expr Expr, b *frameBuilder, paramMap map[stri
 			return nil, err
 		}
 		return &resolvedBoolExpr{term: &comparisonTerm{op: tokTruthy, lhs: lhs}}, nil
+	case *NotExpr:
+		resolved, err := p.resolveFnBoolTree(e.Value, b, paramMap, usedVars, pos)
+		if err != nil {
+			return nil, err
+		}
+		negateResolved(resolved)
+		return resolved, nil
 	case *BoolChainExpr:
 		children := make([]*resolvedBoolExpr, len(e.Children))
 		for i, child := range e.Children {

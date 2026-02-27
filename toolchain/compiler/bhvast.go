@@ -277,6 +277,14 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 		return nil, err
 	}
 
+	if tok.kind == tokBang {
+		inner, err := p.parseBoolPrimary(resolve)
+		if err != nil {
+			return nil, err
+		}
+		return &NotExpr{Value: inner}, nil
+	}
+
 	if tok.kind == tokLParen {
 		inner, err := p.parseBoolExpr(resolve)
 		if err != nil {
@@ -1119,6 +1127,17 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: expr, Comment: comment}}, nil
 	}
 
+	if rhsTok.kind == tokBang {
+		p.unget(rhsTok)
+		expr, err := p.parseBoolExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		syms.vars[nameTok.val] = varInfo{mutable: mutable}
+		syms.usedVars[nameTok.val] = true
+		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: expr, Comment: comment}}, nil
+	}
+
 	return nil, p.errorf(rhsTok.pos, "expected number, function call, or constructor after '=', got %s", rhsTok.describe())
 }
 
@@ -1315,6 +1334,15 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 					&AssignStmt{Target: tok.val, Value: expr, Comment: comment},
 					&AssignStmt{Target: tok.val, Value: contExpr, Comment: ""},
 				}, nil
+			}
+			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment}}, nil
+		}
+
+		if rhsTok.kind == tokBang {
+			p.unget(rhsTok)
+			expr, err := p.parseBoolExpr(resolve)
+			if err != nil {
+				return nil, err
 			}
 			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment}}, nil
 		}
@@ -2583,7 +2611,7 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 			return nil, err
 		}
 		return tmp, nil
-	case *CompareExpr, *TypeCheckExpr, *TruthyExpr, *BoolChainExpr:
+	case *CompareExpr, *TypeCheckExpr, *TruthyExpr, *BoolChainExpr, *NotExpr:
 		tmp := allocUniqueVar("@bool", syms.usedVars)
 		if err := p.emitBhvBoolExprTo(expr, tmp, syms, b, comment); err != nil {
 			return nil, err
@@ -2663,6 +2691,8 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 	case *TruthyExpr:
 		return p.emitBhvBoolExprTo(expr, target, syms, b, comment)
 	case *BoolChainExpr:
+		return p.emitBhvBoolExprTo(expr, target, syms, b, comment)
+	case *NotExpr:
 		return p.emitBhvBoolExprTo(expr, target, syms, b, comment)
 	case *ModeBlockExpr:
 		return p.emitBhvModeBlockExpr(e, target, syms, b, comment)
@@ -2799,9 +2829,11 @@ func (p *parser) emitBhvBoolExprTo(expr Expr, target any, syms *symbolTable, b *
 		return err
 	}
 
-	// For single-leaf expressions, delegate to the specialized emitters
-	// that match the old codegen behavior (omitting "next" for > < !=).
-	if resolved.isLeaf() {
+	// For single non-negated leaf expressions, delegate to the specialized
+	// emitters that match the old codegen behavior (omitting "next" for > < !=).
+	// Negated leaves fall through to the chain/group path which handles
+	// negation via emitBoolCheckFrame's target swap.
+	if resolved.isLeaf() && !resolved.term.negated {
 		t := resolved.term
 		switch {
 		case isTypeCheckOp(t.op):
@@ -2888,6 +2920,13 @@ func (p *parser) resolveBhvBoolTree(expr Expr, syms *symbolTable, b *frameBuilde
 			return nil, err
 		}
 		return &resolvedBoolExpr{term: &comparisonTerm{op: tokTruthy, lhs: lhs}}, nil
+	case *NotExpr:
+		resolved, err := p.resolveBhvBoolTree(e.Value, syms, b)
+		if err != nil {
+			return nil, err
+		}
+		negateResolved(resolved)
+		return resolved, nil
 	case *BoolChainExpr:
 		children := make([]*resolvedBoolExpr, len(e.Children))
 		for i, child := range e.Children {
@@ -2900,6 +2939,24 @@ func (p *parser) resolveBhvBoolTree(expr Expr, syms *symbolTable, b *frameBuilde
 		return &resolvedBoolExpr{chainOp: e.Op, children: children}, nil
 	default:
 		return nil, fmt.Errorf("unsupported boolean expression type %T", expr)
+	}
+}
+
+// negateResolved pushes negation down to leaves of a resolved boolean tree.
+// Leaf: toggle negated. Group: De Morgan's law — swap chainOp, recurse.
+func negateResolved(expr *resolvedBoolExpr) {
+	if expr.isLeaf() {
+		expr.term.negated = !expr.term.negated
+		return
+	}
+	// De Morgan's: !(a && b) → !a || !b, !(a || b) → !a && !b
+	if expr.chainOp == tokDoubleAmpersand {
+		expr.chainOp = tokDoublePipe
+	} else {
+		expr.chainOp = tokDoubleAmpersand
+	}
+	for _, child := range expr.children {
+		negateResolved(child)
 	}
 }
 

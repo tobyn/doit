@@ -1,0 +1,7 @@
+# AI-generated test
+# Negated truthy: let r = !x
+behavior not_simple {
+    @name "Not Simple"
+    var x = 5
+    let r = !x
+}

@@ -1,0 +1,8 @@
+# AI-generated test
+# Negated chain with De Morgan's: let r = !(a > 5 && b < 10)
+behavior not_chain {
+    @name "Not Chain"
+    var a = 10
+    var b = 3
+    let r = !(a > 5 && b < 10)
+}

@@ -798,12 +798,17 @@ func (p *parser) emitTruthyCheck(lhs, target any, b *frameBuilder, comment strin
 // For the 'is' type check op, rhs is a string (the wire-format slot key).
 // For tokTruthy, rhs is nil (only lhs is used).
 type comparisonTerm struct {
-	op  tokenKind // tokGreater, tokLess, tokGreaterEquals, tokLessEquals, tokDoubleEquals, tokNotEquals, tokIs, or tokTruthy
-	lhs any
-	rhs any
+	op      tokenKind // tokGreater, tokLess, tokGreaterEquals, tokLessEquals, tokDoubleEquals, tokNotEquals, tokIs, or tokTruthy
+	lhs     any
+	rhs     any
+	negated bool // true when prefixed with !
 }
 
 func (p *parser) emitBoolCheckFrame(term *comparisonTerm, trueTarget, falseTarget frameRef, b *frameBuilder, comment string) {
+	if term.negated {
+		trueTarget, falseTarget = falseTarget, trueTarget
+	}
+
 	var check map[string]any
 
 	if term.op == tokTruthy {

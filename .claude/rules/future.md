@@ -31,12 +31,14 @@ type checks, truthy checks, arithmetic sub-expressions, and function
 calls in conditions. The old deferred body pattern was replaced with
 forward-jump patching (same pattern as fn bodies).
 
-### 2. Negation operator (`!` or `not`)
+### ~~2. Negation operator (`!`)~~ (Done)
 
-No way to negate a boolean expression. Workarounds require manually
-flipping operators or applying De Morgan's law. Negating `is` checks
-requires an intermediate variable. Adding `!expr` or `not expr` as a
-prefix operator in boolean expressions would cover all cases cleanly.
+`!expr` prefix operator negates any boolean expression. Uses the
+swap-targets approach in emission — `emitBoolCheckFrame` swaps
+`trueTarget`/`falseTarget` when `comparisonTerm.negated` is set.
+For chains, `negateResolved` applies De Morgan's law to push negation
+to leaves. Works in `let`/`var` init, assignment, `if`/`while`
+conditions, fn bodies, and parenthesized call arguments.
 
 ### 3. Negative number literals in variable init/assignment
 
