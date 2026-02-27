@@ -113,6 +113,10 @@ type parser struct {
 	behaviorIDs []string // collected during pass 1
 	loopDepth   int              // >0 when inside a loop body
 	loopLabels  map[string]bool  // labels of enclosing loops
+
+	// callExprParser is set by behavior/fn body contexts to enable
+	// function call parsing in boolean primary position (e.g., d || my_fn x).
+	callExprParser func(callee *fnDef, calleeTok token) (Expr, error)
 }
 
 // enterLoop records entry into a loop body. If label is non-empty, it is

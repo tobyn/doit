@@ -1,0 +1,35 @@
+{
+    "0": {
+        "op": "get_var",
+        "0": "flag",
+        "1": "@ctor"
+    },
+    "1": {
+        "op": "compare_register",
+        "0": 5,
+        "1": "d",
+        "2": false,
+        "next": 3
+    },
+    "2": {
+        "op": "compare_register",
+        "0": 5,
+        "1": "@ctor",
+        "2": false,
+        "next": 4
+    },
+    "3": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 6
+    },
+    "4": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "name": "Bool Fn Call Fn",
+    "parameters": [false],
+    "pnames": ["d"]
+}

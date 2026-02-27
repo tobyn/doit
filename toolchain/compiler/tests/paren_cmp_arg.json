@@ -1,0 +1,28 @@
+{
+    "0": {
+        "op": "check_number",
+        "0": 3,
+        "1": 2,
+        "2": "a",
+        "3": {"num": 5}
+    },
+    "1": {
+        "op": "set_reg",
+        "0": false,
+        "1": "@bool",
+        "next": 4
+    },
+    "2": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "@bool"
+    },
+    "3": {
+        "op": "set_reg",
+        "0": "@bool",
+        "1": "x"
+    },
+    "name": "Paren Cmp Arg",
+    "parameters": [false],
+    "pnames": ["a"]
+}

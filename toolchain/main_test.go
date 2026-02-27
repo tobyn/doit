@@ -1959,6 +1959,51 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("paren_cmp_arg_unclosed", func(t *testing.T) {
+		src := `behavior a { @param in x "x"; let r = set_reg (x > 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error for unclosed parenthesized expression")
+		}
+		if !strings.Contains(err.Error(), "unexpected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("paren_cmp_fn_arg_unclosed", func(t *testing.T) {
+		src := `
+fn helper(val) { return instruction "set_reg" { 0: val; 1: @1 } }
+fn caller(x) { let r = helper (x > 5; return r }
+behavior a { @param in x "x"; let r = caller x }
+`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error for unclosed parenthesized expression in fn body")
+		}
+		if !strings.Contains(err.Error(), "unexpected") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("paren_cmp_arg_compiles", func(t *testing.T) {
+		src := `behavior a { @param in x "x"; let r = set_reg (x > 5) }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bool_fn_call_compiles", func(t *testing.T) {
+		src := `
+fn get_flag() { return instruction "get_var" { 0: "flag"; 1: @1 } }
+behavior a { @param in d "d"; let r = d || get_flag }
+`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

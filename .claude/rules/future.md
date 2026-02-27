@@ -18,11 +18,4 @@ Potential optimization passes (would need a new optimization file):
 - **Dead code elimination**: Remove unreachable statements after
   `return`/`break`.
 
-## Extended comparison and type check expressions
-
-- **Comparison in function arguments**: `notify (a > 5)` — needs
-  parenthesized expressions to disambiguate from `notify a, ...`.
-- **Function calls in non-first boolean position**: `d || my_fn x`
-  would require interleaved frame emission for proper short-circuit
-  semantics.
 

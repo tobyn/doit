@@ -1,0 +1,7 @@
+# AI-generated test
+# Parenthesized comparison in function call argument
+behavior paren_cmp_arg {
+    @name "Paren Cmp Arg"
+    @param in a "a"
+    let x = set_reg (a > 5)
+}

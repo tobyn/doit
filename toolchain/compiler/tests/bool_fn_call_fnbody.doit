@@ -1,0 +1,19 @@
+# AI-generated test
+# Function call in non-first boolean position in fn body
+fn get_flag() {
+    return instruction "get_var" {
+        0: "flag"
+        1: @1
+    }
+}
+
+fn checker(d) {
+    let r = d || get_flag
+    return r
+}
+
+behavior bool_fn_call_fnbody {
+    @name "Bool Fn Call Fn"
+    @param in d "d"
+    let r = checker d
+}

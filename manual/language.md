@@ -604,6 +604,24 @@ notify_number b + 1
 my_fn a * 2, b + c
 ```
 
+#### Parenthesized comparisons in function arguments
+
+Comparison and boolean expressions can be passed as function arguments
+by wrapping them in parentheses:
+
+```doit
+set_reg (a > 5)
+my_fn (x == y), (count > 0 && active)
+```
+
+A parenthesized expression containing only a simple value (no
+comparison or boolean operator) is treated as a regular value with
+optional arithmetic continuation:
+
+```doit
+set_reg (a + 1)    # arithmetic — same as set_reg a + 1
+```
+
 #### Value semantics
 
 Each arithmetic operation compiles to a single instruction frame. The
@@ -740,7 +758,7 @@ let c = x > 5 && active       # comparison AND truthy check
 
 #### Function call results in boolean chains
 
-A function call can be the first term in a boolean chain. The function
+A function call can appear as any term in a boolean chain. The function
 always executes, and its result is tested for truthiness or used as
 the LHS of a comparison:
 
@@ -748,6 +766,8 @@ the LHS of a comparison:
 let a = get_number x || d           # fn result OR'd with d
 let b = get_number x > 5            # fn result compared to 5
 let c = my_fn b + 1, c || d         # fn with arithmetic args, then ||
+let d = active || get_flag           # fn call in non-first position
+let e = active || get_count > 5      # fn call with comparison in non-first position
 ```
 
 `&&` binds tighter than `||` (standard precedence), so you can mix
@@ -780,8 +800,7 @@ var r = (a > 1 || b < 2) && c > 3
 r = (a > 1 || b < 2) && c > 3
 ```
 
-> **Not yet supported:** Function calls in non-first boolean position
-> (`d || my_fn x`); `is Number` (cannot distinguish from null).
+> **Not supported:** `is Number` (cannot distinguish from null).
 
 ### `while`
 

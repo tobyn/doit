@@ -44,8 +44,10 @@ output format.
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), `parser` struct (embeds `scanner`, adds `fns`, `target`,
   `behaviorIDs`, `loopDepth int` for nesting depth, `loopLabels
-  map[string]bool` for active loop labels; `enterLoop(label)`/
-  `exitLoop(label)` helpers manage loop state), token types (including `tokAmpersand` for `&`,
+  map[string]bool` for active loop labels, `callExprParser` callback
+  for context-specific function call parsing in boolean primary position;
+  `enterLoop(label)`/`exitLoop(label)` helpers manage loop state),
+  token types (including `tokAmpersand` for `&`,
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
   `tokNotEquals` for `!=`, `tokPlus`/`tokMinus`/`tokStar`/`tokSlash`
   for arithmetic operators, `tokMinusMinus`/`tokMinusEquals`/
@@ -75,7 +77,8 @@ output format.
   `parseFnBodyForStmt` (variadic `label ...string`),
   `parseFnBodyWaitStmt`,
   `parseFnBodyExpr`, `parseFnBodyArgExpr` (extends `parseFnBodyExpr`
-  with mode block and if-expression detection for call arguments),
+  with mode block, if-expression, and parenthesized boolean expression
+  detection for call arguments),
   `parseFnBodyConstructorExpr`, `parseFnBodyCallArgs` (takes
   `*fnBodyContext`),
   `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
@@ -104,13 +107,15 @@ output format.
   used by both behavior and fn body paths): `parseArithExpr`/
   `parseArithExprFrom`/`parseArithExprFromFull`/`parseArithTerm`/
   `parseArithTermFrom`/`parseArithPrimary` (PEMDAS arithmetic →
-  `ArithExpr`), `parseBoolExpr`/`parseBoolPrimary`/`parseBoolChain`
-  (boolean expressions → `BoolChainExpr`/`CompareExpr`/
+  `ArithExpr`), `parseBoolExpr`/`parseBoolPrimary` (with
+  `callExprParser` support for function calls in boolean position)/
+  `parseBoolChain` (boolean expressions → `BoolChainExpr`/`CompareExpr`/
   `TypeCheckExpr`/`TruthyExpr`),
   `maybeExprContinuation` (resolver-parameterized continuation
   checker), `maybeBhvExprContinuation` (wraps with `bhvResolver`).
   Behavior-level argument parser:
-  `parseBhvArgExpr`. Constructor parsers: `parseBhvConstructorExpr`/
+  `parseBhvArgExpr` (with `tokLParen` for parenthesized boolean
+  expressions). Constructor parsers: `parseBhvConstructorExpr`/
   `parseBhvAmpersandExpr`. Statement parsers:
   `parseBhvVarInit` → `LetStmt`/`AssignStmt`,
   `parseBhvDefaultStmt` → `CallStmt`/`AssignStmt`/`CompoundAssignStmt`/

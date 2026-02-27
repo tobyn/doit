@@ -1,0 +1,19 @@
+# AI-generated test
+# Parenthesized comparison in fn body function call argument
+fn compare_set(val) {
+    return instruction "set_reg" {
+        0: val
+        1: @1
+    }
+}
+
+fn caller(a) {
+    let x = compare_set (a > 5)
+    return x
+}
+
+behavior paren_cmp_fn_arg {
+    @name "Paren Cmp Fn Arg"
+    @param in a "a"
+    let x = caller a
+}

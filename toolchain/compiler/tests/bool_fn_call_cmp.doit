@@ -1,0 +1,14 @@
+# AI-generated test
+# Function call with comparison in non-first boolean position
+fn get_count() {
+    return instruction "get_var" {
+        0: "count"
+        1: @1
+    }
+}
+
+behavior bool_fn_call_cmp {
+    @name "Bool Fn Call Cmp"
+    @param in d "d"
+    let r = d || get_count > 5
+}

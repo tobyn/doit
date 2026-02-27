@@ -191,6 +191,16 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	syms := newSymbolTable()
 	hasInstruction := false // true after any instruction-emitting statement
 
+	// Enable function calls in boolean primary position (e.g., d || my_fn x)
+	p.callExprParser = func(callee *fnDef, calleeTok token) (Expr, error) {
+		args, kwArgs, err := p.parseBhvCallArgs(callee, calleeTok, syms)
+		if err != nil {
+			return nil, err
+		}
+		return &CallExpr{Name: calleeTok.val, Args: args, KwArgs: kwArgs}, nil
+	}
+	defer func() { p.callExprParser = nil }()
+
 	// Phase 1: Parse attributes and statements into AST nodes.
 	var stmts []Stmt
 	for {

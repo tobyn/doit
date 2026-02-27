@@ -1,0 +1,36 @@
+{
+    "0": {
+        "op": "get_var",
+        "0": "count",
+        "1": "@call"
+    },
+    "1": {
+        "op": "compare_register",
+        "0": 5,
+        "1": "d",
+        "2": false,
+        "next": 3
+    },
+    "2": {
+        "op": "check_number",
+        "0": 5,
+        "1": 4,
+        "2": "@call",
+        "3": {"num": 5},
+        "next": 4
+    },
+    "3": {
+        "op": "set_reg",
+        "0": false,
+        "1": "r",
+        "next": 6
+    },
+    "4": {
+        "op": "set_reg",
+        "0": {"num": 1},
+        "1": "r"
+    },
+    "name": "Bool Fn Call Cmp",
+    "parameters": [false],
+    "pnames": ["d"]
+}

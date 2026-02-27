@@ -302,6 +302,15 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 			lhs = &LiteralExpr{Value: false}
 		} else if tok.val == "true" {
 			lhs = &LiteralExpr{Value: map[string]any{"num": 1}}
+		} else if p.callExprParser != nil && p.fns[tok.val] != nil && p.fns[tok.val].hasReturn() {
+			callExpr, err := p.callExprParser(p.fns[tok.val], tok)
+			if err != nil {
+				return nil, err
+			}
+			lhs, err = p.parseArithExprFromFull(callExpr, resolve)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			resolved, err := resolve(tok)
 			if err != nil {
@@ -522,6 +531,25 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 			}
 			base = result
 		}
+	case tokLParen:
+		// Parenthesized expression: (a > 5), (a + 1), etc.
+		inner, err := p.parseBoolExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		if truthy, ok := inner.(*TruthyExpr); ok {
+			// Simple value — allow arithmetic continuation
+			result, err := p.parseArithExprFromFull(truthy.Value, resolve)
+			if err != nil {
+				return nil, err
+			}
+			base = result
+		} else {
+			base = inner
+		}
 	default:
 		return nil, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
 	}
@@ -730,6 +758,18 @@ func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) (
 		val, err := p.parseBhvArgExpr(syms)
 		if err != nil {
 			return nil, nil, err
+		}
+		// In parenthesized call mode, try boolean continuation
+		// to support: notify(val > 5), add(a, b == c)
+		if paren {
+			resolve := p.bhvResolver(syms)
+			cont, handled, err := p.maybeExprContinuation(val, resolve)
+			if err != nil {
+				return nil, nil, err
+			}
+			if handled {
+				val = cont
+			}
 		}
 		args[i] = val
 	}
@@ -2585,6 +2625,12 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 	case *IfExpr:
 		tmp := allocUniqueVar("@if", syms.usedVars)
 		if err := p.emitBhvIfExpr(e, tmp, syms, b, comment); err != nil {
+			return nil, err
+		}
+		return tmp, nil
+	case *CompareExpr, *TypeCheckExpr, *TruthyExpr, *BoolChainExpr:
+		tmp := allocUniqueVar("@bool", syms.usedVars)
+		if err := p.emitBhvBoolExprTo(expr, tmp, syms, b, comment); err != nil {
 			return nil, err
 		}
 		return tmp, nil

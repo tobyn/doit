@@ -149,6 +149,20 @@ func (p *parser) parseFnBodyArgExpr(ctx *fnBodyContext) (Expr, error) {
 		}
 		return p.parseArithExprFromFull(Expr(ifExpr), ctx.resolve)
 	}
+	if tok.kind == tokLParen {
+		// Parenthesized expression: (a > 5), (a + 1), etc.
+		inner, err := p.parseBoolExpr(ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		if truthy, ok := inner.(*TruthyExpr); ok {
+			return p.parseArithExprFromFull(truthy.Value, ctx.resolve)
+		}
+		return inner, nil
+	}
 	p.unget(tok)
 	return p.parseFnBodyExpr()
 }
@@ -305,6 +319,17 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, ctx *fnBody
 		if err != nil {
 			return nil, nil, err
 		}
+		// In parenthesized call mode, try boolean continuation
+		// to support: my_fn(a > 5), my_fn(a, b == c)
+		if paren {
+			cont, handled, err := p.maybeExprContinuation(arg, ctx.resolve)
+			if err != nil {
+				return nil, nil, err
+			}
+			if handled {
+				arg = cont
+			}
+		}
 		args[i] = arg
 	}
 
@@ -352,6 +377,16 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, ctx *fnBody
 			val, err := p.parseFnBodyArgExpr(ctx)
 			if err != nil {
 				return nil, nil, err
+			}
+			// In parenthesized call mode, try boolean continuation
+			if paren {
+				cont, handled, err := p.maybeExprContinuation(val, ctx.resolve)
+				if err != nil {
+					return nil, nil, err
+				}
+				if handled {
+					val = cont
+				}
 			}
 			kwArgs[dirOrKw.val] = val
 
@@ -2333,6 +2368,17 @@ func (p *parser) parseUserFn() error {
 		resolve:   p.fnBodyResolver(paramDirs),
 	}
 
+	// Enable function calls in boolean primary position (e.g., d || my_fn x)
+	prevCallExprParser := p.callExprParser
+	p.callExprParser = func(callee *fnDef, calleeTok token) (Expr, error) {
+		args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &CallExpr{Name: calleeTok.val, Args: args, KwArgs: kwArgs}, nil
+	}
+	defer func() { p.callExprParser = prevCallExprParser }()
+
 	astBody, err := p.parseFnBodyStmts(ctx)
 	if err != nil {
 		return err
@@ -2587,6 +2633,21 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 	// If-expression: return if cond { a } else { b }
 	if tok.kind == tokIdent && tok.val == "if" {
 		return p.parseFnBodyIfExpr(ctx, "")
+	}
+
+	// Parenthesized expression: return (a > 5)
+	if tok.kind == tokLParen {
+		inner, err := p.parseBoolExpr(ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		if truthy, ok := inner.(*TruthyExpr); ok {
+			return truthy.Value, nil
+		}
+		return inner, nil
 	}
 
 	// Function call: known function with a return value

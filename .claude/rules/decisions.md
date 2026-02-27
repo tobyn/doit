@@ -108,8 +108,9 @@ true-set pattern.
 - **Supported**: `let`/`var` init and assignment RHS. Number literal
   LHS. Arithmetic sub-expressions on both sides. Constructor RHS
   (`a == Item("metalbar")`) via `parseArithConstructor` in
-  `parseArithPrimary`.
-- **Deferred**: comparison in function call arguments.
+  `parseArithPrimary`. Parenthesized comparisons in function call
+  arguments (`set_reg (a > 5)`) via `tokLParen` handling in
+  `parseBhvArgExpr` and `parseFnBodyArgExpr`.
 
 ## Type check operator (`is`)
 
@@ -123,7 +124,8 @@ supported (`value_type` cannot distinguish numbers from null).
 `tokIs` exists only as an internal marker in `comparisonTerm.op` — `is`
 scans as `tokIdent` with val `"is"`.
 
-**Deferred**: `is` in function arguments.
+Type checks work in function arguments via parenthesized expressions:
+`set_reg (x is Unit)`.
 
 ## Logical operators (`&&` and `||`)
 
@@ -144,7 +146,11 @@ Truthy checks use `compare_register value, false` — Different
 Single comparison without `&&`/`||` delegates to the existing 3-frame
 emitters for backward-compatible output.
 
-**Deferred**: logical expressions in function call arguments.
+Logical expressions work in function arguments via parenthesized
+expressions: `set_reg (a > 5 && b < 10)`. Parenthesized args are
+handled by `tokLParen` cases in `parseBhvArgExpr` and
+`parseFnBodyArgExpr`, plus `maybeExprContinuation` in paren-mode
+`parseBhvCallArgs` and `parseFnBodyCallArgs`.
 
 ## Structured locking with `locked`/`unlocked` blocks
 
@@ -279,8 +285,14 @@ to existing 3-frame emitters for backward compatibility.
 Highest to lowest: arithmetic > comparisons > function calls > boolean
 operators. So `my_fn b + 1, c || d` parses as `(my_fn(b+1, c)) || d`.
 
-Function calls work as first boolean term only (`my_fn x || d`).
-Non-first position (`d || my_fn x`) is deferred.
+Function calls work in any boolean term position. First position uses
+the existing call-as-expression path. Non-first position uses the
+`callExprParser` callback on the `parser` struct, set contextually by
+`parseBehaviorBody` and `parseUserFn`. In `parseBoolPrimary`, when
+an identifier matches a function with a return value and
+`callExprParser` is set, the function is called and its result becomes
+the boolean primary (with optional arithmetic/comparison continuation).
+Example: `d || my_fn x`, `d || get_count > 5`.
 
 ## Multi-arity expression lists
 
