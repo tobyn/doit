@@ -48,10 +48,6 @@ These extensions are deferred:
   parenthesized expressions to disambiguate from `notify a, ...`.
 - **Constructor RHS**: `a == Item("metalbar")` — requires parsing
   type constructors in comparison RHS position.
-- **Implicit `&&`/`||` precedence**: `a > 1 && b < 5 || c > 3`
-  without parentheses is a compile error. Could add implicit
-  precedence (`&&` binds tighter than `||`), but parenthesized
-  grouping is already supported.
 - **`is Number`**: `value_type` cannot distinguish numbers from null
   (both fall through to "No Match"), so `is Number` is not available.
   Could potentially be implemented with `check_number` against itself

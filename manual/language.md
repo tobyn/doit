@@ -591,7 +591,6 @@ is the arithmetic result of both operands' number components. This means
 `Item("metalbar") & 3` followed by `item + 2` would produce
 `Item("metalbar") & 5` — the item type is preserved.
 
-> **Not yet supported:** Arithmetic expressions in function bodies.
 
 ### Comparison and Type Check Operators
 
@@ -728,20 +727,16 @@ let b = get_number x > 5            # fn result compared to 5
 let c = my_fn b + 1, c || d         # fn with arithmetic args, then ||
 ```
 
-Mixing `&&` and `||` at the same level is not allowed — use parentheses
-to group sub-expressions:
+`&&` binds tighter than `||` (standard precedence), so you can mix
+them freely:
 
 ```doit
-# ERROR: cannot mix '&&' and '||' without parentheses
-let bad = a > 1 && b < 5 || c > 3
-
-# OK: parentheses make the grouping explicit
-let ok1 = (a > 1 && b < 5) || c > 3
-let ok2 = a > 1 && (b < 5 || c > 3)
+let r = a > 1 && b < 5 || c > 3    # same as (a > 1 && b < 5) || c > 3
+let r = a || b && c                  # same as a || (b && c)
 ```
 
-Parentheses can be used to build arbitrarily complex boolean expressions
-by nesting `&&` and `||` at different levels:
+Parentheses can override the default precedence or make grouping
+explicit:
 
 ```doit
 let r = (a > 1 || b < 2) && c > 3
@@ -762,10 +757,9 @@ var r = (a > 1 || b < 2) && c > 3
 r = (a > 1 || b < 2) && c > 3
 ```
 
-> **Not yet supported:** Comparison and type check expressions in function
-> bodies; constructor values on the right side (`a == Item("metalbar")`);
-> function calls in non-first boolean position (`d || my_fn x`);
-> `is Number` (cannot distinguish from null).
+> **Not yet supported:** Constructor values on the right side
+> (`a == Item("metalbar")`); function calls in non-first boolean position
+> (`d || my_fn x`); `is Number` (cannot distinguish from null).
 
 ### `while`
 

@@ -230,17 +230,62 @@ func (p *parser) parseBoolExpr(resolve operandResolver) (Expr, error) {
 }
 
 // parseBoolChain peeks for &&/||. If absent, returns first unchanged.
+// Implements standard precedence: && binds tighter than ||.
 func (p *parser) parseBoolChain(first Expr, resolve operandResolver) (Expr, error) {
+	// Collect an &&-chain starting from first.
+	andGroup, err := p.collectAndChain(first, resolve)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for ||. If absent, return the &&-chain (or single term).
 	peek, err := p.next()
 	if err != nil {
 		return nil, err
 	}
-	if peek.kind != tokDoubleAmpersand && peek.kind != tokDoublePipe {
+	if peek.kind != tokDoublePipe {
+		p.unget(peek)
+		return andGroup, nil
+	}
+
+	// We have ||. Build an ||-chain of &&-groups.
+	orChildren := []Expr{andGroup}
+	for {
+		next, err := p.parseBoolPrimary(resolve)
+		if err != nil {
+			return nil, err
+		}
+		group, err := p.collectAndChain(next, resolve)
+		if err != nil {
+			return nil, err
+		}
+		orChildren = append(orChildren, group)
+
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind != tokDoublePipe {
+			p.unget(tok)
+			break
+		}
+	}
+
+	return &BoolChainExpr{Op: tokDoublePipe, Children: orChildren}, nil
+}
+
+// collectAndChain collects an &&-chain starting from first.
+// Returns first unchanged if no && follows.
+func (p *parser) collectAndChain(first Expr, resolve operandResolver) (Expr, error) {
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek.kind != tokDoubleAmpersand {
 		p.unget(peek)
 		return first, nil
 	}
 
-	chainOp := peek.kind
 	children := []Expr{first}
 	for {
 		next, err := p.parseBoolPrimary(resolve)
@@ -253,16 +298,13 @@ func (p *parser) parseBoolChain(first Expr, resolve operandResolver) (Expr, erro
 		if err != nil {
 			return nil, err
 		}
-		if tok.kind != tokDoubleAmpersand && tok.kind != tokDoublePipe {
+		if tok.kind != tokDoubleAmpersand {
 			p.unget(tok)
 			break
 		}
-		if tok.kind != chainOp {
-			return nil, p.errorf(tok.pos, "cannot mix '&&' and '||' without parentheses; use '(' and ')' to group sub-expressions")
-		}
 	}
 
-	return &BoolChainExpr{Op: chainOp, Children: children}, nil
+	return &BoolChainExpr{Op: tokDoubleAmpersand, Children: children}, nil
 }
 
 // parseBhvArgExpr parses a single argument value into an Expr.

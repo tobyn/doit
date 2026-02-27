@@ -128,8 +128,8 @@ scans as `tokIdent` with val `"is"`.
 
 Chain multiple boolean sub-expressions. Each sub-expression can be a
 comparison, type check, bare variable (truthy check), or number literal.
-Same-operator chaining is supported. Mixing `&&` and `||` at the same
-parenthesization level is a compile error — use parentheses.
+`&&` binds tighter than `||` (standard precedence).
+`a && b || c` parses as `(a && b) || c`. Parentheses can override.
 
 - `&&`: each term must pass to continue; any failure short-circuits to
   false.

@@ -1256,12 +1256,10 @@ func TestCompileErrors(t *testing.T) {
 	// --- Logical operator errors ---
 
 	t.Run("logical_mixed_operators", func(t *testing.T) {
+		// Implicit precedence: && binds tighter than ||
 		src := `behavior a { var x = 5; var y = 3; var z = 1; let r = x > 2 && y < 10 || z > 0 }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "cannot mix") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1452,12 +1450,10 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("logical_mixed_suggests_parens", func(t *testing.T) {
+		// Implicit precedence: && binds tighter than ||
 		src := `behavior a { var x = 5; var y = 3; var z = 1; let r = x > 2 && y < 10 || z > 0 }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "parentheses") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

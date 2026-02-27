@@ -1,0 +1,10 @@
+# AI-generated test
+# a > 1 && b < 2 || c > 3: implicit precedence (same as paren_or_and)
+behavior implicit_precedence {
+    @name "Implicit Precedence"
+    var a = 5
+    var b = 3
+    var c = 7
+    let r = a > 1 && b < 2 || c > 3
+    notify "done"
+}
