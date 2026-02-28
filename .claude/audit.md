@@ -76,19 +76,6 @@ dimensions in a single pass:
   pairs into single implementations (~500+ lines saved). Large
   architectural change — needs developer input.
 
-### HIGH
-
-- **`errorf(0, ...)` reports wrong source position in 8 error paths.**
-  `parseBhvModeBlockExpr` (bhvast.go:2131, 2137),
-  `parseBhvIfExprBranch` (bhvast.go:2158, 2163),
-  `parseFnBodyModeBlockExpr` (parse.go:2633, 2638), and
-  `parseFnBodyIfExprBranch` (parse.go:2659, 2664) all pass `0` as
-  the position to `errorf`. This makes errors like "empty mode block
-  expression" and "last item in if-expression branch must be a
-  value-producing expression" report as `1:1` regardless of where
-  the block actually appears in the source. Fix: capture the `{`
-  token position and thread it through.
-
 ### MEDIUM
 
 - **`parseBhvConstructorExpr` / `parseFnBodyConstructorExpr`

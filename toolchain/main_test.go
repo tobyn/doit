@@ -2165,6 +2165,9 @@ behavior a { f }`
 		if !strings.Contains(err.Error(), "empty mode block expression") {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		if strings.HasPrefix(err.Error(), "1:1:") {
+			t.Fatalf("error should not report position 1:1: %v", err)
+		}
 	})
 
 	t.Run("mode_block_expr_non_value_tail", func(t *testing.T) {

@@ -2628,7 +2628,8 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 // parseFnBodyModeBlockExpr parses a locked/unlocked block used as an
 // expression in a fn body context. The keyword has been consumed.
 func (p *parser) parseFnBodyModeBlockExpr(unlock bool, ctx *fnBodyContext, comment string) (*ModeBlockExpr, error) {
-	if _, err := p.expect(tokLBrace); err != nil {
+	lbrace, err := p.expect(tokLBrace)
+	if err != nil {
 		return nil, err
 	}
 	stmts, err := p.parseFnBodyStmtsInner(ctx, true)
@@ -2636,12 +2637,12 @@ func (p *parser) parseFnBodyModeBlockExpr(unlock bool, ctx *fnBodyContext, comme
 		return nil, err
 	}
 	if len(stmts) == 0 {
-		return nil, p.errorf(0, "empty mode block expression")
+		return nil, p.errorf(lbrace.pos, "empty mode block expression")
 	}
 	last := stmts[len(stmts)-1]
 	tail, ok := last.(*exprTailStmt)
 	if !ok {
-		return nil, p.errorf(0, "last item in mode block expression must be a value-producing expression")
+		return nil, p.errorf(lbrace.pos, "last item in mode block expression must be a value-producing expression")
 	}
 	return &ModeBlockExpr{
 		Unlock:  unlock,
@@ -2654,7 +2655,8 @@ func (p *parser) parseFnBodyModeBlockExpr(unlock bool, ctx *fnBodyContext, comme
 // parseFnBodyIfExprBranch parses a brace-delimited expression block
 // (statements + tail expression) for an if-expression branch in a fn body.
 func (p *parser) parseFnBodyIfExprBranch(ctx *fnBodyContext) ([]Stmt, Expr, error) {
-	if _, err := p.expect(tokLBrace); err != nil {
+	lbrace, err := p.expect(tokLBrace)
+	if err != nil {
 		return nil, nil, err
 	}
 	stmts, err := p.parseFnBodyStmtsInner(ctx, true)
@@ -2662,12 +2664,12 @@ func (p *parser) parseFnBodyIfExprBranch(ctx *fnBodyContext) ([]Stmt, Expr, erro
 		return nil, nil, err
 	}
 	if len(stmts) == 0 {
-		return nil, nil, p.errorf(0, "empty if-expression branch")
+		return nil, nil, p.errorf(lbrace.pos, "empty if-expression branch")
 	}
 	last := stmts[len(stmts)-1]
 	tail, ok := last.(*exprTailStmt)
 	if !ok {
-		return nil, nil, p.errorf(0, "last item in if-expression branch must be a value-producing expression")
+		return nil, nil, p.errorf(lbrace.pos, "last item in if-expression branch must be a value-producing expression")
 	}
 	return stmts[:len(stmts)-1], tail.Expr, nil
 }
