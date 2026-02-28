@@ -1,0 +1,8 @@
+# AI-generated test
+# Wait with function call continuation in condition
+behavior wait_cond_call {
+    @name "Wait Cond Call"
+    @param in r "R"
+    wait 5 { get_resource_num $r > 0 }
+    notify "done"
+}

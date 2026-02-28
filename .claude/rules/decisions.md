@@ -6,6 +6,25 @@ consistent decisions without re-deriving past conclusions.
 For implementation details (frame layouts, internal function names,
 emission patterns), read the source code directly.
 
+## Compiler-generated `@`-prefixed variable names
+
+The compiler generates temporary variables with `@`-prefixed names
+(`@arith1`, `@call`, `@loop`, `@wait`, `@wcond`, `@bool`, `@ctor`,
+`@amp`, `@mode`, `@if`, `@step`, `@start`, `@stop`, `@retK`) via the
+`allocUniqueVar()` function. These are **ordinary VM variable names** —
+the `@` prefix has no special meaning to the game engine. It is purely
+a namespace convention to avoid collisions with user-defined variables,
+since `@` is not valid in doit source identifiers.
+
+These names survive into the final compiled JSON and are visible in the
+game's behavior editor as internal registers. The game has been verified
+to accept `@` in variable names without issues.
+
+Separately, `@break` and `@return` are **control-flow placeholder
+opcodes** (not variable names). They appear as `{"op": "@break"}` and
+`{"op": "@return"}` in intermediate frames and are patched to real jump
+targets before finalization — they never reach the final output.
+
 ## Behaviors as top-level functions
 
 Behavior blocks and function bodies support almost the exact same
@@ -447,10 +466,12 @@ back to WAIT).
 **AST**: `WaitStmt` with `Ticks Expr`, `Body []Stmt`, `Tail Expr`,
 `Comment string`. Both Body and Tail are nil for simple wait.
 
-**Expression tails in fn body wait blocks**: The fn body parser's
-`exprTail` mode handles boolean expression continuations (comparisons,
-`is`, `&&`/`||`) after arithmetic expressions, matching the
-behavior-level `maybeBhvExprContinuation` pattern.
+**Expression tails**: In `exprTail` mode (used by wait condition blocks
+and mode block expressions), both function-call and variable branches
+go through `parseArithExprFromFull` + `maybeExprContinuation`, so
+`wait 5 { get_count > 0 }` works the same as `wait 5 { x > 0 }`.
+The fn body path uses `maybeExprContinuation` (replacing earlier manual
+continuation code) for consistency with the behavior-level path.
 
 ## Nested function calls in arguments
 

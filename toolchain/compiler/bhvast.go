@@ -2511,24 +2511,23 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 
 				if isExprTail {
 					resolve := p.bhvResolver(syms)
+					var result Expr
 					if fn != nil && fn.hasReturn() {
-						// Function call as tail expression
+						// Function call as initial expression
 						args, kwArgs, err := p.parseBhvCallArgs(fn, tok, syms)
 						if err != nil {
 							return nil, err
 						}
-						if _, err := p.expect(tokRBrace); err != nil {
+						result = &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs}
+					} else {
+						// Variable or value as initial expression
+						resolved, err := resolve(tok)
+						if err != nil {
 							return nil, err
 						}
-						stmts = append(stmts, &exprTailStmt{Expr: &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs}})
-						return stmts, nil
+						result = resolved
 					}
-					// Variable or value expression as tail
-					resolved, err := resolve(tok)
-					if err != nil {
-						return nil, err
-					}
-					result, err := p.parseArithExprFromFull(resolved, resolve)
+					result, err = p.parseArithExprFromFull(result, resolve)
 					if err != nil {
 						return nil, err
 					}

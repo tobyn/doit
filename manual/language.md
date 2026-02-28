@@ -1100,6 +1100,13 @@ wait 5 { $a > 3 }
 notify "a is now greater than 3"
 ```
 
+Function call results work as condition expressions, including with
+comparison and boolean continuation:
+
+```doit
+wait 5 { get_resource_num $r > 0 }
+```
+
 The condition block can contain statements before the condition
 expression. The condition is always the last item in the block:
 

@@ -1,0 +1,12 @@
+# AI-generated test
+# Wait with function call continuation in fn body condition
+fn wait_for_resource(r) {
+    wait 5 { get_resource_num r > 0 }
+    notify "done"
+}
+
+behavior wait_cond_call_fn {
+    @name "Wait Cond Call Fn"
+    @param in r "R"
+    wait_for_resource $r
+}

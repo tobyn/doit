@@ -59,12 +59,15 @@ Argument boundaries are always unambiguous because function parameter
 counts are fixed. Deep nesting (`set_reg get_type get_self`) and
 arithmetic continuation within inner arguments work naturally.
 
-### 5. `wait` condition function-call continuation
+### ~~5. `wait` condition function-call continuation~~ (Done)
 
-`wait 5 { get_count > 0 }` fails because after parsing a function
-call as the tail expression, the parser expects `}` without trying
-comparison/boolean continuation. `wait 5 { x > 0 }` (variable) and
-`wait 5 { get_count }` (bare call truthy check) both work.
+Function call results in `wait` condition blocks now support
+comparison/boolean continuation: `wait 5 { get_count > 0 }`. Fixed by
+merging the function-call and variable branches in `exprTail` mode
+(both `parseBhvStmtBlockInner` and `parseFnBodyStmtsInner`) so both
+go through `parseArithExprFromFull` + `maybeExprContinuation`. The fn
+body variable path also replaced manual continuation with
+`maybeExprContinuation` for consistency.
 
 ### 6. Compound assignment RHS limitations
 

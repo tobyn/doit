@@ -3124,10 +3124,22 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						if err != nil {
 							return nil, err
 						}
+						result := Expr(&CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs})
+						result, err = p.parseArithExprFromFull(result, ctx.resolve)
+						if err != nil {
+							return nil, err
+						}
+						final, handled, err := p.maybeExprContinuation(result, ctx.resolve)
+						if err != nil {
+							return nil, err
+						}
+						if handled {
+							result = final
+						}
 						if _, err := p.expect(tokRBrace); err != nil {
 							return nil, err
 						}
-						astBody = append(astBody, &exprTailStmt{Expr: &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs}})
+						astBody = append(astBody, &exprTailStmt{Expr: result})
 						return astBody, nil
 					}
 					if callee == nil {
@@ -3140,40 +3152,12 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						if err != nil {
 							return nil, err
 						}
-						// Check for boolean expression continuation (>, <, ==, !=, is, &&, ||)
-						peek2, err := p.next()
+						final, handled, err := p.maybeExprContinuation(result, ctx.resolve)
 						if err != nil {
 							return nil, err
 						}
-						if isComparisonOp(peek2.kind) {
-							rhs, err := p.parseArithExpr(ctx.resolve)
-							if err != nil {
-								return nil, err
-							}
-							cmp := Expr(&CompareExpr{Op: peek2.kind, LHS: result, RHS: rhs})
-							result, err = p.parseBoolChain(cmp, ctx.resolve)
-							if err != nil {
-								return nil, err
-							}
-						} else if peek2.kind == tokIdent && peek2.val == "is" {
-							slot, err := p.parseIsRHS()
-							if err != nil {
-								return nil, err
-							}
-							tc := Expr(&TypeCheckExpr{Value: result, TypeSlot: slot})
-							result, err = p.parseBoolChain(tc, ctx.resolve)
-							if err != nil {
-								return nil, err
-							}
-						} else if peek2.kind == tokDoubleAmpersand || peek2.kind == tokDoublePipe {
-							p.unget(peek2)
-							truthy := Expr(&TruthyExpr{Value: result})
-							result, err = p.parseBoolChain(truthy, ctx.resolve)
-							if err != nil {
-								return nil, err
-							}
-						} else {
-							p.unget(peek2)
+						if handled {
+							result = final
 						}
 						if _, err := p.expect(tokRBrace); err != nil {
 							return nil, err
