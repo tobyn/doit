@@ -1824,6 +1824,28 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("bhv_continue", func(t *testing.T) {
+		src := "behavior a { loop { continue } }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'continue' is not supported") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_continue", func(t *testing.T) {
+		src := "fn bad() { loop { continue } }\nbehavior a { bad }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'continue' is not supported") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("bhv_break_outside_loop", func(t *testing.T) {
 		src := "behavior a { break }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "")

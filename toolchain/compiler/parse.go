@@ -3084,6 +3084,9 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 		case "else":
 			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
 
+		case "continue":
+			return nil, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop")
+
 		default:
 			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
 			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {

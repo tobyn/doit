@@ -27,7 +27,7 @@ This would also enable recursion. Needs investigation into how the
 `call` instruction works (it's currently a not-implementable stub in
 the stdlib).
 
-## Language ergonomics audit (rounds 3–4)
+## Language ergonomics audit (rounds 3–5)
 
 Periodic review of the language for unintuitive syntax, surprising
 semantics, or potential footguns. The process: read all manual pages,
@@ -39,7 +39,7 @@ section captures the remaining items.
 To repeat this audit in a future session, ask Claude to "examine the
 language and call out any syntax or semantics that might be unintuitive
 or result in unexpected behavior from a normal developer" — the same
-prompt that generated rounds 1–4. Cross-reference against the items
+prompt that generated rounds 1–5. Cross-reference against the items
 below and any that have been resolved since.
 
 Resolved in rounds 3–4: `break` with misspelled label (now errors),
@@ -51,6 +51,13 @@ nested `fn`/`behavior` definitions (now specific errors),
 `let` shadowing is now warned at same scope level (unused
 re-declaration warning), variables no longer leak from block scopes
 (block scoping implemented).
+
+Resolved in round 5: `index.md` hello world `name` → `@name`,
+`language.md` examples using `//` → `#`, missing `checkVarName` in
+fn body `let`/`var` declarations (now errors on keywords/constructors),
+`++`/`--`/`=` on keywords/constructors (now errors), assignment error
+positions always 1:1 (now correct), `continue` gives "unknown function"
+(now specific error with hint).
 
 ### Medium priority (design decisions needed)
 
