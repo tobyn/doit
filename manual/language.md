@@ -503,6 +503,30 @@ initialization, function arguments, comparisons, and return values.
 `true` and `false` are reserved keywords and cannot be used as variable
 names.
 
+## Strings
+
+String literals are enclosed in double quotes:
+
+```doit
+notify "Hello, World!"
+```
+
+Strings support the following escape sequences:
+
+| Escape | Character |
+|--------|-----------|
+| `\"` | Double quote |
+| `\\` | Backslash |
+| `\n` | Newline |
+| `\t` | Tab |
+
+Any other escape sequence (e.g., `\x`) is a compile error.
+
+Strings have no runtime representation in the VM — they exist only at
+compile time. They can be passed as function arguments (baked into
+instruction text fields) but cannot be stored in registers. Attempting to
+assign a string to a variable with `let` or `var` is a compile error.
+
 ## Control Flow
 
 All control flow constructs work in both behavior bodies and function bodies.

@@ -61,7 +61,8 @@ positions always 1:1 (now correct), `continue` gives "unknown function"
 (now specific error explaining step field conflict), `let x = y`
 at behavior level errors as "unknown function" (now allows variable
 and parameter copies like fn bodies), `is Number` and `is Range`
-give generic "unknown type" error (now explain why not supported).
+give generic "unknown type" error (now explain why not supported),
+string escape sequences undocumented (now in manual).
 
 ### Medium priority (design decisions needed)
 
