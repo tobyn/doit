@@ -47,24 +47,18 @@ Resolved in rounds 3–4: `break` with misspelled label (now errors),
 error (now hints `||`), `=` in boolean context (now hints `==`),
 `//` comments (now hints `#`), `return`/`else` at behavior level
 (now specific errors), "unknown statement" (now "unknown function"),
-nested `fn`/`behavior` definitions (now specific errors).
+nested `fn`/`behavior` definitions (now specific errors),
+`let` shadowing is now warned at same scope level (unused
+re-declaration warning), variables no longer leak from block scopes
+(block scoping implemented).
 
 ### Medium priority (design decisions needed)
 
-- **`let` shadowing is silent at the same scope level.**
-  `let a = 1; let a = 2` compiles without warning. Most languages with
-  `let` either error on same-scope re-declaration or require an
-  explicit re-binding keyword. Silent shadowing can mask typos. A
-  warning or error for same-scope `let` re-declaration would catch
-  this. Needs thought about interaction with blocks (variables leak
-  from blocks, so re-declaring after a block is common).
-
-- **Variables leak from block scopes.** Variables declared inside
-  `if`/`while`/`loop`/`locked`/`unlocked` blocks are visible after the
-  block ends because all blocks share the parent `symbolTable`.
-  Developers from Go/Rust/JS would expect block scoping. This is a
-  deeper design issue — fixing it requires scope stacking in the symbol
-  table — but it interacts with the `let` shadowing issue above.
+- **`-Werror` style flag for promoting warnings to errors.** The
+  compiler now supports warnings (returned alongside compiled output).
+  A flag to treat warnings as errors would be useful for CI/strict
+  mode. Needs a CLI flag (`-Werror` or similar) and plumbing through
+  the `Compile`/`CompileString` API.
 
 ### Low priority
 

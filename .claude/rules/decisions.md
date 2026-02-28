@@ -508,3 +508,53 @@ through `parseArithExpr`.
 **No emitter changes**: `emitBhvExprGetValue` already handles
 `*CallExpr` (allocates `@call` temp, calls `expandCall`).
 `emitExprGetValue`/`emitExprTo` in fn bodies also handle `CallExpr`.
+
+## Block scoping
+
+Variables declared inside blocks (`if`/`else`, `while`, `loop`, `for`,
+`locked`, `unlocked`, `wait`) are scoped to that block — they vanish when
+the block ends. This is a breaking change from the earlier flat-scope
+model where all variables leaked to the parent scope.
+
+**Implementation**: `symbolTable.pushScope()` copies the `vars` map and
+increments `scopeDepth`; `popScope(saved)` restores it and decrements.
+The `usedVars` map is NOT saved/restored — it tracks all names ever used
+(for inline variable rename collision avoidance). Both parse-time and
+emit-time need scoping: `parseBhvStmtBlockInner` and
+`parseFnBodyStmtsInner` push/pop during parsing, and emitter functions
+(`emitBhvIfStmt`, `emitBhvWhileStmt`, etc.) push/pop during emission
+(needed because the emitter accesses `syms.vars` for direction checking
+and assignment target resolution).
+
+**Fn body scoping**: Uses `fnBodyContext.pushFnScope()`/`popFnScope()`
+which saves/restores both `fnVars` and `fnVarInfo` maps plus
+`fnScopeDepth`. No emit-time scoping needed for fn bodies — fn body
+emitters resolve variables through `paramMap`, not `ctx.fnVars`.
+
+**For-loop special case**: The for-loop iterator variable needs its own
+scope that encompasses the body but doesn't leak to the parent. The
+for-loop parser wraps pushScope/declareVar/body/popScope explicitly
+(not using parseBhvStmtBlockInner's automatic scoping).
+
+## Compiler warnings and shadowing
+
+The compiler supports non-fatal warnings returned alongside the compiled
+object. `Compile`/`CompileString` return `(*codec.Object, []string, error)`
+where the middle value is warnings (nil if none).
+
+**Shadowing warning**: When a variable is re-declared at the same scope
+depth as an existing declaration that was never used, a warning is emitted.
+`declareVarWarn` (behavior level) and `declareFnVarWarn` (fn bodies) check
+`existing.depth == scopeDepth && !existing.used`. Child-scope
+re-declarations don't warn because they're at a different depth.
+
+**Used tracking**: `varInfo.used` and `fnVarInfo.used` track whether a
+variable has been read since declaration. At behavior level,
+`resolveBhvOperand` and `resolveAssignTarget` (compound) call
+`syms.markUsed()`. In fn bodies, `fnBodyResolver`, `canCompound`,
+`parseFnBodyArgExpr`, `parseFnBodyReturnItem`, and the expression list
+parser call `ctx.markFnVarUsed()` or `ctx.markExprUsed()`.
+
+**Warning infrastructure**: `parser.warnings []string` field,
+`parser.warnf(pos, format, args...)` method. Format matches error
+messages: `line:col: message`.

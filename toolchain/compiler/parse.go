@@ -39,8 +39,8 @@ func isDirection(val string) bool {
 
 // fnBodyResolver returns an operandResolver for fn body contexts.
 // It resolves $registers to literals, checks out-only params are not read,
-// and returns IdentExpr for all other identifiers.
-func (p *parser) fnBodyResolver(paramDirs map[string]string) operandResolver {
+// marks fn body variables as used, and returns IdentExpr for all other identifiers.
+func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 	return func(tok token) (Expr, error) {
 		if strings.HasPrefix(tok.val, "$") {
 			if reg, ok := unitRegisters[tok.val]; ok {
@@ -48,9 +48,10 @@ func (p *parser) fnBodyResolver(paramDirs map[string]string) operandResolver {
 			}
 			return nil, p.errorf(tok.pos, "unknown unit register %q", tok.val)
 		}
-		if dir, ok := paramDirs[tok.val]; ok && dir == "out" {
+		if dir, ok := ctx.paramDirs[tok.val]; ok && dir == "out" {
 			return nil, p.errorf(tok.pos, "cannot read from output parameter %q", tok.val)
 		}
+		ctx.markFnVarUsed(tok.val)
 		return &IdentExpr{Name: tok.val}, nil
 	}
 }
@@ -178,7 +179,12 @@ func (p *parser) parseFnBodyArgExpr(ctx *fnBodyContext) (Expr, error) {
 		return inner, nil
 	}
 	p.unget(tok)
-	return p.parseFnBodyExpr()
+	expr, err := p.parseFnBodyExpr()
+	if err != nil {
+		return nil, err
+	}
+	ctx.markExprUsed(expr)
+	return expr, nil
 }
 
 // parseFnBodyConstructorExpr parses a type constructor in a fn body,
@@ -2330,10 +2336,72 @@ func (p *parser) collectUserFns() error {
 }
 
 // fnBodyContext holds the shared state for fn body parsing.
+type fnVarInfo struct {
+	mutable bool
+	depth   int
+	used    bool
+}
+
 type fnBodyContext struct {
-	paramDirs map[string]string  // param name -> effective direction
-	fnVars    map[string]bool    // name -> true=mutable (var), false=immutable (let)
-	resolve   operandResolver
+	paramDirs    map[string]string    // param name -> effective direction
+	fnVars       map[string]bool      // name -> true=mutable (var), false=immutable (let)
+	fnVarInfo    map[string]fnVarInfo // detailed var info for shadowing warnings
+	fnScopeDepth int                  // current nesting depth (0 = fn top-level)
+	resolve      operandResolver
+}
+
+// pushFnScope saves the current fnVars and fnVarInfo maps and increments scope depth.
+func (ctx *fnBodyContext) pushFnScope() (map[string]bool, map[string]fnVarInfo, int) {
+	savedVars := make(map[string]bool, len(ctx.fnVars))
+	for k, v := range ctx.fnVars {
+		savedVars[k] = v
+	}
+	savedInfo := make(map[string]fnVarInfo, len(ctx.fnVarInfo))
+	for k, v := range ctx.fnVarInfo {
+		savedInfo[k] = v
+	}
+	depth := ctx.fnScopeDepth
+	ctx.fnScopeDepth++
+	return savedVars, savedInfo, depth
+}
+
+// popFnScope restores fnVars and fnVarInfo from saved copies and decrements scope depth.
+func (ctx *fnBodyContext) popFnScope(savedVars map[string]bool, savedInfo map[string]fnVarInfo, depth int) {
+	ctx.fnVars = savedVars
+	ctx.fnVarInfo = savedInfo
+	ctx.fnScopeDepth = depth
+}
+
+// declareFnVar registers a variable at the current fn scope depth.
+func (ctx *fnBodyContext) declareFnVar(name string, mutable bool) {
+	ctx.fnVars[name] = mutable
+	ctx.fnVarInfo[name] = fnVarInfo{mutable: mutable, depth: ctx.fnScopeDepth}
+}
+
+// declareFnVarWarn is like declareFnVar but also emits a warning if the name
+// already exists at the same depth and was never used.
+func (ctx *fnBodyContext) declareFnVarWarn(name string, mutable bool, p *parser, pos int) {
+	if existing, ok := ctx.fnVarInfo[name]; ok {
+		if existing.depth == ctx.fnScopeDepth && !existing.used {
+			p.warnf(pos, "variable %q shadows a previous declaration in the same scope that was never used", name)
+		}
+	}
+	ctx.declareFnVar(name, mutable)
+}
+
+// markFnVarUsed marks a fn body variable as used for shadowing warnings.
+func (ctx *fnBodyContext) markFnVarUsed(name string) {
+	if info, ok := ctx.fnVarInfo[name]; ok {
+		info.used = true
+		ctx.fnVarInfo[name] = info
+	}
+}
+
+// markExprUsed marks any IdentExpr variable as used for shadowing warnings.
+func (ctx *fnBodyContext) markExprUsed(expr Expr) {
+	if ident, ok := expr.(*IdentExpr); ok {
+		ctx.markFnVarUsed(ident.Name)
+	}
 }
 
 // canAssign checks whether name can be written to in a fn body context.
@@ -2359,6 +2427,8 @@ func (ctx *fnBodyContext) canCompound(name string, p *parser, pos int) error {
 	if err := ctx.canAssign(name, p, pos); err != nil {
 		return err
 	}
+	// Mark as used — compound assignment reads the variable
+	ctx.markFnVarUsed(name)
 	if dir, ok := ctx.paramDirs[name]; ok && dir == "out" {
 		return p.errorf(pos, "cannot read from output parameter %q", name)
 	}
@@ -2388,8 +2458,9 @@ func (p *parser) parseUserFn() error {
 	ctx := &fnBodyContext{
 		paramDirs: paramDirs,
 		fnVars:    map[string]bool{},
-		resolve:   p.fnBodyResolver(paramDirs),
+		fnVarInfo: map[string]fnVarInfo{},
 	}
+	ctx.resolve = p.fnBodyResolver(ctx)
 
 	// Enable function calls in boolean primary position (e.g., d || my_fn x)
 	prevCallExprParser := p.callExprParser
@@ -2687,7 +2758,12 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 
 	// Otherwise, parse as a simple expression
 	p.unget(tok)
-	return p.parseFnBodyExpr()
+	expr, err := p.parseFnBodyExpr()
+	if err != nil {
+		return nil, err
+	}
+	ctx.markExprUsed(expr)
+	return expr, nil
 }
 
 // parseFnBodyModeBlockExpr parses a locked/unlocked block used as an
@@ -2817,6 +2893,8 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
 // parseFnBodyStmtsInner parses fn body statements until '}'. If exprTail is
 // true, the last item may be a bare expression (wrapped in exprTailStmt).
 func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stmt, error) {
+	savedVars, savedInfo, savedDepth := ctx.pushFnScope()
+	defer ctx.popFnScope(savedVars, savedInfo, savedDepth)
 	var astBody []Stmt
 	for {
 		tok, err := p.next()
@@ -3235,7 +3313,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 		if firstDiscard {
 			bindings = append(bindings, MultiBinding{Discard: true})
 		} else {
-			bindings = append(bindings, MultiBinding{Name: varTok.val, Mutable: mutable})
+			bindings = append(bindings, MultiBinding{Name: varTok.val, Mutable: mutable, Pos: varTok.pos})
 		}
 		// activeModifier: 0=let, 1=var
 		activeModifier := 0
@@ -3262,18 +3340,19 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 				if err != nil {
 					return nil, err
 				}
-				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: false})
+				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: false, Pos: nameTok.pos})
 			case "var":
 				activeModifier = 1
 				nameTok, err := p.expect(tokIdent)
 				if err != nil {
 					return nil, err
 				}
-				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: true})
+				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: true, Pos: nameTok.pos})
 			default:
 				bindings = append(bindings, MultiBinding{
 					Name:    bindTok.val,
 					Mutable: activeModifier == 1,
+					Pos:     bindTok.pos,
 				})
 			}
 			next, err := p.next()
@@ -3311,7 +3390,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 			}
 			for _, bind := range bindings {
 				if !bind.Discard {
-					ctx.fnVars[bind.Name] = bind.Mutable
+					ctx.declareFnVarWarn(bind.Name, bind.Mutable, p, bind.Pos)
 				}
 			}
 			return []Stmt{&MultiReturnStmt{
@@ -3392,6 +3471,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 			if err != nil {
 				return nil, err
 			}
+			ctx.markExprUsed(expr)
 			// Wrap with arithmetic parsing for numbers and identifiers
 			if _, ok := expr.(*LiteralExpr); ok {
 				if m, isMap := expr.(*LiteralExpr).Value.(map[string]any); isMap {
@@ -3435,7 +3515,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 		// Register variables
 		for _, bind := range bindings {
 			if !bind.Discard {
-				ctx.fnVars[bind.Name] = bind.Mutable
+				ctx.declareFnVarWarn(bind.Name, bind.Mutable, p, bind.Pos)
 			}
 		}
 
@@ -3465,7 +3545,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 	if err != nil {
 		return nil, err
 	}
-	ctx.fnVars[varTok.val] = mutable
+	ctx.declareFnVarWarn(varTok.val, mutable, p, varTok.pos)
 	return []Stmt{&LetStmt{
 		Name:    varTok.val,
 		Mutable: mutable,
@@ -3904,19 +3984,15 @@ func (p *parser) parseFnBodyForStmt(ctx *fnBodyContext, comment string, label ..
 		return nil, err
 	}
 
-	// Save/restore iter var for scoping
-	savedVar, hadVar := ctx.fnVars[iterTok.val]
-	ctx.fnVars[iterTok.val] = false // immutable
+	// Push scope for iter var + body
+	savedVars, savedInfo, savedDepth := ctx.pushFnScope()
+	ctx.declareFnVarWarn(iterTok.val, false, p, iterTok.pos)
 
 	p.enterLoop(lbl)
 	body, err := p.parseFnBodyStmts(ctx)
 	p.exitLoop(lbl)
 
-	if hadVar {
-		ctx.fnVars[iterTok.val] = savedVar
-	} else {
-		delete(ctx.fnVars, iterTok.val)
-	}
+	ctx.popFnScope(savedVars, savedInfo, savedDepth)
 
 	if err != nil {
 		return nil, err

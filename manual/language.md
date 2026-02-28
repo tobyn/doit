@@ -289,6 +289,35 @@ The difference between `var` and `let` is that `let` prevents reassignment —
 the compiler errors on `=`, `+=`, `-=`, `*=`, `/=`, `++`, or `--` targeting
 a `let` variable.
 
+### Block scoping
+
+Variables declared inside a block (`if`/`else`, `while`, `loop`, `for`,
+`locked`, `unlocked`, `wait`) are scoped to that block. They are not
+visible after the block ends:
+
+```doit
+if $p {
+    let x = 5     # x exists only inside this if-block
+    set_reg x
+}
+let x = 10        # a new x — the previous one is out of scope
+set_reg x
+```
+
+Sibling blocks have independent scopes:
+
+```doit
+if $p {
+    let x = 5
+    set_reg x
+} else {
+    let x = 10    # no conflict with the x in the if-branch
+    set_reg x
+}
+```
+
+### Shadowing
+
 Both `var` and `let` allow shadowing — you can redeclare a variable with the
 same name, and the new declaration replaces the previous one:
 
@@ -297,6 +326,38 @@ let x = 5
 let x = 10
 var x = 15
 ```
+
+The compiler emits a warning when a variable is redeclared at the same scope
+level before being used. This helps catch accidental re-declarations that may
+indicate a typo:
+
+```doit
+let x = 5
+let x = 10     # warning: "x" shadows a previous declaration that was never used
+set_reg x
+```
+
+If the variable is read between declarations, no warning is emitted:
+
+```doit
+let x = 5
+set_reg x      # x is used here
+let x = 10     # no warning
+set_reg x
+```
+
+Redeclaring in a child scope (inside a block) never triggers the warning:
+
+```doit
+let x = 5
+if $p {
+    let x = 10   # no warning — different scope
+    set_reg x
+}
+set_reg x
+```
+
+### Assignment
 
 Assign a new value with `=`:
 

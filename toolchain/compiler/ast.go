@@ -69,6 +69,7 @@ type MultiBinding struct {
 	Name    string // "" for discard
 	Discard bool   // true for _
 	Mutable bool   // true for var, false for let (only meaningful when !Discard)
+	Pos     int    // source position of the binding name (for diagnostics)
 }
 
 // InstructionStmt is a bare instruction block: `instruction "op" { ... }`

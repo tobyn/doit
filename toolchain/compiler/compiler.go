@@ -14,22 +14,28 @@ import (
 // multi-behavior source file. When the source contains a single behavior,
 // behaviorID may be empty to auto-select it. The locale parameter is a BCP 47
 // tag used to resolve localized @name blocks; if empty, the first entry is used.
-func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string) (*codec.Object, error) {
+// The returned warnings slice contains non-fatal compiler warnings (nil if none).
+func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string) (*codec.Object, []string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return CompileString(string(data), stdlib, behaviorID, locale)
 }
 
 // CompileString compiles doit source into a codec Object.
-func CompileString(src string, stdlib fs.FS, behaviorID, locale string) (*codec.Object, error) {
+// The returned warnings slice contains non-fatal compiler warnings (nil if none).
+func CompileString(src string, stdlib fs.FS, behaviorID, locale string) (*codec.Object, []string, error) {
 	fns, err := parseStdlib(stdlib)
 	if err != nil {
-		return nil, fmt.Errorf("stdlib: %w", err)
+		return nil, nil, fmt.Errorf("stdlib: %w", err)
 	}
 	p := &parser{scanner: scanner{src: src, locale: locale}, fns: fns, target: behaviorID, loopLabels: map[string]bool{}}
-	return p.parseFile()
+	obj, err := p.parseFile()
+	if err != nil {
+		return nil, nil, err
+	}
+	return obj, p.warnings, nil
 }
 
 // TestParseStdlibFile is a test helper that parses a stdlib source string.
@@ -224,6 +230,8 @@ var unitRegisters = map[string]int{
 
 type varInfo struct {
 	mutable bool // true for var, false for let
+	depth   int  // scope depth at declaration (for shadowing warnings)
+	used    bool // whether the variable has been read since declaration
 }
 
 type paramInfo struct {
@@ -233,10 +241,11 @@ type paramInfo struct {
 }
 
 type symbolTable struct {
-	params   []paramInfo
-	paramMap map[string]int     // "$name" → 1-based index
-	vars     map[string]varInfo // declared variables
-	usedVars map[string]bool    // all variable names in use (for inline rename)
+	params     []paramInfo
+	paramMap   map[string]int     // "$name" → 1-based index
+	vars       map[string]varInfo // declared variables
+	usedVars   map[string]bool    // all variable names in use (for inline rename)
+	scopeDepth int                // current nesting depth (0 = top-level)
 }
 
 func newSymbolTable() *symbolTable {
@@ -244,6 +253,54 @@ func newSymbolTable() *symbolTable {
 		paramMap: map[string]int{},
 		vars:     map[string]varInfo{},
 		usedVars: map[string]bool{},
+	}
+}
+
+// pushScope saves the current vars map and increments scope depth.
+// The caller must pass the returned map to popScope when the block ends.
+func (s *symbolTable) pushScope() map[string]varInfo {
+	saved := make(map[string]varInfo, len(s.vars))
+	for k, v := range s.vars {
+		saved[k] = v
+	}
+	s.scopeDepth++
+	return saved
+}
+
+// popScope restores vars from a saved copy and decrements scope depth.
+func (s *symbolTable) popScope(saved map[string]varInfo) {
+	s.vars = saved
+	s.scopeDepth--
+}
+
+// declareVar registers a variable at the current scope depth.
+func (s *symbolTable) declareVar(name string, mutable bool) {
+	s.vars[name] = varInfo{mutable: mutable, depth: s.scopeDepth}
+	s.usedVars[name] = true
+}
+
+// declareVarWarn is like declareVar but also emits a warning if the name
+// already exists at the same depth and was never used.
+func (s *symbolTable) declareVarWarn(name string, mutable bool, p *parser, pos int) {
+	if existing, ok := s.vars[name]; ok {
+		if existing.depth == s.scopeDepth && !existing.used {
+			p.warnf(pos, "variable %q shadows a previous declaration in the same scope that was never used", name)
+		}
+	}
+	s.declareVar(name, mutable)
+}
+
+// lookupVar returns the varInfo for name and whether it exists.
+func (s *symbolTable) lookupVar(name string) (varInfo, bool) {
+	v, ok := s.vars[name]
+	return v, ok
+}
+
+// markUsed marks a variable as used (read).
+func (s *symbolTable) markUsed(name string) {
+	if vi, ok := s.vars[name]; ok {
+		vi.used = true
+		s.vars[name] = vi
 	}
 }
 

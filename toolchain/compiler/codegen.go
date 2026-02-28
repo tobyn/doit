@@ -89,7 +89,7 @@ func argDirection(val any, syms *symbolTable) string {
 		}
 		return "inout"
 	case string:
-		if vi, ok := syms.vars[v]; ok {
+		if vi, ok := syms.lookupVar(v); ok {
 			if !vi.mutable {
 				return "in"
 			}
@@ -535,9 +535,12 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 // Returns an error if the target is an immutable let variable or a parameter
 // with incompatible direction. compound indicates a read+write operation (++, +=).
 func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, compound bool) (any, error) {
-	if vi, ok := syms.vars[name]; ok {
+	if vi, ok := syms.lookupVar(name); ok {
 		if !vi.mutable {
 			return nil, p.errorf(pos, "cannot assign to immutable variable %q", name)
+		}
+		if compound {
+			syms.markUsed(name) // compound assignment reads the variable
 		}
 		return name, nil
 	}

@@ -1,0 +1,12 @@
+# AI-generated test
+# Block scoping: variables declared in blocks don't leak to outer scope
+behavior bhv_block_scope {
+    @name "Block Scope"
+    @param in p "P"
+    if $p {
+        let x = 5
+        set_reg x
+    }
+    let x = 10
+    set_reg x
+}

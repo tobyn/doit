@@ -20,8 +20,11 @@ output format.
   `InstructionExpr`, `ArithExpr`, `CompareExpr`, `TypeCheckExpr`,
   `TruthyExpr`, `BoolChainExpr`, `NotExpr`, `ConstructorExpr`,
   `AmpersandExpr`, `ExprListExpr`, `ModeBlockExpr`, `IfExpr`)
-- **`compiler/compiler.go`** — Public API (`Compile`, `CompileString`), shared types
-  (`fnDef`, `symbolTable`, `unitRegisters`),
+- **`compiler/compiler.go`** — Public API (`Compile`, `CompileString` — both
+  return `(*codec.Object, []string, error)` where the middle value is
+  compiler warnings), shared types
+  (`fnDef`, `symbolTable` with block scoping via `pushScope`/`popScope`
+  and shadowing warnings via `declareVarWarn`, `unitRegisters`),
   `paramDef` (with `direction` field, `effectiveDirection()`)
   and `paramInfo` (with `direction` field) types, direction compatibility
   via `canPass(paramDir, argDir)`, `frameBuilder`/`frameRef` abstraction
@@ -43,7 +46,9 @@ output format.
   (used by both statement and expression mode blocks)
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), `parser` struct (embeds `scanner`, adds `fns`, `target`,
-  `behaviorIDs`, `loopDepth int` for nesting depth, `loopLabels
+  `behaviorIDs`, `warnings []string` for non-fatal compiler warnings,
+  `warnf(pos, format, args...)` method for emitting warnings,
+  `loopDepth int` for nesting depth, `loopLabels
   map[string]bool` for active loop labels, `callExprParser` callback
   for context-specific function call parsing in boolean primary position;
   `enterLoop(label)`/`exitLoop(label)` helpers manage loop state),
@@ -64,7 +69,10 @@ output format.
 - **`compiler/parse.go`** — Stdlib parsing (delegates to `parseUserFn`),
   file-level parsing, function definitions with `instruction` support,
   `fnBodyResolver` (operandResolver for fn bodies),
-  `fnBodyContext` (tracks paramDirs, fnVars, resolve for fn body parsing),
+  `fnBodyContext` (tracks paramDirs, fnVars, fnVarInfo, fnScopeDepth,
+  resolve for fn body parsing; block scoping via `pushFnScope`/`popFnScope`,
+  shadowing warnings via `declareFnVarWarn`, used tracking via
+  `markFnVarUsed`/`markExprUsed`),
   fn body AST parsing (`parseFnBodyStmts`/`parseFnBodyStmtsInner`
   (with `exprTail` parameter for mode block expression tail detection;
   uses `p.loopDepth > 0` for break validation; detects
@@ -464,10 +472,15 @@ is threaded through `expandCall` and all call sites in codegen.go.
 **Symbol table**: During behavior compilation, a `symbolTable` tracks
 `@param` declarations (with `$name` keys mapping to 1-based indices,
 direction, and display names), `var` declarations (mutable), `let`
-declarations (immutable), and `usedVars` (all variable names in use, for
-inline rename collision detection). Variables can be initialized with a
-number literal (`let x = 5`), a function call with a return value
-(`let me = get_self`), or an inline instruction
+declarations (immutable), `usedVars` (all variable names in use, for
+inline rename collision detection), and `scopeDepth` (for block scoping
+and shadowing warnings). Variables are block-scoped: `pushScope()` copies
+the vars map and increments depth, `popScope()` restores and decrements.
+`declareVar()` registers a variable at the current depth. `declareVarWarn()`
+additionally checks for same-depth unused shadowing and emits a warning.
+`lookupVar()` reads and `markUsed()` tracks variable reads. Variables can
+be initialized with a number literal (`let x = 5`), a function call with a
+return value (`let me = get_self`), or an inline instruction
 (`let me = instruction "get_self" { 0: @1 }`). Assignment (`x = ...`)
 also supports number literals, function calls, and inline instructions. Both `var` and `let` allow shadowing —
 redeclaring a variable with the same name overwrites the previous symbol

@@ -53,7 +53,7 @@ func main() {
 // encoded string. The locale parameter is a BCP 47 tag for resolving localized
 // @name blocks; if empty, the first entry is used.
 func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string) (string, error) {
-	obj, err := compiler.Compile(r, stdlib, behaviorID, locale)
+	obj, _, err := compiler.Compile(r, stdlib, behaviorID, locale)
 	if err != nil {
 		return "", err
 	}
@@ -106,10 +106,13 @@ func cmdCompile(args []string) (err error) {
 	}
 
 	if *jsonFlag || *jsonLongFlag {
-		obj, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale)
+		obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale)
 		if compileErr != nil {
 			err = compileErr
 			return
+		}
+		for _, w := range warnings {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 		}
 		if obj == nil {
 			return
@@ -118,9 +121,20 @@ func cmdCompile(args []string) (err error) {
 		return
 	}
 
-	encoded, compileErr := Compile(r, stdlib, *behaviorID, locale)
+	obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale)
 	if compileErr != nil {
 		err = compileErr
+		return
+	}
+	for _, w := range warnings {
+		_, _ = fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+	if obj == nil {
+		return
+	}
+	encoded, encodeErr := codec.EncodeString(obj)
+	if encodeErr != nil {
+		err = encodeErr
 		return
 	}
 	if encoded == "" {

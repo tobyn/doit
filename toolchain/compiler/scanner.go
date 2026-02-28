@@ -115,10 +115,25 @@ type parser struct {
 	behaviorIDs []string // collected during pass 1
 	loopDepth   int              // >0 when inside a loop body
 	loopLabels  map[string]bool  // labels of enclosing loops
+	warnings    []string         // compiler warnings (non-fatal)
 
 	// callExprParser is set by behavior/fn body contexts to enable
 	// function call parsing in boolean primary position (e.g., d || my_fn x).
 	callExprParser func(callee *fnDef, calleeTok token) (Expr, error)
+}
+
+// warnf appends a formatted warning message with line:column prefix.
+func (p *parser) warnf(pos int, format string, args ...any) {
+	line, col := 1, 1
+	for i := 0; i < pos && i < len(p.src); i++ {
+		if p.src[i] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	p.warnings = append(p.warnings, fmt.Sprintf("%d:%d: %s", line, col, fmt.Sprintf(format, args...)))
 }
 
 // enterLoop records entry into a loop body. If label is non-empty, it is

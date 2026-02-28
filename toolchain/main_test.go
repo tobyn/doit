@@ -90,7 +90,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("multiple_behaviors_no_selection", func(t *testing.T) {
 		src := `behavior a { @name "A" } behavior b { @name "B" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -101,7 +101,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("behavior_not_found", func(t *testing.T) {
 		src := `behavior a { @name "A" } behavior b { @name "B" }`
-		_, err := compiler.CompileString(src, stdlib, "c", "")
+		_, _, err := compiler.CompileString(src, stdlib, "c", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -112,7 +112,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("duplicate_name", func(t *testing.T) {
 		src := `behavior a { @name "A" @name "B" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -123,7 +123,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("no_behaviors", func(t *testing.T) {
 		src := `fn greet() { notify "hi" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -134,7 +134,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("localized_name_with_locale", func(t *testing.T) {
 		src := `behavior a { @name localize { en_US "English" ja "日本語" } notify "hi" }`
-		obj, err := compiler.CompileString(src, stdlib, "", "ja")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "ja")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -146,7 +146,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("localized_name_no_match", func(t *testing.T) {
 		src := `behavior a { @name localize { en_US "English" ja "日本語" } notify "hi" }`
-		obj, err := compiler.CompileString(src, stdlib, "", "fr")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "fr")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -158,7 +158,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("localized_name_empty_block", func(t *testing.T) {
 		src := `behavior a { @name localize {} notify "hi" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -169,7 +169,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("localize_missing_brace", func(t *testing.T) {
 		src := `behavior a { @name localize "Foo" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -180,7 +180,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("doc_comment_inherit", func(t *testing.T) {
 		src := "fn greet() { notify \"Hello\" }\nbehavior a {\n#! Greeting\ngreet\n}"
-		obj, err := compiler.CompileString(src, stdlib, "", "")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -192,7 +192,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("doc_comment_override", func(t *testing.T) {
 		src := "fn greet() {\n#! Inner\nnotify \"Hello\"\nnotify \"World\"\n}\nbehavior a {\n#! Outer\ngreet\n}"
-		obj, err := compiler.CompileString(src, stdlib, "", "")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -209,7 +209,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("no_doc_comment", func(t *testing.T) {
 		src := `behavior a { notify "Hello" }`
-		obj, err := compiler.CompileString(src, stdlib, "", "")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -221,7 +221,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unknown_keyword_arg", func(t *testing.T) {
 		src := `behavior a { notify "Hello", unknown: "x" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -232,7 +232,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("positional_param_after_keyword", func(t *testing.T) {
 		src := "fn bad(value v, txt) {}\nbehavior a { notify \"hi\" }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -243,7 +243,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("duplicate_keyword_arg", func(t *testing.T) {
 		src := `behavior a { notify "Hello", timeout: "5", timeout: "10" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -254,7 +254,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("duplicate_keyword_arg_in_fn_body", func(t *testing.T) {
 		src := "fn bad(txt) { notify txt, timeout: \"5\", timeout: \"10\" }\nbehavior a { bad \"hi\" }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -265,7 +265,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("extra_positional_arg", func(t *testing.T) {
 		src := `behavior a { notify "Hello" "extra" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -276,7 +276,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unterminated_string", func(t *testing.T) {
 		src := `behavior a { notify "Hello }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -287,7 +287,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unknown_escape", func(t *testing.T) {
 		src := `behavior a { notify "Hello\q" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -298,7 +298,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unexpected_character", func(t *testing.T) {
 		src := `behavior a { ~ }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -309,7 +309,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unknown_function_in_behavior", func(t *testing.T) {
 		src := `behavior a { nonexistent "x" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -320,7 +320,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unknown_function_in_fn_body", func(t *testing.T) {
 		src := "fn foo() { nonexistent \"x\" }\nbehavior a { foo }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -331,7 +331,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("missing_closing_brace", func(t *testing.T) {
 		src := `behavior a { notify "Hello"`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -342,7 +342,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unknown_attribute", func(t *testing.T) {
 		src := `behavior a { @foo "bar" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -353,7 +353,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("missing_function_arg", func(t *testing.T) {
 		src := `behavior a { check_number "x" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -365,7 +365,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("invalid_top_level", func(t *testing.T) {
 		src := `foobar {}`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -376,7 +376,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("empty_source", func(t *testing.T) {
 		src := ``
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -387,7 +387,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_reassign", func(t *testing.T) {
 		src := `behavior a { let x = 5; x = 10 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -398,7 +398,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_plus_equals", func(t *testing.T) {
 		src := `behavior a { let x = 5; x += 1 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -409,7 +409,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_plus_plus", func(t *testing.T) {
 		src := `behavior a { let x = 5; x++ }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -420,7 +420,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unknown_register", func(t *testing.T) {
 		src := `behavior a { domove $foo }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -431,7 +431,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_after_instruction", func(t *testing.T) {
 		src := `behavior a { notify "hi"; @param in x "X" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -442,7 +442,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_builtin_conflict", func(t *testing.T) {
 		src := `behavior a { @param in signal "Signal" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -453,7 +453,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_duplicate_name", func(t *testing.T) {
 		src := `behavior a { @param in x "X1"; @param out x "X2" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -464,7 +464,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_invalid_direction", func(t *testing.T) {
 		src := `behavior a { @param rw x "X" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -475,7 +475,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("dollar_sign_alone", func(t *testing.T) {
 		src := `behavior a { domove $ }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -486,7 +486,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_fn_no_return", func(t *testing.T) {
 		src := `behavior a { let x = notify }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -497,7 +497,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_fn_unknown", func(t *testing.T) {
 		src := `behavior a { let x = nonexistent }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -508,7 +508,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_fn_string_rhs", func(t *testing.T) {
 		src := `behavior a { let x = "hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -519,7 +519,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("var_fn_no_return", func(t *testing.T) {
 		src := `behavior a { var x = notify }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -530,7 +530,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("assign_fn_no_return", func(t *testing.T) {
 		src := `behavior a { var x = 5; x = notify }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -541,7 +541,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_fn_return_immutable", func(t *testing.T) {
 		src := `behavior a { let me = get_self; me = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -552,7 +552,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_fn_body_no_return", func(t *testing.T) {
 		src := "fn bad() { let x = notify }\nbehavior a { bad }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -621,7 +621,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("localized_doc_comment_with_locale", func(t *testing.T) {
 		src := "behavior a {\n#! (en) English comment\n#! (ja) 日本語コメント\nnotify \"Hello\"\n}"
-		obj, err := compiler.CompileString(src, stdlib, "", "ja")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "ja")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -633,7 +633,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("localized_doc_comment_no_locale", func(t *testing.T) {
 		src := "behavior a {\n#! (en) English comment\n#! (ja) 日本語コメント\nnotify \"Hello\"\n}"
-		obj, err := compiler.CompileString(src, stdlib, "", "")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -645,7 +645,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("localized_doc_comment_fallback", func(t *testing.T) {
 		src := "behavior a {\n#! (en) English comment\n#! (ja) 日本語コメント\nnotify \"Hello\"\n}"
-		obj, err := compiler.CompileString(src, stdlib, "", "fr")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "fr")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -657,7 +657,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("localized_doc_comment_multiline_continuation", func(t *testing.T) {
 		src := "behavior a {\n#! (en) line one\n#! continued\n#! (ja) 日本語\nnotify \"Hello\"\n}"
-		obj, err := compiler.CompileString(src, stdlib, "", "en")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "en")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -670,7 +670,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("plain_doc_comment_not_affected", func(t *testing.T) {
 		// A plain doc comment (no locale prefix) should work as before
 		src := "behavior a {\n#! plain comment\nnotify \"Hello\"\n}"
-		obj, err := compiler.CompileString(src, stdlib, "", "ja")
+		obj, _, err := compiler.CompileString(src, stdlib, "", "ja")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -682,7 +682,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("multi_return_too_many_bindings", func(t *testing.T) {
 		src := "behavior a {\n  let me = get_self\n  let coord = get_location me\n  let x, y, z = separate_coordinate coord\n}"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -693,7 +693,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("multi_return_no_return_fn", func(t *testing.T) {
 		src := `behavior a { let x, y = notify "Hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -704,7 +704,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("underscore_as_var_name", func(t *testing.T) {
 		src := `behavior a { var _ = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -715,7 +715,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("underscore_as_let_name", func(t *testing.T) {
 		src := `behavior a { let _ = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -726,7 +726,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("multi_return_fn_body_too_many", func(t *testing.T) {
 		src := "fn bad() {\n  let me = get_self\n  let coord = get_location me\n  let x, y, z = separate_coordinate coord\n  return x\n}\nbehavior a { bad }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -737,7 +737,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("constructor_missing_lparen", func(t *testing.T) {
 		src := `behavior a { notify "hi", value: Item "metalbar" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -748,7 +748,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("coordinate_wrong_arg_count", func(t *testing.T) {
 		src := `behavior a { notify "hi", value: Coordinate(1) }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -760,7 +760,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("item_non_string_arg", func(t *testing.T) {
 		src := `behavior a { notify "hi", value: Item(42) }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -771,7 +771,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("item_wrong_arg_count", func(t *testing.T) {
 		src := `behavior a { notify "hi", value: Item("a", "b") }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -783,7 +783,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("constructor_as_variable_name", func(t *testing.T) {
 		src := `behavior a { let Item = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -794,7 +794,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("instruction_let_no_return_slot", func(t *testing.T) {
 		src := "behavior a { let x = instruction \"test\" { 0: foo } }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -805,7 +805,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("instruction_multi_return_too_many_bindings", func(t *testing.T) {
 		src := "behavior a { let x, y = instruction \"test\" { 0: @1 } }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -816,7 +816,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("instruction_fn_body_let_no_return_slot", func(t *testing.T) {
 		src := "fn bad() { let x = instruction \"test\" { 0: foo } }\nbehavior a { bad }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -827,7 +827,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("instruction_fn_body_multi_return_too_many", func(t *testing.T) {
 		src := "fn bad() { let x, y = instruction \"test\" { 0: @1 } }\nbehavior a { bad }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -840,7 +840,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_in_assign", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; $x = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -851,7 +851,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_in_plusplus", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; $x++ }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -862,7 +862,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_in_plusequals", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; $x += 1 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -873,7 +873,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_out_read_fn_arg", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; domove $x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -884,7 +884,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_in_to_out_fn", func(t *testing.T) {
 		src := "fn writer(out target) { let target = get_self }\nbehavior a { @param in x \"X\"; writer out $x }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -895,7 +895,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_out_in_condition", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; if $x >= 5 { notify "hi" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -906,7 +906,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_out_plusplus", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; $x++ }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -917,7 +917,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_in_param_to_out", func(t *testing.T) {
 		src := "fn writer(out target) { let target = get_self }\nfn caller(x) { writer out x }\nbehavior a { caller 5 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -928,7 +928,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_out_param_as_input", func(t *testing.T) {
 		src := "fn caller(out x) { notify x }\nbehavior a { var z = 5; caller z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -939,7 +939,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("let_to_out_param", func(t *testing.T) {
 		src := "fn writer(out target) { let target = get_self }\nbehavior a { let x = 5; writer out x }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -951,7 +951,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("fn_out_param_in_instruction_input", func(t *testing.T) {
 		// out param used in non-@N instruction slot (treated as input read)
 		src := "fn bad(out x) { instruction \"notify\" { txt: x } }\nbehavior a { var z = 5; bad out z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -963,7 +963,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("fn_out_param_read_in_call", func(t *testing.T) {
 		// out param used as input in a fn body call (notify reads x)
 		src := "fn bad(out x) { notify x }\nbehavior a { var z = 5; bad out z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -976,7 +976,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_out_assign_ok", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; $x = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -984,7 +984,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_inout_both_ok", func(t *testing.T) {
 		src := `behavior a { @param inout x "X"; $x += 1; domove $x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -993,7 +993,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("fn_direction_default_in", func(t *testing.T) {
 		// Omitting direction defaults to "in" — passing a literal to an unadorned param should work
 		src := "fn reader(x) { notify x }\nbehavior a { reader 5 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1002,7 +1002,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("fn_out_param_ok", func(t *testing.T) {
 		// out param in fn: callee writes to it via let binding, fine with a var argument + out annotation
 		src := "fn writer(out target) { let target = get_self }\nbehavior a { var z = 5; writer out z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1010,7 +1010,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_out_in_while_condition", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; while $x <= 5 { notify "hi" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1021,7 +1021,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("param_out_in_instruction_input", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; instruction "notify" { 0: $x } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1034,7 +1034,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("missing_out_annotation", func(t *testing.T) {
 		src := "fn writer(out target) { let target = get_self }\nbehavior a { var z = 5; writer z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1045,7 +1045,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("missing_inout_annotation", func(t *testing.T) {
 		src := "fn updater(inout target) { instruction \"get_self\" { 0: target } }\nbehavior a { var z = 5; updater z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1056,7 +1056,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("wrong_annotation_out_for_in", func(t *testing.T) {
 		src := "fn reader(x) { notify x }\nbehavior a { reader out 5 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1067,7 +1067,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("wrong_annotation_in_for_out", func(t *testing.T) {
 		src := "fn writer(out target) { let target = get_self }\nbehavior a { var z = 5; writer in z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1078,7 +1078,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("missing_out_annotation_keyword", func(t *testing.T) {
 		src := "fn my_fn(x, out kw result) { let result = get_self }\nbehavior a { var z = 5; my_fn 1, kw: z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1089,7 +1089,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("missing_out_annotation_fn_body", func(t *testing.T) {
 		src := "fn writer(out target) { let target = get_self }\nfn caller(x) { writer x }\nbehavior a { caller 5 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1102,7 +1102,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("out_annotation_ok", func(t *testing.T) {
 		src := "fn writer(out target) { let target = get_self }\nbehavior a { var z = 5; writer out z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1110,7 +1110,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("inout_annotation_ok", func(t *testing.T) {
 		src := "fn updater(inout target) { instruction \"add\" { 0: target  1: target  2: target } }\nbehavior a { var z = 5; updater inout z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1119,7 +1119,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("explicit_in_annotation_ok", func(t *testing.T) {
 		// explicit "in" for an "in" param should be accepted
 		src := "fn reader(x) { notify x }\nbehavior a { reader in 5 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1127,7 +1127,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_body_out_annotation_ok", func(t *testing.T) {
 		src := "fn writer(out target) { let target = get_self }\nfn caller(inout x) { writer out x }\nbehavior a { var z = 5; caller inout z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1135,7 +1135,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("keyword_out_annotation_ok", func(t *testing.T) {
 		src := "fn my_fn(x, out kw result) { let result = get_self }\nbehavior a { var z = 5; my_fn 1, out kw: z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1143,7 +1143,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("keyword_as_var_name_null", func(t *testing.T) {
 		src := `behavior a { var null = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1154,7 +1154,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("keyword_as_var_name_return", func(t *testing.T) {
 		src := `behavior a { var return = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1165,7 +1165,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("keyword_as_var_name_true", func(t *testing.T) {
 		src := `behavior a { var true = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1176,7 +1176,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("keyword_as_var_name_false", func(t *testing.T) {
 		src := `behavior a { var false = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1187,7 +1187,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("instruction_assign_no_return_slot", func(t *testing.T) {
 		src := `behavior a { var x = 5; x = instruction "test" { 0: x } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1198,7 +1198,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("direction_keyword_as_var_name", func(t *testing.T) {
 		src := `behavior a { let out = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1209,7 +1209,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unit_as_var_name", func(t *testing.T) {
 		src := `behavior a { let Unit = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1222,7 +1222,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("single_pipe_error", func(t *testing.T) {
 		src := `behavior a { let x = a | b }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1233,7 +1233,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("return_at_behavior_level", func(t *testing.T) {
 		src := `behavior a { return }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1244,7 +1244,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("return_in_behavior_block", func(t *testing.T) {
 		src := `behavior a { if true { return } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1255,7 +1255,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("else_without_if", func(t *testing.T) {
 		src := `behavior a { else { } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1266,7 +1266,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_nested_in_fn_body", func(t *testing.T) {
 		src := `behavior a { f } fn f() { fn g() { } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1277,7 +1277,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_nested_in_behavior", func(t *testing.T) {
 		src := `behavior a { fn g() { } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1288,7 +1288,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("behavior_nested_in_behavior", func(t *testing.T) {
 		src := `behavior a { behavior b { } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1299,7 +1299,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("double_slash_comment", func(t *testing.T) {
 		src := `behavior a { // this is a comment }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1310,7 +1310,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("single_equals_in_condition", func(t *testing.T) {
 		src := `behavior a { var x = 1; if x = 5 { } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1321,7 +1321,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("single_equals_in_while", func(t *testing.T) {
 		src := `behavior a { var x = 1; while x = 5 { } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1334,7 +1334,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("comparison_string_rhs", func(t *testing.T) {
 		src := `behavior a { var x = 5; let r = x > "hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1345,7 +1345,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("comparison_out_param_lhs", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; let r = $x > 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1356,7 +1356,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("comparison_assign_string_rhs", func(t *testing.T) {
 		src := `behavior a { var x = 5; var r = 0; r = x > "hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1367,7 +1367,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("comparison_out_param_rhs", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; var a = 5; let r = a > $x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1381,7 +1381,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("logical_mixed_operators", func(t *testing.T) {
 		// Implicit precedence: && binds tighter than ||
 		src := `behavior a { var x = 5; var y = 3; var z = 1; let r = x > 2 && y < 10 || z > 0 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1390,7 +1390,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("logical_number_truthy", func(t *testing.T) {
 		// Numbers and bare variables are now valid as truthy terms in && / ||
 		src := `behavior a { var x = 5; let r = x > 2 && 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1399,7 +1399,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("logical_var_truthy", func(t *testing.T) {
 		// Bare variable is a valid truthy term in &&
 		src := `behavior a { var x = 5; var y = 3; let r = x > 2 && y }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1407,7 +1407,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("logical_out_param_second", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; var a = 5; let r = a > 2 && $x < 10 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1420,7 +1420,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("equality_string_rhs", func(t *testing.T) {
 		src := `behavior a { var a = 5; let r = a != "hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1431,7 +1431,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("negation_compiles", func(t *testing.T) {
 		src := `behavior a { var x = 5; let r = !x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1439,7 +1439,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("double_negation_compiles", func(t *testing.T) {
 		src := `behavior a { var x = 5; let r = !!x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1447,7 +1447,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("negation_in_if_compiles", func(t *testing.T) {
 		src := `behavior a { var x = 5; if !x { notify "empty" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1455,7 +1455,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("negation_in_while_compiles", func(t *testing.T) {
 		src := `behavior a { var x = 5; while !x { notify "waiting" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1463,7 +1463,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("negation_in_fn_body_compiles", func(t *testing.T) {
 		src := `fn check(v) { let r = !v; return r } behavior a { var x = 5; let r = check x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1471,7 +1471,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("negation_assign_compiles", func(t *testing.T) {
 		src := `behavior a { var x = 5; var r = 0; r = !x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1479,7 +1479,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("negation_chain_compiles", func(t *testing.T) {
 		src := `behavior a { var x = 5; var y = 3; let r = !(x > 0 && y < 10) }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1487,7 +1487,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("negation_is_compiles", func(t *testing.T) {
 		src := `behavior a { let me = get_self; let r = !(me is Unit) }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1497,7 +1497,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("is_unknown_type", func(t *testing.T) {
 		src := `behavior a { let me = get_self; let a = me is Foo }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1508,7 +1508,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("is_missing_type", func(t *testing.T) {
 		src := `behavior a { let me = get_self; let a = me is }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1519,7 +1519,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("locked_as_variable_name", func(t *testing.T) {
 		src := `behavior a { let locked = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1530,7 +1530,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("unlocked_as_variable_name", func(t *testing.T) {
 		src := `behavior a { let unlocked = 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1541,7 +1541,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("bare_lock_not_valid", func(t *testing.T) {
 		src := `behavior a { lock }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			return // error expected — "lock" is no longer a keyword
 		}
@@ -1550,7 +1550,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("bare_unlock_not_valid", func(t *testing.T) {
 		src := `behavior a { unlock }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			return // error expected — "unlock" is no longer a keyword
 		}
@@ -1559,7 +1559,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("arith_string_rhs", func(t *testing.T) {
 		src := `behavior a { var b = 5; let a = b + "hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1570,7 +1570,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("arith_out_param_lhs", func(t *testing.T) {
 		src := `behavior a { @param out x "X"; let r = $x + 1 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1581,7 +1581,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("arith_let_compound_assign", func(t *testing.T) {
 		src := `behavior a { let x = 5; x -= 1 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1592,7 +1592,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("arith_let_decrement", func(t *testing.T) {
 		src := `behavior a { let x = 5; x-- }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1605,7 +1605,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("paren_unclosed", func(t *testing.T) {
 		src := `behavior a { var x = 5; var y = 3; let r = (x > 2 && y < 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1616,7 +1616,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("paren_empty", func(t *testing.T) {
 		src := `behavior a { let r = () }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1628,7 +1628,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("logical_mixed_suggests_parens", func(t *testing.T) {
 		// Implicit precedence: && binds tighter than ||
 		src := `behavior a { var x = 5; var y = 3; var z = 1; let r = x > 2 && y < 10 || z > 0 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1638,7 +1638,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("compound_assign_arith_string", func(t *testing.T) {
 		src := `behavior a { var x = 5; x += "hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1649,7 +1649,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("arith_chain_string_rhs", func(t *testing.T) {
 		src := `behavior a { var b = 5; let a = b + 1 + "hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1661,7 +1661,7 @@ func TestCompileErrors(t *testing.T) {
 	t.Run("constructor_arith_not_supported", func(t *testing.T) {
 		// Constructor followed by arithmetic operator is not a valid expression
 		src := `behavior a { var b = 5; let a = Item("metalbar") + 1 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1673,7 +1673,7 @@ func TestCompileErrors(t *testing.T) {
 	// Positive test: parenthesized single value compiles as value passthrough
 	t.Run("paren_value_passthrough", func(t *testing.T) {
 		src := `behavior a { var x = 5; let a = (x) }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1683,7 +1683,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_body_assign_to_let", func(t *testing.T) {
 		src := "fn bad(x) { let a = x; a = 5 }\nbehavior a { bad 1 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1694,7 +1694,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_body_assign_to_in_param", func(t *testing.T) {
 		src := "fn bad(x) { x = 5 }\nbehavior a { bad 1 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1705,7 +1705,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_body_compound_assign_to_let", func(t *testing.T) {
 		src := "fn bad(x) { let a = x; a += 1 }\nbehavior a { bad 1 }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1716,7 +1716,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_body_read_out_param", func(t *testing.T) {
 		src := "fn bad(out x) { let a = x }\nbehavior a { var z = 5; bad out z }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1727,7 +1727,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_body_var_underscore", func(t *testing.T) {
 		src := "fn bad() { var _ = 5 }\nbehavior a { bad }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1738,7 +1738,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("bhv_break_outside_loop", func(t *testing.T) {
 		src := "behavior a { break }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1747,7 +1747,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("expr_list_too_many_expressions", func(t *testing.T) {
 		src := `behavior a { let a, b = 1, 2, 3 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1758,7 +1758,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("expr_list_fn_no_return", func(t *testing.T) {
 		src := `behavior a { let a, b = notify "hi", 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1769,7 +1769,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("expr_list_fn_body_too_many_expressions", func(t *testing.T) {
 		src := "fn bad() { let a, b = 1, 2, 3 }\nbehavior a { bad }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1780,7 +1780,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("expr_list_fn_body_fn_no_return", func(t *testing.T) {
 		src := "fn bad() { let a, b = notify \"hi\", 5 }\nbehavior a { bad }"
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1791,7 +1791,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("mode_block_expr_empty", func(t *testing.T) {
 		src := `behavior a { let x = unlocked { } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1802,7 +1802,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("mode_block_expr_non_value_tail", func(t *testing.T) {
 		src := `behavior a { let x = unlocked { notify "hi" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1813,7 +1813,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("mode_block_expr_fn_body_empty", func(t *testing.T) {
 		src := `behavior a { let x = f } fn f() { let x = unlocked { }; return x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1824,7 +1824,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("mode_block_expr_fn_body_non_value_tail", func(t *testing.T) {
 		src := `behavior a { let x = f } fn f() { let x = unlocked { notify "hi" }; return x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1835,7 +1835,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("break_in_while_compiles", func(t *testing.T) {
 		src := `behavior a { var i = 1; while i <= 5 { if i >= 3 { break }; i += 1 } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -1843,7 +1843,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("counted_loop_missing_brace", func(t *testing.T) {
 		src := `behavior a { loop 5 notify "hi" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1852,7 +1852,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("fn_body_counted_loop_missing_brace", func(t *testing.T) {
 		src := `behavior a { f } fn f() { loop 5 notify "hi" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1861,7 +1861,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("break_outside_loop_behavior", func(t *testing.T) {
 		src := `behavior a { var i = 0 if i >= 1 { break } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1872,7 +1872,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("break_outside_loop_fn_body", func(t *testing.T) {
 		src := `behavior a { f } fn f() { break }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1883,7 +1883,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("duplicate_loop_label_behavior", func(t *testing.T) {
 		src := `behavior a { x: loop { x: loop { break } } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1894,7 +1894,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("duplicate_loop_label_fn_body", func(t *testing.T) {
 		src := `behavior a { f } fn f() { x: loop { x: loop { break } } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1905,7 +1905,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("labeled_break_compiles", func(t *testing.T) {
 		src := `behavior a { var i = 0 outer: loop { loop { if i >= 5 { break outer } i += 1 } } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -1913,7 +1913,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("labeled_break_fn_body_compiles", func(t *testing.T) {
 		src := `behavior a { f } fn f() { var i = 0 outer: loop { loop { if i >= 5 { break outer } i += 1 } } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -1921,7 +1921,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("break_unknown_label_behavior", func(t *testing.T) {
 		src := `behavior a { var i = 0 outer: loop { loop { if i >= 5 { break typo } i += 1 } } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1932,7 +1932,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("break_unknown_label_fn_body", func(t *testing.T) {
 		src := `behavior a { f } fn f() { var i = 0 outer: loop { loop { if i >= 5 { break typo } i += 1 } } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1943,7 +1943,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("if_expr_no_else_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X" let r = if $x > 1 { 5 } notify "done", value: r }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -1951,7 +1951,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("if_expr_empty_branch", func(t *testing.T) {
 		src := `behavior a { @param in x "X" let r = if $x > 1 { } else { 5 } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1962,7 +1962,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("if_expr_non_value_tail", func(t *testing.T) {
 		src := `behavior a { @param in x "X" let r = if $x > 1 { notify "hi" } else { 5 } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1973,7 +1973,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("if_expr_fn_body_no_else_compiles", func(t *testing.T) {
 		src := `behavior a { let r = f } fn f() { let x = if 1 > 0 { 5 }; return x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -1981,7 +1981,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("if_expr_fn_body_empty_branch", func(t *testing.T) {
 		src := `behavior a { let r = f } fn f() { let x = if 1 > 0 { } else { 5 }; return x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -1992,7 +1992,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("if_expr_fn_body_non_value_tail", func(t *testing.T) {
 		src := `behavior a { let r = f } fn f() { let x = if 1 > 0 { notify "hi" } else { 5 }; return x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2005,7 +2005,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("range_step_zero", func(t *testing.T) {
 		src := `behavior a { for i in Range(0, 10, 0) { notify "hi" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2016,7 +2016,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("range_step_zero_fn_body", func(t *testing.T) {
 		src := `fn f() { for i in Range(0, 10, 0) { notify "hi" } } behavior a { f }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2027,7 +2027,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("for_missing_in", func(t *testing.T) {
 		src := `behavior a { for i Range(5) { notify "hi" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2038,7 +2038,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("for_non_ident_iter_var", func(t *testing.T) {
 		src := `behavior a { for "x" in Range(5) { notify "hi" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2050,7 +2050,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("for_keyword_iter_var", func(t *testing.T) {
 		src := `behavior a { for if in Range(5) { notify "hi" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2061,7 +2061,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("for_assign_to_iter_var", func(t *testing.T) {
 		src := `behavior a { for i in Range(5) { i = 3 } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2072,7 +2072,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("for_duplicate_label", func(t *testing.T) {
 		src := `behavior a { x: for i in Range(5) { x: for j in Range(3) { notify "hi" } } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2085,7 +2085,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("wait_empty_block", func(t *testing.T) {
 		src := `behavior a { wait 5 { } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2096,7 +2096,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("wait_non_value_tail", func(t *testing.T) {
 		src := `behavior a { wait 5 { notify "hi" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2107,7 +2107,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("wait_empty_block_fn_body", func(t *testing.T) {
 		src := `fn f() { wait 5 { } } behavior a { f }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2118,7 +2118,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("wait_non_value_tail_fn_body", func(t *testing.T) {
 		src := `fn f() { wait 5 { notify "hi" } } behavior a { f }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2129,7 +2129,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("paren_call_missing_rparen", func(t *testing.T) {
 		src := `behavior a { notify("Hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2140,7 +2140,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("paren_call_missing_rparen_fn_body", func(t *testing.T) {
 		src := `fn f() { notify("Hello" } behavior a { f }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -2151,7 +2151,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("paren_call_compiles", func(t *testing.T) {
 		src := `behavior a { notify("Hello"); let me = get_self(); notify("Hi", value: me) }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2159,7 +2159,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("paren_cmp_arg_unclosed", func(t *testing.T) {
 		src := `behavior a { @param in x "x"; let r = set_reg (x > 5 }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error for unclosed parenthesized expression")
 		}
@@ -2174,7 +2174,7 @@ fn helper(val) { return instruction "set_reg" { 0: val; 1: @1 } }
 fn caller(x) { let r = helper (x > 5; return r }
 behavior a { @param in x "x"; let r = caller x }
 `
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error for unclosed parenthesized expression in fn body")
 		}
@@ -2185,7 +2185,7 @@ behavior a { @param in x "x"; let r = caller x }
 
 	t.Run("paren_cmp_arg_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "x"; let r = set_reg (x > 5) }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2196,7 +2196,7 @@ behavior a { @param in x "x"; let r = caller x }
 fn get_flag() { return instruction "get_var" { 0: "flag"; 1: @1 } }
 behavior a { @param in d "d"; let r = d || get_flag }
 `
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2206,7 +2206,7 @@ behavior a { @param in d "d"; let r = d || get_flag }
 
 	t.Run("bhv_if_var_rhs_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; @param in y "Y"; if $x > $y { notify "yes" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2214,7 +2214,7 @@ behavior a { @param in d "d"; let r = d || get_flag }
 
 	t.Run("bhv_if_bool_chain_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; @param in y "Y"; if $x > 5 && $y < 10 { notify "yes" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2222,7 +2222,7 @@ behavior a { @param in d "d"; let r = d || get_flag }
 
 	t.Run("bhv_if_is_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; if $x is Unit { notify "unit" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2230,7 +2230,7 @@ behavior a { @param in d "d"; let r = d || get_flag }
 
 	t.Run("bhv_if_truthy_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; if $x { notify "yes" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2238,7 +2238,7 @@ behavior a { @param in d "d"; let r = d || get_flag }
 
 	t.Run("bhv_if_equality_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; if $x == null { notify "null" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2246,7 +2246,7 @@ behavior a { @param in d "d"; let r = d || get_flag }
 
 	t.Run("bhv_while_var_rhs_compiles", func(t *testing.T) {
 		src := `behavior a { @param in limit "Limit"; var i = 0; while i < $limit { notify "tick"; i++ } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2254,7 +2254,7 @@ behavior a { @param in d "d"; let r = d || get_flag }
 
 	t.Run("bhv_while_bool_chain_compiles", func(t *testing.T) {
 		src := `behavior a { var i = 0; var active = 1; while i < 10 && active { notify "tick"; i++ } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2265,7 +2265,7 @@ behavior a { @param in d "d"; let r = d || get_flag }
 fn get_count(in v) { return instruction "get_number" { 0: v; 1: @1 } }
 behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 `
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2273,7 +2273,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("bhv_if_arith_condition_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X"; @param in y "Y"; if $x + 1 >= $y - 2 { notify "yes" } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2281,7 +2281,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("bhv_if_break_chain_compiles", func(t *testing.T) {
 		src := `behavior a { var i = 0; var j = 0; loop { if i > 5 && j > 3 { break }; i++; j++ } }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2291,7 +2291,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("neg_let_literal_compiles", func(t *testing.T) {
 		src := `behavior a { let x = -5; set_reg x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2299,7 +2299,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("neg_let_variable_compiles", func(t *testing.T) {
 		src := `behavior a { @param in p "P"; let x = -$p; set_reg x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2307,7 +2307,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("neg_assign_compiles", func(t *testing.T) {
 		src := `behavior a { var x = 0; x = -5; set_reg x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2315,7 +2315,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("neg_fn_body_compiles", func(t *testing.T) {
 		src := `fn neg(p) { let x = -p; return x }; behavior a { @param in p "P"; let x = neg $p; set_reg x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2323,7 +2323,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("neg_in_call_arg_compiles", func(t *testing.T) {
 		src := `behavior a { @param in p "P"; set_reg -$p }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2331,7 +2331,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("neg_in_comparison_compiles", func(t *testing.T) {
 		src := `behavior a { @param in p "P"; let x = $p > -5; set_reg x }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2339,7 +2339,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 
 	t.Run("neg_string_error", func(t *testing.T) {
 		src := `behavior a { let x = -"hello" }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error for negating a string")
 		}
@@ -2348,7 +2348,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 	t.Run("fn_mixed_modifier_immutable_assign", func(t *testing.T) {
 		src := `fn f(coord) { var a, let b = separate_coordinate coord; b = a }
 		        behavior a { @name "A" f Coordinate(1, 2) }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error assigning to immutable let binding in mixed modifier list")
 		}
@@ -2360,7 +2360,7 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 	t.Run("fn_underscore_not_variable", func(t *testing.T) {
 		src := `fn f() { let _ = 5 }
 		        behavior a { @name "A" f }`
-		_, err := compiler.CompileString(src, stdlib, "", "")
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error using _ as variable name")
 		}
@@ -2369,6 +2369,257 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 		}
 	})
 
+	// --- Block scoping tests ---
+
+	t.Run("block_scoping_let_redeclare_after_block", func(t *testing.T) {
+		// let x in if-block should go out of scope, allowing re-declaration after
+		src := `behavior a {
+			@name "A"
+			@param in p "P"
+			if $p {
+				let x = 5
+				set_reg x
+			}
+			let x = 10
+			set_reg x
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("expected block-scoped let to allow re-declaration after block, got: %v", err)
+		}
+	})
+
+	t.Run("block_scoping_assign_after_let_block", func(t *testing.T) {
+		// let x in if-block should not prevent assignment to x after block (behavior level)
+		src := `behavior a {
+			@name "A"
+			@param in p "P"
+			if $p {
+				let x = get_self
+			}
+			var x = get_self
+			set_reg x
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("expected let in block not to leak immutability, got: %v", err)
+		}
+	})
+
+	t.Run("block_scoping_sibling_branches", func(t *testing.T) {
+		// Same name in sibling if/else branches — both scopes are independent
+		src := `behavior a {
+			@name "A"
+			@param in p "P"
+			if $p {
+				let x = 5
+				set_reg x
+			} else {
+				let x = 10
+				set_reg x
+			}
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("expected same name in sibling branches to work, got: %v", err)
+		}
+	})
+
+	t.Run("fn_block_scoping_let_redeclare_after_block", func(t *testing.T) {
+		// fn body: let x in if-block should go out of scope
+		src := `fn f(in cond) {
+			if cond {
+				let x = 5
+				set_reg x
+			}
+			let x = 10
+			set_reg x
+		}
+		behavior a { @name "A" @param in p "P" f $p }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("expected fn body block-scoped let to allow re-declaration, got: %v", err)
+		}
+	})
+
+	t.Run("fn_block_scoping_immutability_contained", func(t *testing.T) {
+		// fn body: let x in block should not prevent var x after block
+		src := `fn f(in cond) {
+			if cond {
+				let x = 5
+				set_reg x
+			}
+			var x = 10
+			x = 20
+			set_reg x
+		}
+		behavior a { @name "A" @param in p "P" f $p }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("expected let immutability to be contained in block, got: %v", err)
+		}
+	})
+
+}
+
+func TestCompileWarnings(t *testing.T) {
+	stdlib := os.DirFS("stdlib")
+
+	t.Run("same_scope_shadow_unused", func(t *testing.T) {
+		src := `behavior a {
+			@name "A"
+			let x = 5
+			let x = 10
+			set_reg x
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(warnings) == 0 {
+			t.Fatal("expected a shadowing warning for unused let re-declaration")
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "shadows a previous declaration") && strings.Contains(w, `"x"`) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected shadowing warning for x, got warnings: %v", warnings)
+		}
+	})
+
+	t.Run("same_scope_shadow_used_no_warning", func(t *testing.T) {
+		src := `behavior a {
+			@name "A"
+			let x = 5
+			set_reg x
+			let x = 10
+			set_reg x
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "shadows") && strings.Contains(w, `"x"`) {
+				t.Fatalf("expected no shadowing warning when variable was used, got: %s", w)
+			}
+		}
+	})
+
+	t.Run("child_scope_no_warning", func(t *testing.T) {
+		src := `behavior a {
+			@name "A"
+			@param in p "P"
+			let x = 5
+			if $p {
+				let x = 10
+				set_reg x
+			}
+			set_reg x
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "shadows") && strings.Contains(w, `"x"`) {
+				t.Fatalf("expected no shadowing warning for child scope, got: %s", w)
+			}
+		}
+	})
+
+	t.Run("fn_same_scope_shadow_unused", func(t *testing.T) {
+		src := `fn f() {
+			let x = 5
+			let x = 10
+			set_reg x
+		}
+		behavior a { @name "A" f }`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(warnings) == 0 {
+			t.Fatal("expected a shadowing warning in fn body")
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "shadows a previous declaration") && strings.Contains(w, `"x"`) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected shadowing warning for x in fn body, got warnings: %v", warnings)
+		}
+	})
+
+	t.Run("fn_same_scope_shadow_used_no_warning", func(t *testing.T) {
+		src := `fn f() {
+			let x = 5
+			set_reg x
+			let x = 10
+			set_reg x
+		}
+		behavior a { @name "A" f }`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "shadows") && strings.Contains(w, `"x"`) {
+				t.Fatalf("expected no shadowing warning in fn body when variable was used, got: %s", w)
+			}
+		}
+	})
+
+	t.Run("fn_child_scope_no_warning", func(t *testing.T) {
+		src := `fn f(in cond) {
+			let x = 5
+			if cond {
+				let x = 10
+				set_reg x
+			}
+			set_reg x
+		}
+		behavior a { @name "A" @param in p "P" f $p }`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "shadows") && strings.Contains(w, `"x"`) {
+				t.Fatalf("expected no shadowing warning for child scope in fn body, got: %s", w)
+			}
+		}
+	})
+
+	t.Run("var_shadow_unused", func(t *testing.T) {
+		src := `behavior a {
+			@name "A"
+			var x = 5
+			var x = 10
+			set_reg x
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(warnings) == 0 {
+			t.Fatal("expected a shadowing warning for unused var re-declaration")
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "shadows a previous declaration") && strings.Contains(w, `"x"`) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected shadowing warning for var x, got warnings: %v", warnings)
+		}
+	})
 }
 
 func TestParseLocalePrefix(t *testing.T) {

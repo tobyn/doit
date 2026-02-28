@@ -288,6 +288,7 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		}
 		return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
 	}
+	syms.markUsed(tok.val)
 	return &IdentExpr{Name: tok.val}, nil
 }
 
@@ -904,8 +905,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if err != nil {
 			return nil, err
 		}
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 		final, handled, err := p.maybeBhvExprContinuation(result, syms)
 		if err != nil {
 			return nil, err
@@ -927,8 +927,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if err != nil {
 			return nil, err
 		}
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 		final, handled, err := p.maybeBhvExprContinuation(result, syms)
 		if err != nil {
 			return nil, err
@@ -957,8 +956,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 			return nil, err
 		}
 
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 
 		final, handled, err := p.maybeBhvExprContinuation(result, syms)
 		if err != nil {
@@ -976,8 +974,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if err != nil {
 			return nil, err
 		}
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: ctor, Comment: comment}}, nil
 	}
 
@@ -992,8 +989,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if err := p.checkInstructionDirections(rawFrame, syms, rhsTok.pos); err != nil {
 			return nil, err
 		}
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 		return []Stmt{&LetStmt{
 			Name:    nameTok.val,
 			Mutable: mutable,
@@ -1016,8 +1012,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 				return nil, err
 			}
 
-			syms.vars[nameTok.val] = varInfo{mutable: mutable}
-			syms.usedVars[nameTok.val] = true
+			syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 
 			final, handled, err := p.maybeBhvExprContinuation(result, syms)
 			if err != nil {
@@ -1040,8 +1035,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if !fn.hasReturn() {
 			return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
 		}
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 		args, kwArgs, err := p.parseBhvCallArgs(fn, rhsTok, syms)
 		if err != nil {
 			return nil, err
@@ -1071,8 +1065,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if err != nil {
 			return nil, err
 		}
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 
 		// Single truthy = parenthesized value — check for arithmetic continuation
 		if truthy, ok := expr.(*TruthyExpr); ok {
@@ -1113,8 +1106,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if err != nil {
 			return nil, err
 		}
-		syms.vars[nameTok.val] = varInfo{mutable: mutable}
-		syms.usedVars[nameTok.val] = true
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 
 		// Unary minus produces TruthyExpr wrapping arithmetic — unwrap it
 		if truthy, ok := expr.(*TruthyExpr); ok {
@@ -1723,21 +1715,15 @@ func (p *parser) parseBhvForStmt(syms *symbolTable, label ...string) (*ForStmt, 
 		return nil, err
 	}
 
-	// Save/restore iter var in symbol table for scoping
-	savedVar, hadVar := syms.vars[iterTok.val]
-	syms.vars[iterTok.val] = varInfo{mutable: false}
-	syms.usedVars[iterTok.val] = true
+	// Push scope for iter var + body
+	saved := syms.pushScope()
+	syms.declareVarWarn(iterTok.val, false, p, iterTok.pos)
 
 	p.enterLoop(lbl)
 	body, err := p.parseBhvStmtBlockInner(syms)
 	p.exitLoop(lbl)
 
-	// Restore symbol table
-	if hadVar {
-		syms.vars[iterTok.val] = savedVar
-	} else {
-		delete(syms.vars, iterTok.val)
-	}
+	syms.popScope(saved)
 
 	if err != nil {
 		return nil, err
@@ -1758,6 +1744,7 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		bindings = append(bindings, MultiBinding{
 			Name:    firstTok.val,
 			Mutable: firstMutable,
+			Pos:     firstTok.pos,
 		})
 	}
 
@@ -1791,22 +1778,23 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 			if err != nil {
 				return nil, err
 			}
-			bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: false})
+			bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: false, Pos: nameTok.pos})
 		case "var":
 			activeModifier = 1
 			nameTok, err := p.expect(tokIdent)
 			if err != nil {
 				return nil, err
 			}
-			bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: true})
+			bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: true, Pos: nameTok.pos})
 		default:
 			if activeModifier >= 0 {
 				bindings = append(bindings, MultiBinding{
 					Name:    tok.val,
 					Mutable: activeModifier == 1,
+					Pos:     tok.pos,
 				})
 			} else {
-				bindings = append(bindings, MultiBinding{Name: tok.val})
+				bindings = append(bindings, MultiBinding{Name: tok.val, Pos: tok.pos})
 			}
 		}
 
@@ -1858,8 +1846,7 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		// Register new variables
 		for _, bind := range bindings {
 			if !bind.Discard {
-				syms.vars[bind.Name] = varInfo{mutable: bind.Mutable}
-				syms.usedVars[bind.Name] = true
+				syms.declareVarWarn(bind.Name, bind.Mutable, p, bind.Pos)
 			}
 		}
 
@@ -1930,8 +1917,7 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 				if !varsRegistered {
 					for _, bind := range bindings {
 						if !bind.Discard {
-							syms.vars[bind.Name] = varInfo{mutable: bind.Mutable}
-							syms.usedVars[bind.Name] = true
+							syms.declareVarWarn(bind.Name, bind.Mutable, p, bind.Pos)
 						}
 					}
 					varsRegistered = true
@@ -1978,8 +1964,7 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 	if !varsRegistered {
 		for _, bind := range bindings {
 			if !bind.Discard {
-				syms.vars[bind.Name] = varInfo{mutable: bind.Mutable}
-				syms.usedVars[bind.Name] = true
+				syms.declareVarWarn(bind.Name, bind.Mutable, p, bind.Pos)
 			}
 		}
 	}
@@ -2168,6 +2153,8 @@ func (p *parser) parseBhvStmtBlock(syms *symbolTable) ([]Stmt, error) {
 // item may be a bare expression (wrapped in exprTailStmt).
 func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]Stmt, error) {
 	allowExprTail := len(exprTail) > 0 && exprTail[0]
+	saved := syms.pushScope()
+	defer syms.popScope(saved)
 	var stmts []Stmt
 	for {
 		tok, err := p.next()
@@ -3163,6 +3150,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		return p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, 0, s.Comment, syms.usedVars)
 
 	case *LetStmt:
+		syms.declareVar(s.Name, s.Mutable)
 		return p.emitBhvExprTo(s.Value, s.Name, syms, b, s.Comment)
 
 	case *AssignStmt:
@@ -3224,6 +3212,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 			if bind.Discard {
 				retVals[i] = false
 			} else {
+				syms.declareVar(bind.Name, bind.Mutable)
 				retVals[i] = bind.Name
 			}
 		}
@@ -3331,11 +3320,13 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 // It emits a mode transition frame on entry (if needed), recurses into the
 // body, then restores the mode on exit (if needed).
 func (p *parser) emitBhvModeBlock(s *ModeBlockStmt, b *frameBuilder, syms *symbolTable) error {
-	saved := emitModeEntry(b, s.Unlock, s.Comment)
+	savedMode := emitModeEntry(b, s.Unlock, s.Comment)
+	savedScope := syms.pushScope()
 	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}
-	emitModeExit(b, saved)
+	syms.popScope(savedScope)
+	emitModeExit(b, savedMode)
 	return nil
 }
 
@@ -3347,14 +3338,16 @@ func (p *parser) emitBhvModeBlockExpr(e *ModeBlockExpr, target any, syms *symbol
 	if mbeComment == "" {
 		mbeComment = comment
 	}
-	saved := emitModeEntry(b, e.Unlock, mbeComment)
+	savedMode := emitModeEntry(b, e.Unlock, mbeComment)
+	savedScope := syms.pushScope()
 	if _, err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
 		return err
 	}
 	if err := p.emitBhvExprTo(e.Tail, target, syms, b, mbeComment); err != nil {
 		return err
 	}
-	emitModeExit(b, saved)
+	syms.popScope(savedScope)
+	emitModeExit(b, savedMode)
 	return nil
 }
 
@@ -3365,7 +3358,8 @@ func (p *parser) emitBhvModeBlockExprMulti(e *ModeBlockExpr, retVals []any, syms
 	if mbeComment == "" {
 		mbeComment = comment
 	}
-	saved := emitModeEntry(b, e.Unlock, mbeComment)
+	savedMode := emitModeEntry(b, e.Unlock, mbeComment)
+	savedScope := syms.pushScope()
 	if _, err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
 		return err
 	}
@@ -3385,7 +3379,8 @@ func (p *parser) emitBhvModeBlockExprMulti(e *ModeBlockExpr, retVals []any, syms
 	if err := p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, mbeComment, syms.usedVars); err != nil {
 		return err
 	}
-	emitModeExit(b, saved)
+	syms.popScope(savedScope)
+	emitModeExit(b, savedMode)
 	return nil
 }
 
@@ -3429,6 +3424,7 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 		}
 
 		// Emit body via child builder
+		savedScope := syms.pushScope()
 		bodyBuilder := &frameBuilder{mode: b.mode}
 		mainCount, err := p.emitBehaviorStmts(br.body, bodyBuilder, syms)
 		if err != nil {
@@ -3451,6 +3447,7 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 		if err := p.emitBhvExprTo(br.tail, target, syms, b, ""); err != nil {
 			return err
 		}
+		syms.popScope(savedScope)
 
 		// Emit jump-to-continuation
 		jumpIdx := b.pos()
@@ -3476,6 +3473,7 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 
 	// Emit else body + tail (or null for missing else)
 	if e.ElsTail != nil {
+		savedScope := syms.pushScope()
 		bodyBuilder := &frameBuilder{mode: b.mode}
 		mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
 		if err != nil {
@@ -3496,6 +3494,7 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 		if err := p.emitBhvExprTo(e.ElsTail, target, syms, b, ""); err != nil {
 			return err
 		}
+		syms.popScope(savedScope)
 	} else {
 		// No else clause — assign null to target
 		b.emit(map[string]any{
@@ -3551,6 +3550,7 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
 		}
 
+		savedScope := syms.pushScope()
 		bodyBuilder := &frameBuilder{mode: b.mode}
 		mainCount, err := p.emitBehaviorStmts(br.body, bodyBuilder, syms)
 		if err != nil {
@@ -3572,6 +3572,7 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 		if err := p.emitBhvIfExprTailMulti(br.tail, retVals, syms, b); err != nil {
 			return err
 		}
+		syms.popScope(savedScope)
 
 		jumpIdx := b.pos()
 		b.emit(map[string]any{
@@ -3595,6 +3596,7 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 
 	// Else body + tail (or null for missing else)
 	if e.ElsTail != nil {
+		savedScope := syms.pushScope()
 		bodyBuilder := &frameBuilder{mode: b.mode}
 		mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
 		if err != nil {
@@ -3615,6 +3617,7 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 		if err := p.emitBhvIfExprTailMulti(e.ElsTail, retVals, syms, b); err != nil {
 			return err
 		}
+		syms.popScope(savedScope)
 	} else {
 		// No else clause — zero all retVal slots
 		for _, rv := range retVals {
@@ -3699,9 +3702,11 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable) er
 		stripFallThrough(b, checkStart, checkCount)
 
 		// Emit body directly into b
+		savedScope := syms.pushScope()
 		if _, err := p.emitBehaviorStmts(br.body, b, syms); err != nil {
 			return err
 		}
+		syms.popScope(savedScope)
 
 		// If there's more branches or an else, emit jump-to-continuation
 		hasMore := i < len(branches)-1 || len(s.Else) > 0
@@ -3730,9 +3735,11 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable) er
 
 	// Emit else body if present
 	if len(s.Else) > 0 {
+		savedScope := syms.pushScope()
 		if _, err := p.emitBehaviorStmts(s.Else, b, syms); err != nil {
 			return err
 		}
+		syms.popScope(savedScope)
 	}
 
 	// Patch all jumps-to-continuation to point to after everything
@@ -3788,6 +3795,7 @@ func (p *parser) emitBhvWaitStmt(s *WaitStmt, b *frameBuilder, syms *symbolTable
 	waitPos := b.emit(waitFrame)
 
 	// Emit body via child builder
+	savedScope := syms.pushScope()
 	bodyBuilder := &frameBuilder{mode: b.mode}
 	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
 	if err != nil {
@@ -3805,6 +3813,7 @@ func (p *parser) emitBhvWaitStmt(s *WaitStmt, b *frameBuilder, syms *symbolTable
 			lastMain["next"] = frameRef(b.pos())
 		}
 	}
+	syms.popScope(savedScope)
 
 	// Emit tail condition to temp var
 	condVar := allocUniqueVar("@wcond", syms.usedVars)
@@ -3852,9 +3861,11 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 	origLen := len(b.frames)
 
 	// Emit body directly into b
+	savedScope := syms.pushScope()
 	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}
+	syms.popScope(savedScope)
 
 	// Jump back to loop start
 	lastFrame := b.get(b.pos() - 1)
@@ -3908,11 +3919,13 @@ func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable
 	loopStart := b.pos()
 
 	// Compile body
+	savedScope := syms.pushScope()
 	bodyBuilder := &frameBuilder{mode: b.mode}
 	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
 	if err != nil {
 		return err
 	}
+	syms.popScope(savedScope)
 
 	bodyStart := b.pos()
 	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
@@ -3973,11 +3986,13 @@ func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTa
 	setComment(b.get(checkFrame), s.Comment)
 
 	// Compile body
+	savedScope := syms.pushScope()
 	bodyBuilder := &frameBuilder{mode: b.mode}
 	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
 	if err != nil {
 		return err
 	}
+	syms.popScope(savedScope)
 
 	bodyStart := b.pos()
 	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
@@ -4027,15 +4042,19 @@ func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTa
 
 // emitBhvForStmt emits a for-in loop at behavior level.
 func (p *parser) emitBhvForStmt(s *ForStmt, b *frameBuilder, syms *symbolTable) error {
+	savedScope := syms.pushScope()
 	iterVar := s.IterVar
-	syms.vars[iterVar] = varInfo{mutable: false}
-	syms.usedVars[iterVar] = true
+	syms.declareVar(iterVar, false)
 
+	var err error
 	ctor, isCtor := s.Range.(*ConstructorExpr)
 	if isCtor && ctor.TypeName == "Range" {
-		return p.emitBhvForStmtRange(s, ctor, b, syms)
+		err = p.emitBhvForStmtRange(s, ctor, b, syms)
+	} else {
+		err = p.emitBhvForStmtRuntime(s, b, syms)
 	}
-	return p.emitBhvForStmtRuntime(s, b, syms)
+	syms.popScope(savedScope)
+	return err
 }
 
 // emitBhvForStmtRange emits a for loop when the Range constructor is directly visible.
