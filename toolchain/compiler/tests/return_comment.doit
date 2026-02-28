@@ -1,0 +1,9 @@
+# AI-generated test
+# #! doc comment on return statement propagates to emitted frame
+fn get_five() {
+    #! Returns five
+    return 5
+}
+behavior return_comment {
+    let x = get_five
+}

@@ -76,12 +76,3 @@ dimensions in a single pass:
   pairs into single implementations (~500+ lines saved). Large
   architectural change — needs developer input.
 
-### LOW
-
-- **`ReturnStmt` missing `Comment` field.** All 14 other statement
-  types in ast.go have a `Comment string` field, but `ReturnStmt`
-  (ast.go:92–94) does not. This means `#!` doc comments on return
-  statements are silently lost. The emitter (`emitFnBody`) uses
-  the calling context's comment for return frames, so this is a
-  feature gap rather than a bug — users cannot annotate return
-  statements independently.

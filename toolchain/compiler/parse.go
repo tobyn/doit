@@ -1120,6 +1120,10 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 
 		case *ReturnStmt:
 			// Emit values to @retK targets, then emit @return jump placeholder
+			callComment := s.Comment
+			if callComment == "" {
+				callComment = comment
+			}
 			retOffset := 0
 			for _, val := range s.Values {
 				switch e := val.(type) {
@@ -1134,7 +1138,7 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 					if err != nil {
 						return err
 					}
-					if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, comment, usedVars); err != nil {
+					if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, callComment, usedVars); err != nil {
 						return err
 					}
 					retOffset += rc
@@ -1144,12 +1148,12 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 					for j := 0; j < rc; j++ {
 						retVals[j] = resolveVarName("@ret"+strconv.Itoa(retOffset+j+1), paramMap)
 					}
-					resolved := resolveInstructionFrame(e.Frame, retVals, paramMap, nil, comment)
+					resolved := resolveInstructionFrame(e.Frame, retVals, paramMap, nil, callComment)
 					b.emit(resolved)
 					retOffset += rc
 				default:
 					target := resolveVarName("@ret"+strconv.Itoa(retOffset+1), paramMap)
-					if err := p.emitExprTo(val, target, b, paramMap, usedVars, comment, pos); err != nil {
+					if err := p.emitExprTo(val, target, b, paramMap, usedVars, callComment, pos); err != nil {
 						return err
 					}
 					retOffset++
@@ -2702,7 +2706,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, retPeek.pos); err != nil {
 					return nil, err
 				}
-				astBody = append(astBody, &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame}}})
+				astBody = append(astBody, &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame}}, Comment: comment})
 			} else {
 				p.unget(retPeek)
 				var values []Expr
@@ -2721,7 +2725,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						break
 					}
 				}
-				astBody = append(astBody, &ReturnStmt{Values: values})
+				astBody = append(astBody, &ReturnStmt{Values: values, Comment: comment})
 			}
 
 		case "let", "var":

@@ -90,7 +90,8 @@ type ModeBlockStmt struct {
 
 // ReturnStmt is a return from a function body: `return x, y`
 type ReturnStmt struct {
-	Values []Expr // nil for bare return (not currently used)
+	Values  []Expr // nil for bare return (not currently used)
+	Comment string
 }
 
 // IfStmt is an if/else-if/else block.

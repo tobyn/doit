@@ -1,0 +1,15 @@
+{
+    "0": {
+        "0": { "num": 5 },
+        "1": "x",
+        "cmt": "Returns five",
+        "op": "set_reg"
+    },
+    "1": {
+        "0": false,
+        "1": false,
+        "next": 3,
+        "op": "set_reg"
+    },
+    "name": "return_comment"
+}
