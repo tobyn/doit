@@ -1231,6 +1231,28 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("single_equals_in_condition", func(t *testing.T) {
+		src := `behavior a { var x = 1; if x = 5 { } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "use '==' for comparison") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("single_equals_in_while", func(t *testing.T) {
+		src := `behavior a { var x = 1; while x = 5 { } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "use '==' for comparison") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	// --- Comparison expression errors ---
 
 	t.Run("comparison_string_rhs", func(t *testing.T) {

@@ -348,6 +348,9 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 		}
 		return &CompareExpr{Op: cmpTok.kind, LHS: lhs, RHS: rhs}, nil
 	}
+	if cmpTok.kind == tokEquals {
+		return nil, p.errorf(cmpTok.pos, "unexpected '=' — use '==' for comparison")
+	}
 
 	p.unget(cmpTok)
 	return &TruthyExpr{Value: lhs}, nil
