@@ -1,0 +1,8 @@
+# AI-generated test
+# Boolean literals in comparisons at behavior level
+behavior bool_literal_cmp {
+    @name "Bool Literal Cmp"
+    let x = true == false
+    let y = true != null
+    let z = null == false
+}

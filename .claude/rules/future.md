@@ -64,6 +64,14 @@ and parameter copies like fn bodies), `is Number` and `is Range`
 give generic "unknown type" error (now explain why not supported),
 string escape sequences undocumented (now in manual).
 
+Resolved in round 6: `let x = true`/`let x = false`/`let x = null`
+and `x = true`/`x = false`/`x = null` at behavior level gave
+"unknown function 'true'" (now correctly produces literal values
+matching fn body and function argument behavior). The fix was in
+`parseBhvVarInit` and `parseBhvDefaultStmt` in `bhvast.go` — both
+now check for `"null"`, `"false"`, `"true"` identifiers before the
+function lookup path and emit the appropriate `LiteralExpr`.
+
 ### Medium priority (design decisions needed)
 
 - **`-Werror` style flag for promoting warnings to errors.** The
@@ -72,9 +80,30 @@ string escape sequences undocumented (now in manual).
   mode. Needs a CLI flag (`-Werror` or similar) and plumbing through
   the `Compile`/`CompileString` API.
 
+- **Undeclared variable names silently succeed as function arguments.**
+  `set_reg completely_undeclared_var` compiles without error or warning.
+  The compiler treats the name as a runtime register reference. A typo
+  in a variable name passed as a function argument has no compile-time
+  feedback. Adding a warning for names not in the symbol table would
+  catch the common typo case. The challenge is backward compatibility
+  and distinguishing intentional "dynamic" register names from typos.
+
+- **`&` operator on plain variables gives confusing error.** `let x = myvar & 5`
+  gives "expected statement, got '&'" instead of explaining that `&`
+  requires a typed value (constructor) on the left side. The error message
+  should clarify what `&` does and when it is valid.
+
 ### Low priority
 
 - **Error message for `let x = "string"` could explain why.** The
   current message (`expected number, function call, or constructor
   after '='`) is accurate but doesn't explain that strings have no
   runtime representation and cannot be stored in variables.
+
+- **`for` loop iteration variable is accessible after the loop** with its
+  final value. Developers from Go/Rust expect the iteration variable to
+  be scoped to the loop body. The current behavior is undocumented. Either
+  document it explicitly or scope the variable to the loop.
+
+- **`wait 0` semantics are undocumented.** The manual doesn't explain
+  whether zero ticks is a no-op or has a minimum tick wait.

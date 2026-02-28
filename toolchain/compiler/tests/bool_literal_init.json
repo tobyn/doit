@@ -1,0 +1,44 @@
+{
+    "0": {
+        "1": {
+            "num": 1
+        },
+        "2": "t",
+        "op": "set_number"
+    },
+    "1": {
+        "0": false,
+        "1": "f",
+        "op": "set_reg"
+    },
+    "2": {
+        "0": false,
+        "1": "n",
+        "op": "set_reg"
+    },
+    "3": {
+        "1": {
+            "num": 5
+        },
+        "2": "x",
+        "op": "set_number"
+    },
+    "4": {
+        "1": {
+            "num": 1
+        },
+        "2": "x",
+        "op": "set_number"
+    },
+    "5": {
+        "0": false,
+        "1": "x",
+        "op": "set_reg"
+    },
+    "6": {
+        "0": false,
+        "1": "x",
+        "op": "set_reg"
+    },
+    "name": "Bool Literal Init"
+}

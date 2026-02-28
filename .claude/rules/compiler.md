@@ -594,8 +594,10 @@ type checks, and truthy checks) can be freely mixed in the same
 `&&`/`||` chain — each term emits its own independent check frame.
 Parenthesized sub-expressions allow mixing `&&` and `||` at different
 nesting levels: `(a > 1 || b < 2) && c > 3`. The recursive
-`BoolChainExpr` AST node supports arbitrary nesting depth. Mixing `&&`
-and `||` at the same parenthesization level is a compile error.
+`BoolChainExpr` AST node supports arbitrary nesting depth. `&&` binds
+tighter than `||` (standard precedence), so `a && b || c` parses as
+`(a && b) || c` without requiring parentheses — mixing is allowed and
+produces the expected result.
 Function call results can compose with boolean operators:
 `let a = my_fn x || d` (function call as first boolean term);
 `maybeExprContinuation` (resolver-parameterized) handles peeking for

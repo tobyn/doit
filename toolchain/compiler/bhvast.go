@@ -1013,6 +1013,32 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 	}
 
 	if rhsTok.kind == tokIdent {
+		// Boolean/null keyword literals: true, false, null.
+		// Handle before function lookup so these are treated as literals,
+		// not as unknown functions or variable names.
+		if rhsTok.val == "null" || rhsTok.val == "false" || rhsTok.val == "true" {
+			var litVal any
+			if rhsTok.val == "true" {
+				litVal = map[string]any{"num": 1}
+			} else {
+				litVal = false
+			}
+			litExpr := Expr(&LiteralExpr{Value: litVal})
+			result, err := p.parseArithExprFromFull(litExpr, resolve)
+			if err != nil {
+				return nil, err
+			}
+			syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
+			final, handled, err := p.maybeBhvExprContinuation(result, syms)
+			if err != nil {
+				return nil, err
+			}
+			if handled {
+				return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
+			}
+			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
+		}
+
 		fn := p.fns[rhsTok.val]
 		if fn == nil {
 			// Not a function — parse as value with arithmetic/comparison/boolean
@@ -1261,6 +1287,31 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		}
 
 		if rhsTok.kind == tokIdent {
+			// Boolean/null keyword literals: true, false, null.
+			// Handle before function lookup so these are treated as literals,
+			// not as unknown functions or variable names.
+			if rhsTok.val == "null" || rhsTok.val == "false" || rhsTok.val == "true" {
+				var litVal any
+				if rhsTok.val == "true" {
+					litVal = map[string]any{"num": 1}
+				} else {
+					litVal = false
+				}
+				litExpr := Expr(&LiteralExpr{Value: litVal})
+				result, err := p.parseArithExprFromFull(litExpr, resolve)
+				if err != nil {
+					return nil, err
+				}
+				final, handled, err := p.maybeBhvExprContinuation(result, syms)
+				if err != nil {
+					return nil, err
+				}
+				if handled {
+					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
+				}
+				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
+			}
+
 			fn := p.fns[rhsTok.val]
 			if fn == nil {
 				// Not a function — value + arithmetic/comparison/boolean
