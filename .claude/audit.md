@@ -5,20 +5,22 @@ semantics, or potential footguns.
 
 ## Process
 
-1. Read all manual pages (`manual/`), all test cases
+1. **Start from the open items below.** Fix all open items that don't
+   require the developer's input first — work through them in priority
+   order (HIGH, then MEDIUM), committing each fix separately. Skip any
+   item that requires a design decision or developer input.
+2. **Only after all actionable open items are done**, run a new audit
+   round: read all manual pages (`manual/`), all test cases
    (`toolchain/compiler/tests/`), and the parser/emitter source
-   (`toolchain/compiler/`) end-to-end.
-2. Identify anything that would surprise a developer coming from
-   Go/Python/JS/Rust.
+   (`toolchain/compiler/`) end-to-end. Identify anything that would
+   surprise a developer coming from Go/Python/JS/Rust.
 3. Categorize each finding as HIGH (likely bugs/confusion), MEDIUM
-   (design decision needed), or LOW (minor gap).
-4. Fix HIGH issues first, then MEDIUM, committing each fix separately.
-5. After completing all fixes, re-run the audit and repeat until no new
-   HIGH or MEDIUM issues are found.
-6. Update this file with the results after each round.
-
-Cross-reference findings against the resolved list below to avoid
-re-reporting fixed issues.
+   (design decision needed), or LOW (minor gap). Cross-reference
+   against the resolved list below to avoid re-reporting fixed issues.
+4. Add new findings to the open items list in this file.
+5. Repeat from step 1 until no open items remain above LOW priority.
+6. Keep working autonomously — do not stop to ask the developer for
+   confirmation. The developer will interrupt if needed.
 
 ## Resolved items
 
