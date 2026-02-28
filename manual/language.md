@@ -9,7 +9,7 @@ A doit program consists of one or more `behavior` declarations:
 ```doit
 behavior my_behavior {
     @name "My Behavior"
-    // ... body ...
+    # ... body ...
 }
 ```
 
@@ -18,7 +18,7 @@ identifier or a quoted string (for IDs containing spaces):
 
 ```doit
 behavior "My Behavior" {
-    // ...
+    # ...
 }
 ```
 
@@ -28,7 +28,7 @@ the behavior id:
 
 ```doit
 behavior patrol {
-    // display name will be "patrol"
+    # display name will be "patrol"
     notify "Patrolling"
 }
 ```
@@ -50,12 +50,12 @@ When a file contains multiple behaviors, the `-b` flag selects which to compile:
 ```doit
 behavior patrol {
     @name "Patrol"
-    // ...
+    # ...
 }
 
 behavior harvest {
     @name "Harvest"
-    // ...
+    # ...
 }
 ```
 
