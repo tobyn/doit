@@ -37,6 +37,9 @@ semantics, or potential footguns.
    item must also remove that item from the open items list below.
    This file should reflect the current state of the codebase at all
    times — it is a real-time work log, not an append-only record.
+10. **A fix is not done until it is committed.** The commit is part of
+    the fix, not a follow-up step. Never leave uncommitted changes at
+    the end of an audit loop or when reporting results to the developer.
 
 ## Open items
 
