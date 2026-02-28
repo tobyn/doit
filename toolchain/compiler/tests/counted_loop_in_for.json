@@ -1,0 +1,86 @@
+{
+  "0": {
+    "1": {
+      "num": 0
+    },
+    "2": "count",
+    "op": "set_number"
+  },
+  "1": {
+    "op": "unlock"
+  },
+  "2": {
+    "0": {
+      "num": 0
+    },
+    "1": "j",
+    "op": "set_reg"
+  },
+  "3": {
+    "0": 10,
+    "2": "j",
+    "3": {
+      "num": 3
+    },
+    "next": 10,
+    "op": "check_number"
+  },
+  "4": {
+    "1": {
+      "num": 0
+    },
+    "2": "@loop",
+    "op": "set_number"
+  },
+  "5": {
+    "0": 9,
+    "2": "@loop",
+    "3": {
+      "num": 2
+    },
+    "next": 9,
+    "op": "check_number"
+  },
+  "6": {
+    "0": "count",
+    "1": {
+      "num": 1
+    },
+    "2": "count",
+    "next": 8,
+    "op": "add"
+  },
+  "7": {
+    "0": "@loop",
+    "1": {
+      "num": 1
+    },
+    "2": "@loop",
+    "next": 6,
+    "op": "add"
+  },
+  "8": {
+    "0": "j",
+    "1": {
+      "num": 1
+    },
+    "2": "j",
+    "next": 4,
+    "op": "add"
+  },
+  "9": {
+    "op": "lock"
+  },
+  "10": {
+    "0": "count",
+    "1": 1,
+    "op": "set_reg"
+  },
+  "name": "Counted Loop In For",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "Result"
+  ]
+}

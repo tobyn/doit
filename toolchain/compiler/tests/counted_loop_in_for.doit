@@ -1,0 +1,16 @@
+# AI-generated test
+# Counted loop nested inside a for loop — verifies @loop re-initialization
+behavior counted_loop_in_for {
+    @name "Counted Loop In For"
+    @param out result "Result"
+
+    var count = 0
+    unlocked {
+        for j in Range(3) {
+            loop 2 {
+                count += 1
+            }
+        }
+    }
+    $result = count
+}

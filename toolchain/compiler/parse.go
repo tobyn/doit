@@ -1623,8 +1623,8 @@ func (p *parser) emitFnCountedLoop(s *LoopStmt, b *frameBuilder, paramMap map[st
 	// INIT: set_number 0 → counter
 	b.emit(map[string]any{
 		"op": "set_number",
-		"1":  map[string]any{"num": 0},
-		"2":  counterVar,
+		"2":  map[string]any{"num": 0},
+		"3":  counterVar,
 	})
 
 	// CHECK: check_number counter vs limit
