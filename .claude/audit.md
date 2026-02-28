@@ -1,7 +1,15 @@
-# Language Ergonomics Audit
+# Codebase Audit
 
-Periodic review of the doit language for unintuitive syntax, surprising
-semantics, or potential footguns.
+Periodic review of the doit language and its implementation. Covers two
+dimensions in a single pass:
+
+- **Language ergonomics** — unintuitive syntax, surprising semantics,
+  or potential footguns that would trip up a developer coming from
+  Go/Python/JS/Rust.
+- **Implementation quality** — duplicated code, redundant data
+  structures, extractable helpers, latent bugs from structural issues,
+  and simplification opportunities that don't change the language or
+  break tests.
 
 ## Process
 
@@ -12,13 +20,22 @@ semantics, or potential footguns.
    the same commit). Skip any item that requires a design decision or
    developer input.
 2. **Only after all actionable open items are done**, run a new audit
-   round: read all manual pages (`manual/`), all test cases
-   (`toolchain/compiler/tests/`), and the parser/emitter source
-   (`toolchain/compiler/`) end-to-end. Identify anything that would
-   surprise a developer coming from Go/Python/JS/Rust.
+   round. Read end-to-end:
+   - All manual pages (`manual/`)
+   - All test cases (`toolchain/compiler/tests/`)
+   - The parser/emitter source (`toolchain/compiler/`)
+
+   Look for issues in both dimensions:
+   - **Ergonomics**: syntax that would surprise users, semantics that
+     differ from expectations, missing error messages, misleading
+     behavior.
+   - **Implementation**: duplicated logic between bhv/fn paths,
+     redundant data structures, repeated code patterns that could be
+     extracted into helpers, structural issues that risk bugs.
 3. Categorize each finding as HIGH (likely bugs/confusion), MEDIUM
-   (design decision needed), or LOW (minor gap). Do not re-report
-   issues that have already been fixed — check git history if unsure.
+   (cleanup or design decision needed), or LOW (minor gap). Do not
+   re-report issues that have already been fixed — check git history
+   if unsure.
 4. Add new findings to the open items list in this file.
 5. Repeat from step 1 until no new actionable items are found in a
    round.
@@ -43,7 +60,7 @@ semantics, or potential footguns.
 
 ## Open items
 
-### Medium priority (design decisions needed)
+### Deferred
 
 - **`private fn` visibility is not enforced.** The compiler parses
   `private fn` but does not restrict its visibility — it is callable
