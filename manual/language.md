@@ -65,6 +65,136 @@ doit compile -b harvest source.doit
 
 When a file contains only one behavior, `-b` is optional.
 
+## Imports
+
+Functions can be shared across files using `import` statements. All imports
+must appear at the top of the file, before any `fn` or `behavior`
+declarations.
+
+### Named imports
+
+Import specific functions by name:
+
+```doit
+import greet from "./my_library"
+```
+
+This makes the function `greet` from `my_library.doit` available for use.
+Multiple names can be imported from the same file:
+
+```doit
+import greet, farewell from "./my_library"
+```
+
+### Aliased imports
+
+Rename an import with `as`:
+
+```doit
+import greet as hello from "./my_library"
+```
+
+### Glob imports
+
+Import all public functions from a file with `*`:
+
+```doit
+import * from "./my_library"
+```
+
+Glob imports add all non-private functions to the current scope. If
+multiple glob imports define the same name, the last one wins. Named
+imports and same-file functions always take priority over glob imports.
+
+### Namespace imports
+
+Import an entire file as a namespace:
+
+```doit
+import "./my_library" as lib
+```
+
+Access functions with dot notation:
+
+```doit
+lib.greet
+let me = lib.get_me
+```
+
+Namespace imports can be combined with named imports:
+
+```doit
+import greet from "./my_library" as lib
+```
+
+This imports `greet` directly and also makes the full namespace available
+as `lib`.
+
+### Import paths
+
+Import paths must start with `./` (relative to current file), `../`
+(parent directory), or `std:` (standard library). The `.doit` extension
+is added automatically:
+
+```doit
+import helper from "./utils"       # resolves to ./utils.doit
+import base from "../shared/base"  # resolves to ../shared/base.doit
+```
+
+### Private functions
+
+Functions marked with `private` cannot be imported by other files:
+
+```doit
+private fn internal_helper() {
+    notify "internal"
+}
+```
+
+Attempting to import a private function (either by name or via namespace
+access) is a compile error. Private functions are excluded from glob
+imports.
+
+### Import ordering and collisions
+
+- Import statements must appear before all `fn` and `behavior` declarations
+- Duplicate import names (across all import statements) are compile errors
+- A same-file function name that conflicts with a named import or namespace
+  name is a compile error
+- A same-file function name that shadows a glob import is allowed (same-file
+  wins)
+
+### Transitive dependencies
+
+Imported functions can call other functions from their defining file. These
+transitive dependencies are resolved automatically — you don't need to
+import them explicitly:
+
+```doit
+# greet.doit
+import say from "./say"
+fn greet() { say }
+
+# main.doit
+import greet from "./greet"   # say is available transitively
+behavior main { greet }
+```
+
+### Circular imports
+
+Circular import chains are detected and reported as compile errors:
+
+```doit
+# a.doit — imports from b.doit, which imports from a.doit → error
+import helper from "./b"
+```
+
+### Stdin limitation
+
+Import statements require a source file path for resolving relative paths.
+When compiling from stdin, import statements are not supported (this is a
+compile error).
+
 ## Statements
 
 Behavior bodies and control flow blocks contain sequences of statements. A

@@ -599,3 +599,51 @@ return items parsed via `parseFnBodyExpr()` (which creates `IdentExpr`
 without going through the resolver), `checkFnBodyExprDeclared` validates
 all `IdentExpr` nodes in the result. This covers `IdentExpr`,
 `ArithExpr`, `AmpersandExpr`, and `ConstructorExpr` recursively.
+
+## Import system
+
+**Syntax**: `import <names> from "<path>"`, `import "<path>" as <ns>`,
+or `import <names> from "<path>" as <ns>`. Glob imports use `*` in the
+name list. `import`, `from`, `as` are reserved keywords. Import
+statements must appear before all `fn` and `behavior` declarations.
+
+**Path resolution**: `./` and `../` are relative to the importing file
+(via `path.Join(sourceDir, importPath+".doit")`). `std:` resolves
+against the stdlib `fs.FS`. The compiler API takes `sourceFS fs.FS`
+and `sourcePath string` for filesystem context. When compiling from
+stdin, `sourceFS` is nil and imports produce a compile error.
+
+**Namespace resolution**: `resolveFnName(tok)` peeks for `tokDot`
+after an identifier. If the identifier is a known namespace name and
+a dot follows, it reads the function name, looks it up in
+`p.namespaces[ns]`, checks for private access, and stores the result
+in `p.fns["ns.fn"]` for `expandCall` to find. The qualified name
+`"ns.fn"` is stored in `CallStmt.Name`/`CallExpr.Name`.
+
+**Transitive dependencies**: Imported functions carry a `scope`
+(`fnDef.scope`) containing all non-stdlib functions from their defining
+file. During `expandCall`, scope entries are temporarily merged into
+`p.fns` (only filling gaps, not overriding existing entries) so that
+functions called by the imported function are available during body
+expansion. This is removed after expansion completes.
+
+**Collision rules**: Named imports and namespace names are tracked in
+`p.namedImports` and `p.namespaceNames`. Same-file function names are
+checked against both after `collectUserFns`. Glob imports silently add
+functions to `p.fns` and can be overridden by named imports or same-file
+functions (no error). Named import vs named import or namespace vs
+namespace collisions are detected across all import statements via
+`allAliases` in `parseImports`.
+
+**Private functions**: `fnDef.private` is set by `private fn` syntax.
+Private functions are included in `parseImportedFile`'s return map (for
+error reporting) but excluded from glob imports and produce compile
+errors when accessed via named import or namespace dot access.
+
+**Circular imports**: Detected via `parser.importStack []string`. Each
+`parseImportedFile` call checks if the target path is already in the
+stack. The cycle is reported with the full chain.
+
+**File caching**: `processImports` uses a `fileCache` to avoid
+re-parsing files imported multiple times within the same file's import
+statements.

@@ -20,10 +20,20 @@ output format.
   `InstructionExpr`, `ArithExpr`, `CompareExpr`, `TypeCheckExpr`,
   `TruthyExpr`, `BoolChainExpr`, `NotExpr`, `ConstructorExpr`,
   `AmpersandExpr`, `ExprListExpr`, `ModeBlockExpr`, `IfExpr`)
+- **`compiler/import.go`** — Import system: `ImportStmt`/`ImportName`
+  types, import parsing (`parseImports`, `parseImportStmt`,
+  `parseImportNames`), validation (`validateImportPath`,
+  `validateImportAlias`), pass 2 skip (`skipImportStmt`), file
+  resolution (`resolveImportPath`), imported file parsing
+  (`parseImportedFile`, `collectImportedFns`), import processing
+  (`processImports`), collision checking (`checkImportCollisions`),
+  qualified name resolution (`resolveFnName`)
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString` — both
+  accept `sourceFS fs.FS` and `sourcePath string` for import resolution,
   return `(*codec.Object, []string, error)` where the middle value is
   compiler warnings), shared types
-  (`fnDef`, `symbolTable` with block scoping via `pushScope`/`popScope`
+  (`fnDef` with `scope` for transitive import dependencies,
+  `symbolTable` with block scoping via `pushScope`/`popScope`
   and shadowing warnings via `declareVarWarn`, `unitRegisters`),
   `paramDef` (with `direction` field, `effectiveDirection()`)
   and `paramInfo` (with `direction` field) types, direction compatibility
@@ -51,8 +61,16 @@ output format.
   `loopDepth int` for nesting depth, `loopLabels
   map[string]bool` for active loop labels, `callExprParser` callback
   for context-specific function call parsing in boolean primary position;
-  `enterLoop(label)`/`exitLoop(label)` helpers manage loop state),
-  token types (including `tokAmpersand` for `&`,
+  `enterLoop(label)`/`exitLoop(label)` helpers manage loop state;
+  import-related fields: `imports []ImportStmt` for parsed import
+  statements, `sourceFS fs.FS` and `sourcePath`/`sourceDir string` for
+  file system context, `stdlibFS fs.FS` for `std:` imports,
+  `importStack []string` for circular import detection,
+  `namedImports map[string]bool` and `namespaceNames map[string]bool`
+  for collision checking, `namespaces map[string]map[string]*fnDef`
+  for namespace-qualified function lookup),
+  token types (including `tokDot` for `.` (namespace separator),
+  `tokAmpersand` for `&`,
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
   `tokNotEquals` for `!=`, `tokPlus`/`tokMinus`/`tokStar`/`tokSlash`
   for arithmetic operators, `tokMinusMinus`/`tokMinusEquals`/
@@ -61,8 +79,9 @@ output format.
   `tokBang` for `!` (negation prefix),
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),
-  `Keywords` map (includes `"is"`, `"wait"`, `"true"`, `"false"`)
-  (includes type constructor names, direction keywords, and `locked`/`unlocked`), `isConstructor`
+  `Keywords` map (includes `"import"`, `"from"`, `"as"`, `"is"`,
+  `"wait"`, `"true"`, `"false"`, type constructor names, direction
+  keywords, and `locked`/`unlocked`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
   `#!` comments
@@ -258,13 +277,15 @@ compile-time string construct usable anywhere a string argument is expected (e.g
 call arguments).
 
 The `Compile` and `CompileString` functions accept an `fs.FS` containing the standard library, a
-`behaviorID string` that selects which behavior to compile, and a `locale string` (BCP 47 tag) for
-resolving `localize` blocks. When `behaviorID` is empty and the source contains a
+`behaviorID string` that selects which behavior to compile, a `locale string` (BCP 47 tag) for
+resolving `localize` blocks, and `sourceFS fs.FS` + `sourcePath string` for import resolution.
+When `behaviorID` is empty and the source contains a
 single behavior, it is auto-selected. When the source contains multiple behaviors,
 `behaviorID` must name one of them. When `locale` is empty, `localize` blocks use
-their first entry. The compiler parses stdlib function definitions first, then compiles
-user source. Stdlib functions that contain an `instruction` intrinsic are inlined at call
-sites — the compiler substitutes arguments into the instruction template fields.
+their first entry. The compiler parses stdlib function definitions first, then processes
+imports (parse → resolve paths → read imported files → merge functions into the namespace),
+then compiles user source. Stdlib functions that contain an `instruction` intrinsic are inlined
+at call sites — the compiler substitutes arguments into the instruction template fields.
 Numeric keys in instruction templates are converted from 0-based (reference
 format) to 1-based (native wire format) during expansion by `resolveInstructionFrame`.
 Stdlib parsing is unified: `parseStdlibFile` delegates to `parseUserFn`, which handles
