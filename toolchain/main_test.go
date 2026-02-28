@@ -2896,6 +2896,117 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 		}
 	})
 
+	t.Run("import_after_fn", func(t *testing.T) {
+		src := `fn my_fn() { notify "hi" }
+		import hello from "./lib"
+		behavior a { my_fn }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "import statements must appear before") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_after_behavior", func(t *testing.T) {
+		src := `behavior a { notify "hi" }
+		import hello from "./lib"`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "import statements must appear before") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_duplicate_names", func(t *testing.T) {
+		src := `import hello, hello from "./lib"
+		behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate import name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_duplicate_names_across_stmts", func(t *testing.T) {
+		src := `import hello from "./a"
+		import hello from "./b"
+		behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate import name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_named_collides_with_namespace", func(t *testing.T) {
+		src := `import hello from "./a"
+		import "./b" as hello
+		behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate import name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_keyword_alias", func(t *testing.T) {
+		src := `import hello as fn from "./lib"
+		behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_keyword_namespace", func(t *testing.T) {
+		src := `import "./lib" as fn
+		behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_bad_path", func(t *testing.T) {
+		src := `import hello from "lib"
+		behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "import path must start with") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_empty_path", func(t *testing.T) {
+		src := `import hello from ""
+		behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "import path cannot be empty") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

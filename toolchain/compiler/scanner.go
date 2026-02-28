@@ -117,6 +117,7 @@ type parser struct {
 	fns         map[string]*fnDef
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
+	imports     []ImportStmt     // parsed import statements
 	loopDepth   int              // >0 when inside a loop body
 	loopLabels  map[string]bool  // labels of enclosing loops
 	warnings    []string         // compiler warnings (non-fatal)

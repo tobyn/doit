@@ -2021,6 +2021,11 @@ func (p *parser) parseFile() (*codec.Object, error) {
 			if err := p.skipFnDef(); err != nil {
 				return nil, err
 			}
+		case "import":
+			// Skip import statements in pass 2 (already processed in pass 1)
+			if err := p.skipImportStmt(); err != nil {
+				return nil, err
+			}
 		default:
 			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
 		}
@@ -2028,6 +2033,11 @@ func (p *parser) parseFile() (*codec.Object, error) {
 }
 
 func (p *parser) collectUserFns() error {
+	// Parse import statements at the top of the file
+	if err := p.parseImports(); err != nil {
+		return err
+	}
+
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -2066,6 +2076,8 @@ func (p *parser) collectUserFns() error {
 			if _, err := p.parseUserFn(); err != nil {
 				return err
 			}
+		case "import":
+			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
 		default:
 			return p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
 		}
