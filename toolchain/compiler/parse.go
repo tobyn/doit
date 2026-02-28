@@ -1931,7 +1931,7 @@ func parseStdlibFile(src string, fns map[string]*fnDef) error {
 		if tok.kind != tokIdent || tok.val != "fn" {
 			return p.errorf(tok.pos, "expected 'fn', got %s", tok.describe())
 		}
-		if err := p.parseUserFn(); err != nil {
+		if _, err := p.parseUserFn(); err != nil {
 			return err
 		}
 	}
@@ -2057,11 +2057,13 @@ func (p *parser) collectUserFns() error {
 			if fnTok.val != "fn" {
 				return p.errorf(fnTok.pos, "expected 'fn' after 'private', got %q", fnTok.val)
 			}
-			if err := p.parseUserFn(); err != nil {
+			name, err := p.parseUserFn()
+			if err != nil {
 				return err
 			}
+			p.fns[name].private = true
 		case "fn":
-			if err := p.parseUserFn(); err != nil {
+			if _, err := p.parseUserFn(); err != nil {
 				return err
 			}
 		default:
@@ -2163,19 +2165,22 @@ func (ctx *fnBodyContext) canCompound(name string, p *parser, pos int) error {
 	return nil
 }
 
-func (p *parser) parseUserFn() error {
+func (p *parser) parseUserFn() (string, error) {
 	nameTok, err := p.expect(tokIdent)
 	if err != nil {
-		return err
+		return "", err
+	}
+	if Keywords[nameTok.val] {
+		return "", p.errorf(nameTok.pos, "%q is a reserved keyword and cannot be used as a function name", nameTok.val)
 	}
 
 	params, err := p.parseParamList()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
-		return err
+		return "", err
 	}
 
 	// Build direction maps for enforcement in fn body
@@ -2202,7 +2207,7 @@ func (p *parser) parseUserFn() error {
 
 	astBody, err := p.parseFnBodyStmts(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Pure-instruction promotion (no return): if the function body is a
@@ -2212,7 +2217,7 @@ func (p *parser) parseUserFn() error {
 		if instrStmt, ok := astBody[0].(*InstructionStmt); ok {
 			if promoted := tryPromoteInstruction(instrStmt.Frame, params, nil); promoted != nil {
 				p.fns[nameTok.val] = &fnDef{params: params, frame: promoted}
-				return nil
+				return nameTok.val, nil
 			}
 		}
 	}
@@ -2260,12 +2265,12 @@ func (p *parser) parseUserFn() error {
 					if len(astBody) == 1 {
 						if canPromote := tryPromoteInstruction(modifiedFrame, params, rets); canPromote != nil {
 							p.fns[nameTok.val] = &fnDef{params: params, frame: canPromote}
-							return nil
+							return nameTok.val, nil
 						}
 					}
 
 					p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
-					return nil
+					return nameTok.val, nil
 				}
 			}
 
@@ -2284,7 +2289,7 @@ func (p *parser) parseUserFn() error {
 				// Remove the ReturnStmt from the body
 				astBody = astBody[:len(astBody)-1]
 				p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
-				return nil
+				return nameTok.val, nil
 			}
 		}
 
@@ -2304,7 +2309,7 @@ func (p *parser) parseUserFn() error {
 	}
 
 	p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
-	return nil
+	return nameTok.val, nil
 }
 
 // tryPromoteInstruction checks whether an instruction frame can be promoted

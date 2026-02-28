@@ -146,6 +146,7 @@ type fnDef struct {
 	rets    []string       // return names (nil = no return)
 	frame   map[string]any // instruction-based (stdlib)
 	astBody []Stmt         // call-based (user-defined) — AST IR
+	private bool           // true for private fn (not visible as import)
 }
 
 // positionalCount returns the number of positional params.

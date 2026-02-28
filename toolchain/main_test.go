@@ -2830,6 +2830,72 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 		}
 	})
 
+	t.Run("keyword_import_as_var", func(t *testing.T) {
+		src := `behavior a { let import = 5 }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("keyword_from_as_var", func(t *testing.T) {
+		src := `behavior a { let from = 5 }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("keyword_as_as_var", func(t *testing.T) {
+		src := `behavior a { let as = 5 }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("keyword_import_as_fn_name", func(t *testing.T) {
+		src := `fn import() { notify "hi" } behavior a { import }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("keyword_from_as_fn_name", func(t *testing.T) {
+		src := `fn from() { notify "hi" } behavior a { from }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("keyword_as_as_fn_name", func(t *testing.T) {
+		src := `fn as() { notify "hi" } behavior a { as }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

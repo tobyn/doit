@@ -44,6 +44,7 @@ const (
 	tokPercent
 	tokPercentEquals
 	tokBang
+	tokDot
 	tokIs     // internal-only: represents the 'is' operator in comparisonTerm.op
 	tokTruthy // internal-only: represents a truthy check in comparisonTerm.op
 )
@@ -56,13 +57,16 @@ type token struct {
 
 // Keywords lists all reserved keywords in the doit language.
 var Keywords = map[string]bool{
+	"as":          true,
 	"behavior":    true,
 	"break":       true,
 	"else":        true,
 	"false":       true,
 	"fn":          true,
 	"for":         true,
+	"from":        true,
 	"if":          true,
+	"import":      true,
 	"in":          true,
 	"inout":       true,
 	"instruction": true,
@@ -367,6 +371,9 @@ func (s *scanner) next() (token, error) {
 	case c == '!':
 		s.pos++
 		return token{tokBang, "!", start}, nil
+	case c == '.':
+		s.pos++
+		return token{tokDot, ".", start}, nil
 	case c == '$':
 		s.pos++
 		if s.pos >= len(s.src) || !isIdentStart(s.src[s.pos]) {
@@ -528,6 +535,8 @@ func (t token) describe() string {
 		return "'%='"
 	case tokBang:
 		return "'!'"
+	case tokDot:
+		return "'.'"
 	case tokIs:
 		return "'is'"
 	case tokTruthy:
