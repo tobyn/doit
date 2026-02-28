@@ -1799,21 +1799,7 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 		}
 	}
 
-	// Patch @break placeholders
-	for j := origLen; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }
@@ -1851,22 +1837,8 @@ func (p *parser) emitFnLoopStmt(s *LoopStmt, b *frameBuilder, paramMap map[strin
 		}
 	}
 
-	// Patch break frames to point after the loop
 	afterLoop := frameRef(b.pos())
-	for j := origLen; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }
@@ -1929,21 +1901,7 @@ func (p *parser) emitFnCountedLoop(s *LoopStmt, b *frameBuilder, paramMap map[st
 	check[checkLarger] = afterLoop
 	check["next"] = afterLoop
 
-	// Patch @break placeholders
-	for j := origLen; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }
@@ -2043,20 +2001,7 @@ func (p *parser) emitFnForStmtRange(s *ForStmt, ctor *ConstructorExpr, counterVa
 		check["next"] = afterLoop
 	}
 
-	for j := origLen; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }
@@ -2147,20 +2092,7 @@ func (p *parser) emitFnForStmtRuntime(s *ForStmt, counterVar string, b *frameBui
 	checkNeg[checkSmaller] = afterLoop
 	checkNeg["next"] = afterLoop
 
-	for j := origLen; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }

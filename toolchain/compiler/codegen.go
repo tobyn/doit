@@ -1066,3 +1066,24 @@ func (p *parser) resolveLocalize() (string, error) {
 	idx := matchLocale(p.locale, locales)
 	return entries[idx].name, nil
 }
+
+// patchBreakPlaceholders replaces @break placeholder frames in
+// b.frames[from:] whose label matches (or is empty) with a noop jump
+// to target. Used by all loop emitters (while, loop, counted loop, for)
+// in both behavior-level and fn body paths.
+func patchBreakPlaceholders(b *frameBuilder, from int, label string, target frameRef) {
+	for j := from; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			fLabel, _ := f["label"].(string)
+			if fLabel == "" || fLabel == label {
+				b.frames[j] = map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": target,
+				}
+			}
+		}
+	}
+}

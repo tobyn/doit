@@ -43,6 +43,41 @@ semantics, or potential footguns.
 
 ## Open items
 
+### High priority
+
+- **Bhv emitters unconditionally overwrite last body frame's `"next"`.**
+  `emitBhvCountedLoop`, `emitBhvWaitStmt`, `emitBhvIfExpr`,
+  `emitBhvForStmtRange`, `emitBhvForStmtRuntime`, and
+  `emitBhvLoopStmt` use a child `frameBuilder` + `rebaseFrameRefs`,
+  then unconditionally set the last body frame's `"next"` to the
+  continuation. If the last body statement is a while/loop/for, this
+  overwrites the inner loop's back-edge jump. The fn body emitters
+  correctly check `!hasNext` before setting. Fix: switch bhv emitters
+  to direct emission (matching the fn body approach). Add regression
+  test.
+
+- **False-branch patching block duplicated 11 times.** The ~7-line
+  loop that replaces `falsePlaceholder` `frameRef` values with the
+  actual false-branch target is copied in 6 bhv emitters and 5 fn
+  body emitters. Extract into a shared `patchFalseBranches` helper
+  in `codegen.go`.
+
+### Medium priority
+
+- **`resolveBhvBoolTree` / `resolveFnBoolTree` are near-identical.**
+  These ~60-line recursive functions differ only in which
+  `emitExprGetValue` they call on leaf operands. Unify into a single
+  `resolveBoolTree` taking an operand-resolution callback.
+
+- **`emitBhvArithNode` / `emitFnArithNode` are near-identical.**
+  Same callback-parameterization opportunity as the bool tree
+  resolvers. Unify into a single `emitArithNode`.
+
+- **`fnBodyContext` tracks variables in two redundant maps.**
+  `fnVars map[string]bool` (mutability flag) and
+  `fnVarInfo map[string]fnVarInfo` (depth, used tracking) must be
+  kept in sync. Merge `mutable` into `fnVarInfo` and drop `fnVars`.
+
 ### Medium priority (design decisions needed)
 
 - **`private fn` visibility is not enforced.** The compiler parses
@@ -51,4 +86,11 @@ semantics, or potential footguns.
   architecture (single source string, no file boundaries) makes
   file-level scoping structurally impossible. Deferred to the module
   system implementation.
+
+- **Full emitter unification via `emitContext` interface.** After the
+  child builder elimination, the bhv and fn emitter pairs differ only
+  in operand resolution, scope management, and body emission dispatch.
+  An interface abstracting these would allow merging all 17+ emitter
+  pairs into single implementations (~500+ lines saved). Large
+  architectural change — needs developer input.
 

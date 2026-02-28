@@ -4003,21 +4003,7 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 		}
 	}
 
-	// Patch @break placeholders
-	for j := origLen; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }
@@ -4051,22 +4037,8 @@ func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable
 		lastMainBody["next"] = frameRef(loopStart)
 	}
 
-	// Patch @break placeholders
 	afterLoop := frameRef(b.pos())
-	for j := bodyStart; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, bodyStart, s.Label, afterLoop)
 
 	return nil
 }
@@ -4133,21 +4105,7 @@ func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTa
 	check[checkLarger] = afterLoop
 	check["next"] = afterLoop
 
-	// Patch @break placeholders
-	for j := bodyStart; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, bodyStart, s.Label, afterLoop)
 
 	return nil
 }
@@ -4256,20 +4214,7 @@ func (p *parser) emitBhvForStmtRange(s *ForStmt, ctor *ConstructorExpr, b *frame
 		check["next"] = afterLoop
 	}
 
-	for j := bodyStart; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, bodyStart, s.Label, afterLoop)
 
 	return nil
 }
@@ -4364,20 +4309,7 @@ func (p *parser) emitBhvForStmtRuntime(s *ForStmt, b *frameBuilder, syms *symbol
 	checkNeg[checkSmaller] = afterLoop
 	checkNeg["next"] = afterLoop
 
-	for j := bodyStart; j < len(b.frames); j++ {
-		f := b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			fLabel, _ := f["label"].(string)
-			if fLabel == "" || fLabel == s.Label {
-				b.frames[j] = map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": afterLoop,
-				}
-			}
-		}
-	}
+	patchBreakPlaceholders(b, bodyStart, s.Label, afterLoop)
 
 	return nil
 }
