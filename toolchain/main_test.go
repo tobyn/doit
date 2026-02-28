@@ -524,7 +524,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "undeclared variable") {
+		if !strings.Contains(err.Error(), "unknown function or variable") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2032,7 +2032,7 @@ behavior a { f }`
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "undeclared variable") {
+		if !strings.Contains(err.Error(), "unknown function or variable") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2043,7 +2043,7 @@ behavior a { f }`
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "undeclared variable") {
+		if !strings.Contains(err.Error(), "unknown function or variable") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2065,7 +2065,7 @@ behavior a { f }`
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "undeclared variable") {
+		if !strings.Contains(err.Error(), "unknown function or variable") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

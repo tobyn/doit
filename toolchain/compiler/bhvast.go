@@ -295,7 +295,7 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		if tok.val == "Unit" {
 			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
-		return nil, p.errorf(tok.pos, "undeclared variable %q", tok.val)
+		return nil, p.errorf(tok.pos, "unknown function or variable %q", tok.val)
 	}
 	syms.markUsed(tok.val)
 	return &IdentExpr{Name: tok.val}, nil

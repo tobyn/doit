@@ -51,7 +51,7 @@ func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int)
 		if e.Name == "Unit" {
 			return p.errorf(pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
-		return p.errorf(pos, "undeclared variable %q", e.Name)
+		return p.errorf(pos, "unknown function or variable %q", e.Name)
 	case *ArithExpr:
 		if err := p.checkFnBodyExprDeclared(e.LHS, ctx, pos); err != nil {
 			return err
@@ -91,7 +91,7 @@ func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 			if tok.val == "Unit" {
 				return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 			}
-			return nil, p.errorf(tok.pos, "undeclared variable %q", tok.val)
+			return nil, p.errorf(tok.pos, "unknown function or variable %q", tok.val)
 		}
 		ctx.markFnVarUsed(tok.val)
 		return &IdentExpr{Name: tok.val}, nil

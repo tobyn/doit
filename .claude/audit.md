@@ -78,14 +78,6 @@ dimensions in a single pass:
 
 ### HIGH
 
-- **"undeclared variable" when the user meant a function call.** When
-  a user writes `let x = frobnicate y` and `frobnicate` doesn't exist,
-  the error is "undeclared variable `frobnicate`" because the name
-  fails the function lookup and falls through to variable resolution.
-  The error is technically correct but misleading — the user likely
-  intended a function call. Should say something like "unknown function
-  or variable `frobnicate`".
-
 - **`errorf(0, ...)` reports wrong source position in 8 error paths.**
   `parseBhvModeBlockExpr` (bhvast.go:2131, 2137),
   `parseBhvIfExprBranch` (bhvast.go:2158, 2163),
