@@ -14,23 +14,36 @@ import (
 // multi-behavior source file. When the source contains a single behavior,
 // behaviorID may be empty to auto-select it. The locale parameter is a BCP 47
 // tag used to resolve localized @name blocks; if empty, the first entry is used.
+// sourceFS and sourcePath provide file system context for resolving imports.
+// When sourceFS is nil, imports are not supported (attempting to use them
+// produces a compile error). sourcePath is the path of the source file
+// within sourceFS, used to resolve relative import paths.
 // The returned warnings slice contains non-fatal compiler warnings (nil if none).
-func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string) (*codec.Object, []string, error) {
+func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (*codec.Object, []string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, nil, err
 	}
-	return CompileString(string(data), stdlib, behaviorID, locale)
+	return CompileString(string(data), stdlib, behaviorID, locale, sourceFS, sourcePath)
 }
 
 // CompileString compiles doit source into a codec Object.
+// sourceFS and sourcePath provide file system context for resolving imports.
 // The returned warnings slice contains non-fatal compiler warnings (nil if none).
-func CompileString(src string, stdlib fs.FS, behaviorID, locale string) (*codec.Object, []string, error) {
+func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (*codec.Object, []string, error) {
 	fns, err := parseStdlib(stdlib)
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdlib: %w", err)
 	}
-	p := &parser{scanner: scanner{src: src, locale: locale}, fns: fns, target: behaviorID, loopLabels: map[string]bool{}}
+	p := &parser{
+		scanner:    scanner{src: src, locale: locale},
+		fns:        fns,
+		target:     behaviorID,
+		loopLabels: map[string]bool{},
+		sourceFS:   sourceFS,
+		sourcePath: sourcePath,
+		stdlibFS:   stdlib,
+	}
 	obj, err := p.parseFile()
 	if err != nil {
 		return nil, nil, err

@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"io/fs"
 	"strings"
 )
 
@@ -110,6 +111,7 @@ type scanner struct {
 	docComment   string // accumulated #! lines before the current token
 	ungotComment string // saved docComment for ungotten token
 	locale       string // BCP 47 locale tag; empty = use first entry
+	sourceFile   string // source file path for error messages (empty = main file)
 }
 
 type parser struct {
@@ -118,6 +120,11 @@ type parser struct {
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
 	imports     []ImportStmt     // parsed import statements
+	sourceFS    fs.FS            // file system for resolving imports (nil = no imports)
+	sourcePath  string           // path of the source file within sourceFS
+	sourceDir   string           // directory of the source file (derived from sourcePath)
+	stdlibFS    fs.FS            // stdlib file system for std: imports
+	importStack []string         // import path stack for cycle detection
 	loopDepth   int              // >0 when inside a loop body
 	loopLabels  map[string]bool  // labels of enclosing loops
 	warnings    []string         // compiler warnings (non-fatal)
@@ -144,7 +151,12 @@ func (s *scanner) posToLineCol(pos int) (line, col int) {
 
 func (p *parser) warnf(pos int, format string, args ...any) {
 	line, col := p.posToLineCol(pos)
-	p.warnings = append(p.warnings, fmt.Sprintf("%d:%d: %s", line, col, fmt.Sprintf(format, args...)))
+	msg := fmt.Sprintf(format, args...)
+	if p.sourceFile != "" {
+		p.warnings = append(p.warnings, fmt.Sprintf("%s:%d:%d: %s", p.sourceFile, line, col, msg))
+	} else {
+		p.warnings = append(p.warnings, fmt.Sprintf("%d:%d: %s", line, col, msg))
+	}
 }
 
 // enterLoop records entry into a loop body. If label is non-empty, it is
@@ -166,7 +178,11 @@ func (p *parser) exitLoop(label string) {
 
 func (s *scanner) errorf(pos int, format string, args ...any) error {
 	line, col := s.posToLineCol(pos)
-	return fmt.Errorf("%d:%d: %s", line, col, fmt.Sprintf(format, args...))
+	msg := fmt.Sprintf(format, args...)
+	if s.sourceFile != "" {
+		return fmt.Errorf("%s:%d:%d: %s", s.sourceFile, line, col, msg)
+	}
+	return fmt.Errorf("%d:%d: %s", line, col, msg)
 }
 
 // parseLocalePrefix checks if line starts with a (locale) prefix.

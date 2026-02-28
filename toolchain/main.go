@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/tobyn/doit/toolchain/codec"
@@ -51,9 +52,11 @@ func main() {
 
 // Compile compiles doit source from r using the given stdlib and returns the
 // encoded string. The locale parameter is a BCP 47 tag for resolving localized
-// @name blocks; if empty, the first entry is used.
-func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string) (string, error) {
-	obj, _, err := compiler.Compile(r, stdlib, behaviorID, locale)
+// @name blocks; if empty, the first entry is used. sourceFS and sourcePath
+// provide file system context for resolving imports; pass nil and "" when
+// imports are not needed.
+func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (string, error) {
+	obj, _, err := compiler.Compile(r, stdlib, behaviorID, locale, sourceFS, sourcePath)
 	if err != nil {
 		return "", err
 	}
@@ -109,8 +112,20 @@ func cmdCompile(args []string) (err error) {
 
 	treatWarningsAsErrors := *errorFlag || *errorLongFlag
 
+	// Derive source file system context for import resolution
+	var sourceFS fs.FS
+	var sourcePath string
+	if flags.NArg() > 0 {
+		absPath, absErr := filepath.Abs(flags.Arg(0))
+		if absErr == nil {
+			dir := filepath.Dir(absPath)
+			sourceFS = os.DirFS(dir)
+			sourcePath = filepath.Base(absPath)
+		}
+	}
+
 	if *jsonFlag || *jsonLongFlag {
-		obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale)
+		obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale, sourceFS, sourcePath)
 		if compileErr != nil {
 			err = compileErr
 			return
@@ -129,7 +144,7 @@ func cmdCompile(args []string) (err error) {
 		return
 	}
 
-	obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale)
+	obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale, sourceFS, sourcePath)
 	if compileErr != nil {
 		err = compileErr
 		return
