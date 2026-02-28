@@ -12,11 +12,14 @@ hello"`). The syntax for this hasn't been decided yet.
 
 ## AST optimizations
 
-Potential optimization passes (would need a new optimization file):
+Constant folding is now implemented (arithmetic, comparisons, boolean
+chains, negation). Remaining optimization ideas:
 
-- **Constant folding**: Evaluate compile-time-computable expressions.
 - **Dead code elimination**: Remove unreachable statements after
   `return`/`break`.
+- **Opportunistic partial evaluation**: Extend compile-time evaluation
+  beyond `const` declarations to optimize regular expressions when all
+  operands happen to be known at compile time.
 
 ## Subroutine calls instead of inlining
 

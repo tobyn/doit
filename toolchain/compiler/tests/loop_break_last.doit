@@ -1,0 +1,13 @@
+# AI-generated test
+# if/break as last statement in loop body
+behavior loop_break_last {
+    @name "Loop Break Last"
+
+    var i = 0
+    loop {
+        i++
+        if i >= 3 { break }
+    }
+
+    notify "Done"
+}

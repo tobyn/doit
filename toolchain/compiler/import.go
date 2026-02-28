@@ -282,7 +282,7 @@ func (p *parser) skipImportStmt() error {
 		// Import statements end when we see a top-level keyword
 		if tok.kind == tokIdent {
 			switch tok.val {
-			case "import", "fn", "private", "behavior":
+			case "import", "fn", "private", "behavior", "const":
 				p.unget(tok)
 				return nil
 			}
@@ -319,9 +319,15 @@ func (p *parser) resolveImportPath(importPath string, pos int) (string, fs.FS, e
 	return resolved, p.sourceFS, nil
 }
 
-// parseImportedFile reads and parses a file, returning its exported function definitions.
-// The returned map includes private functions (with private=true) for error reporting.
-func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (map[string]*fnDef, error) {
+// importedFile holds the parsed results from an imported file.
+type importedFile struct {
+	fns    map[string]*fnDef
+	consts map[string]*constDef
+}
+
+// parseImportedFile reads and parses a file, returning its exported function and constant definitions.
+// The returned maps include private entries (with private=true) for error reporting.
+func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*importedFile, error) {
 	// Circular import check
 	for _, stackPath := range p.importStack {
 		if stackPath == filePath {
@@ -361,6 +367,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (map[st
 			sourceFile: filePath,
 		},
 		fns:         stdlibFns,
+		consts:      map[string]*constDef{},
 		loopLabels:  map[string]bool{},
 		sourceFS:    p.sourceFS,
 		sourcePath:  filePath,
@@ -369,7 +376,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (map[st
 		importStack: append(append([]string{}, p.importStack...), filePath),
 	}
 
-	// Parse imports recursively, then collect function definitions
+	// Parse imports recursively, then collect function and constant definitions
 	if err := ip.parseImports(); err != nil {
 		return nil, err
 	}
@@ -378,7 +385,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (map[st
 		return nil, err
 	}
 
-	// Collect user-defined functions (pass 1 — skips behaviors)
+	// Collect user-defined functions and constants (pass 1 — skips behaviors)
 	if err := ip.collectImportedFns(); err != nil {
 		return nil, err
 	}
@@ -395,18 +402,18 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (map[st
 	}
 
 	// Extract only user-defined functions (exclude stdlib)
-	result := map[string]*fnDef{}
+	resultFns := map[string]*fnDef{}
 	for name, fn := range scope {
 		if fn.astBody != nil && fn.scope == nil {
 			fn.scope = scope
 		}
-		result[name] = fn
+		resultFns[name] = fn
 	}
 
-	return result, nil
+	return &importedFile{fns: resultFns, consts: ip.consts}, nil
 }
 
-// collectImportedFns collects function definitions from an imported file.
+// collectImportedFns collects function and constant definitions from an imported file.
 // Similar to collectUserFns but skips behaviors (they're ignored in imports).
 func (p *parser) collectImportedFns() error {
 	for {
@@ -434,35 +441,47 @@ func (p *parser) collectImportedFns() error {
 			if err != nil {
 				return err
 			}
-			if fnTok.val != "fn" {
-				return p.errorf(fnTok.pos, "expected 'fn' after 'private', got %q", fnTok.val)
+			switch fnTok.val {
+			case "fn":
+				name, err := p.parseUserFn()
+				if err != nil {
+					return err
+				}
+				p.fns[name].private = true
+			case "const":
+				name, err := p.parseConstDecl(true)
+				if err != nil {
+					return err
+				}
+				_ = name
+			default:
+				return p.errorf(fnTok.pos, "expected 'fn' or 'const' after 'private', got %q", fnTok.val)
 			}
-			name, err := p.parseUserFn()
-			if err != nil {
-				return err
-			}
-			p.fns[name].private = true
 		case "fn":
 			if _, err := p.parseUserFn(); err != nil {
+				return err
+			}
+		case "const":
+			if _, err := p.parseConstDecl(false); err != nil {
 				return err
 			}
 		case "import":
 			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
 		default:
-			return p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
+			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', or 'private', got %q", tok.val)
 		}
 	}
 }
 
 // processImports resolves all parsed import statements and merges imported
-// functions into the parser's function table.
+// functions and constants into the parser's tables.
 func (p *parser) processImports() error {
 	if len(p.imports) == 0 {
 		return nil
 	}
 
 	// Cache of already-parsed files to avoid re-parsing the same file
-	fileCache := map[string]map[string]*fnDef{}
+	fileCache := map[string]*importedFile{}
 
 	// Track named imports and namespace names for post-collectUserFns collision checking
 	p.namedImports = map[string]bool{}
@@ -475,16 +494,19 @@ func (p *parser) processImports() error {
 		}
 
 		// Parse the file (use cache if already parsed)
-		fns, ok := fileCache[filePath]
+		imported, ok := fileCache[filePath]
 		if !ok {
-			fns, err = p.parseImportedFile(fsys, filePath, stmt.Pos)
+			imported, err = p.parseImportedFile(fsys, filePath, stmt.Pos)
 			if err != nil {
 				return err
 			}
-			fileCache[filePath] = fns
+			fileCache[filePath] = imported
 		}
 
-		// Process glob imports — add all non-private functions to p.fns.
+		fns := imported.fns
+		consts := imported.consts
+
+		// Process glob imports — add all non-private functions and constants.
 		// Globs are last-wins: later glob imports shadow earlier ones.
 		if stmt.Glob {
 			for name, fn := range fns {
@@ -492,24 +514,39 @@ func (p *parser) processImports() error {
 					p.fns[name] = fn
 				}
 			}
+			for name, c := range consts {
+				if !c.private {
+					p.consts[name] = c
+				}
+			}
 		}
 
 		// Process named imports
 		for _, imp := range stmt.Names {
-			fn, exists := fns[imp.Name]
-			if !exists {
-				return p.errorf(imp.Pos, "function %q not found in %q", imp.Name, stmt.Path)
+			fn, fnExists := fns[imp.Name]
+			c, cExists := consts[imp.Name]
+			if !fnExists && !cExists {
+				return p.errorf(imp.Pos, "%q not found in %q", imp.Name, stmt.Path)
 			}
-			if fn.private {
-				return p.errorf(imp.Pos, "cannot import private function %q from %q", imp.Name, stmt.Path)
+			if fnExists {
+				if fn.private {
+					return p.errorf(imp.Pos, "cannot import private function %q from %q", imp.Name, stmt.Path)
+				}
+				p.fns[imp.Alias] = fn
 			}
-			p.fns[imp.Alias] = fn
+			if cExists {
+				if c.private {
+					return p.errorf(imp.Pos, "cannot import private constant %q from %q", imp.Name, stmt.Path)
+				}
+				p.consts[imp.Alias] = c
+			}
 			p.namedImports[imp.Alias] = true
 			// When a glob and a rename coexist in the same statement,
 			// the rename replaces the original name — remove the
 			// glob-imported original so only the alias is accessible.
 			if stmt.Glob && imp.Alias != imp.Name {
 				delete(p.fns, imp.Name)
+				delete(p.consts, imp.Name)
 			}
 		}
 
@@ -524,15 +561,24 @@ func (p *parser) processImports() error {
 			}
 			p.namespaces[stmt.Namespace] = nsFns
 			p.namespaceNames[stmt.Namespace] = true
+
+			nsConsts := map[string]*constDef{}
+			for name, c := range consts {
+				nsConsts[name] = c
+			}
+			if p.namespaceConsts == nil {
+				p.namespaceConsts = map[string]map[string]*constDef{}
+			}
+			p.namespaceConsts[stmt.Namespace] = nsConsts
 		}
 	}
 
 	return nil
 }
 
-// checkImportCollisions checks for collisions between same-file function
+// checkImportCollisions checks for collisions between same-file function/constant
 // definitions and named imports or namespace names. Called after collectUserFns.
-func (p *parser) checkImportCollisions(fnNames []string) error {
+func (p *parser) checkImportCollisions(fnNames []string, constNames []string) error {
 	for _, name := range fnNames {
 		if p.namedImports[name] {
 			return fmt.Errorf("function %q conflicts with a named import", name)
@@ -541,36 +587,63 @@ func (p *parser) checkImportCollisions(fnNames []string) error {
 			return fmt.Errorf("function %q conflicts with an import namespace", name)
 		}
 	}
+	for _, name := range constNames {
+		if p.namedImports[name] {
+			return fmt.Errorf("constant %q conflicts with a named import", name)
+		}
+		if p.namespaceNames[name] {
+			return fmt.Errorf("constant %q conflicts with an import namespace", name)
+		}
+	}
 	return nil
 }
 
-// resolveFnName resolves a potential qualified function name (ns.fn).
+// resolveFnName resolves a potential qualified function name (ns.fn or ns.CONST).
 // If the token is a namespace name, peeks for a dot and resolves the qualified
-// function. Otherwise returns the unqualified p.fns lookup.
-// Returns the effective name (either "fn" or "ns.fn"), the fnDef, and any error.
-// A nil fnDef with no error means the name was not found as a function.
+// name. Returns the effective name, the fnDef, and any error.
+// A nil fnDef with no error means the name was not found as a function
+// (it might be a constant — the caller should check p.consts).
 func (p *parser) resolveFnName(tok token) (string, *fnDef, error) {
-	if p.namespaces != nil {
-		if nsFns, ok := p.namespaces[tok.val]; ok {
+	if p.namespaces != nil || p.namespaceConsts != nil {
+		isNs := false
+		if p.namespaces != nil {
+			_, isNs = p.namespaces[tok.val]
+		}
+		if !isNs && p.namespaceConsts != nil {
+			_, isNs = p.namespaceConsts[tok.val]
+		}
+		if isNs {
 			peek, err := p.next()
 			if err != nil {
 				return "", nil, err
 			}
 			if peek.kind == tokDot {
-				fnTok, err := p.expect(tokIdent)
+				memberTok, err := p.expect(tokIdent)
 				if err != nil {
 					return "", nil, err
 				}
-				fn, exists := nsFns[fnTok.val]
-				if !exists {
-					return "", nil, p.errorf(fnTok.pos, "function %q not found in namespace %q", fnTok.val, tok.val)
+				qualName := tok.val + "." + memberTok.val
+				// Check functions first
+				if nsFns, ok := p.namespaces[tok.val]; ok {
+					if fn, exists := nsFns[memberTok.val]; exists {
+						if fn.private {
+							return "", nil, p.errorf(memberTok.pos, "cannot access private function %q in namespace %q", memberTok.val, tok.val)
+						}
+						p.fns[qualName] = fn
+						return qualName, fn, nil
+					}
 				}
-				if fn.private {
-					return "", nil, p.errorf(fnTok.pos, "cannot access private function %q in namespace %q", fnTok.val, tok.val)
+				// Then check constants
+				if nsConsts, ok := p.namespaceConsts[tok.val]; ok {
+					if c, exists := nsConsts[memberTok.val]; exists {
+						if c.private {
+							return "", nil, p.errorf(memberTok.pos, "cannot access private constant %q in namespace %q", memberTok.val, tok.val)
+						}
+						p.consts[qualName] = c
+						return qualName, nil, nil
+					}
 				}
-				qualName := tok.val + "." + fnTok.val
-				p.fns[qualName] = fn
-				return qualName, fn, nil
+				return "", nil, p.errorf(memberTok.pos, "%q not found in namespace %q", memberTok.val, tok.val)
 			}
 			p.unget(peek)
 		}

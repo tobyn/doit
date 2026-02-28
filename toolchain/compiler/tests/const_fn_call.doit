@@ -1,0 +1,19 @@
+# AI-generated test
+# Constant defined via function call evaluated at compile time
+
+fn double(x) {
+    return x * 2
+}
+
+fn add_three(a, b, c) {
+    return a + b + c
+}
+
+const TEN = double(5)
+const SUM = add_three(1, 2, 3)
+
+behavior const_fn_call {
+    @name "Const Fn Call"
+    set_reg TEN
+    set_reg SUM
+}

@@ -61,6 +61,7 @@ var Keywords = map[string]bool{
 	"as":          true,
 	"behavior":    true,
 	"break":       true,
+	"const":       true,
 	"else":        true,
 	"false":       true,
 	"fn":          true,
@@ -128,6 +129,9 @@ type parser struct {
 	namedImports   map[string]bool            // names from named imports (for collision checking)
 	namespaceNames map[string]bool            // namespace names (for collision checking)
 	namespaces     map[string]map[string]*fnDef // namespace → fn name → fnDef
+	consts         map[string]*constDef              // compile-time constants
+	namespaceConsts map[string]map[string]*constDef  // namespace → const name → constDef
+	evalStepLimit  int                               // step limit for compile-time evaluation
 	loopDepth      int                        // >0 when inside a loop body
 	loopLabels  map[string]bool  // labels of enclosing loops
 	warnings    []string         // compiler warnings (non-fatal)

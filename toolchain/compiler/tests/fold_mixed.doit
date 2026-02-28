@@ -1,0 +1,9 @@
+# AI-generated test
+# Constant folding in constructor args and & operator
+behavior fold_mixed {
+    @name "Fold Mixed"
+    let c = Coordinate(1 + 2, 3 + 4)
+    let item = Item("metalbar") & (2 + 3)
+    set_reg c
+    set_reg item
+}

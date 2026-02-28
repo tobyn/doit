@@ -1,0 +1,13 @@
+{
+    "0": {
+        "0": {"num": 10},
+        "1": false,
+        "op": "set_reg"
+    },
+    "1": {
+        "0": {"num": 6},
+        "1": false,
+        "op": "set_reg"
+    },
+    "name": "Const Fn Call"
+}

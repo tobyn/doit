@@ -1,0 +1,28 @@
+# AI-generated test
+# Constant via function with if/else evaluated at compile time
+
+fn abs(x) {
+    if x > 0 {
+        return x
+    } else {
+        return 0 - x
+    }
+}
+
+fn clamp(x, lo, hi) {
+    if x < lo {
+        return lo
+    } else if x > hi {
+        return hi
+    }
+    return x
+}
+
+const A = abs(-7)
+const B = clamp(50, 0, 10)
+
+behavior const_fn_control {
+    @name "Const Fn Control"
+    set_reg A
+    set_reg B
+}

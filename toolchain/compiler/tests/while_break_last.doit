@@ -1,0 +1,13 @@
+# AI-generated test
+# if/break as last statement in while body
+behavior while_break_last {
+    @name "While Break Last"
+
+    var i = 0
+    while i < 10 {
+        i++
+        if i >= 3 { break }
+    }
+
+    notify "Done"
+}

@@ -32,7 +32,8 @@ output format.
   accept `sourceFS fs.FS` and `sourcePath string` for import resolution,
   return `(*codec.Object, []string, error)` where the middle value is
   compiler warnings), shared types
-  (`fnDef` with `scope` for transitive import dependencies,
+  (`constDef` with `value any` and `private bool` for compile-time constants,
+  `fnDef` with `scope` for transitive import dependencies,
   `symbolTable` with block scoping via `pushScope`/`popScope`
   and shadowing warnings via `declareVarWarn`, `unitRegisters`),
   `paramDef` (with `direction` field, `effectiveDirection()`)
@@ -68,7 +69,10 @@ output format.
   `importStack []string` for circular import detection,
   `namedImports map[string]bool` and `namespaceNames map[string]bool`
   for collision checking, `namespaces map[string]map[string]*fnDef`
-  for namespace-qualified function lookup),
+  for namespace-qualified function lookup,
+  `consts map[string]*constDef` for compile-time constants,
+  `namespaceConsts map[string]map[string]*constDef`
+  for namespace-qualified constant lookup),
   token types (including `tokDot` for `.` (namespace separator),
   `tokAmpersand` for `&`,
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
@@ -80,8 +84,8 @@ output format.
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),
   `Keywords` map (includes `"import"`, `"from"`, `"as"`, `"is"`,
-  `"wait"`, `"true"`, `"false"`, type constructor names, direction
-  keywords, and `locked`/`unlocked`), `isConstructor`
+  `"wait"`, `"true"`, `"false"`, `"const"`, type constructor names,
+  direction keywords, and `locked`/`unlocked`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
   `#!` comments
@@ -125,6 +129,8 @@ output format.
   `ifExprArityStatic`/`exprArityStatic`,
   `resolveVarName`, `tryResolveConstructorLiteral`,
   `tryResolveAmpersandLiteral`),
+  compile-time evaluator (`tryEvalExpr`, `tryEvalCall`, `tryEvalStmts`,
+  `constEvalStatus` type, `parseConstCallArgs`, `parseConstArgExpr`),
   call expansion with `[]any`/`map[string]any` argument types,
   fn body instruction direction enforcement
   (`checkFnBodyInstructionDirections`)
@@ -140,6 +146,12 @@ output format.
   function calls via `callExprParser` when the identifier matches a
   function with a return value, enabling nested calls in all arithmetic
   contexts),
+  constant folding helpers: `tryFoldArith` (folds `ArithExpr` with two
+  numeric `LiteralExpr` operands), `tryFoldCompare` (folds `CompareExpr`
+  with two compile-time constant `LiteralExpr` operands, guarded by
+  `isCompileTimeConstant`), `tryFoldBoolChain` (folds `BoolChainExpr`
+  when all children are `LiteralExpr`), `tryFoldNot` (folds `NotExpr`
+  with `LiteralExpr` inner),
   `parseBoolExpr`/`parseBoolPrimary` (delegates `tokIdent` through
   `parseArithExpr` which handles function calls, null/false/true,
   constructors, and plain identifiers)/

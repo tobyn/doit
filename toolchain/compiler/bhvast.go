@@ -83,10 +83,18 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 		if tok.val == "Unit" {
 			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
+		// Check constants (direct lookup) before function resolution
+		if c, ok := p.consts[tok.val]; ok {
+			return &LiteralExpr{Value: c.value}, nil
+		}
 		if p.callExprParser != nil {
 			name, callee, err := p.resolveFnName(tok)
 			if err != nil {
 				return nil, err
+			}
+			// Check if resolved name is a namespace constant (from ns.name dot access)
+			if c, ok := p.consts[name]; ok {
+				return &LiteralExpr{Value: c.value}, nil
 			}
 			if callee != nil && callee.hasReturn() {
 				return p.callExprParser(callee, token{kind: tokIdent, val: name, pos: tok.pos})
@@ -239,7 +247,12 @@ func (p *parser) parseArithTermFrom(first Expr, resolve operandResolver) (Expr, 
 		if err != nil {
 			return nil, err
 		}
-		result = &ArithExpr{Op: peek.kind, LHS: result, RHS: rhs}
+		expr := &ArithExpr{Op: peek.kind, LHS: result, RHS: rhs}
+		if folded, ok := tryFoldArith(expr); ok {
+			result = folded
+		} else {
+			result = expr
+		}
 	}
 }
 
@@ -268,8 +281,126 @@ func (p *parser) parseArithExprFrom(first Expr, resolve operandResolver) (Expr, 
 		if err != nil {
 			return nil, err
 		}
-		result = &ArithExpr{Op: peek.kind, LHS: result, RHS: rhs}
+		expr := &ArithExpr{Op: peek.kind, LHS: result, RHS: rhs}
+		if folded, ok := tryFoldArith(expr); ok {
+			result = folded
+		} else {
+			result = expr
+		}
 	}
+}
+
+// tryFoldArith attempts to fold an ArithExpr with two literal numeric operands
+// into a single LiteralExpr. Returns (nil, false) if either operand is not a
+// numeric literal or if division by zero would occur.
+func tryFoldArith(expr *ArithExpr) (*LiteralExpr, bool) {
+	lLit, lOk := expr.LHS.(*LiteralExpr)
+	rLit, rOk := expr.RHS.(*LiteralExpr)
+	if !lOk || !rOk {
+		return nil, false
+	}
+	lNum, lHas := extractNum(lLit.Value)
+	rNum, rHas := extractNum(rLit.Value)
+	if !lHas || !rHas {
+		return nil, false
+	}
+	var result int
+	switch expr.Op {
+	case tokPlus:
+		result = lNum + rNum
+	case tokMinus:
+		result = lNum - rNum
+	case tokStar:
+		result = lNum * rNum
+	case tokSlash:
+		if rNum == 0 {
+			return nil, false
+		}
+		result = lNum / rNum
+	case tokPercent:
+		if rNum == 0 {
+			return nil, false
+		}
+		result = lNum % rNum
+	default:
+		return nil, false
+	}
+	return &LiteralExpr{Value: map[string]any{"num": result}}, true
+}
+
+// isCompileTimeConstant reports whether a LiteralExpr value represents an
+// actual compile-time constant (number, typed value, coordinate, null/false)
+// as opposed to a runtime reference (parameter index as int, variable name
+// as string).
+func isCompileTimeConstant(v any) bool {
+	switch v.(type) {
+	case map[string]any, bool:
+		return true
+	default:
+		return v == nil
+	}
+}
+
+// tryFoldCompare attempts to fold a CompareExpr with two literal operands
+// into a boolean LiteralExpr. Returns (nil, false) if either operand is not
+// a compile-time constant literal.
+func tryFoldCompare(expr *CompareExpr) (*LiteralExpr, bool) {
+	lLit, lOk := expr.LHS.(*LiteralExpr)
+	rLit, rOk := expr.RHS.(*LiteralExpr)
+	if !lOk || !rOk {
+		return nil, false
+	}
+	// Only fold actual compile-time constants, not runtime references
+	// (parameter indices are int, variable names are string).
+	if !isCompileTimeConstant(lLit.Value) || !isCompileTimeConstant(rLit.Value) {
+		return nil, false
+	}
+	if evalCompare(expr.Op, lLit.Value, rLit.Value) {
+		return &LiteralExpr{Value: map[string]any{"num": 1}}, true
+	}
+	return &LiteralExpr{Value: false}, true
+}
+
+// tryFoldBoolChain attempts to fold a BoolChainExpr when all children are
+// literal values. Returns (nil, false) if any child is not a LiteralExpr.
+func tryFoldBoolChain(expr *BoolChainExpr) (*LiteralExpr, bool) {
+	for _, child := range expr.Children {
+		if _, ok := child.(*LiteralExpr); !ok {
+			return nil, false
+		}
+	}
+	switch expr.Op {
+	case tokDoubleAmpersand:
+		// All must be truthy
+		for _, child := range expr.Children {
+			if !isTruthy(child.(*LiteralExpr).Value) {
+				return &LiteralExpr{Value: false}, true
+			}
+		}
+		return &LiteralExpr{Value: map[string]any{"num": 1}}, true
+	case tokDoublePipe:
+		// Any truthy is enough
+		for _, child := range expr.Children {
+			if isTruthy(child.(*LiteralExpr).Value) {
+				return &LiteralExpr{Value: map[string]any{"num": 1}}, true
+			}
+		}
+		return &LiteralExpr{Value: false}, true
+	}
+	return nil, false
+}
+
+// tryFoldNot attempts to fold a NotExpr when the inner value is a literal.
+// Returns (nil, false) if the inner value is not a LiteralExpr.
+func tryFoldNot(expr *NotExpr) (*LiteralExpr, bool) {
+	lit, ok := expr.Value.(*LiteralExpr)
+	if !ok {
+		return nil, false
+	}
+	if isTruthy(lit.Value) {
+		return &LiteralExpr{Value: false}, true
+	}
+	return &LiteralExpr{Value: map[string]any{"num": 1}}, true
 }
 
 // parseArithExprFromFull parses a full PEMDAS expression from an
@@ -298,6 +429,10 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
 	}
 	if _, ok := syms.lookupVar(tok.val); !ok {
+		// Check constants before erroring
+		if c, ok := p.consts[tok.val]; ok {
+			return &LiteralExpr{Value: c.value}, nil
+		}
 		if tok.val == "Unit" {
 			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
@@ -321,7 +456,11 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &NotExpr{Value: inner}, nil
+		notExpr := &NotExpr{Value: inner}
+		if folded, ok := tryFoldNot(notExpr); ok {
+			return folded, nil
+		}
+		return notExpr, nil
 	}
 
 	if tok.kind == tokLParen {
@@ -364,7 +503,11 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &CompareExpr{Op: cmpTok.kind, LHS: lhs, RHS: rhs}, nil
+		cmp := &CompareExpr{Op: cmpTok.kind, LHS: lhs, RHS: rhs}
+		if folded, ok := tryFoldCompare(cmp); ok {
+			return folded, nil
+		}
+		return cmp, nil
 	}
 	if cmpTok.kind == tokEquals {
 		return nil, p.errorf(cmpTok.pos, "unexpected '=' — use '==' for comparison")
@@ -425,7 +568,11 @@ func (p *parser) parseBoolChain(first Expr, resolve operandResolver) (Expr, erro
 		}
 	}
 
-	return &BoolChainExpr{Op: tokDoublePipe, Children: orChildren}, nil
+	chain := &BoolChainExpr{Op: tokDoublePipe, Children: orChildren}
+	if folded, ok := tryFoldBoolChain(chain); ok {
+		return folded, nil
+	}
+	return chain, nil
 }
 
 // collectAndChain collects an &&-chain starting from first.
@@ -458,7 +605,11 @@ func (p *parser) collectAndChain(first Expr, resolve operandResolver) (Expr, err
 		}
 	}
 
-	return &BoolChainExpr{Op: tokDoubleAmpersand, Children: children}, nil
+	chain := &BoolChainExpr{Op: tokDoubleAmpersand, Children: children}
+	if folded, ok := tryFoldBoolChain(chain); ok {
+		return folded, nil
+	}
+	return chain, nil
 }
 
 // parseBhvArgExpr parses a single argument value into an Expr.
@@ -954,6 +1105,23 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		rhsName, fn, fnErr := p.resolveFnName(rhsTok)
 		if fnErr != nil {
 			return nil, fnErr
+		}
+		// Check if resolveFnName resolved to a constant (e.g., ns.CONST)
+		if c, ok := p.consts[rhsName]; ok {
+			litExpr := Expr(&LiteralExpr{Value: c.value})
+			result, err := p.parseArithExprFromFull(litExpr, resolve)
+			if err != nil {
+				return nil, err
+			}
+			syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
+			final, handled, err := p.maybeBhvExprContinuation(result, syms)
+			if err != nil {
+				return nil, err
+			}
+			if handled {
+				return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
+			}
+			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
 		}
 		if fn == nil {
 			// Not a function — parse as value with arithmetic/comparison/boolean
@@ -3677,9 +3845,21 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 	}
 	syms.popScope(savedScope)
 
-	// Jump back to loop start
+	// Jump back to loop start.
+	// When the last frame is @break (from if/break as last statement),
+	// we must emit a back-edge noop so the if/break's false branch
+	// can reach it and continue the loop. Setting "next" on @break
+	// directly doesn't work because patchBreakPlaceholders replaces
+	// the entire frame.
 	lastFrame := b.get(b.pos() - 1)
-	if _, hasNext := lastFrame["next"]; !hasNext {
+	if op, _ := lastFrame["op"].(string); op == "@break" {
+		b.emit(map[string]any{
+			"op":   "set_reg",
+			"1":    false,
+			"2":    false,
+			"next": frameRef(loopStart),
+		})
+	} else if _, hasNext := lastFrame["next"]; !hasNext {
 		lastFrame["next"] = frameRef(loopStart)
 	} else {
 		b.emit(map[string]any{
@@ -3714,20 +3894,28 @@ func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable
 	}
 	syms.popScope(savedScope)
 
-	// Loop back: set last frame's "next" to loop start
+	// Loop back: set last frame's "next" to loop start.
+	// When the last frame is @break (from if/break as last statement),
+	// we must still emit a back-edge noop so the if/break's false branch
+	// can reach it and continue the loop.
 	if b.pos() > loopStart {
 		lastFrame := b.get(b.pos() - 1)
-		if op, _ := lastFrame["op"].(string); op != "@break" {
-			if _, hasNext := lastFrame["next"]; !hasNext {
-				lastFrame["next"] = frameRef(loopStart)
-			} else {
-				b.emit(map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": frameRef(loopStart),
-				})
-			}
+		if op, _ := lastFrame["op"].(string); op == "@break" {
+			b.emit(map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": frameRef(loopStart),
+			})
+		} else if _, hasNext := lastFrame["next"]; !hasNext {
+			lastFrame["next"] = frameRef(loopStart)
+		} else {
+			b.emit(map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": frameRef(loopStart),
+			})
 		}
 	}
 

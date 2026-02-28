@@ -882,6 +882,14 @@ func (p *parser) resolveBoolTree(expr Expr, emit func(Expr) (any, error)) (*reso
 			return nil, err
 		}
 		return &resolvedBoolExpr{term: &comparisonTerm{op: tokTruthy, lhs: lhs}}, nil
+	case *LiteralExpr:
+		// Folded constant (e.g., from comparison folding). Treat as a truthy
+		// check on the literal value.
+		lhs, err := emit(e)
+		if err != nil {
+			return nil, err
+		}
+		return &resolvedBoolExpr{term: &comparisonTerm{op: tokTruthy, lhs: lhs}}, nil
 	case *NotExpr:
 		resolved, err := p.resolveBoolTree(e.Value, emit)
 		if err != nil {

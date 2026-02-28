@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -48,6 +49,9 @@ func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int)
 		if _, ok := ctx.fnVarInfo[e.Name]; ok {
 			return nil
 		}
+		if _, ok := p.consts[e.Name]; ok {
+			return nil
+		}
 		if e.Name == "Unit" {
 			return p.errorf(pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
@@ -88,6 +92,10 @@ func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 				return nil, p.errorf(tok.pos, "cannot read from output parameter %q", tok.val)
 			}
 		} else if _, ok := ctx.fnVarInfo[tok.val]; !ok {
+			// Check constants before erroring
+			if c, ok := p.consts[tok.val]; ok {
+				return &LiteralExpr{Value: c.value}, nil
+			}
 			if tok.val == "Unit" {
 				return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 			}
@@ -154,6 +162,8 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 			} else {
 				return nil, p.errorf(tok.pos, "unknown unit register %q", tok.val)
 			}
+		} else if c, ok := p.consts[tok.val]; ok {
+			base = &LiteralExpr{Value: c.value}
 		} else {
 			base = &IdentExpr{Name: tok.val}
 		}
@@ -1549,12 +1559,20 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 		return err
 	}
 
-	// Jump back to loop start
+	// Jump back to loop start.
+	// When the last frame is @break, emit a back-edge noop so the
+	// if/break's false branch can reach it and continue the loop.
 	lastFrame := b.get(b.pos() - 1)
-	if _, hasNext := lastFrame["next"]; !hasNext {
+	if op, _ := lastFrame["op"].(string); op == "@break" {
+		b.emit(map[string]any{
+			"op":   "set_reg",
+			"1":    false,
+			"2":    false,
+			"next": frameRef(loopStart),
+		})
+	} else if _, hasNext := lastFrame["next"]; !hasNext {
 		lastFrame["next"] = frameRef(loopStart)
 	} else {
-		// Emit explicit jump back
 		b.emit(map[string]any{
 			"op":   "set_reg",
 			"1":    false,
@@ -1587,20 +1605,27 @@ func (p *parser) emitFnLoopStmt(s *LoopStmt, b *frameBuilder, paramMap map[strin
 		return err
 	}
 
-	// Jump back to loop start
+	// Jump back to loop start.
+	// When the last frame is @break, emit a back-edge noop so the
+	// if/break's false branch can reach it and continue the loop.
 	if b.pos() > loopStart {
 		lastFrame := b.get(b.pos() - 1)
-		if op, _ := lastFrame["op"].(string); op != "@break" {
-			if _, hasNext := lastFrame["next"]; !hasNext {
-				lastFrame["next"] = frameRef(loopStart)
-			} else {
-				b.emit(map[string]any{
-					"op":   "set_reg",
-					"1":    false,
-					"2":    false,
-					"next": frameRef(loopStart),
-				})
-			}
+		if op, _ := lastFrame["op"].(string); op == "@break" {
+			b.emit(map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": frameRef(loopStart),
+			})
+		} else if _, hasNext := lastFrame["next"]; !hasNext {
+			lastFrame["next"] = frameRef(loopStart)
+		} else {
+			b.emit(map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": frameRef(loopStart),
+			})
 		}
 	}
 
@@ -1956,6 +1981,1027 @@ func (p *parser) parseBehaviorID() (token, error) {
 	return tok, nil
 }
 
+// --- Compile-time constants ---
+
+// parseConstDecl parses a const declaration after the `const` keyword.
+// Syntax: const <name> = <expr>
+// Returns the constant name.
+func (p *parser) parseConstDecl(private bool) (string, error) {
+	nameTok, err := p.expect(tokIdent)
+	if err != nil {
+		return "", err
+	}
+	name := nameTok.val
+	if Keywords[name] {
+		return "", p.errorf(nameTok.pos, "%q is a reserved keyword and cannot be used as a constant name", name)
+	}
+	if name == "_" {
+		return "", p.errorf(nameTok.pos, "'_' cannot be used as a constant name")
+	}
+	if _, ok := p.consts[name]; ok {
+		return "", p.errorf(nameTok.pos, "duplicate constant %q", name)
+	}
+	if _, ok := p.fns[name]; ok {
+		return "", p.errorf(nameTok.pos, "constant %q conflicts with a function of the same name", name)
+	}
+	if _, err := p.expect(tokEquals); err != nil {
+		return "", err
+	}
+
+	// Peek to see if the RHS is a string or localize block (these can't go through parseBoolExpr)
+	peek, err := p.next()
+	if err != nil {
+		return "", err
+	}
+
+	var val any
+	if peek.kind == tokString {
+		val = peek.val
+	} else if peek.kind == tokIdent && peek.val == "localize" {
+		resolved, err := p.parseLocalize()
+		if err != nil {
+			return "", err
+		}
+		val = resolved
+	} else {
+		p.unget(peek)
+
+		// Parse expression using a const-only resolver
+		constResolver := func(tok token) (Expr, error) {
+			if strings.HasPrefix(tok.val, "$") {
+				if reg, ok := unitRegisters[tok.val]; ok {
+					return &LiteralExpr{Value: reg}, nil
+				}
+				return nil, p.errorf(tok.pos, "unknown unit register %q", tok.val)
+			}
+			if c, ok := p.consts[tok.val]; ok {
+				return &LiteralExpr{Value: c.value}, nil
+			}
+			return nil, p.errorf(tok.pos, "%q is not a compile-time constant", tok.val)
+		}
+		// Enable function calls in const expressions
+		savedCallExprParser := p.callExprParser
+		p.callExprParser = func(callee *fnDef, calleeTok token) (Expr, error) {
+			args, kwArgs, err := p.parseConstCallArgs(callee, calleeTok, constResolver)
+			if err != nil {
+				return nil, err
+			}
+			return &CallExpr{Name: calleeTok.val, Args: args, KwArgs: kwArgs}, nil
+		}
+		defer func() { p.callExprParser = savedCallExprParser }()
+
+		expr, err := p.parseBoolExpr(constResolver)
+		if err != nil {
+			return "", err
+		}
+
+		// Unwrap TruthyExpr for plain arithmetic results (same pattern as
+		// parseBhvVarInit and parseFnBodyRHSExpr)
+		if te, ok := expr.(*TruthyExpr); ok {
+			expr = te.Value
+		}
+
+		// Check for & operator after the expression
+		ampTok, err := p.next()
+		if err != nil {
+			return "", err
+		}
+		if ampTok.kind == tokAmpersand {
+			numExpr, err := p.parseBoolExpr(constResolver)
+			if err != nil {
+				return "", err
+			}
+			if te, ok := numExpr.(*TruthyExpr); ok {
+				numExpr = te.Value
+			}
+			expr = &AmpersandExpr{Value: expr, Num: numExpr}
+		} else {
+			p.unget(ampTok)
+		}
+
+		// Evaluate the expression using the compile-time evaluator
+		p.evalStepLimit = 10000
+		result, ok := p.tryEvalExpr(expr, nil)
+		if !ok {
+			return "", p.errorf(nameTok.pos, "expression is not compile-time evaluable")
+		}
+		val = result
+	}
+
+	p.consts[name] = &constDef{value: val, private: private}
+	return name, nil
+}
+
+// --- Compile-time evaluator ---
+//
+// tryEvalExpr, tryEvalCall, and tryEvalStmts form a compile-time evaluator
+// that can trace through function calls. The evaluator bails (returns false)
+// when it encounters runtime-only constructs like the instruction intrinsic
+// or wait statements. It uses p.evalStepLimit as a safety limit.
+
+// constEvalStatus signals non-normal completion from tryEvalStmts.
+type constEvalStatus struct {
+	returned   bool
+	retVals    []any
+	broke      bool
+	breakLabel string
+}
+
+// tryEvalExpr evaluates an expression at compile time.
+// env holds local variable bindings (nil for top-level const expressions).
+// Returns (value, true) on success, (nil, false) on bail.
+func (p *parser) tryEvalExpr(expr Expr, env map[string]any) (any, bool) {
+	switch e := expr.(type) {
+	case *LiteralExpr:
+		return e.Value, true
+	case *IdentExpr:
+		if env != nil {
+			if val, ok := env[e.Name]; ok {
+				return val, true
+			}
+		}
+		return nil, false
+	case *ArithExpr:
+		lhs, ok := p.tryEvalExpr(e.LHS, env)
+		if !ok {
+			return nil, false
+		}
+		rhs, ok := p.tryEvalExpr(e.RHS, env)
+		if !ok {
+			return nil, false
+		}
+		lNum, lOk := extractNum(lhs)
+		rNum, rOk := extractNum(rhs)
+		if !lOk || !rOk {
+			return nil, false
+		}
+		var result int
+		switch e.Op {
+		case tokPlus:
+			result = lNum + rNum
+		case tokMinus:
+			result = lNum - rNum
+		case tokStar:
+			result = lNum * rNum
+		case tokSlash:
+			if rNum == 0 {
+				return nil, false
+			}
+			result = lNum / rNum
+		case tokPercent:
+			if rNum == 0 {
+				return nil, false
+			}
+			result = lNum % rNum
+		default:
+			return nil, false
+		}
+		return map[string]any{"num": result}, true
+	case *ConstructorExpr:
+		// Evaluate constructor args first (they may reference env vars)
+		resolved := &ConstructorExpr{TypeName: e.TypeName, Args: make([]Expr, len(e.Args))}
+		for i, arg := range e.Args {
+			val, ok := p.tryEvalExpr(arg, env)
+			if !ok {
+				return nil, false
+			}
+			resolved.Args[i] = &LiteralExpr{Value: val}
+		}
+		val, ok := tryResolveConstructorLiteral(resolved)
+		if !ok {
+			return nil, false
+		}
+		return val, true
+	case *AmpersandExpr:
+		// Evaluate both sides first
+		lhs, ok := p.tryEvalExpr(e.Value, env)
+		if !ok {
+			return nil, false
+		}
+		rhs, ok := p.tryEvalExpr(e.Num, env)
+		if !ok {
+			return nil, false
+		}
+		resolved := &AmpersandExpr{
+			Value: &LiteralExpr{Value: lhs},
+			Num:   &LiteralExpr{Value: rhs},
+		}
+		val, ok := tryResolveAmpersandLiteral(resolved)
+		if !ok {
+			return nil, false
+		}
+		return val, true
+	case *CompareExpr:
+		lhs, ok := p.tryEvalExpr(e.LHS, env)
+		if !ok {
+			return nil, false
+		}
+		rhs, ok := p.tryEvalExpr(e.RHS, env)
+		if !ok {
+			return nil, false
+		}
+		if evalCompare(e.Op, lhs, rhs) {
+			return map[string]any{"num": 1}, true
+		}
+		return false, true
+	case *BoolChainExpr:
+		if e.Op == tokDoubleAmpersand {
+			for _, child := range e.Children {
+				val, ok := p.tryEvalExpr(child, env)
+				if !ok {
+					return nil, false
+				}
+				if !isTruthy(val) {
+					return false, true
+				}
+			}
+			return map[string]any{"num": 1}, true
+		}
+		// ||
+		for _, child := range e.Children {
+			val, ok := p.tryEvalExpr(child, env)
+			if !ok {
+				return nil, false
+			}
+			if isTruthy(val) {
+				return map[string]any{"num": 1}, true
+			}
+		}
+		return false, true
+	case *NotExpr:
+		inner, ok := p.tryEvalExpr(e.Value, env)
+		if !ok {
+			return nil, false
+		}
+		if isTruthy(inner) {
+			return false, true
+		}
+		return map[string]any{"num": 1}, true
+	case *TruthyExpr:
+		inner, ok := p.tryEvalExpr(e.Value, env)
+		if !ok {
+			return nil, false
+		}
+		if isTruthy(inner) {
+			return map[string]any{"num": 1}, true
+		}
+		return false, true
+	case *TypeCheckExpr:
+		val, ok := p.tryEvalExpr(e.Value, env)
+		if !ok {
+			return nil, false
+		}
+		if evalTypeCheck(val, e.TypeSlot) {
+			return map[string]any{"num": 1}, true
+		}
+		return false, true
+	case *CallExpr:
+		fn := p.fns[e.Name]
+		if fn == nil {
+			return nil, false
+		}
+		// Evaluate positional args
+		posArgs := make([]any, len(e.Args))
+		for i, arg := range e.Args {
+			val, ok := p.tryEvalExpr(arg, env)
+			if !ok {
+				return nil, false
+			}
+			posArgs[i] = val
+		}
+		// Evaluate keyword args
+		var kwArgs map[string]any
+		if len(e.KwArgs) > 0 {
+			kwArgs = make(map[string]any, len(e.KwArgs))
+			for k, v := range e.KwArgs {
+				val, ok := p.tryEvalExpr(v, env)
+				if !ok {
+					return nil, false
+				}
+				kwArgs[k] = val
+			}
+		}
+		retVals, ok := p.tryEvalCall(fn, posArgs, kwArgs)
+		if !ok {
+			return nil, false
+		}
+		if len(retVals) == 0 {
+			return false, true
+		}
+		return retVals[0], true
+	case *ModeBlockExpr:
+		// Mode is irrelevant at compile time; just eval body + tail
+		status, ok := p.tryEvalStmts(e.Body, env)
+		if !ok {
+			return nil, false
+		}
+		if status != nil {
+			return nil, false // unexpected return/break in mode block body
+		}
+		return p.tryEvalExpr(e.Tail, env)
+	case *IfExpr:
+		cond, ok := p.tryEvalExpr(e.Cond, env)
+		if !ok {
+			return nil, false
+		}
+		if isTruthy(cond) {
+			status, ok := p.tryEvalStmts(e.Body, env)
+			if !ok {
+				return nil, false
+			}
+			if status != nil {
+				return nil, false
+			}
+			return p.tryEvalExpr(e.Tail, env)
+		}
+		for _, elif := range e.ElseIfs {
+			cond, ok := p.tryEvalExpr(elif.Cond, env)
+			if !ok {
+				return nil, false
+			}
+			if isTruthy(cond) {
+				status, ok := p.tryEvalStmts(elif.Body, env)
+				if !ok {
+					return nil, false
+				}
+				if status != nil {
+					return nil, false
+				}
+				return p.tryEvalExpr(elif.Tail, env)
+			}
+		}
+		if e.ElsTail != nil {
+			status, ok := p.tryEvalStmts(e.ElsBody, env)
+			if !ok {
+				return nil, false
+			}
+			if status != nil {
+				return nil, false
+			}
+			return p.tryEvalExpr(e.ElsTail, env)
+		}
+		return false, true // no else → null
+	case *ExprListExpr:
+		// Evaluate each expression; collect results
+		var results []any
+		for _, sub := range e.Exprs {
+			val, ok := p.tryEvalExpr(sub, env)
+			if !ok {
+				return nil, false
+			}
+			results = append(results, val)
+		}
+		if len(results) == 1 {
+			return results[0], true
+		}
+		return results, true
+	case *InstructionExpr:
+		return nil, false // bail: runtime-only
+	default:
+		return nil, false
+	}
+}
+
+// tryEvalCall evaluates a function call at compile time.
+// Returns (returnValues, true) on success, (nil, false) on bail.
+func (p *parser) tryEvalCall(fn *fnDef, posArgs []any, kwArgs map[string]any) ([]any, bool) {
+	if fn.frame != nil {
+		return nil, false // instruction-based function → bail
+	}
+	if fn.astBody == nil {
+		return nil, false // no body → bail
+	}
+
+	// Build environment from params + args
+	env := map[string]any{}
+	posIdx := 0
+	for _, param := range fn.params {
+		if param.keyword == "" {
+			if posIdx < len(posArgs) {
+				env[param.name] = posArgs[posIdx]
+			} else {
+				env[param.name] = false
+			}
+			posIdx++
+		} else {
+			if kwArgs != nil {
+				if val, ok := kwArgs[param.keyword]; ok {
+					env[param.name] = val
+				} else {
+					env[param.name] = false
+				}
+			} else {
+				env[param.name] = false
+			}
+		}
+	}
+
+	// Merge transitive function scope (same pattern as expandCall)
+	var savedFns map[string]*fnDef
+	if fn.scope != nil {
+		savedFns = map[string]*fnDef{}
+		for name, def := range fn.scope {
+			if _, exists := p.fns[name]; !exists {
+				p.fns[name] = def
+				savedFns[name] = def
+			}
+		}
+	}
+
+	status, ok := p.tryEvalStmts(fn.astBody, env)
+
+	// Restore function scope
+	if savedFns != nil {
+		for name := range savedFns {
+			delete(p.fns, name)
+		}
+	}
+
+	if !ok {
+		return nil, false
+	}
+
+	// Extract return values
+	if status != nil && status.returned {
+		return status.retVals, true
+	}
+
+	// No explicit return — extract from rets
+	if fn.rets != nil {
+		retVals := make([]any, len(fn.rets))
+		for i, name := range fn.rets {
+			if val, ok := env[name]; ok {
+				retVals[i] = val
+			} else {
+				retVals[i] = false
+			}
+		}
+		return retVals, true
+	}
+
+	return nil, true
+}
+
+// tryEvalStmts evaluates a list of statements at compile time.
+// Returns (nil, true) for normal completion, (*constEvalStatus, true) for
+// return/break, and (nil, false) for bail.
+func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatus, bool) {
+	for _, stmt := range stmts {
+		p.evalStepLimit--
+		if p.evalStepLimit <= 0 {
+			return nil, false // step limit exceeded
+		}
+		switch s := stmt.(type) {
+		case *LetStmt:
+			val, ok := p.tryEvalExpr(s.Value, env)
+			if !ok {
+				return nil, false
+			}
+			env[s.Name] = val
+		case *AssignStmt:
+			val, ok := p.tryEvalExpr(s.Value, env)
+			if !ok {
+				return nil, false
+			}
+			env[s.Target] = val
+		case *CompoundAssignStmt:
+			rhs, ok := p.tryEvalExpr(s.Value, env)
+			if !ok {
+				return nil, false
+			}
+			lhs, ok := env[s.Target]
+			if !ok {
+				return nil, false
+			}
+			lNum, lOk := extractNum(lhs)
+			rNum, rOk := extractNum(rhs)
+			if !lOk || !rOk {
+				return nil, false
+			}
+			var result int
+			switch s.Op {
+			case tokPlusEquals:
+				result = lNum + rNum
+			case tokMinusEquals:
+				result = lNum - rNum
+			case tokStarEquals:
+				result = lNum * rNum
+			case tokSlashEquals:
+				if rNum == 0 {
+					return nil, false
+				}
+				result = lNum / rNum
+			case tokPercentEquals:
+				if rNum == 0 {
+					return nil, false
+				}
+				result = lNum % rNum
+			default:
+				return nil, false
+			}
+			env[s.Target] = map[string]any{"num": result}
+		case *IncrDecrStmt:
+			lhs, ok := env[s.Target]
+			if !ok {
+				return nil, false
+			}
+			lNum, lOk := extractNum(lhs)
+			if !lOk {
+				return nil, false
+			}
+			if s.Op == tokPlusPlus {
+				env[s.Target] = map[string]any{"num": lNum + 1}
+			} else {
+				env[s.Target] = map[string]any{"num": lNum - 1}
+			}
+		case *MultiReturnStmt:
+			// Evaluate RHS
+			switch rv := s.Value.(type) {
+			case *CallExpr:
+				fn := p.fns[rv.Name]
+				if fn == nil {
+					return nil, false
+				}
+				posArgs := make([]any, len(rv.Args))
+				for i, arg := range rv.Args {
+					val, ok := p.tryEvalExpr(arg, env)
+					if !ok {
+						return nil, false
+					}
+					posArgs[i] = val
+				}
+				var kwArgs map[string]any
+				if len(rv.KwArgs) > 0 {
+					kwArgs = make(map[string]any, len(rv.KwArgs))
+					for k, v := range rv.KwArgs {
+						val, ok := p.tryEvalExpr(v, env)
+						if !ok {
+							return nil, false
+						}
+						kwArgs[k] = val
+					}
+				}
+				retVals, ok := p.tryEvalCall(fn, posArgs, kwArgs)
+				if !ok {
+					return nil, false
+				}
+				for i, b := range s.Bindings {
+					if b.Discard {
+						continue
+					}
+					if i < len(retVals) {
+						env[b.Name] = retVals[i]
+					} else {
+						env[b.Name] = false
+					}
+				}
+			case *ExprListExpr:
+				idx := 0
+				for _, e := range rv.Exprs {
+					val, ok := p.tryEvalExpr(e, env)
+					if !ok {
+						return nil, false
+					}
+					if idx < len(s.Bindings) {
+						b := s.Bindings[idx]
+						if !b.Discard {
+							env[b.Name] = val
+						}
+						idx++
+					}
+				}
+			default:
+				return nil, false
+			}
+		case *CallStmt:
+			fn := p.fns[s.Name]
+			if fn == nil {
+				return nil, false
+			}
+			posArgs := make([]any, len(s.Args))
+			for i, arg := range s.Args {
+				val, ok := p.tryEvalExpr(arg, env)
+				if !ok {
+					return nil, false
+				}
+				posArgs[i] = val
+			}
+			var kwArgs map[string]any
+			if len(s.KwArgs) > 0 {
+				kwArgs = make(map[string]any, len(s.KwArgs))
+				for k, v := range s.KwArgs {
+					val, ok := p.tryEvalExpr(v, env)
+					if !ok {
+						return nil, false
+					}
+					kwArgs[k] = val
+				}
+			}
+			_, ok := p.tryEvalCall(fn, posArgs, kwArgs)
+			if !ok {
+				return nil, false
+			}
+		case *ReturnStmt:
+			var retVals []any
+			for _, v := range s.Values {
+				val, ok := p.tryEvalExpr(v, env)
+				if !ok {
+					return nil, false
+				}
+				retVals = append(retVals, val)
+			}
+			return &constEvalStatus{returned: true, retVals: retVals}, true
+		case *IfStmt:
+			cond, ok := p.tryEvalExpr(s.Cond, env)
+			if !ok {
+				return nil, false
+			}
+			if isTruthy(cond) {
+				status, ok := p.tryEvalStmts(s.Body, env)
+				if !ok {
+					return nil, false
+				}
+				if status != nil {
+					return status, true
+				}
+				continue
+			}
+			matched := false
+			for _, elif := range s.ElseIfs {
+				cond, ok := p.tryEvalExpr(elif.Cond, env)
+				if !ok {
+					return nil, false
+				}
+				if isTruthy(cond) {
+					status, ok := p.tryEvalStmts(elif.Body, env)
+					if !ok {
+						return nil, false
+					}
+					if status != nil {
+						return status, true
+					}
+					matched = true
+					break
+				}
+			}
+			if !matched && s.Else != nil {
+				status, ok := p.tryEvalStmts(s.Else, env)
+				if !ok {
+					return nil, false
+				}
+				if status != nil {
+					return status, true
+				}
+			}
+		case *LoopStmt:
+			if s.Count == nil {
+				return nil, false // infinite loop → bail
+			}
+			countVal, ok := p.tryEvalExpr(s.Count, env)
+			if !ok {
+				return nil, false
+			}
+			countNum, cOk := extractNum(countVal)
+			if !cOk || countNum < 0 {
+				return nil, false
+			}
+			for i := 0; i < countNum; i++ {
+				status, ok := p.tryEvalStmts(s.Body, env)
+				if !ok {
+					return nil, false
+				}
+				if status != nil {
+					if status.broke {
+						if status.breakLabel == "" || status.breakLabel == s.Label {
+							break // break consumed
+						}
+						return status, true // propagate labeled break
+					}
+					if status.returned {
+						return status, true
+					}
+				}
+			}
+		case *WhileStmt:
+			for {
+				p.evalStepLimit--
+				if p.evalStepLimit <= 0 {
+					return nil, false
+				}
+				cond, ok := p.tryEvalExpr(s.Cond, env)
+				if !ok {
+					return nil, false
+				}
+				if !isTruthy(cond) {
+					break
+				}
+				status, ok := p.tryEvalStmts(s.Body, env)
+				if !ok {
+					return nil, false
+				}
+				if status != nil {
+					if status.broke {
+						if status.breakLabel == "" || status.breakLabel == s.Label {
+							break
+						}
+						return status, true
+					}
+					if status.returned {
+						return status, true
+					}
+				}
+			}
+		case *ForStmt:
+			rangeVal, ok := p.tryEvalExpr(s.Range, env)
+			if !ok {
+				return nil, false
+			}
+			// Extract range parts from coordinate+number composite
+			rm, ok := rangeVal.(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			coord, ok := rm["coord"].(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			start, ok := coord["x"].(int)
+			if !ok {
+				return nil, false
+			}
+			stop, ok := coord["y"].(int)
+			if !ok {
+				return nil, false
+			}
+			step := 1
+			if n, ok := rm["num"]; ok {
+				if s, ok := n.(int); ok && s != 0 {
+					step = s
+				}
+			}
+			for i := start; (step > 0 && i < stop) || (step < 0 && i > stop); i += step {
+				p.evalStepLimit--
+				if p.evalStepLimit <= 0 {
+					return nil, false
+				}
+				env[s.IterVar] = map[string]any{"num": i}
+				status, ok := p.tryEvalStmts(s.Body, env)
+				if !ok {
+					return nil, false
+				}
+				if status != nil {
+					if status.broke {
+						if status.breakLabel == "" || status.breakLabel == s.Label {
+							break
+						}
+						return status, true
+					}
+					if status.returned {
+						return status, true
+					}
+				}
+			}
+		case *BreakStmt:
+			return &constEvalStatus{broke: true, breakLabel: s.Label}, true
+		case *ModeBlockStmt:
+			// Mode is irrelevant at compile time
+			status, ok := p.tryEvalStmts(s.Body, env)
+			if !ok {
+				return nil, false
+			}
+			if status != nil {
+				return status, true
+			}
+		case *InstructionStmt:
+			return nil, false // bail: runtime-only
+		case *WaitStmt:
+			return nil, false // bail: runtime-only
+		default:
+			return nil, false
+		}
+	}
+	return nil, true // normal completion
+}
+
+// parseConstCallArgs parses function call arguments in a const expression context.
+func (p *parser) parseConstCallArgs(callee *fnDef, calleeTok token, constResolver operandResolver) ([]Expr, map[string]Expr, error) {
+	// Detect parenthesized call syntax
+	paren := false
+	peek, err := p.next()
+	if err != nil {
+		return nil, nil, err
+	}
+	if peek.kind == tokLParen {
+		paren = true
+	} else {
+		p.unget(peek)
+	}
+
+	posCount := callee.positionalCount()
+	args := make([]Expr, posCount)
+	for i := 0; i < posCount; i++ {
+		if i > 0 {
+			if paren {
+				if _, err := p.expect(tokComma); err != nil {
+					return nil, nil, err
+				}
+			} else {
+				sep, err := p.next()
+				if err != nil {
+					return nil, nil, err
+				}
+				if sep.kind != tokComma {
+					p.unget(sep)
+				}
+			}
+		}
+
+		// Skip direction annotations (irrelevant for compile-time eval)
+		dirTok, err := p.next()
+		if err != nil {
+			return nil, nil, err
+		}
+		if !(dirTok.kind == tokIdent && isDirection(dirTok.val)) {
+			p.unget(dirTok)
+		}
+
+		val, err := p.parseConstArgExpr(constResolver)
+		if err != nil {
+			return nil, nil, err
+		}
+		args[i] = val
+	}
+
+	// Parse optional keyword args
+	var kwArgs map[string]Expr
+	peek, err = p.next()
+	if err != nil {
+		return nil, nil, err
+	}
+	if peek.kind == tokComma && callee.positionalCount() < len(callee.params) {
+		kwArgs = map[string]Expr{}
+		for {
+			dirOrKw, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, nil, err
+			}
+			if isDirection(dirOrKw.val) {
+				dirOrKw, err = p.expect(tokIdent)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			kw := callee.keywordByName(dirOrKw.val)
+			if kw == nil {
+				return nil, nil, p.errorf(dirOrKw.pos, "unknown keyword argument %q", dirOrKw.val)
+			}
+			if _, exists := kwArgs[dirOrKw.val]; exists {
+				return nil, nil, p.errorf(dirOrKw.pos, "duplicate keyword argument %q", dirOrKw.val)
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return nil, nil, err
+			}
+			val, err := p.parseConstArgExpr(constResolver)
+			if err != nil {
+				return nil, nil, err
+			}
+			kwArgs[dirOrKw.val] = val
+
+			next, err := p.next()
+			if err != nil {
+				return nil, nil, err
+			}
+			if next.kind != tokComma {
+				p.unget(next)
+				break
+			}
+		}
+	} else {
+		p.unget(peek)
+	}
+
+	if paren {
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return args, kwArgs, nil
+}
+
+// parseConstArgExpr parses a single argument in a const expression context.
+func (p *parser) parseConstArgExpr(constResolver operandResolver) (Expr, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind == tokString {
+		return &LiteralExpr{Value: tok.val}, nil
+	}
+	if tok.kind == tokIdent && tok.val == "localize" {
+		resolved, err := p.parseLocalize()
+		if err != nil {
+			return nil, err
+		}
+		return &LiteralExpr{Value: resolved}, nil
+	}
+	p.unget(tok)
+	expr, err := p.parseArithExpr(constResolver)
+	if err != nil {
+		return nil, err
+	}
+	// Check for & operator
+	ampTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if ampTok.kind == tokAmpersand {
+		numExpr, err := p.parseArithExpr(constResolver)
+		if err != nil {
+			return nil, err
+		}
+		return &AmpersandExpr{Value: expr, Num: numExpr}, nil
+	}
+	p.unget(ampTok)
+	return expr, nil
+}
+
+// extractNum extracts the integer from a compile-time value.
+func extractNum(val any) (int, bool) {
+	if m, ok := val.(map[string]any); ok {
+		if n, ok := m["num"]; ok {
+			if i, ok := n.(int); ok {
+				return i, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// isTruthy checks if a compile-time value is truthy (non-false/non-null).
+func isTruthy(val any) bool {
+	if val == nil {
+		return false
+	}
+	if b, ok := val.(bool); ok {
+		return b
+	}
+	return true // maps, ints, strings are truthy
+}
+
+// evalCompare evaluates a comparison between two compile-time values.
+func evalCompare(op tokenKind, lhs, rhs any) bool {
+	if isEqualityOp(op) {
+		eq := reflect.DeepEqual(lhs, rhs)
+		if op == tokDoubleEquals {
+			return eq
+		}
+		return !eq
+	}
+	lNum, lOk := extractNum(lhs)
+	rNum, rOk := extractNum(rhs)
+	if !lOk || !rOk {
+		return false
+	}
+	switch op {
+	case tokGreater:
+		return lNum > rNum
+	case tokGreaterEquals:
+		return lNum >= rNum
+	case tokLess:
+		return lNum < rNum
+	case tokLessEquals:
+		return lNum <= rNum
+	}
+	return false
+}
+
+// evalTypeCheck checks whether a compile-time value matches a type slot.
+func evalTypeCheck(val any, typeSlot string) bool {
+	m, ok := val.(map[string]any)
+	if !ok {
+		return false
+	}
+	if _, hasID := m["id"]; hasID {
+		id := m["id"].(string)
+		switch typeSlot {
+		case valueTypeItem:
+			return !strings.HasPrefix(id, "c_") && !strings.HasPrefix(id, "t_") && !strings.HasPrefix(id, "v_")
+		case valueTypeComp:
+			return strings.HasPrefix(id, "c_")
+		case valueTypeTech:
+			return strings.HasPrefix(id, "t_")
+		case valueTypeValue:
+			return strings.HasPrefix(id, "v_")
+		}
+		return false
+	}
+	if _, hasCoord := m["coord"]; hasCoord {
+		return typeSlot == valueTypeCoord
+	}
+	return false
+}
+
 func (p *parser) parseFile() (*codec.Object, error) {
 	// Pass 1: collect user-defined function definitions
 	if err := p.collectUserFns(); err != nil {
@@ -2017,14 +3063,25 @@ func (p *parser) parseFile() (*codec.Object, error) {
 			if err != nil {
 				return nil, err
 			}
-			if fnTok.val != "fn" {
-				return nil, p.errorf(fnTok.pos, "expected 'fn' after 'private', got %q", fnTok.val)
-			}
-			if err := p.skipFnDef(); err != nil {
-				return nil, err
+			switch fnTok.val {
+			case "fn":
+				if err := p.skipFnDef(); err != nil {
+					return nil, err
+				}
+			case "const":
+				if err := p.skipConstDecl(); err != nil {
+					return nil, err
+				}
+			default:
+				return nil, p.errorf(fnTok.pos, "expected 'fn' or 'const' after 'private', got %q", fnTok.val)
 			}
 		case "fn":
 			if err := p.skipFnDef(); err != nil {
+				return nil, err
+			}
+		case "const":
+			// Skip const declarations in pass 2 (already processed in pass 1)
+			if err := p.skipConstDecl(); err != nil {
 				return nil, err
 			}
 		case "import":
@@ -2033,7 +3090,7 @@ func (p *parser) parseFile() (*codec.Object, error) {
 				return nil, err
 			}
 		default:
-			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
+			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', or 'private', got %q", tok.val)
 		}
 	}
 }
@@ -2049,8 +3106,9 @@ func (p *parser) collectUserFns() error {
 		return err
 	}
 
-	// Track same-file function names for import collision checking
+	// Track same-file names for import collision checking
 	var sameFileFns []string
+	var sameFileConsts []string
 
 	for {
 		tok, err := p.next()
@@ -2078,30 +3136,44 @@ func (p *parser) collectUserFns() error {
 			if err != nil {
 				return err
 			}
-			if fnTok.val != "fn" {
-				return p.errorf(fnTok.pos, "expected 'fn' after 'private', got %q", fnTok.val)
+			switch fnTok.val {
+			case "fn":
+				name, err := p.parseUserFn()
+				if err != nil {
+					return err
+				}
+				p.fns[name].private = true
+				sameFileFns = append(sameFileFns, name)
+			case "const":
+				name, err := p.parseConstDecl(true)
+				if err != nil {
+					return err
+				}
+				sameFileConsts = append(sameFileConsts, name)
+			default:
+				return p.errorf(fnTok.pos, "expected 'fn' or 'const' after 'private', got %q", fnTok.val)
 			}
-			name, err := p.parseUserFn()
-			if err != nil {
-				return err
-			}
-			p.fns[name].private = true
-			sameFileFns = append(sameFileFns, name)
 		case "fn":
 			name, err := p.parseUserFn()
 			if err != nil {
 				return err
 			}
 			sameFileFns = append(sameFileFns, name)
+		case "const":
+			name, err := p.parseConstDecl(false)
+			if err != nil {
+				return err
+			}
+			sameFileConsts = append(sameFileConsts, name)
 		case "import":
 			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
 		default:
-			return p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
+			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', or 'private', got %q", tok.val)
 		}
 	}
 
-	// Check for collisions between same-file functions and imports
-	return p.checkImportCollisions(sameFileFns)
+	// Check for collisions between same-file names and imports
+	return p.checkImportCollisions(sameFileFns, sameFileConsts)
 }
 
 // fnBodyContext holds the shared state for fn body parsing.
@@ -3870,6 +4942,31 @@ func (p *parser) skipFnDef() error {
 		}
 	}
 	return p.skipBraceBlock()
+}
+
+// skipConstDecl skips a const declaration during pass 2.
+// The `const` keyword has already been consumed.
+func (p *parser) skipConstDecl() error {
+	// Skip tokens until we reach the next top-level declaration.
+	// Const declarations are single-line (no braces), so we skip until we
+	// see a token that starts a new top-level declaration or EOF.
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return err
+		}
+		if tok.kind == tokEOF {
+			p.unget(tok)
+			return nil
+		}
+		if tok.kind == tokIdent {
+			switch tok.val {
+			case "import", "fn", "private", "behavior", "const":
+				p.unget(tok)
+				return nil
+			}
+		}
+	}
 }
 
 func (p *parser) parseInstruction() (map[string]any, error) {

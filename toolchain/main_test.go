@@ -3008,6 +3008,127 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 		}
 	})
 
+	// --- Constant declaration errors ---
+
+	t.Run("const_duplicate_name", func(t *testing.T) {
+		src := `const X = 5
+const X = 10
+behavior a { let x = X }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate constant") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("const_collides_with_fn", func(t *testing.T) {
+		src := `fn greet() { notify "hi" }
+const greet = 5
+behavior a { let x = greet }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with a function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("const_forward_reference", func(t *testing.T) {
+		src := `const A = B
+const B = 5
+behavior a { let x = A }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not a compile-time constant") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("const_runtime_variable", func(t *testing.T) {
+		src := `const X = y
+behavior a { let y = 5 }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not a compile-time constant") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("const_keyword_name", func(t *testing.T) {
+		src := `const if = 5
+behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("const_underscore_name", func(t *testing.T) {
+		src := `const _ = 5
+behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot be used as a constant name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// --- Compile-time evaluator errors ---
+
+	t.Run("const_fn_call_bail", func(t *testing.T) {
+		// Function that hits instruction → should bail
+		src := `fn runtime_fn(x) {
+    return instruction "set_number" {
+        2: x
+        3: @1
+    }
+}
+const X = runtime_fn(5)
+behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not compile-time evaluable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("const_fn_call_ok", func(t *testing.T) {
+		// Pure function call should succeed
+		src := `fn double(x) { return x * 2 }
+const X = double(5)
+behavior a { set_reg X }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("const_fn_call_transitive", func(t *testing.T) {
+		// Function calling another function should work
+		src := `fn double(x) { return x * 2 }
+fn quadruple(x) { return double(double(x)) }
+const X = quadruple(3)
+behavior a { set_reg X }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {
@@ -3623,6 +3744,108 @@ behavior main {
 	lib.greet
 }`)},
 			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// --- Constant import tests ---
+
+	t.Run("named_import_const", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import COUNT from "./lib"
+behavior a { let x = COUNT }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`const COUNT = 42`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_import_const", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import * from "./lib"
+behavior a { let x = COUNT }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`const COUNT = 42
+private const SECRET = 99`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_no_private_const", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import * from "./lib"
+behavior a { let x = SECRET }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`const COUNT = 42
+private const SECRET = 99`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error — private const should not be imported by glob")
+		}
+	})
+
+	t.Run("private_const_import_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import SECRET from "./lib"
+behavior a { let x = SECRET }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`private const SECRET = 99`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "private") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_const", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior a { let x = lib.COUNT }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`const COUNT = 42`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_private_const_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior a { let x = lib.SECRET }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`private const SECRET = 99`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error for private constant access")
+		}
+		if !strings.Contains(err.Error(), "private") {
+			t.Fatalf("expected private constant error, got: %v", err)
+		}
+	})
+
+	t.Run("const_via_imported_fn", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import double from "./lib"
+const X = double(5)
+behavior a { set_reg X }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn double(x) { return x * 2 }`)},
 		}
 		src, _ := sourceFS.ReadFile("main.doit")
 		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")

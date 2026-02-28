@@ -1,0 +1,23 @@
+{
+    "0": {
+        "0": {"coord": {"x": 3, "y": 7}},
+        "1": "c",
+        "op": "set_reg"
+    },
+    "1": {
+        "0": {"id": "metalbar", "num": 5},
+        "1": "item",
+        "op": "set_reg"
+    },
+    "2": {
+        "0": "c",
+        "1": false,
+        "op": "set_reg"
+    },
+    "3": {
+        "0": "item",
+        "1": false,
+        "op": "set_reg"
+    },
+    "name": "Fold Mixed"
+}

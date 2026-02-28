@@ -1,0 +1,23 @@
+{
+    "0": {
+        "1": {"num": 5},
+        "2": "x",
+        "op": "set_number"
+    },
+    "1": {
+        "1": {"num": 25},
+        "2": "y",
+        "op": "set_number"
+    },
+    "2": {
+        "0": "x",
+        "op": "notify",
+        "txt": "result"
+    },
+    "3": {
+        "0": "y",
+        "1": false,
+        "op": "set_reg"
+    },
+    "name": "Fold Arith"
+}

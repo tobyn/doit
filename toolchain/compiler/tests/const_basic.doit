@@ -1,0 +1,12 @@
+# AI-generated test
+const GREETING = "hello"
+const COUNT = 5
+const TRUEVAL = true
+const METAL_STACK = Item("metalbar") & 10
+
+behavior a {
+    @name "Const Basic"
+    notify GREETING
+    let x = COUNT
+    let y = METAL_STACK
+}

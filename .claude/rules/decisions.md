@@ -312,6 +312,18 @@ behavior level, `emitBehaviorStmts` detects the if/break pattern
 (single `BreakStmt` body, no else) and routes through `emitBhvIfBreak`
 instead of `emitBhvIfStmt` for optimized break emission.
 
+**Back-edge for if/break as last statement**: When `if ... { break }` is
+the last statement in a loop body, all four affected loop emitters
+(`emitBhvLoopStmt`, `emitBhvWhileStmt`, `emitFnLoopStmt`,
+`emitFnWhileStmt`) detect that the last body frame is `@break` and emit
+a noop back-edge frame after it. This is necessary because `emitBhvIfBreak`
+sets the false branch (condition not met → continue loop) to
+`checkStart + checkCount + 1` — the frame after the @break placeholder.
+Without the back-edge noop, that position would equal `afterLoop`, causing
+the loop to exit after one iteration regardless of the condition. Counted
+loops and for-loops are not affected because the false branch reaches the
+INCR frame, which naturally loops back to CHECK.
+
 ## Labeled loops and breaks
 
 Syntax: `label: loop { ... }`, `label: while cond { ... }`,
@@ -671,3 +683,110 @@ the imported file's path for correct source location reporting.
 **File caching**: `processImports` uses a `fileCache` to avoid
 re-parsing files imported multiple times within the same file's import
 statements.
+
+## Compile-time constants
+
+`const` declarations define named compile-time values. Values are
+evaluated during pass 1 (`collectUserFns`) and substituted as
+`LiteralExpr` nodes wherever the constant name appears.
+
+**Data model**: `constDef` struct with `value any` and `private bool`.
+Stored in `parser.consts` (flat map) and `parser.namespaceConsts`
+(for namespace-qualified access). Constants are pure values with no
+transitive dependency concerns (unlike functions with `scope`).
+
+**Evaluation**: `parseConstDecl` uses `parseBoolExpr` with a
+const-only `operandResolver` that resolves known constants to
+`LiteralExpr` and errors on everything else. String and `localize`
+RHS are handled specially before `parseBoolExpr` (since `parseBoolExpr`
+rejects strings). `TruthyExpr` is unwrapped after `parseBoolExpr` to
+preserve arithmetic values. `evalConstExpr` recursively evaluates the
+resulting AST to a Go value.
+
+**Import system**: `parseImportedFile` returns `*importedFile` (fns +
+consts). `processImports` handles glob, named, and namespace imports
+for both functions and constants. `resolveFnName` resolves namespace
+constants via `p.namespaceConsts`. The `checkImportCollisions` function
+checks both function and constant names.
+
+**Expression integration**: Constants are resolved in five places:
+(1) `parseArithPrimary` (shared arithmetic parser — covers most paths),
+(2) `resolveBhvOperand` (behavior-level resolver fallback),
+(3) `fnBodyResolver` (fn body resolver fallback),
+(4) `parseFnBodyExpr` (fn body expression parser),
+(5) `checkFnBodyExprDeclared` (declaration validator).
+Additionally, `parseBhvVarInit` checks `p.consts` after `resolveFnName`
+to handle namespace-qualified constants like `lib.COUNT`.
+
+**Pass 2 skipping**: `skipConstDecl` skips const declarations during
+pass 2 by scanning until the next top-level keyword (same approach as
+`skipImportStmt`).
+
+## Constant folding
+
+Arithmetic and comparison expressions with all-literal operands are
+folded at compile time, producing no runtime instructions.
+
+**Arithmetic folding**: `tryFoldArith` in `parseArithTermFrom` and
+`parseArithExprFrom` — after constructing an `ArithExpr`, checks if
+both operands are numeric `LiteralExpr`. Supports `+`, `-`, `*`, `/`,
+`%`. Division by zero is not folded (left to runtime). Cascades
+naturally: `2 + 3 + 4` folds bottom-up to `9`.
+
+**Comparison folding**: `tryFoldCompare` in `parseBoolPrimary` — after
+constructing a `CompareExpr`, checks if both operands are `LiteralExpr`
+with compile-time constant values. The `isCompileTimeConstant` guard
+prevents folding runtime references (parameter indices as bare `int`,
+variable names as `string`) that happen to be wrapped in `LiteralExpr`
+by the behavior-level resolver.
+
+**Boolean chain/not folding**: `tryFoldBoolChain` and `tryFoldNot` —
+fold `BoolChainExpr` when all children are `LiteralExpr`, and `NotExpr`
+when the inner value is `LiteralExpr`.
+
+**`LiteralExpr` in boolean contexts**: `resolveBoolTree` handles
+`*LiteralExpr` by treating it as a truthy check, emitting
+`compare_register <value>, false`. This handles folded comparisons
+that appear as if/while/wait conditions.
+
+**Constructor integration**: `tryResolveConstructorLiteral` already
+checks for `LiteralExpr` args, so `Coordinate(1 + 2, 3 + 4)` folds
+automatically after arithmetic folding.
+
+## Compile-time evaluator
+
+`tryEvalExpr`, `tryEvalCall`, and `tryEvalStmts` form a compile-time
+evaluator that can trace through function calls. Used by `parseConstDecl`
+to evaluate `const` expressions that include function calls.
+
+**Design**: Try-and-bail approach. Returns `(value, true)` on success,
+`(nil, false)` on bail. Bails on `instruction` blocks, `wait` statements,
+and any construct that can't be evaluated without runtime state.
+`p.evalStepLimit` (initialized to 10000) prevents infinite loops.
+
+**Expression evaluation** (`tryEvalExpr`): Handles all `Expr` types.
+`LiteralExpr` returns the value. `IdentExpr` looks up in the local
+environment. `CallExpr` delegates to `tryEvalCall`. `IfExpr` evaluates
+the condition and the matching branch. `ModeBlockExpr` ignores mode
+and evaluates body + tail.
+
+**Function call evaluation** (`tryEvalCall`): Builds an environment
+from params + args, merges transitive function scope (same pattern as
+`expandCall`), evaluates `fn.astBody`, extracts return values. Bails
+if `fn.frame != nil` (instruction-based function).
+
+**Statement evaluation** (`tryEvalStmts`): Returns `(*constEvalStatus, bool)`.
+Normal completion returns `(nil, true)`. `ReturnStmt` returns
+`(&constEvalStatus{returned: true, retVals: ...}, true)`. `BreakStmt`
+returns `(&constEvalStatus{broke: true, breakLabel: ...}, true)`.
+Bail returns `(nil, false)`.
+
+**Call argument parsing**: `parseConstCallArgs` and `parseConstArgExpr`
+are const-specific helpers for parsing function call arguments within
+`const` declarations. They use the `constResolver` for identifier
+resolution and handle strings, constructors, `&`, and arithmetic.
+
+**Parsing integration**: `parseConstDecl` sets `callExprParser` to a
+closure that uses `parseConstCallArgs`, enabling function call detection
+in `parseArithPrimary`. After parsing, `tryEvalExpr` replaces the
+earlier `evalConstExpr`.

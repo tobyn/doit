@@ -241,6 +241,76 @@ Import statements require a source file path for resolving relative paths.
 When compiling from stdin, import statements are not supported (this is a
 compile error).
 
+## Constants
+
+Constants are compile-time values defined with `const`:
+
+```doit
+const METAL = Item("metalbar")
+const STACK_SIZE = 10
+const METAL_STACK = METAL & STACK_SIZE
+const GREETING = "hello"
+const ORIGIN = Coordinate(0, 0)
+```
+
+Constants can appear after imports, interspersed with `fn` and `behavior`
+declarations. A constant may reference earlier constants and literal
+expressions, but not runtime variables or forward references.
+
+Constant values are evaluated at compile time. Supported expressions include
+number literals, string literals, boolean literals (`true`, `false`), `null`,
+type constructors (`Item`, `Component`, `Technology`, `Value`, `Coordinate`,
+`Range`), the `&` operator, arithmetic (`+`, `-`, `*`, `/`, `%`),
+comparisons (`>`, `<`, `>=`, `<=`, `==`, `!=`), boolean operators
+(`&&`, `||`, `!`), type checks (`is`), and `localize` blocks.
+
+Function calls are also supported in constant expressions. The compiler traces
+through the function body at compile time, evaluating pure computations:
+
+```doit
+fn double(x) { return x * 2 }
+fn clamp(x, lo, hi) {
+    if x < lo { return lo }
+    else if x > hi { return hi }
+    return x
+}
+
+const SPEED = double(5)           # evaluates to 10
+const CLAMPED = clamp(50, 0, 10)  # evaluates to 10
+```
+
+The evaluator bails if the function body hits a runtime-only construct like
+an `instruction` block or `wait` statement. Only functions defined before the
+constant (or imported) can be called.
+
+Constants are substituted at their use sites with their literal values. They
+can be used anywhere an expression is accepted: function arguments, `let`/`var`
+initializers, comparisons, and more.
+
+### Private constants
+
+Mark a constant as private to prevent it from being imported:
+
+```doit
+private const INTERNAL = 42
+```
+
+### Importing constants
+
+Constants participate in the same import system as functions:
+
+```doit
+# Named import
+import METAL, STACK_SIZE from "./config"
+
+# Glob import (includes all non-private constants)
+import * from "./config"
+
+# Namespace import
+import "./config" as cfg
+let x = cfg.STACK_SIZE
+```
+
 ## Statements
 
 Behavior bodies and control flow blocks contain sequences of statements. A
@@ -945,6 +1015,20 @@ Use parentheses to override the default precedence:
 ```doit
 let a = (b + c) * d     # b+c first, then *d
 ```
+
+#### Constant folding
+
+Arithmetic on literal operands is computed at compile time, producing no
+runtime instructions:
+
+```doit
+let x = 2 + 3           # compiles as let x = 5
+let y = 10 * 2 + 5      # compiles as let y = 25
+let c = Coordinate(1 + 2, 3 + 4)  # compiles as Coordinate(3, 7)
+```
+
+Comparisons on literals are also folded (`5 > 3` → `true`), as are
+boolean chains and negations when all operands are compile-time constants.
 
 #### Arithmetic in function arguments
 

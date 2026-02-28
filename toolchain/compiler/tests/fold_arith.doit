@@ -1,0 +1,9 @@
+# AI-generated test
+# Constant folding: arithmetic on literal operands is computed at compile time
+behavior fold_arith {
+    @name "Fold Arith"
+    let x = 2 + 3
+    let y = 10 * 2 + 5
+    notify "result", value: x
+    set_reg y
+}

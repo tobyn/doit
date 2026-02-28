@@ -1,0 +1,11 @@
+# AI-generated test
+const A = 10
+const B = 3
+const SUM = A + B
+const PRODUCT = A * B
+
+behavior a {
+    @name "Const Arithmetic"
+    let x = SUM
+    let y = PRODUCT
+}

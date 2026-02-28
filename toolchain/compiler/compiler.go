@@ -48,6 +48,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		fns:        fns,
 		target:     behaviorID,
 		loopLabels: map[string]bool{},
+		consts:     map[string]*constDef{},
 		sourceFS:   sourceFS,
 		sourcePath: sourcePath,
 		sourceDir:  sourceDir,
@@ -161,6 +162,12 @@ func canPass(paramDir, argDir string) bool {
 		return argDir == "inout"
 	}
 	return false
+}
+
+// constDef holds a compile-time constant value.
+type constDef struct {
+	value   any  // the resolved compile-time value
+	private bool // true for private const (not visible as import)
 }
 
 type fnDef struct {
