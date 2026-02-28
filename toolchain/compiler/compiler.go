@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"path"
 	"strconv"
 
 	"github.com/tobyn/doit/toolchain/codec"
@@ -35,6 +36,13 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdlib: %w", err)
 	}
+	sourceDir := ""
+	if sourcePath != "" {
+		sourceDir = path.Dir(sourcePath)
+		if sourceDir == "." {
+			sourceDir = ""
+		}
+	}
 	p := &parser{
 		scanner:    scanner{src: src, locale: locale},
 		fns:        fns,
@@ -42,6 +50,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		loopLabels: map[string]bool{},
 		sourceFS:   sourceFS,
 		sourcePath: sourcePath,
+		sourceDir:  sourceDir,
 		stdlibFS:   stdlib,
 	}
 	obj, err := p.parseFile()
@@ -160,6 +169,7 @@ type fnDef struct {
 	frame   map[string]any // instruction-based (stdlib)
 	astBody []Stmt         // call-based (user-defined) — AST IR
 	private bool           // true for private fn (not visible as import)
+	scope   map[string]*fnDef // functions available when this fn was defined (for imports)
 }
 
 // positionalCount returns the number of positional params.

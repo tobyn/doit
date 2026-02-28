@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/tobyn/doit/toolchain/codec"
 	"github.com/tobyn/doit/toolchain/compiler"
@@ -3165,6 +3166,293 @@ func TestCompileWarnings(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("expected shadowing warning for var x, got warnings: %v", warnings)
+		}
+	})
+}
+
+func TestImports(t *testing.T) {
+	stdlib := os.DirFS("stdlib")
+
+	t.Run("named_import", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./lib"
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("named_import_with_alias", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet as hello from "./lib"
+behavior a { hello }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_import", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import * from "./lib"
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }
+private fn secret() { notify "Secret" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_no_private", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import * from "./lib"
+behavior a { secret }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }
+private fn secret() { notify "Secret" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error — private fn should not be imported by glob")
+		}
+	})
+
+	t.Run("private_import_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import secret from "./lib"
+behavior a { secret }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`private fn secret() { notify "Secret" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "private") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("circular_import_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"a.doit": &fstest.MapFile{Data: []byte(`import b_fn from "./b"
+fn a_fn() { notify "A" }
+behavior a { b_fn }`)},
+			"b.doit": &fstest.MapFile{Data: []byte(`import a_fn from "./a"
+fn b_fn() { notify "B" }`)},
+		}
+		src, _ := sourceFS.ReadFile("a.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "a.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "circular import") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("self_import_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./main"
+fn greet() { notify "Hello" }
+behavior a { greet }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "import itself") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_collides_with_named_import", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./lib"
+fn greet() { notify "Local" }
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with a named import") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_collides_with_namespace", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+fn lib() { notify "Local" }
+behavior a { lib }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with an import namespace") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_shadowed_by_same_file", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import * from "./lib"
+fn greet() { notify "Local" }
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_last_wins", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import * from "./a"
+import * from "./b"
+behavior a { greet }`)},
+			"a.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "A" }`)},
+			"b.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "B" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("import_behaviors_ignored", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./lib"
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }
+behavior ignored { notify "Ignored" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("not_found_import", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./lib"
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn other() { notify "Other" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("missing_file_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./nonexistent"
+behavior a { notify "hi" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot read import") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("parent_path_import", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"sub/main.doit": &fstest.MapFile{Data: []byte(`import greet from "../lib"
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("sub/main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "sub/main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("imported_file_parse_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./lib"
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet( { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "lib.doit") {
+			t.Fatalf("expected error mentioning lib.doit, got: %v", err)
+		}
+	})
+
+	t.Run("stdin_import_error", func(t *testing.T) {
+		src := `import greet from "./lib"
+behavior a { greet }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "imports require a source file path") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("named_import_with_return_value", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import get_val from "./lib"
+behavior a { let x = get_val; set_reg x }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn get_val() {
+	return instruction "get_self" { 0: @1 }
+}`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("transitive_import", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./a"
+behavior main { greet }`)},
+			"a.doit": &fstest.MapFile{Data: []byte(`import say from "./b"
+fn greet() { say }`)},
+			"b.doit": &fstest.MapFile{Data: []byte(`fn say() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }

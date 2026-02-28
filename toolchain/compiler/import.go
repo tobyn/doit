@@ -1,5 +1,12 @@
 package compiler
 
+import (
+	"fmt"
+	"io/fs"
+	"path"
+	"strings"
+)
+
 // ImportStmt represents a parsed import statement.
 type ImportStmt struct {
 	Path      string       // "./my_library"
@@ -281,4 +288,252 @@ func (p *parser) skipImportStmt() error {
 			}
 		}
 	}
+}
+
+// resolveImportPath resolves an import path to a file path and file system.
+// Returns the resolved file path (with .doit extension) and the fs.FS to read from.
+func (p *parser) resolveImportPath(importPath string, pos int) (string, fs.FS, error) {
+	if strings.HasPrefix(importPath, "std:") {
+		// Standard library import
+		if p.stdlibFS == nil {
+			return "", nil, p.errorf(pos, "stdlib not available for import")
+		}
+		relPath := importPath[4:] + ".doit"
+		return relPath, p.stdlibFS, nil
+	}
+
+	// Relative import (./ or ../)
+	if p.sourceFS == nil {
+		return "", nil, p.errorf(pos, "imports require a source file path; pass a file argument instead of stdin")
+	}
+
+	resolved := path.Join(p.sourceDir, importPath+".doit")
+	// Clean the path to normalize ../ traversals
+	resolved = path.Clean(resolved)
+
+	// Self-import check
+	if resolved == p.sourcePath {
+		return "", nil, p.errorf(pos, "file cannot import itself")
+	}
+
+	return resolved, p.sourceFS, nil
+}
+
+// parseImportedFile reads and parses a file, returning its exported function definitions.
+// The returned map includes private functions (with private=true) for error reporting.
+func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (map[string]*fnDef, error) {
+	// Circular import check
+	for _, stackPath := range p.importStack {
+		if stackPath == filePath {
+			cycle := append(p.importStack, filePath)
+			return nil, p.errorf(pos, "circular import: %s", strings.Join(cycle, " → "))
+		}
+	}
+
+	data, err := fs.ReadFile(fsys, filePath)
+	if err != nil {
+		return nil, p.errorf(pos, "cannot read import %q: %v", filePath, err)
+	}
+
+	// Parse the imported file's stdlib first (same stdlib as parent)
+	stdlibFns, err := parseStdlib(p.stdlibFS)
+	if err != nil {
+		return nil, fmt.Errorf("stdlib: %w", err)
+	}
+
+	// Snapshot stdlib names before parsing user functions (since parseUserFn
+	// adds to the same map, we need the original set of names to filter later).
+	stdlibNames := make(map[string]bool, len(stdlibFns))
+	for name := range stdlibFns {
+		stdlibNames[name] = true
+	}
+
+	sourceDir := path.Dir(filePath)
+	if sourceDir == "." {
+		sourceDir = ""
+	}
+
+	// Create a parser for the imported file
+	ip := &parser{
+		scanner: scanner{
+			src:        string(data),
+			locale:     p.locale,
+			sourceFile: filePath,
+		},
+		fns:         stdlibFns,
+		loopLabels:  map[string]bool{},
+		sourceFS:    p.sourceFS,
+		sourcePath:  filePath,
+		sourceDir:   sourceDir,
+		stdlibFS:    p.stdlibFS,
+		importStack: append(append([]string{}, p.importStack...), filePath),
+	}
+
+	// Parse imports recursively, then collect function definitions
+	if err := ip.parseImports(); err != nil {
+		return nil, err
+	}
+
+	if err := ip.processImports(); err != nil {
+		return nil, err
+	}
+
+	// Collect user-defined functions (pass 1 — skips behaviors)
+	if err := ip.collectImportedFns(); err != nil {
+		return nil, err
+	}
+
+	// Build scope: all non-stdlib functions available in this file.
+	// Functions with bodies need this scope so that transitive dependencies
+	// (functions they call but the importer didn't explicitly import) are
+	// available during expandCall inlining.
+	scope := map[string]*fnDef{}
+	for name, fn := range ip.fns {
+		if !stdlibNames[name] {
+			scope[name] = fn
+		}
+	}
+
+	// Extract only user-defined functions (exclude stdlib)
+	result := map[string]*fnDef{}
+	for name, fn := range scope {
+		if fn.astBody != nil && fn.scope == nil {
+			fn.scope = scope
+		}
+		result[name] = fn
+	}
+
+	return result, nil
+}
+
+// collectImportedFns collects function definitions from an imported file.
+// Similar to collectUserFns but skips behaviors (they're ignored in imports).
+func (p *parser) collectImportedFns() error {
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return err
+		}
+		if tok.kind == tokEOF {
+			return nil
+		}
+		if tok.kind != tokIdent {
+			return p.errorf(tok.pos, "expected declaration, got %s", tok.describe())
+		}
+		switch tok.val {
+		case "behavior":
+			// Skip behaviors in imported files
+			if _, err := p.parseBehaviorID(); err != nil {
+				return err
+			}
+			if err := p.skipBraceBlock(); err != nil {
+				return err
+			}
+		case "private":
+			fnTok, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			if fnTok.val != "fn" {
+				return p.errorf(fnTok.pos, "expected 'fn' after 'private', got %q", fnTok.val)
+			}
+			name, err := p.parseUserFn()
+			if err != nil {
+				return err
+			}
+			p.fns[name].private = true
+		case "fn":
+			if _, err := p.parseUserFn(); err != nil {
+				return err
+			}
+		case "import":
+			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
+		default:
+			return p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
+		}
+	}
+}
+
+// processImports resolves all parsed import statements and merges imported
+// functions into the parser's function table.
+func (p *parser) processImports() error {
+	if len(p.imports) == 0 {
+		return nil
+	}
+
+	// Cache of already-parsed files to avoid re-parsing the same file
+	fileCache := map[string]map[string]*fnDef{}
+
+	// Track named imports and namespace names for post-collectUserFns collision checking
+	p.namedImports = map[string]bool{}
+	p.namespaceNames = map[string]bool{}
+
+	for _, stmt := range p.imports {
+		filePath, fsys, err := p.resolveImportPath(stmt.Path, stmt.Pos)
+		if err != nil {
+			return err
+		}
+
+		// Parse the file (use cache if already parsed)
+		fns, ok := fileCache[filePath]
+		if !ok {
+			fns, err = p.parseImportedFile(fsys, filePath, stmt.Pos)
+			if err != nil {
+				return err
+			}
+			fileCache[filePath] = fns
+		}
+
+		// Process glob imports — add all non-private functions to p.fns.
+		// Globs are last-wins: later glob imports shadow earlier ones.
+		if stmt.Glob {
+			for name, fn := range fns {
+				if !fn.private {
+					p.fns[name] = fn
+				}
+			}
+		}
+
+		// Process named imports
+		for _, imp := range stmt.Names {
+			fn, exists := fns[imp.Name]
+			if !exists {
+				return p.errorf(imp.Pos, "function %q not found in %q", imp.Name, stmt.Path)
+			}
+			if fn.private {
+				return p.errorf(imp.Pos, "cannot import private function %q from %q", imp.Name, stmt.Path)
+			}
+			p.fns[imp.Alias] = fn
+			p.namedImports[imp.Alias] = true
+		}
+
+		// Process namespace imports
+		if stmt.Namespace != "" {
+			nsFns := map[string]*fnDef{}
+			for name, fn := range fns {
+				nsFns[name] = fn
+			}
+			if p.namespaces == nil {
+				p.namespaces = map[string]map[string]*fnDef{}
+			}
+			p.namespaces[stmt.Namespace] = nsFns
+			p.namespaceNames[stmt.Namespace] = true
+		}
+	}
+
+	return nil
+}
+
+// checkImportCollisions checks for collisions between same-file function
+// definitions and named imports or namespace names. Called after collectUserFns.
+func (p *parser) checkImportCollisions(fnNames []string) error {
+	for _, name := range fnNames {
+		if p.namedImports[name] {
+			return fmt.Errorf("function %q conflicts with a named import", name)
+		}
+		if p.namespaceNames[name] {
+			return fmt.Errorf("function %q conflicts with an import namespace", name)
+		}
+	}
+	return nil
 }

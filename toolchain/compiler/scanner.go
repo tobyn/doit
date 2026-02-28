@@ -120,12 +120,15 @@ type parser struct {
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
 	imports     []ImportStmt     // parsed import statements
-	sourceFS    fs.FS            // file system for resolving imports (nil = no imports)
-	sourcePath  string           // path of the source file within sourceFS
-	sourceDir   string           // directory of the source file (derived from sourcePath)
-	stdlibFS    fs.FS            // stdlib file system for std: imports
-	importStack []string         // import path stack for cycle detection
-	loopDepth   int              // >0 when inside a loop body
+	sourceFS       fs.FS                      // file system for resolving imports (nil = no imports)
+	sourcePath     string                     // path of the source file within sourceFS
+	sourceDir      string                     // directory of the source file (derived from sourcePath)
+	stdlibFS       fs.FS                      // stdlib file system for std: imports
+	importStack    []string                   // import path stack for cycle detection
+	namedImports   map[string]bool            // names from named imports (for collision checking)
+	namespaceNames map[string]bool            // namespace names (for collision checking)
+	namespaces     map[string]map[string]*fnDef // namespace → fn name → fnDef
+	loopDepth      int                        // >0 when inside a loop body
 	loopLabels  map[string]bool  // labels of enclosing loops
 	warnings    []string         // compiler warnings (non-fatal)
 

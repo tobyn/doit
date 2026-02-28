@@ -2038,13 +2038,21 @@ func (p *parser) collectUserFns() error {
 		return err
 	}
 
+	// Resolve imports and merge imported functions
+	if err := p.processImports(); err != nil {
+		return err
+	}
+
+	// Track same-file function names for import collision checking
+	var sameFileFns []string
+
 	for {
 		tok, err := p.next()
 		if err != nil {
 			return err
 		}
 		if tok.kind == tokEOF {
-			return nil
+			break
 		}
 		if tok.kind != tokIdent {
 			return p.errorf(tok.pos, "expected declaration, got %s", tok.describe())
@@ -2072,16 +2080,22 @@ func (p *parser) collectUserFns() error {
 				return err
 			}
 			p.fns[name].private = true
+			sameFileFns = append(sameFileFns, name)
 		case "fn":
-			if _, err := p.parseUserFn(); err != nil {
+			name, err := p.parseUserFn()
+			if err != nil {
 				return err
 			}
+			sameFileFns = append(sameFileFns, name)
 		case "import":
 			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
 		default:
 			return p.errorf(tok.pos, "expected 'behavior', 'fn', or 'private', got %q", tok.val)
 		}
 	}
+
+	// Check for collisions between same-file functions and imports
+	return p.checkImportCollisions(sameFileFns)
 }
 
 // fnBodyContext holds the shared state for fn body parsing.
@@ -3953,8 +3967,28 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		return nil
 	}
 
+	// Temporarily merge the function's scope into p.fns so that transitive
+	// dependencies (functions called by this fn but not explicitly imported
+	// by the caller) are available during body expansion.
+	var scopeAdded []string
+	if fn.scope != nil {
+		for k, v := range fn.scope {
+			if _, exists := p.fns[k]; !exists {
+				p.fns[k] = v
+				scopeAdded = append(scopeAdded, k)
+			}
+		}
+	}
+
 	origPos := b.pos()
-	if err := p.emitFnBody(fn.astBody, b, paramMap, usedVars, comment, pos); err != nil {
+	err := p.emitFnBody(fn.astBody, b, paramMap, usedVars, comment, pos)
+
+	// Remove temporarily added scope entries
+	for _, k := range scopeAdded {
+		delete(p.fns, k)
+	}
+
+	if err != nil {
 		return err
 	}
 	for _, rc := range retCopies {
