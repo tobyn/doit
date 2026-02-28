@@ -99,16 +99,6 @@ dimensions in a single pass:
   expression and any continuation statements, with the caller
   wrapping the result in the appropriate statement type.
 
-- **`emitBhvBoolExprTo` / `emitFnBoolExprTo` post-resolve body
-  duplication.** After the resolve step, bhvast.go:2910–2945 and
-  parse.go:947–982 contain ~35 lines of identical code: single
-  non-negated leaf delegation to `emitComparison`/`emitTypeCheck`/
-  `emitTruthyCheck`, followed by the chain/group path with
-  `emitResolvedBoolFrames` + false/true `set_reg` frame emission.
-  Extractable into `emitResolvedBoolExprTo(resolved, target, b,
-  comment)`. Independent of the larger emitContext unification —
-  this is a small targeted extraction.
-
 ### LOW
 
 - **`ReturnStmt` missing `Comment` field.** All 14 other statement

@@ -2905,51 +2905,11 @@ func (p *parser) emitBhvAmpersandTo(amp *AmpersandExpr, target any, syms *symbol
 // emitBhvBoolExprTo emits a boolean expression (comparison/typecheck/truthy/chain)
 // writing the result (1 or false) to target.
 func (p *parser) emitBhvBoolExprTo(expr Expr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
-	// Pre-resolve the expression: emit arithmetic frames, resolve operands.
 	resolved, err := p.resolveBhvBoolTree(expr, syms, b)
 	if err != nil {
 		return err
 	}
-
-	// For single non-negated leaf expressions, delegate to the specialized
-	// emitters that match the old codegen behavior (omitting "next" for > < !=).
-	// Negated leaves fall through to the chain/group path which handles
-	// negation via emitBoolCheckFrame's target swap.
-	if resolved.isLeaf() && !resolved.term.negated {
-		t := resolved.term
-		switch {
-		case isTypeCheckOp(t.op):
-			p.emitTypeCheck(t.lhs, target, t.rhs.(string), b, comment)
-		case t.op == tokTruthy:
-			p.emitTruthyCheck(t.lhs, target, b, comment)
-		default:
-			p.emitComparison(t.op, t.lhs, t.rhs, target, b, comment)
-		}
-		return nil
-	}
-
-	// Chain or group: use recursive emitter with explicit targets.
-	totalChecks := resolved.frameCount()
-	base := b.pos()
-	falsePos := base + totalChecks
-	truePos := base + totalChecks + 1
-	afterPos := base + totalChecks + 2
-
-	p.emitResolvedBoolFrames(resolved, frameRef(truePos), frameRef(falsePos), b, comment)
-
-	// False frame
-	b.emit(map[string]any{
-		"op":   "set_reg",
-		"1":    false,
-		"2":    target,
-		"next": frameRef(afterPos),
-	})
-	// True frame
-	b.emit(map[string]any{
-		"op": "set_reg",
-		"1":  map[string]any{"num": 1},
-		"2":  target,
-	})
+	p.emitResolvedBoolExprTo(resolved, target, b, comment)
 	return nil
 }
 

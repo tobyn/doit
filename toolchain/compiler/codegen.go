@@ -803,6 +803,44 @@ func (p *parser) emitTruthyCheck(lhs, target any, b *frameBuilder, comment strin
 	})
 }
 
+// emitResolvedBoolExprTo emits the post-resolve boolean expression frames.
+// For a single non-negated leaf, delegates to the specialized emitter.
+// For chains/groups, emits the recursive bool frames with false/true set_reg.
+func (p *parser) emitResolvedBoolExprTo(resolved *resolvedBoolExpr, target any, b *frameBuilder, comment string) {
+	if resolved.isLeaf() && !resolved.term.negated {
+		t := resolved.term
+		switch {
+		case isTypeCheckOp(t.op):
+			p.emitTypeCheck(t.lhs, target, t.rhs.(string), b, comment)
+		case t.op == tokTruthy:
+			p.emitTruthyCheck(t.lhs, target, b, comment)
+		default:
+			p.emitComparison(t.op, t.lhs, t.rhs, target, b, comment)
+		}
+		return
+	}
+
+	totalChecks := resolved.frameCount()
+	base := b.pos()
+	falsePos := base + totalChecks
+	truePos := base + totalChecks + 1
+	afterPos := base + totalChecks + 2
+
+	p.emitResolvedBoolFrames(resolved, frameRef(truePos), frameRef(falsePos), b, comment)
+
+	b.emit(map[string]any{
+		"op":   "set_reg",
+		"1":    false,
+		"2":    target,
+		"next": frameRef(afterPos),
+	})
+	b.emit(map[string]any{
+		"op": "set_reg",
+		"1":  map[string]any{"num": 1},
+		"2":  target,
+	})
+}
+
 // comparisonTerm holds the parsed components of a single comparison expression.
 // For comparison ops (>, <, etc.), rhs is any (resolved operand).
 // For the 'is' type check op, rhs is a string (the wire-format slot key).

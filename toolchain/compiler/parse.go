@@ -946,45 +946,7 @@ func (p *parser) emitFnBoolExprTo(expr Expr, target any, b *frameBuilder, paramM
 	if err != nil {
 		return err
 	}
-
-	// Single non-negated leaf: delegate to specialized emitters (matching old behavior).
-	// Negated leaves fall through to the chain/group path which handles
-	// negation via emitBoolCheckFrame's target swap.
-	if resolved.isLeaf() && !resolved.term.negated {
-		t := resolved.term
-		switch {
-		case isTypeCheckOp(t.op):
-			p.emitTypeCheck(t.lhs, target, t.rhs.(string), b, comment)
-		case t.op == tokTruthy:
-			p.emitTruthyCheck(t.lhs, target, b, comment)
-		default:
-			p.emitComparison(t.op, t.lhs, t.rhs, target, b, comment)
-		}
-		return nil
-	}
-
-	// Chain/group: use recursive emitter
-	totalChecks := resolved.frameCount()
-	base := b.pos()
-	falsePos := base + totalChecks
-	truePos := base + totalChecks + 1
-	afterPos := base + totalChecks + 2
-
-	p.emitResolvedBoolFrames(resolved, frameRef(truePos), frameRef(falsePos), b, comment)
-
-	// False frame
-	b.emit(map[string]any{
-		"op":   "set_reg",
-		"1":    false,
-		"2":    target,
-		"next": frameRef(afterPos),
-	})
-	// True frame
-	b.emit(map[string]any{
-		"op": "set_reg",
-		"1":  map[string]any{"num": 1},
-		"2":  target,
-	})
+	p.emitResolvedBoolExprTo(resolved, target, b, comment)
 	return nil
 }
 
