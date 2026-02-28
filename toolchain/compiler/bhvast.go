@@ -1052,6 +1052,16 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 				return nil, err
 			}
 
+			// Check for & after variable/expression (not supported in declarations)
+			ampPeek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if ampPeek.kind == tokAmpersand {
+				return nil, p.errorf(ampPeek.pos, "'&' requires a type constructor on the left side; use set_number to attach a number to an existing value")
+			}
+			p.unget(ampPeek)
+
 			syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 
 			final, handled, err := p.maybeBhvExprContinuation(result, syms)
@@ -1323,6 +1333,16 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				if err != nil {
 					return nil, err
 				}
+
+				// Check for & after variable/expression (not supported in assignments)
+				ampPeek, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if ampPeek.kind == tokAmpersand {
+					return nil, p.errorf(ampPeek.pos, "'&' requires a type constructor on the left side; use set_number to attach a number to an existing value")
+				}
+				p.unget(ampPeek)
 
 				final, handled, err := p.maybeBhvExprContinuation(result, syms)
 				if err != nil {

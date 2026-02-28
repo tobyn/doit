@@ -69,6 +69,11 @@ semantics, or potential footguns.
 
 - `_ = fn_call` syntax undocumented (now in manual)
 
+### Round 8
+
+- `for` loop iteration variable scoping (already fixed by block scoping
+  implementation — push/pop scope in both parser and emitter)
+
 ## Open items
 
 ### Medium priority (design decisions needed)
@@ -110,10 +115,6 @@ semantics, or potential footguns.
 - **Error message for `let x = "string"` could explain why.** The
   current message is accurate but doesn't explain that strings have no
   runtime representation and cannot be stored in variables.
-
-- **`for` loop iteration variable is accessible after the loop** with
-  its final value. Developers from Go/Rust expect the iteration variable
-  to be scoped to the loop body. Either document or scope it.
 
 - **`wait 0` semantics are undocumented.** The manual doesn't explain
   whether zero ticks is a no-op or has a minimum tick wait.

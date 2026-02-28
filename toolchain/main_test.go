@@ -1890,6 +1890,39 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("bhv_ampersand_variable_let", func(t *testing.T) {
+		src := "behavior a { var x = 1\nlet y = x & 5 }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'&' requires a type constructor on the left side") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_ampersand_variable_assign", func(t *testing.T) {
+		src := "behavior a { var x = 1\nx = x & 5 }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'&' requires a type constructor on the left side") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_ampersand_variable", func(t *testing.T) {
+		src := "fn bad(x) { let y = x & 5 }\nbehavior a { bad 1 }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'&' requires a type constructor on the left side") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("bhv_let_var_copy", func(t *testing.T) {
 		src := "behavior a { var x = 1\nlet y = x }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "")

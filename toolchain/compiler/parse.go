@@ -3698,6 +3698,15 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 	// If the result is a bare truthy wrapper around a simple value, unwrap it
 	// since the caller just wants the expression value, not a boolean check.
 	if truthy, ok := expr.(*TruthyExpr); ok {
+		// Check for & after variable/expression (not supported in declarations/assignments)
+		ampPeek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if ampPeek.kind == tokAmpersand {
+			return nil, p.errorf(ampPeek.pos, "'&' requires a type constructor on the left side; use set_number to attach a number to an existing value")
+		}
+		p.unget(ampPeek)
 		return truthy.Value, nil
 	}
 	return expr, nil
