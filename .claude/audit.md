@@ -45,11 +45,6 @@ semantics, or potential footguns.
 
 ### Medium priority
 
-- **`resolveBhvBoolTree` / `resolveFnBoolTree` are near-identical.**
-  These ~60-line recursive functions differ only in which
-  `emitExprGetValue` they call on leaf operands. Unify into a single
-  `resolveBoolTree` taking an operand-resolution callback.
-
 - **`emitBhvArithNode` / `emitFnArithNode` are near-identical.**
   Same callback-parameterization opportunity as the bool tree
   resolvers. Unify into a single `emitArithNode`.

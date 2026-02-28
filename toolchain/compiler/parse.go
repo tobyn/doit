@@ -1027,50 +1027,12 @@ func (p *parser) emitFnBoolExprTo(expr Expr, target any, b *frameBuilder, paramM
 
 // resolveFnBoolTree walks an Expr tree, resolving operands through paramMap
 // and emitting arithmetic frames. Produces a resolvedBoolExpr tree.
+// resolveFnBoolTree delegates to the unified resolveBoolTree with
+// fn body operand resolution.
 func (p *parser) resolveFnBoolTree(expr Expr, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, pos int) (*resolvedBoolExpr, error) {
-	switch e := expr.(type) {
-	case *CompareExpr:
-		lhs, err := p.emitExprGetValue(e.LHS, b, paramMap, usedVars, "", pos)
-		if err != nil {
-			return nil, err
-		}
-		rhs, err := p.emitExprGetValue(e.RHS, b, paramMap, usedVars, "", pos)
-		if err != nil {
-			return nil, err
-		}
-		return &resolvedBoolExpr{term: &comparisonTerm{op: e.Op, lhs: lhs, rhs: rhs}}, nil
-	case *TypeCheckExpr:
-		lhs, err := p.emitExprGetValue(e.Value, b, paramMap, usedVars, "", pos)
-		if err != nil {
-			return nil, err
-		}
-		return &resolvedBoolExpr{term: &comparisonTerm{op: tokIs, lhs: lhs, rhs: e.TypeSlot}}, nil
-	case *TruthyExpr:
-		lhs, err := p.emitExprGetValue(e.Value, b, paramMap, usedVars, "", pos)
-		if err != nil {
-			return nil, err
-		}
-		return &resolvedBoolExpr{term: &comparisonTerm{op: tokTruthy, lhs: lhs}}, nil
-	case *NotExpr:
-		resolved, err := p.resolveFnBoolTree(e.Value, b, paramMap, usedVars, pos)
-		if err != nil {
-			return nil, err
-		}
-		negateResolved(resolved)
-		return resolved, nil
-	case *BoolChainExpr:
-		children := make([]*resolvedBoolExpr, len(e.Children))
-		for i, child := range e.Children {
-			resolved, err := p.resolveFnBoolTree(child, b, paramMap, usedVars, pos)
-			if err != nil {
-				return nil, err
-			}
-			children[i] = resolved
-		}
-		return &resolvedBoolExpr{chainOp: e.Op, children: children}, nil
-	default:
-		return nil, fmt.Errorf("unsupported boolean expression type %T", expr)
-	}
+	return p.resolveBoolTree(expr, func(e Expr) (any, error) {
+		return p.emitExprGetValue(e, b, paramMap, usedVars, "", pos)
+	})
 }
 
 // emitFnBody emits frames for an AST body during call expansion.

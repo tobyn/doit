@@ -3018,52 +3018,12 @@ func (e *resolvedBoolExpr) frameCount() int {
 	return n
 }
 
-// resolveBhvBoolTree walks an Expr tree, emitting arithmetic frames and
-// resolving all operands to values, producing a resolvedBoolExpr tree.
+// resolveBhvBoolTree delegates to the unified resolveBoolTree with
+// behavior-level operand resolution.
 func (p *parser) resolveBhvBoolTree(expr Expr, syms *symbolTable, b *frameBuilder) (*resolvedBoolExpr, error) {
-	switch e := expr.(type) {
-	case *CompareExpr:
-		lhs, err := p.emitBhvExprGetValue(e.LHS, syms, b, "")
-		if err != nil {
-			return nil, err
-		}
-		rhs, err := p.emitBhvExprGetValue(e.RHS, syms, b, "")
-		if err != nil {
-			return nil, err
-		}
-		return &resolvedBoolExpr{term: &comparisonTerm{op: e.Op, lhs: lhs, rhs: rhs}}, nil
-	case *TypeCheckExpr:
-		lhs, err := p.emitBhvExprGetValue(e.Value, syms, b, "")
-		if err != nil {
-			return nil, err
-		}
-		return &resolvedBoolExpr{term: &comparisonTerm{op: tokIs, lhs: lhs, rhs: e.TypeSlot}}, nil
-	case *TruthyExpr:
-		lhs, err := p.emitBhvExprGetValue(e.Value, syms, b, "")
-		if err != nil {
-			return nil, err
-		}
-		return &resolvedBoolExpr{term: &comparisonTerm{op: tokTruthy, lhs: lhs}}, nil
-	case *NotExpr:
-		resolved, err := p.resolveBhvBoolTree(e.Value, syms, b)
-		if err != nil {
-			return nil, err
-		}
-		negateResolved(resolved)
-		return resolved, nil
-	case *BoolChainExpr:
-		children := make([]*resolvedBoolExpr, len(e.Children))
-		for i, child := range e.Children {
-			resolved, err := p.resolveBhvBoolTree(child, syms, b)
-			if err != nil {
-				return nil, err
-			}
-			children[i] = resolved
-		}
-		return &resolvedBoolExpr{chainOp: e.Op, children: children}, nil
-	default:
-		return nil, fmt.Errorf("unsupported boolean expression type %T", expr)
-	}
+	return p.resolveBoolTree(expr, func(e Expr) (any, error) {
+		return p.emitBhvExprGetValue(e, syms, b, "")
+	})
 }
 
 // negateResolved pushes negation down to leaves of a resolved boolean tree.

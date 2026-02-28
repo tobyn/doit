@@ -832,6 +832,55 @@ type comparisonTerm struct {
 	negated bool // true when prefixed with !
 }
 
+// resolveBoolTree walks an Expr tree, emitting arithmetic frames via the
+// emit callback and resolving all operands to values, producing a
+// resolvedBoolExpr tree. Used by both behavior-level and fn body paths.
+func (p *parser) resolveBoolTree(expr Expr, emit func(Expr) (any, error)) (*resolvedBoolExpr, error) {
+	switch e := expr.(type) {
+	case *CompareExpr:
+		lhs, err := emit(e.LHS)
+		if err != nil {
+			return nil, err
+		}
+		rhs, err := emit(e.RHS)
+		if err != nil {
+			return nil, err
+		}
+		return &resolvedBoolExpr{term: &comparisonTerm{op: e.Op, lhs: lhs, rhs: rhs}}, nil
+	case *TypeCheckExpr:
+		lhs, err := emit(e.Value)
+		if err != nil {
+			return nil, err
+		}
+		return &resolvedBoolExpr{term: &comparisonTerm{op: tokIs, lhs: lhs, rhs: e.TypeSlot}}, nil
+	case *TruthyExpr:
+		lhs, err := emit(e.Value)
+		if err != nil {
+			return nil, err
+		}
+		return &resolvedBoolExpr{term: &comparisonTerm{op: tokTruthy, lhs: lhs}}, nil
+	case *NotExpr:
+		resolved, err := p.resolveBoolTree(e.Value, emit)
+		if err != nil {
+			return nil, err
+		}
+		negateResolved(resolved)
+		return resolved, nil
+	case *BoolChainExpr:
+		children := make([]*resolvedBoolExpr, len(e.Children))
+		for i, child := range e.Children {
+			resolved, err := p.resolveBoolTree(child, emit)
+			if err != nil {
+				return nil, err
+			}
+			children[i] = resolved
+		}
+		return &resolvedBoolExpr{chainOp: e.Op, children: children}, nil
+	default:
+		return nil, fmt.Errorf("unsupported boolean expression type %T", expr)
+	}
+}
+
 func (p *parser) emitBoolCheckFrame(term *comparisonTerm, trueTarget, falseTarget frameRef, b *frameBuilder, comment string) {
 	if term.negated {
 		trueTarget, falseTarget = falseTarget, trueTarget
