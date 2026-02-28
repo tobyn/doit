@@ -43,13 +43,6 @@ semantics, or potential footguns.
 
 ## Open items
 
-### Medium priority
-
-- **`fnBodyContext` tracks variables in two redundant maps.**
-  `fnVars map[string]bool` (mutability flag) and
-  `fnVarInfo map[string]fnVarInfo` (depth, used tracking) must be
-  kept in sync. Merge `mutable` into `fnVarInfo` and drop `fnVars`.
-
 ### Medium priority (design decisions needed)
 
 - **`private fn` visibility is not enforced.** The compiler parses

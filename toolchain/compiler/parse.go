@@ -45,7 +45,7 @@ func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int)
 		if _, ok := ctx.paramDirs[e.Name]; ok {
 			return nil
 		}
-		if _, ok := ctx.fnVars[e.Name]; ok {
+		if _, ok := ctx.fnVarInfo[e.Name]; ok {
 			return nil
 		}
 		return p.errorf(pos, "undeclared variable %q", e.Name)
@@ -84,7 +84,7 @@ func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 			if dir == "out" {
 				return nil, p.errorf(tok.pos, "cannot read from output parameter %q", tok.val)
 			}
-		} else if _, ok := ctx.fnVars[tok.val]; !ok {
+		} else if _, ok := ctx.fnVarInfo[tok.val]; !ok {
 			return nil, p.errorf(tok.pos, "undeclared variable %q", tok.val)
 		}
 		ctx.markFnVarUsed(tok.val)
@@ -336,7 +336,7 @@ func (p *parser) parseFnBodyConstructorExpr(nameTok token) (Expr, error) {
 // Supports both unparenthesized and parenthesized call syntax.
 func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, ctx *fnBodyContext) ([]Expr, map[string]Expr, error) {
 	paramDirs := ctx.paramDirs
-	letVars := ctx.fnVars
+	letVars := ctx.fnVarInfo
 	// Detect parenthesized call syntax
 	paren := false
 	peek, err := p.next()
@@ -480,13 +480,13 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, ctx *fnBody
 
 // fnBodyExprDir determines the effective direction of an AST expression
 // in a fn body context.
-func fnBodyExprDir(expr Expr, paramDirs map[string]string, fnVars map[string]bool) string {
+func fnBodyExprDir(expr Expr, paramDirs map[string]string, fnVars map[string]fnVarInfo) string {
 	if e, ok := expr.(*IdentExpr); ok {
 		if dir, ok := paramDirs[e.Name]; ok {
 			return dir
 		}
-		if mutable, declared := fnVars[e.Name]; declared {
-			if mutable {
+		if info, declared := fnVars[e.Name]; declared {
+			if info.mutable {
 				return "inout"
 			}
 			return "in"
@@ -497,7 +497,7 @@ func fnBodyExprDir(expr Expr, paramDirs map[string]string, fnVars map[string]boo
 }
 
 // checkFnBodyCallDirectionsExpr checks direction compatibility for AST-typed args.
-func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string, args []Expr, kwArgs map[string]Expr, paramDirs map[string]string, letVars map[string]bool, pos int) error {
+func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string, args []Expr, kwArgs map[string]Expr, paramDirs map[string]string, letVars map[string]fnVarInfo, pos int) error {
 	posIdx := 0
 	for _, pd := range callee.params {
 		calleeDir := pd.effectiveDirection()
@@ -2203,37 +2203,30 @@ type fnVarInfo struct {
 
 type fnBodyContext struct {
 	paramDirs    map[string]string    // param name -> effective direction
-	fnVars       map[string]bool      // name -> true=mutable (var), false=immutable (let)
-	fnVarInfo    map[string]fnVarInfo // detailed var info for shadowing warnings
+	fnVarInfo    map[string]fnVarInfo // name -> var info (mutability, depth, used tracking)
 	fnScopeDepth int                  // current nesting depth (0 = fn top-level)
 	resolve      operandResolver
 }
 
-// pushFnScope saves the current fnVars and fnVarInfo maps and increments scope depth.
-func (ctx *fnBodyContext) pushFnScope() (map[string]bool, map[string]fnVarInfo, int) {
-	savedVars := make(map[string]bool, len(ctx.fnVars))
-	for k, v := range ctx.fnVars {
-		savedVars[k] = v
-	}
+// pushFnScope saves the current fnVarInfo map and increments scope depth.
+func (ctx *fnBodyContext) pushFnScope() (map[string]fnVarInfo, int) {
 	savedInfo := make(map[string]fnVarInfo, len(ctx.fnVarInfo))
 	for k, v := range ctx.fnVarInfo {
 		savedInfo[k] = v
 	}
 	depth := ctx.fnScopeDepth
 	ctx.fnScopeDepth++
-	return savedVars, savedInfo, depth
+	return savedInfo, depth
 }
 
-// popFnScope restores fnVars and fnVarInfo from saved copies and decrements scope depth.
-func (ctx *fnBodyContext) popFnScope(savedVars map[string]bool, savedInfo map[string]fnVarInfo, depth int) {
-	ctx.fnVars = savedVars
+// popFnScope restores fnVarInfo from a saved copy and decrements scope depth.
+func (ctx *fnBodyContext) popFnScope(savedInfo map[string]fnVarInfo, depth int) {
 	ctx.fnVarInfo = savedInfo
 	ctx.fnScopeDepth = depth
 }
 
 // declareFnVar registers a variable at the current fn scope depth.
 func (ctx *fnBodyContext) declareFnVar(name string, mutable bool) {
-	ctx.fnVars[name] = mutable
 	ctx.fnVarInfo[name] = fnVarInfo{mutable: mutable, depth: ctx.fnScopeDepth}
 }
 
@@ -2265,8 +2258,8 @@ func (ctx *fnBodyContext) markExprUsed(expr Expr) {
 
 // canAssign checks whether name can be written to in a fn body context.
 func (ctx *fnBodyContext) canAssign(name string, p *parser, pos int) error {
-	if mutable, ok := ctx.fnVars[name]; ok {
-		if !mutable {
+	if info, ok := ctx.fnVarInfo[name]; ok {
+		if !info.mutable {
 			return p.errorf(pos, "cannot assign to immutable variable %q", name)
 		}
 		return nil
@@ -2316,7 +2309,6 @@ func (p *parser) parseUserFn() error {
 	}
 	ctx := &fnBodyContext{
 		paramDirs: paramDirs,
-		fnVars:    map[string]bool{},
 		fnVarInfo: map[string]fnVarInfo{},
 	}
 	ctx.resolve = p.fnBodyResolver(ctx)
@@ -2754,8 +2746,8 @@ func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
 // parseFnBodyStmtsInner parses fn body statements until '}'. If exprTail is
 // true, the last item may be a bare expression (wrapped in exprTailStmt).
 func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stmt, error) {
-	savedVars, savedInfo, savedDepth := ctx.pushFnScope()
-	defer ctx.popFnScope(savedVars, savedInfo, savedDepth)
+	savedInfo, savedDepth := ctx.pushFnScope()
+	defer ctx.popFnScope(savedInfo, savedDepth)
 	var astBody []Stmt
 	for {
 		tok, err := p.next()
@@ -3880,14 +3872,14 @@ func (p *parser) parseFnBodyForStmt(ctx *fnBodyContext, comment string, label ..
 	}
 
 	// Push scope for iter var + body
-	savedVars, savedInfo, savedDepth := ctx.pushFnScope()
+	savedInfo, savedDepth := ctx.pushFnScope()
 	ctx.declareFnVarWarn(iterTok.val, false, p, iterTok.pos)
 
 	p.enterLoop(lbl)
 	body, err := p.parseFnBodyStmts(ctx)
 	p.exitLoop(lbl)
 
-	ctx.popFnScope(savedVars, savedInfo, savedDepth)
+	ctx.popFnScope(savedInfo, savedDepth)
 
 	if err != nil {
 		return nil, err

@@ -277,8 +277,8 @@ chains, and negation. The RHS is parsed via `parseBoolExpr` with
 
 ## Mutable variables (`var`) in fn bodies
 
-`let` = immutable, `var` = mutable. `fnBodyContext.fnVars` map tracks
-`name → true` (mutable) or `name → false` (immutable). Assignment
+`let` = immutable, `var` = mutable. `fnBodyContext.fnVarInfo` map tracks
+each variable's mutability, scope depth, and used status. Assignment
 validation at parse time via `canAssign`/`canCompound`.
 
 ## Control flow emission (unified)
@@ -544,9 +544,9 @@ emit-time need scoping: `parseBhvStmtBlockInner` and
 and assignment target resolution).
 
 **Fn body scoping**: Uses `fnBodyContext.pushFnScope()`/`popFnScope()`
-which saves/restores both `fnVars` and `fnVarInfo` maps plus
-`fnScopeDepth`. No emit-time scoping needed for fn bodies — fn body
-emitters resolve variables through `paramMap`, not `ctx.fnVars`.
+which saves/restores `fnVarInfo` map plus `fnScopeDepth`. No emit-time
+scoping needed for fn bodies — fn body emitters resolve variables
+through `paramMap`, not `ctx.fnVarInfo`.
 
 **For-loop special case**: The for-loop iterator variable needs its own
 scope that encompasses the body but doesn't leak to the parent. The
@@ -593,7 +593,7 @@ non-`$` identifiers. `resolveAssignTarget` errors on names not in
 bare identifiers in `let x = nonexistent` is subsumed — `resolve()`
 now catches it first with "undeclared variable".
 
-**Fn bodies**: `fnBodyResolver` checks `ctx.paramDirs` and `ctx.fnVars`.
+**Fn bodies**: `fnBodyResolver` checks `ctx.paramDirs` and `ctx.fnVarInfo`.
 `canAssign` errors on names not in either map. For call arguments and
 return items parsed via `parseFnBodyExpr()` (which creates `IdentExpr`
 without going through the resolver), `checkFnBodyExprDeclared` validates

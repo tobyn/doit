@@ -69,7 +69,7 @@ output format.
 - **`compiler/parse.go`** — Stdlib parsing (delegates to `parseUserFn`),
   file-level parsing, function definitions with `instruction` support,
   `fnBodyResolver` (operandResolver for fn bodies),
-  `fnBodyContext` (tracks paramDirs, fnVars, fnVarInfo, fnScopeDepth,
+  `fnBodyContext` (tracks paramDirs, fnVarInfo, fnScopeDepth,
   resolve for fn body parsing; block scoping via `pushFnScope`/`popFnScope`,
   shadowing warnings via `declareFnVarWarn`, used tracking via
   `markFnVarUsed`/`markExprUsed`),
