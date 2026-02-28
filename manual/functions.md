@@ -346,7 +346,8 @@ parameters can be assigned to.
 
 ### Control flow in function bodies
 
-Function bodies support `if`/`else if`/`else`, `while`, and `loop`/`break`:
+Function bodies support `if`/`else if`/`else`, `while`, `loop`/`break`,
+`for`, `wait`, and `locked`/`unlocked` blocks:
 
 ```doit
 fn clamp(a, min, max) {
@@ -379,12 +380,17 @@ fn find_threshold(inout x) {
 }
 ```
 
+`for` loops, `wait` statements, and `locked`/`unlocked` blocks also work
+in function bodies — see [Language](language.md#for-loops),
+[Language](language.md#the-wait-keyword), and
+[Language](language.md#execution-mode) for details.
+
 Control flow conditions support the same expressions as behavior-level
 conditions: comparisons, type checks, boolean chains, and parenthesized
 grouping.
 
-`return` can appear inside control flow blocks (`if`, `while`, `loop`)
-for early exit. When there are multiple `return` paths, the compiler
+`return` can appear inside control flow blocks (`if`, `while`, `loop`,
+`for`) for early exit. When there are multiple `return` paths, the compiler
 emits jump instructions to ensure control reaches the end of the function.
 
 ### Private Functions
