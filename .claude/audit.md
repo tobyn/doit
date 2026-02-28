@@ -15,10 +15,10 @@ dimensions in a single pass:
 
 1. **Start from the open items below.** Fix all open items that don't
    require the developer's input first — work through them in priority
-   order (HIGH, then MEDIUM), committing each fix separately (code,
-   tests, docs, and the removal of the item from this file all go in
-   the same commit). Skip any item that requires a design decision or
-   developer input.
+   order (High, then Medium, then Low), committing each fix separately
+   (code, tests, docs, and the removal of the item from this file all
+   go in the same commit). Skip any item that requires a design
+   decision or developer input.
 2. **Only after all actionable open items are done**, run a new audit
    round. Read end-to-end:
    - All manual pages (`manual/`)
@@ -28,37 +28,49 @@ dimensions in a single pass:
    Look for issues in both dimensions:
    - **Ergonomics**: syntax that would surprise users, semantics that
      differ from expectations, missing error messages, misleading
-     behavior.
+     behavior. Focus on compiler-level issues — VM limitations that
+     the language faithfully reflects (null/false/0 equivalence,
+     `is Number` unsupported, etc.) are not audit findings.
    - **Implementation**: duplicated logic between bhv/fn paths,
      redundant data structures, repeated code patterns that could be
      extracted into helpers, structural issues that risk bugs.
-3. Categorize each finding as HIGH (likely bugs/confusion), MEDIUM
-   (cleanup or design decision needed), or LOW (minor gap). Do not
+3. Categorize each finding as High (likely bugs/confusion), Medium
+   (cleanup or design decision needed), or Low (minor gap). Do not
    re-report issues that have already been fixed — check git history
    if unsure.
-4. Add new findings to the open items list in this file.
-5. Repeat from step 1 until no new actionable items are found in a
+4. **Verify each finding against the actual code before adding it.**
+   Agent-assisted analysis can produce false positives — confirm that
+   the issue exists and is not already handled by a different code
+   path before recording it.
+5. Add new findings to the open items list in this file.
+6. Repeat from step 1 until no new actionable items are found in a
    round.
-6. **When only design-decision items remain**, stop and ask the
+7. **When only design-decision items remain**, stop and ask the
    developer for input on each one. Present the trade-offs and your
    recommendation, then wait for direction before proceeding. Do not
    silently skip these and end the audit — the developer needs to
    weigh in. Once the developer gives direction, implement and commit
    each item separately (same commit rules as step 1).
-7. Keep working autonomously on non-design-decision items — do not
+8. Keep working autonomously on non-design-decision items — do not
    stop to ask the developer for confirmation on those. The developer
    will interrupt if needed.
-8. **Do not add resolved items to this file.** History is tracked in
+9. **Do not add resolved items to this file.** History is tracked in
    git commits. Only open items belong here.
-9. **Keep this file in sync with the repo.** The commit that fixes an
-   item must also remove that item from the open items list below.
-   This file should reflect the current state of the codebase at all
-   times — it is a real-time work log, not an append-only record.
-10. **A fix is not done until it is committed.** The commit is part of
+10. **Keep this file in sync with the repo.** The commit that fixes an
+    item must also remove that item from the open items list below.
+    This file should reflect the current state of the codebase at all
+    times — it is a real-time work log, not an append-only record.
+11. **A fix is not done until it is committed.** The commit is part of
     the fix, not a follow-up step. Never leave uncommitted changes at
     the end of an audit loop or when reporting results to the developer.
+12. **If investigation reveals an item is not worth fixing**, remove it
+    with a commit explaining why. Move the item to the Rejected section
+    below (one-line summary with rationale) so future rounds don't
+    re-discover and re-investigate the same thing.
 
 ## Open items
+
+(No actionable items.)
 
 ### Deferred
 
@@ -89,4 +101,10 @@ dimensions in a single pass:
   control flow emitters into single implementations. Large
   architectural change — needs developer input.
 
+### Rejected
 
+- **`parseBhvVarInit` / `parseBhvDefaultStmt` RHS parsing
+  duplication.** Investigated and rejected — extraction would require
+  a complex return type and interleaving protocol (variable
+  declaration timing, LetStmt vs AssignStmt wrapping, fn call
+  continuation) that adds more indirection than it saves.
