@@ -7,8 +7,10 @@ semantics, or potential footguns.
 
 1. **Start from the open items below.** Fix all open items that don't
    require the developer's input first — work through them in priority
-   order (HIGH, then MEDIUM), committing each fix separately. Skip any
-   item that requires a design decision or developer input.
+   order (HIGH, then MEDIUM), committing each fix separately (code,
+   tests, docs, and the removal of the item from this file all go in
+   the same commit). Skip any item that requires a design decision or
+   developer input.
 2. **Only after all actionable open items are done**, run a new audit
    round: read all manual pages (`manual/`), all test cases
    (`toolchain/compiler/tests/`), and the parser/emitter source
@@ -24,7 +26,8 @@ semantics, or potential footguns.
    developer for input on each one. Present the trade-offs and your
    recommendation, then wait for direction before proceeding. Do not
    silently skip these and end the audit — the developer needs to
-   weigh in.
+   weigh in. Once the developer gives direction, implement and commit
+   each item separately (same commit rules as step 1).
 7. Keep working autonomously on non-design-decision items — do not
    stop to ask the developer for confirmation on those. The developer
    will interrupt if needed.
