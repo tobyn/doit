@@ -111,7 +111,7 @@ func (p *parser) checkReadable(name string, syms *symbolTable, pos int) error {
 	}
 	if idx, ok := syms.paramMap[name]; ok {
 		if syms.params[idx-1].direction == "out" {
-			return p.errorf(pos, "cannot read from output parameter %s", name)
+			return p.errorf(pos, "cannot read from output parameter %q", name)
 		}
 	}
 	return nil
@@ -554,10 +554,10 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, co
 		if idx, ok := syms.paramMap[name]; ok {
 			dir := syms.params[idx-1].direction
 			if dir == "in" {
-				return nil, p.errorf(pos, "cannot assign to input parameter %s", name)
+				return nil, p.errorf(pos, "cannot assign to input parameter %q", name)
 			}
 			if compound && dir == "out" {
-				return nil, p.errorf(pos, "cannot read from output parameter %s", name)
+				return nil, p.errorf(pos, "cannot read from output parameter %q", name)
 			}
 			return idx, nil
 		}

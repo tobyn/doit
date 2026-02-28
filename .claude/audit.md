@@ -89,14 +89,4 @@ dimensions in a single pass:
   control flow emitters into single implementations. Large
   architectural change — needs developer input.
 
-### LOW
-
-- **Direction error messages use `%s` in codegen.go but `%q` in
-  parse.go.** Three error messages in codegen.go format parameter
-  names with bare `%s` (`checkReadable` line 114,
-  `resolveAssignTarget` lines 557 and 560), while the matching
-  messages in parse.go use `%q`. This causes the same error to
-  produce different output depending on whether it's triggered at
-  behavior level or in a fn body — e.g., `cannot read from output
-  parameter $x` vs `cannot read from output parameter "$x"`.
 
