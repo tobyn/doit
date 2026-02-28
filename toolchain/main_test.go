@@ -1780,6 +1780,50 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("bhv_keyword_assign", func(t *testing.T) {
+		src := "behavior a { true = 5 }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_constructor_increment", func(t *testing.T) {
+		src := "behavior a { Item++ }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "type constructor") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_keyword_assign", func(t *testing.T) {
+		src := "fn bad(x) { false = x }\nbehavior a { bad 1 }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_constructor_compound_assign", func(t *testing.T) {
+		src := "fn bad(x) { Range += x }\nbehavior a { bad 1 }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "type constructor") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("bhv_break_outside_loop", func(t *testing.T) {
 		src := "behavior a { break }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "")

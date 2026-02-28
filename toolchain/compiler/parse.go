@@ -3133,6 +3133,11 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			if err != nil {
 				return nil, err
 			}
+			if peek.kind == tokEquals || isCompoundAssignOp(peek.kind) || peek.kind == tokPlusPlus || peek.kind == tokMinusMinus {
+				if err := p.checkVarName(tok.val, nil, tok.pos); err != nil {
+					return nil, err
+				}
+			}
 			if peek.kind == tokEquals {
 				// Assignment: x = <expr>
 				if err := ctx.canAssign(tok.val, p, tok.pos); err != nil {

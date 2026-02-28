@@ -1137,6 +1137,12 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		return nil, err
 	}
 
+	if tok2.kind == tokPlusPlus || tok2.kind == tokMinusMinus || tok2.kind == tokEquals || isCompoundAssignOp(tok2.kind) {
+		if err := p.checkVarName(tok.val, syms, tok.pos); err != nil {
+			return nil, err
+		}
+	}
+
 	if tok2.kind == tokPlusPlus {
 		return []Stmt{&IncrDecrStmt{Target: tok.val, Op: tokPlusPlus, Comment: comment}}, nil
 	}
