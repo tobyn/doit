@@ -1,0 +1,10 @@
+# AI-generated test
+# Return negation expression directly
+fn is_empty(a) {
+    return !a
+}
+
+behavior return_negation {
+    @name "Return Neg"
+    let x = is_empty 1
+}

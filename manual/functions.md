@@ -266,11 +266,29 @@ When there are multiple `return` statements, or `return` appears inside
 a block, the compiler emits jump instructions to transfer control to the
 end of the function body.
 
-`return` accepts function calls as values:
+`return` accepts the full expression language — arithmetic, comparisons,
+boolean chains, negation, type checks, function calls, constructors,
+mode block expressions, if-expressions, and parenthesized expressions:
 
 ```doit
 fn locate() {
     return get_self
+}
+
+fn adder(a, b) {
+    return a + b
+}
+
+fn is_big(a) {
+    return a > 5
+}
+
+fn is_empty(a) {
+    return !a
+}
+
+fn in_range(a) {
+    return a > 0 && a < 100
 }
 ```
 

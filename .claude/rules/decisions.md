@@ -356,6 +356,16 @@ Three paths based on post-parse analysis:
    `@return` placeholder. Max-arity rule: return count = max arity
    across all `ReturnStmt` nodes; shorter branches zero remaining slots.
 
+**Return item expressions**: `parseFnBodyReturnItem` supports the full
+expression language via `parseBoolExpr` as the fallback parser. This
+enables `return a + b`, `return a > 5`, `return !flag`,
+`return a > 0 && b < 100`, `return x is Unit`, constructors with `&`,
+and parenthesized expressions. Mode block expressions and if-expressions
+are handled as special cases before the `parseBoolExpr` fallback (since
+`locked`/`unlocked` and `if` are not recognized by the shared expression
+parser). Function calls are handled by `callExprParser` within
+`parseArithPrimary`.
+
 ## Parenthesized boolean expressions
 
 Recursive tree model: `BoolChainExpr` has `Op` (`&&`/`||`) and

@@ -1,0 +1,27 @@
+{
+    "0": {
+        "0": 2,
+        "1": {"num": 1},
+        "2": false,
+        "next": 3,
+        "op": "compare_register"
+    },
+    "1": {
+        "0": false,
+        "1": "x",
+        "next": 4,
+        "op": "set_reg"
+    },
+    "2": {
+        "0": {"num": 1},
+        "1": "x",
+        "op": "set_reg"
+    },
+    "3": {
+        "0": false,
+        "1": false,
+        "next": 5,
+        "op": "set_reg"
+    },
+    "name": "Return Neg"
+}

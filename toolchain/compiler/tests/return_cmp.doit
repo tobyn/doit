@@ -1,0 +1,10 @@
+# AI-generated test
+# Return comparison expression directly
+fn is_big(a) {
+    return a > 5
+}
+
+behavior return_cmp {
+    @name "Return Cmp"
+    let x = is_big 10
+}

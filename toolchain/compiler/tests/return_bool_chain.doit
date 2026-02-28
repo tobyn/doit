@@ -1,0 +1,10 @@
+# AI-generated test
+# Return boolean chain expression directly
+fn in_range(a) {
+    return a > 0 && a < 100
+}
+
+behavior return_bool_chain {
+    @name "Return Bool"
+    let x = in_range 50
+}

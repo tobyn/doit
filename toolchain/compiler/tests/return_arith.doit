@@ -1,0 +1,10 @@
+# AI-generated test
+# Return arithmetic expression directly
+fn adder(a, b) {
+    return a + b
+}
+
+behavior return_arith {
+    @name "Return Arith"
+    let x = adder 1, 2
+}

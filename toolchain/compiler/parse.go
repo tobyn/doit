@@ -2753,8 +2753,9 @@ func returnStmtArity(ret *ReturnStmt, fns map[string]*fnDef) int {
 }
 
 // parseFnBodyReturnItem parses a single item in a return statement.
-// Handles function calls (with return values), identifiers, numbers,
-// null, constructors, &, and $register references.
+// Supports the full expression language: arithmetic, comparisons, boolean
+// chains, negation, type checks, function calls, constructors, &, mode
+// block expressions, if-expressions, and parenthesized expressions.
 func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 	tok, err := p.next()
 	if err != nil {
@@ -2771,43 +2772,41 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 		return p.parseFnBodyIfExpr(ctx, "")
 	}
 
-	// Parenthesized expression: return (a > 5)
-	if tok.kind == tokLParen {
-		inner, err := p.parseBoolExpr(ctx.resolve)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokRParen); err != nil {
-			return nil, err
-		}
-		if truthy, ok := inner.(*TruthyExpr); ok {
-			return truthy.Value, nil
-		}
-		return inner, nil
-	}
-
-	// Function call: known function with a return value
-	if tok.kind == tokIdent && !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" && !strings.HasPrefix(tok.val, "$") {
-		callee := p.fns[tok.val]
-		if callee != nil && callee.hasReturn() {
-			args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx)
-			if err != nil {
-				return nil, err
-			}
-			return &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs}, nil
-		}
-	}
-
-	// Otherwise, parse as a simple expression
+	// Full expression: arithmetic, comparison, boolean, negation, type check,
+	// constructors, function calls, parenthesized expressions.
+	// parseBoolExpr handles all of these through parseArithPrimary (which
+	// detects constructors, function calls, null/true/false, unary minus)
+	// and parseBoolPrimary (which handles parenthesized and ! expressions).
 	p.unget(tok)
-	expr, err := p.parseFnBodyExpr()
+	expr, err := p.parseBoolExpr(ctx.resolve)
 	if err != nil {
 		return nil, err
 	}
-	if err := p.checkFnBodyExprDeclared(expr, ctx, tok.pos); err != nil {
-		return nil, err
+	// Unwrap TruthyExpr for plain values (ident, number, constructor, fn call)
+	if truthy, ok := expr.(*TruthyExpr); ok {
+		inner := truthy.Value
+		// Check for & operator after constructor
+		ampPeek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if ampPeek.kind == tokAmpersand {
+			if ctorExpr, ok := inner.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
+				return nil, p.errorf(ampPeek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+			}
+			numExpr, err := p.parseFnBodyExpr()
+			if err != nil {
+				return nil, err
+			}
+			if err := p.checkFnBodyExprDeclared(numExpr, ctx, ampPeek.pos); err != nil {
+				return nil, err
+			}
+			ctx.markExprUsed(numExpr)
+			return &AmpersandExpr{Value: inner, Num: numExpr}, nil
+		}
+		p.unget(ampPeek)
+		return inner, nil
 	}
-	ctx.markExprUsed(expr)
 	return expr, nil
 }
 

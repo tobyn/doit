@@ -26,7 +26,3 @@ subroutines, which could allow true function calls without duplication.
 This would also enable recursion. Needs investigation into how the
 `call` instruction works (it's currently a not-implementable stub in
 the stdlib).
-
-## Language ergonomics audit
-
-See `.claude/audit.md` for the full audit process and open items.
