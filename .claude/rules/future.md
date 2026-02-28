@@ -27,22 +27,29 @@ This would also enable recursion. Needs investigation into how the
 `call` instruction works (it's currently a not-implementable stub in
 the stdlib).
 
-## Language ergonomics audit (round 3)
+## Language ergonomics audit (rounds 3–4)
 
 Periodic review of the language for unintuitive syntax, surprising
 semantics, or potential footguns. The process: read all manual pages,
 all test cases, and the parser/emitter source end-to-end, then
 identify anything that would surprise a developer coming from
 Go/Python/JS/Rust. Previous rounds produced actionable fixes; this
-section captures the remaining items from the third pass.
+section captures the remaining items.
 
 To repeat this audit in a future session, ask Claude to "examine the
 language and call out any syntax or semantics that might be unintuitive
 or result in unexpected behavior from a normal developer" — the same
-prompt that generated rounds 1–3. Cross-reference against the items
+prompt that generated rounds 1–4. Cross-reference against the items
 below and any that have been resolved since.
 
-### Medium priority
+Resolved in rounds 3–4: `break` with misspelled label (now errors),
+`describe()` keyword vs identifier (now distinguishes), single `|`
+error (now hints `||`), `=` in boolean context (now hints `==`),
+`//` comments (now hints `#`), `return`/`else` at behavior level
+(now specific errors), "unknown statement" (now "unknown function"),
+nested `fn`/`behavior` definitions (now specific errors).
+
+### Medium priority (design decisions needed)
 
 - **`let` shadowing is silent at the same scope level.**
   `let a = 1; let a = 2` compiles without warning. Most languages with

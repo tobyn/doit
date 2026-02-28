@@ -313,7 +313,9 @@ Syntax: `label: loop { ... }`, `label: while cond { ... }`,
 Parser uses `parser.loopDepth` (int) and `parser.loopLabels` (map)
 instead of threading `inLoop bool` through functions. Label detection
 via three-token lookahead (`ident: loop/while/for`). Duplicate labels
-are compile errors.
+are compile errors. `break` followed by an identifier not in
+`loopLabels` is also a compile error ("unknown loop label") — it does
+not silently fall through to unlabeled break.
 
 `@break` placeholder includes optional `"label"` field. Patching
 condition: `fLabel == "" || fLabel == myLabel` — unlabeled breaks are
