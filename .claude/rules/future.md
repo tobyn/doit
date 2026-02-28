@@ -58,7 +58,9 @@ fn body `let`/`var` declarations (now errors on keywords/constructors),
 `++`/`--`/`=` on keywords/constructors (now errors), assignment error
 positions always 1:1 (now correct), `continue` gives "unknown function"
 (now specific error with hint), `Range(...) & n` gives confusing error
-(now specific error explaining step field conflict).
+(now specific error explaining step field conflict), `let x = y`
+at behavior level errors as "unknown function" (now allows variable
+and parameter copies like fn bodies).
 
 ### Medium priority (design decisions needed)
 

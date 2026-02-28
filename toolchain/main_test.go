@@ -1890,6 +1890,41 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("bhv_let_var_copy", func(t *testing.T) {
+		src := "behavior a { var x = 1\nlet y = x }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("let y = x should compile: %v", err)
+		}
+	})
+
+	t.Run("bhv_assign_var_copy", func(t *testing.T) {
+		src := "behavior a { var x = 1\nvar y = 2\ny = x }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("y = x should compile: %v", err)
+		}
+	})
+
+	t.Run("bhv_let_param_copy", func(t *testing.T) {
+		src := "behavior a { @param in x \"X\"\nlet y = $x }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err != nil {
+			t.Fatalf("let y = $x should compile: %v", err)
+		}
+	})
+
+	t.Run("bhv_let_unknown_still_errors", func(t *testing.T) {
+		src := "behavior a { let y = unknown }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("bhv_break_outside_loop", func(t *testing.T) {
 		src := "behavior a { break }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "")

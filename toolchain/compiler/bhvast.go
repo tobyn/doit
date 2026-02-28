@@ -1036,12 +1036,14 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 				return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
 			}
 
-			// Check if any arithmetic or continuation happened
+			// Check if any arithmetic or continuation happened — bare identifier
+			// with no arithmetic/comparison/boolean continuation is a variable copy
+			// (if the variable exists) or an error (unknown function).
+			// Bare LiteralExpr results are valid $-prefixed parameter/register refs.
 			if _, isIdent := result.(*IdentExpr); isIdent {
-				return nil, p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
-			}
-			if _, isLit := result.(*LiteralExpr); isLit {
-				return nil, p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+				if _, ok := syms.lookupVar(rhsTok.val); !ok {
+					return nil, p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+				}
 			}
 
 			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
@@ -1280,7 +1282,13 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				}
 
 				if result == resolved {
-					return nil, p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+					// Bare identifier with no arithmetic/comparison continuation:
+					// allow if it's a known variable or $-prefixed ref, error otherwise.
+					if _, isIdent := result.(*IdentExpr); isIdent {
+						if _, ok := syms.lookupVar(rhsTok.val); !ok {
+							return nil, p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
+						}
+					}
 				}
 				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 			}
