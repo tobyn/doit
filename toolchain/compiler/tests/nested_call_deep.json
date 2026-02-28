@@ -1,0 +1,17 @@
+{
+    "0": {
+        "0": "@call_2",
+        "op": "get_self"
+    },
+    "1": {
+        "0": "@call_2",
+        "1": "@call",
+        "op": "get_type"
+    },
+    "2": {
+        "0": "@call",
+        "1": "t",
+        "op": "set_reg"
+    },
+    "name": "Nested Call Deep"
+}

@@ -49,13 +49,15 @@ and fn bodies. For number literals, compile-time fold (`-5` →
 (`ArithExpr{sub, 0, x}`). Implemented in `parseArithPrimary` as the
 single source of truth. Call sites simplified to delegate through it.
 
-### 4. Nested function calls in arguments
+### ~~4. Nested function calls in arguments~~ (Done)
 
-`set_reg get_self` and `add get_number x, 5` fail — function calls
-can't appear as arguments to other function calls. Developers must
-use intermediate `let` bindings. Function calls DO work in boolean
-expression position (`let a = get_number x > 5`), just not as direct
-call arguments.
+Function calls with return values work as arguments to other function
+calls: `set_reg get_self`, `add x, get_resource_num y`. Implemented
+by adding function call detection to `parseArithPrimary` (the
+lowest-level shared expression parser) and `parseFnBodyArgExpr`.
+Argument boundaries are always unambiguous because function parameter
+counts are fixed. Deep nesting (`set_reg get_type get_self`) and
+arithmetic continuation within inner arguments work naturally.
 
 ### 5. `wait` condition function-call continuation
 

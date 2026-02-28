@@ -1,0 +1,7 @@
+# AI-generated test
+# Nested function call with arithmetic in the inner argument
+behavior nested_call_arith {
+    @name "Nested Call Arith"
+    @param in x "X"
+    add x, get_resource_num x + 5
+}

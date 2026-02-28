@@ -80,6 +80,9 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 		if isConstructor(tok.val) {
 			return p.parseArithConstructor(tok, resolve)
 		}
+		if p.callExprParser != nil && p.fns[tok.val] != nil && p.fns[tok.val].hasReturn() {
+			return p.callExprParser(p.fns[tok.val], tok)
+		}
 		return resolve(tok)
 	default:
 		return nil, p.errorf(tok.pos, "expected number, variable, or '(' in arithmetic expression, got %s", tok.describe())
@@ -317,35 +320,11 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 	}
 
 	var lhs Expr
-	if tok.kind == tokNumber || tok.kind == tokMinus {
+	if tok.kind == tokNumber || tok.kind == tokMinus || tok.kind == tokIdent {
 		p.unget(tok)
 		lhs, err = p.parseArithExpr(resolve)
 		if err != nil {
 			return nil, err
-		}
-	} else if tok.kind == tokIdent {
-		if tok.val == "null" || tok.val == "false" {
-			lhs = &LiteralExpr{Value: false}
-		} else if tok.val == "true" {
-			lhs = &LiteralExpr{Value: map[string]any{"num": 1}}
-		} else if p.callExprParser != nil && p.fns[tok.val] != nil && p.fns[tok.val].hasReturn() {
-			callExpr, err := p.callExprParser(p.fns[tok.val], tok)
-			if err != nil {
-				return nil, err
-			}
-			lhs, err = p.parseArithExprFromFull(callExpr, resolve)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			resolved, err := resolve(tok)
-			if err != nil {
-				return nil, err
-			}
-			lhs, err = p.parseArithExprFromFull(resolved, resolve)
-			if err != nil {
-				return nil, err
-			}
 		}
 	} else {
 		return nil, p.errorf(tok.pos, "expected identifier, number, or '(' in boolean expression, got %s", tok.describe())
@@ -486,10 +465,6 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 				return nil, err
 			}
 			base = &LiteralExpr{Value: resolved}
-		} else if tok.val == "null" || tok.val == "false" {
-			base = &LiteralExpr{Value: false}
-		} else if tok.val == "true" {
-			base = &LiteralExpr{Value: map[string]any{"num": 1}}
 		} else if isConstructor(tok.val) {
 			ctor, err := p.parseBhvConstructorExpr(tok, syms)
 			if err != nil {
@@ -533,8 +508,8 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 			}
 			base = result
 		} else {
-			resolved := Expr(&IdentExpr{Name: tok.val})
-			result, err := p.parseArithExprFromFull(resolved, resolve)
+			p.unget(tok)
+			result, err := p.parseArithExpr(resolve)
 			if err != nil {
 				return nil, err
 			}

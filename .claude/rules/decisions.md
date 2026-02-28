@@ -451,3 +451,35 @@ back to WAIT).
 `exprTail` mode handles boolean expression continuations (comparisons,
 `is`, `&&`/`||`) after arithmetic expressions, matching the
 behavior-level `maybeBhvExprContinuation` pattern.
+
+## Nested function calls in arguments
+
+Function calls with return values work as arguments to other function
+calls: `set_reg get_self`, `add x, get_resource_num y`,
+`set_reg get_type get_self` (2-deep).
+
+**Approach**: Function call detection in `parseArithPrimary` — the
+lowest-level shared expression parser. In the `tokIdent` case, before
+`resolve(tok)`, check `callExprParser != nil && fns[name].hasReturn()`.
+This makes function calls work everywhere arithmetic expressions are
+accepted: call arguments, arithmetic operands, comparison operands.
+
+**Fn body path**: `parseFnBodyArgExpr` has its own function call
+detection (before the `tokLParen` check) because fn body expressions
+don't go through `parseArithPrimary`. Uses `parseArithExprFromFull`
+for arithmetic continuation after the call result.
+
+**Argument boundaries**: Always unambiguous because function parameter
+counts are fixed. `add get_resource_num x, 5` → `get_resource_num`
+takes 1 arg (consumes `x`), `5` is `add`'s second arg.
+
+**Simplifications**: `parseBoolPrimary`'s `tokIdent` case merged with
+`tokNumber`/`tokMinus` to delegate through `parseArithExpr` (which
+now handles function calls, null/false/true, constructors).
+`parseBhvArgExpr`'s explicit `null`/`false`/`true` cases removed
+(handled by `parseArithPrimary`); bare-ident else branch delegates
+through `parseArithExpr`.
+
+**No emitter changes**: `emitBhvExprGetValue` already handles
+`*CallExpr` (allocates `@call` temp, calls `expandCall`).
+`emitExprGetValue`/`emitExprTo` in fn bodies also handle `CallExpr`.

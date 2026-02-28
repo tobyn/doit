@@ -1,17 +1,21 @@
 {
     "0": {
-        "0": "get_self",
-        "1": "coord",
-        "op": "get_location"
+        "op": "get_self",
+        "0": "@call"
     },
     "1": {
+        "op": "get_location",
+        "0": "@call",
+        "1": "coord"
+    },
+    "2": {
         "1": {
             "num": 1
         },
         "2": "a",
         "op": "set_number"
     },
-    "2": {
+    "3": {
         "0": "coord",
         "1": "b",
         "2": false,

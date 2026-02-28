@@ -1,0 +1,28 @@
+{
+    "0": {
+        "0": "x",
+        "1": {
+            "num": 5
+        },
+        "2": "@arith1",
+        "op": "add"
+    },
+    "1": {
+        "0": "@arith1",
+        "1": "@call",
+        "op": "get_resource_num"
+    },
+    "2": {
+        "0": "x",
+        "1": "@call",
+        "2": false,
+        "op": "add"
+    },
+    "name": "Nested Call Arith",
+    "parameters": [
+        false
+    ],
+    "pnames": [
+        "X"
+    ]
+}

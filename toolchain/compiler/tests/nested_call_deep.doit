@@ -1,0 +1,6 @@
+# AI-generated test
+# Deeply nested function calls (2-deep nesting)
+behavior nested_call_deep {
+    @name "Nested Call Deep"
+    let t = set_reg get_type get_self
+}

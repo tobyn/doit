@@ -1,0 +1,8 @@
+# AI-generated test
+# Nested function calls in arguments at behavior level
+behavior nested_call_bhv {
+    @name "Nested Call Bhv"
+    let me = set_reg get_self
+    let loc = get_location me
+    add loc, get_resource_num me
+}

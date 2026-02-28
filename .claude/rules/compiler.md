@@ -78,8 +78,8 @@ output format.
   `parseFnBodyForStmt` (variadic `label ...string`),
   `parseFnBodyWaitStmt`,
   `parseFnBodyExpr`, `parseFnBodyArgExpr` (extends `parseFnBodyExpr`
-  with mode block, if-expression, and parenthesized boolean expression
-  detection for call arguments),
+  with mode block, if-expression, nested function call, and
+  parenthesized boolean expression detection for call arguments),
   `parseFnBodyConstructorExpr`, `parseFnBodyCallArgs` (takes
   `*fnBodyContext`),
   `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
@@ -109,9 +109,13 @@ output format.
   `parseArithExprFrom`/`parseArithExprFromFull`/`parseArithTerm`/
   `parseArithTermFrom`/`parseArithPrimary` (PEMDAS arithmetic →
   `ArithExpr`; handles `tokMinus` for unary minus with compile-time
-  fold for literals and `0-expr` desugar for variables),
-  `parseBoolExpr`/`parseBoolPrimary` (with
-  `callExprParser` support for function calls in boolean position)/
+  fold for literals and `0-expr` desugar for variables; handles
+  function calls via `callExprParser` when the identifier matches a
+  function with a return value, enabling nested calls in all arithmetic
+  contexts),
+  `parseBoolExpr`/`parseBoolPrimary` (delegates `tokIdent` through
+  `parseArithExpr` which handles function calls, null/false/true,
+  constructors, and plain identifiers)/
   `parseBoolChain` (boolean expressions → `BoolChainExpr`/`CompareExpr`/
   `TypeCheckExpr`/`TruthyExpr`),
   `maybeExprContinuation` (resolver-parameterized continuation

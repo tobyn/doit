@@ -669,6 +669,39 @@ optional arithmetic continuation:
 set_reg (a + 1)    # arithmetic — same as set_reg a + 1
 ```
 
+#### Nested function calls in arguments
+
+Function calls with return values can appear directly as arguments to
+other function calls. The compiler recognizes function names and
+automatically calls them, passing the result to the outer function:
+
+```doit
+let me = set_reg get_self               # get_self() → set_reg
+let loc = get_location get_self         # get_self() → get_location
+add loc, get_resource_num x             # get_resource_num(x) → add's 2nd arg
+```
+
+Argument boundaries are always unambiguous because each function's
+parameter count is fixed. `add get_resource_num x, 5` calls
+`get_resource_num` with one argument (`x`), then passes the result
+and `5` to `add`.
+
+Deep nesting is supported — function calls can be nested to arbitrary
+depth:
+
+```doit
+let t = set_reg get_type get_self       # get_self() → get_type() → set_reg
+```
+
+Nested calls compose with arithmetic — inner arguments can contain
+arithmetic expressions:
+
+```doit
+add x, get_resource_num x + 5           # get_resource_num(x + 5) → add
+```
+
+Nested function calls work in both behavior bodies and function bodies.
+
 #### Value semantics
 
 Each arithmetic operation compiles to a single instruction frame. The

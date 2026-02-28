@@ -156,6 +156,13 @@ func (p *parser) parseFnBodyArgExpr(ctx *fnBodyContext) (Expr, error) {
 		}
 		return p.parseArithExprFromFull(Expr(ifExpr), ctx.resolve)
 	}
+	if tok.kind == tokIdent && p.callExprParser != nil && p.fns[tok.val] != nil && p.fns[tok.val].hasReturn() {
+		callExpr, err := p.callExprParser(p.fns[tok.val], tok)
+		if err != nil {
+			return nil, err
+		}
+		return p.parseArithExprFromFull(callExpr, ctx.resolve)
+	}
 	if tok.kind == tokLParen {
 		// Parenthesized expression: (a > 5), (a + 1), etc.
 		inner, err := p.parseBoolExpr(ctx.resolve)
