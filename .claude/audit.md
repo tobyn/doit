@@ -79,6 +79,7 @@ semantics, or potential footguns.
   variable, only comparison result is written to target)
 - `let x = "string"` error message now explains strings have no runtime
   representation
+- `wait 0` semantics documented
 
 ## Open items
 
@@ -107,5 +108,4 @@ semantics, or potential footguns.
 
 ### Low priority
 
-- **`wait 0` semantics are undocumented.** The manual doesn't explain
-  whether zero ticks is a no-op or has a minimum tick wait.
+(none)

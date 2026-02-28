@@ -1229,6 +1229,11 @@ wait 10 {
 condition block is evaluated after each wait period, and the wait
 repeats only if the condition is falsy.
 
+`wait 0` compiles to a `wait` instruction with zero ticks. In locked
+mode, every instruction takes at least one tick to execute, so `wait 0`
+effectively pauses for one tick. In unlocked mode, the behavior is
+game-engine-dependent.
+
 `wait` works in both behavior bodies and function bodies.
 
 ## Execution Mode
