@@ -45,12 +45,6 @@ semantics, or potential footguns.
 
 ### Medium priority
 
-- **Assignment `=` RHS documentation incomplete.** The assignment section
-  of `language.md` doesn't list mode block expressions, if-expressions,
-  boolean/null literals, variable copies, or negation in the prose, even
-  though the compiler supports them and the `let`/`var` section documents
-  them.
-
 - **Labeled loops section omits `for`.** `language.md` line 1131 says
   labels work with `loop`, counted `loop`, and `while` but doesn't
   mention `for`, which is also supported.

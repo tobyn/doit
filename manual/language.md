@@ -372,20 +372,31 @@ Assign a new value with `=`:
 
 ```doit
 x = 2
+x = true
+x = null
+x = other_var
 x = get_self
 x = Item("metalbar") & 5
 x = a + b
 x = a > b
 x = a == b
 x = me is Unit
+x = a > 0 && a < 100
+x = !flag
+x = locked { get_self }
+x = if a > 5 { a } else { b }
 ```
 
-The right-hand side of `=` can be a number literal, a function call with a
+The right-hand side of `=` can be a number literal, a boolean literal
+(`true`, `false`, `null`), another variable, a function call with a
 return value, a type constructor expression, an
 [arithmetic expression](#arithmetic-expressions), a
 [comparison expression](#comparison-expressions), a
-[type check expression](#type-check-expressions), or an
-[`instruction`](instruction.md) expression.
+[type check expression](#type-check-expressions), a negation (`!`),
+a boolean chain (`&&`, `||`), an
+[`instruction`](instruction.md) expression, a
+[mode block expression](#mode-block-expressions), or an
+[if-expression](#if-expressions).
 
 Compound assignment, increment, and decrement are also supported:
 
