@@ -1207,6 +1207,17 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("unit_as_var_name", func(t *testing.T) {
+		src := `behavior a { let Unit = 5 }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	// --- Comparison expression errors ---
 
 	t.Run("comparison_string_rhs", func(t *testing.T) {

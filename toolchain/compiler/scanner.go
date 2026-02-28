@@ -86,6 +86,7 @@ var Keywords = map[string]bool{
 	"Item":       true,
 	"Range":      true,
 	"Technology": true,
+	"Unit":       true,
 	"Value":      true,
 }
 

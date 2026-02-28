@@ -66,7 +66,8 @@ resolves at compile time. With variable arguments, the compiler emits a
 `for` loops (see [Language](language.md#for-loops)).
 
 Constructor names are reserved — they cannot be used as variable or function
-names.
+names. `Unit` is also reserved (it has no constructor but is used as a type
+name in `is` expressions).
 
 ### The `&` operator
 
