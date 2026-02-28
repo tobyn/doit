@@ -449,6 +449,16 @@ Modifiers are sticky — bare identifiers inherit the most recent `let` or
 `var`. `_` discards the value at that position without changing the active
 modifier.
 
+To call a function with a return value without binding any of its results,
+use `_ =`:
+
+```doit
+_ = my_function args
+```
+
+This is equivalent to calling the function as a bare statement (which also
+discards return values), but makes the intent explicit.
+
 ## Unit Registers
 
 Four special registers are available via the `$` prefix:

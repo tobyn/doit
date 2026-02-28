@@ -67,10 +67,10 @@ string escape sequences undocumented (now in manual).
 Resolved in round 6: `let x = true`/`let x = false`/`let x = null`
 and `x = true`/`x = false`/`x = null` at behavior level gave
 "unknown function 'true'" (now correctly produces literal values
-matching fn body and function argument behavior). The fix was in
-`parseBhvVarInit` and `parseBhvDefaultStmt` in `bhvast.go` — both
-now check for `"null"`, `"false"`, `"true"` identifiers before the
-function lookup path and emit the appropriate `LiteralExpr`.
+matching fn body and function argument behavior).
+
+Resolved in round 7: `_ = fn_call` syntax undocumented (now in
+manual).
 
 ### Medium priority (design decisions needed)
 
@@ -92,6 +92,20 @@ function lookup path and emit the appropriate `LiteralExpr`.
   gives "expected statement, got '&'" instead of explaining that `&`
   requires a typed value (constructor) on the left side. The error message
   should clarify what `&` does and when it is valid.
+
+- **`private fn` visibility is not enforced.** The compiler parses
+  `private fn` but does not restrict its visibility — it is callable
+  from any behavior in the same compilation unit. The current architecture
+  (single source string, no file boundaries) makes file-level scoping
+  structurally impossible. Either document the limitation, remove the
+  feature, or repurpose it (e.g., "excluded from generated docs").
+
+- **`let x = fn_call > 5` emits observable intermediate write.** When
+  combining a function call with a comparison continuation, the compiler
+  emits two frames: one writing the raw return value to `x`, another
+  overwriting with the boolean result. The intermediate value is visible
+  in the game's behavior editor. Could be fixed by storing the fn result
+  in a temp variable instead.
 
 ### Low priority
 
