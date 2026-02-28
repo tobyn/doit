@@ -1,0 +1,14 @@
+# AI-generated test
+# Regression: while loop as last statement in counted loop body.
+# The while loop's back-edge must not be overwritten by the outer
+# loop's continuation jump.
+behavior while_in_counted_loop {
+    @name "While In Counted Loop"
+    var x = 0
+    loop 3 {
+        while x < 10 {
+            x += 1
+        }
+    }
+    notify "done"
+}

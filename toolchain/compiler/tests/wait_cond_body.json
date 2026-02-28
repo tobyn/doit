@@ -1,53 +1,52 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "num": 10
-        },
-        "op": "wait"
+      "num": 10
     },
-    "1": {
-        "next": 3,
-        "op": "notify",
-        "txt": "checking"
-    },
-    "2": {
-        "0": 5,
-        "1": 4,
-        "2": 1,
-        "3": {
-            "num": 5
-        },
-        "op": "check_number"
-    },
+    "op": "wait"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "checking"
+  },
+  "2": {
+    "0": 5,
+    "1": 4,
+    "2": 1,
     "3": {
-        "0": false,
-        "1": "@wcond",
-        "next": 6,
-        "op": "set_reg"
+      "num": 5
     },
-    "4": {
-        "0": {
-            "num": 1
-        },
-        "1": "@wcond",
-        "op": "set_reg"
+    "op": "check_number"
+  },
+  "3": {
+    "0": false,
+    "1": "@wcond",
+    "next": 6,
+    "op": "set_reg"
+  },
+  "4": {
+    "0": {
+      "num": 1
     },
-    "5": {
-        "0": 7,
-        "1": "@wcond",
-        "2": false,
-        "next": 1,
-        "op": "compare_register"
-    },
-    "6": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Wait Cond Body",
-    "parameters": [
-        false
-    ],
-    "pnames": [
-        "A"
-    ]
+    "1": "@wcond",
+    "op": "set_reg"
+  },
+  "5": {
+    "0": 7,
+    "1": "@wcond",
+    "2": false,
+    "next": 1,
+    "op": "compare_register"
+  },
+  "6": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Wait Cond Body",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "A"
+  ]
 }

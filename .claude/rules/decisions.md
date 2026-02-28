@@ -284,13 +284,20 @@ validation at parse time via `canAssign`/`canCompound`.
 ## Control flow emission (unified)
 
 Both behavior-level and fn body `if`/`else if`/`else`, `while`,
-`loop`/`break` use inline forward-jump patching. Condition check frames
-use `frameRef(0)` as a false-branch placeholder, patched after body
-emission. `stripFallThrough` removes redundant branch slots that point
-to the natural next frame. `break` emits `{"op": "@break"}` placeholder.
-In fn bodies, `return` emits values to `@retK` targets then
-`{"op": "@return"}` placeholder; `expandCall` patches these to jump
-past the function expansion.
+`loop`/`break`, `for`, `wait` emit directly into the parent
+`frameBuilder` — no child builders or `rebaseFrameRefs`. Condition
+check frames use `frameRef(0)` as a false-branch placeholder, patched
+after body emission. `stripFallThrough` removes redundant branch slots
+that point to the natural next frame. `break` emits
+`{"op": "@break"}` placeholder. In fn bodies, `return` emits values to
+`@retK` targets then `{"op": "@return"}` placeholder; `expandCall`
+patches these to jump past the function expansion.
+
+Loop back-edges (counted loop INCR, infinite loop jump-back) check
+`!hasNext` on the last body frame before setting `"next"`, preserving
+inner control flow back-edges. If-expression and wait-statement bodies
+rely on natural frame fall-through to the tail expression — no
+explicit `"next"` is set on the last body frame.
 
 Behavior-level `if`/`while` conditions use `parseBoolPrimary` +
 `parseBoolChain` (same parsers as fn bodies and `let`/`var`

@@ -3135,8 +3135,7 @@ func stripFallThrough(b *frameBuilder, start, count int) {
 // emitBehaviorStmts walks a []Stmt list and emits frames. Mode
 // transitions are emitted on-the-fly via frameBuilder.mode tracking —
 // ModeBlockStmt blocks emit transitions only when needed and restore mode
-// on exit. Returns the total frame count (for compatibility with callers
-// that use child builders with rebaseFrameRefs).
+// on exit. Returns the total frame count.
 func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTable) (int, error) {
 	for _, stmt := range stmts {
 		switch s := stmt.(type) {
@@ -3535,24 +3534,10 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
 		}
 
-		// Emit body via child builder
+		// Emit body
 		savedScope := syms.pushScope()
-		bodyBuilder := &frameBuilder{mode: b.mode}
-		mainCount, err := p.emitBehaviorStmts(br.body, bodyBuilder, syms)
-		if err != nil {
+		if _, err := p.emitBehaviorStmts(br.body, b, syms); err != nil {
 			return err
-		}
-		if len(bodyBuilder.frames) > 0 {
-			bodyStart := b.pos()
-			rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-			for _, f := range rebased {
-				b.emit(f)
-			}
-			// Patch last main-line frame's "next" to skip deferred → tail
-			if mainCount > 0 {
-				lastMain := b.get(bodyStart + mainCount - 1)
-				lastMain["next"] = frameRef(b.pos())
-			}
 		}
 
 		// Emit tail expression to target
@@ -3577,21 +3562,8 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 	// Emit else body + tail (or null for missing else)
 	if e.ElsTail != nil {
 		savedScope := syms.pushScope()
-		bodyBuilder := &frameBuilder{mode: b.mode}
-		mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
-		if err != nil {
+		if _, err := p.emitBehaviorStmts(e.ElsBody, b, syms); err != nil {
 			return err
-		}
-		if len(bodyBuilder.frames) > 0 {
-			bodyStart := b.pos()
-			rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-			for _, f := range rebased {
-				b.emit(f)
-			}
-			if mainCount > 0 {
-				lastMain := b.get(bodyStart + mainCount - 1)
-				lastMain["next"] = frameRef(b.pos())
-			}
 		}
 
 		if err := p.emitBhvExprTo(e.ElsTail, target, syms, b, ""); err != nil {
@@ -3654,21 +3626,8 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 		}
 
 		savedScope := syms.pushScope()
-		bodyBuilder := &frameBuilder{mode: b.mode}
-		mainCount, err := p.emitBehaviorStmts(br.body, bodyBuilder, syms)
-		if err != nil {
+		if _, err := p.emitBehaviorStmts(br.body, b, syms); err != nil {
 			return err
-		}
-		if len(bodyBuilder.frames) > 0 {
-			bodyStart := b.pos()
-			rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-			for _, f := range rebased {
-				b.emit(f)
-			}
-			if mainCount > 0 {
-				lastMain := b.get(bodyStart + mainCount - 1)
-				lastMain["next"] = frameRef(b.pos())
-			}
 		}
 
 		// Emit tail to retVals
@@ -3692,21 +3651,8 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 	// Else body + tail (or null for missing else)
 	if e.ElsTail != nil {
 		savedScope := syms.pushScope()
-		bodyBuilder := &frameBuilder{mode: b.mode}
-		mainCount, err := p.emitBehaviorStmts(e.ElsBody, bodyBuilder, syms)
-		if err != nil {
+		if _, err := p.emitBehaviorStmts(e.ElsBody, b, syms); err != nil {
 			return err
-		}
-		if len(bodyBuilder.frames) > 0 {
-			bodyStart := b.pos()
-			rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-			for _, f := range rebased {
-				b.emit(f)
-			}
-			if mainCount > 0 {
-				lastMain := b.get(bodyStart + mainCount - 1)
-				lastMain["next"] = frameRef(b.pos())
-			}
 		}
 
 		if err := p.emitBhvIfExprTailMulti(e.ElsTail, retVals, syms, b); err != nil {
@@ -3880,24 +3826,10 @@ func (p *parser) emitBhvWaitStmt(s *WaitStmt, b *frameBuilder, syms *symbolTable
 	setComment(waitFrame, s.Comment)
 	waitPos := b.emit(waitFrame)
 
-	// Emit body via child builder
+	// Emit body
 	savedScope := syms.pushScope()
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
-	if err != nil {
+	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
-	}
-	if len(bodyBuilder.frames) > 0 {
-		bodyStart := b.pos()
-		rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-		for _, f := range rebased {
-			b.emit(f)
-		}
-		// Patch last main-line frame's "next" to skip deferred → tail
-		if mainCount > 0 {
-			lastMain := b.get(bodyStart + mainCount - 1)
-			lastMain["next"] = frameRef(b.pos())
-		}
 	}
 	syms.popScope(savedScope)
 
@@ -3984,27 +3916,31 @@ func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable
 
 	// Compile body
 	savedScope := syms.pushScope()
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
-	if err != nil {
+	origLen := len(b.frames)
+	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}
 	syms.popScope(savedScope)
 
-	bodyStart := b.pos()
-	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-	for _, f := range rebased {
-		b.emit(f)
-	}
-
-	// Loop back: set main-line last frame's "next" to loop start
-	if mainCount > 0 {
-		lastMainBody := b.get(bodyStart + mainCount - 1)
-		lastMainBody["next"] = frameRef(loopStart)
+	// Loop back: set last frame's "next" to loop start
+	if b.pos() > loopStart {
+		lastFrame := b.get(b.pos() - 1)
+		if op, _ := lastFrame["op"].(string); op != "@break" {
+			if _, hasNext := lastFrame["next"]; !hasNext {
+				lastFrame["next"] = frameRef(loopStart)
+			} else {
+				b.emit(map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": frameRef(loopStart),
+				})
+			}
+		}
 	}
 
 	afterLoop := frameRef(b.pos())
-	patchBreakPlaceholders(b, bodyStart, s.Label, afterLoop)
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }
@@ -4037,18 +3973,11 @@ func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTa
 
 	// Compile body
 	savedScope := syms.pushScope()
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
-	if err != nil {
+	origLen := len(b.frames)
+	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}
 	syms.popScope(savedScope)
-
-	bodyStart := b.pos()
-	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-	for _, f := range rebased {
-		b.emit(f)
-	}
 
 	// INCR: add counter + 1 → counter, next → CHECK
 	incrFrame := b.emit(map[string]any{
@@ -4059,10 +3988,14 @@ func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTa
 		"next": frameRef(checkFrame),
 	})
 
-	// Set main-line last body frame's "next" to incr
-	if mainCount > 0 {
-		lastMainBody := b.get(bodyStart + mainCount - 1)
-		lastMainBody["next"] = frameRef(incrFrame)
+	// Set last body frame's "next" to incr (if not already set by inner control flow)
+	if b.pos()-1 > origLen-1 {
+		lastBodyFrame := b.get(incrFrame - 1)
+		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
+			if _, hasNext := lastBodyFrame["next"]; !hasNext {
+				lastBodyFrame["next"] = frameRef(incrFrame)
+			}
+		}
 	}
 
 	// Patch CHECK exits: larger and equal → afterLoop
@@ -4071,7 +4004,7 @@ func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTa
 	check[checkLarger] = afterLoop
 	check["next"] = afterLoop
 
-	patchBreakPlaceholders(b, bodyStart, s.Label, afterLoop)
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }
@@ -4145,16 +4078,9 @@ func (p *parser) emitBhvForStmtRange(s *ForStmt, ctor *ConstructorExpr, b *frame
 	checkFrame := b.emit(check)
 
 	// Compile body
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
-	if err != nil {
+	origLen := len(b.frames)
+	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
-	}
-
-	bodyStart := b.pos()
-	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-	for _, f := range rebased {
-		b.emit(f)
 	}
 
 	// INCR: add iterVar + step → iterVar, next → CHECK
@@ -4166,9 +4092,14 @@ func (p *parser) emitBhvForStmtRange(s *ForStmt, ctor *ConstructorExpr, b *frame
 		"next": frameRef(checkFrame),
 	})
 
-	if mainCount > 0 {
-		lastMainBody := b.get(bodyStart + mainCount - 1)
-		lastMainBody["next"] = frameRef(incrFrame)
+	// Set last body frame's "next" to incr (if not already set by inner control flow)
+	if b.pos()-1 > origLen-1 {
+		lastBodyFrame := b.get(incrFrame - 1)
+		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
+			if _, hasNext := lastBodyFrame["next"]; !hasNext {
+				lastBodyFrame["next"] = frameRef(incrFrame)
+			}
+		}
 	}
 
 	afterLoop := frameRef(b.pos())
@@ -4180,7 +4111,7 @@ func (p *parser) emitBhvForStmtRange(s *ForStmt, ctor *ConstructorExpr, b *frame
 		check["next"] = afterLoop
 	}
 
-	patchBreakPlaceholders(b, bodyStart, s.Label, afterLoop)
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }
@@ -4235,16 +4166,9 @@ func (p *parser) emitBhvForStmtRuntime(s *ForStmt, b *frameBuilder, syms *symbol
 	checkNegFrame := b.emit(checkNeg)
 
 	// Compile body
-	bodyBuilder := &frameBuilder{mode: b.mode}
-	mainCount, err := p.emitBehaviorStmts(s.Body, bodyBuilder, syms)
-	if err != nil {
+	origLen := len(b.frames)
+	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
-	}
-
-	bodyStart := b.pos()
-	rebased := rebaseFrameRefs(bodyBuilder.frames, bodyStart)
-	for _, f := range rebased {
-		b.emit(f)
 	}
 
 	// INCR
@@ -4256,9 +4180,14 @@ func (p *parser) emitBhvForStmtRuntime(s *ForStmt, b *frameBuilder, syms *symbol
 		"next": frameRef(stepCheckFrame),
 	})
 
-	if mainCount > 0 {
-		lastMainBody := b.get(bodyStart + mainCount - 1)
-		lastMainBody["next"] = frameRef(incrFrame)
+	// Set last body frame's "next" to incr (if not already set by inner control flow)
+	if b.pos()-1 > origLen-1 {
+		lastBodyFrame := b.get(incrFrame - 1)
+		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
+			if _, hasNext := lastBodyFrame["next"]; !hasNext {
+				lastBodyFrame["next"] = frameRef(incrFrame)
+			}
+		}
 	}
 
 	afterLoop := frameRef(b.pos())
@@ -4267,15 +4196,16 @@ func (p *parser) emitBhvForStmtRuntime(s *ForStmt, b *frameBuilder, syms *symbol
 	stepCheck[checkSmaller] = frameRef(checkNegFrame)
 	stepCheck["next"] = afterLoop
 
-	checkPos[checkSmaller] = frameRef(bodyStart)
+	bodyStart := frameRef(origLen)
+	checkPos[checkSmaller] = bodyStart
 	checkPos[checkLarger] = afterLoop
 	checkPos["next"] = afterLoop
 
-	checkNeg[checkLarger] = frameRef(bodyStart)
+	checkNeg[checkLarger] = bodyStart
 	checkNeg[checkSmaller] = afterLoop
 	checkNeg["next"] = afterLoop
 
-	patchBreakPlaceholders(b, bodyStart, s.Label, afterLoop)
+	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 
 	return nil
 }

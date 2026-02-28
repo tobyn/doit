@@ -43,19 +43,6 @@ semantics, or potential footguns.
 
 ## Open items
 
-### High priority
-
-- **Bhv emitters unconditionally overwrite last body frame's `"next"`.**
-  `emitBhvCountedLoop`, `emitBhvWaitStmt`, `emitBhvIfExpr`,
-  `emitBhvForStmtRange`, `emitBhvForStmtRuntime`, and
-  `emitBhvLoopStmt` use a child `frameBuilder` + `rebaseFrameRefs`,
-  then unconditionally set the last body frame's `"next"` to the
-  continuation. If the last body statement is a while/loop/for, this
-  overwrites the inner loop's back-edge jump. The fn body emitters
-  correctly check `!hasNext` before setting. Fix: switch bhv emitters
-  to direct emission (matching the fn body approach). Add regression
-  test.
-
 ### Medium priority
 
 - **`resolveBhvBoolTree` / `resolveFnBoolTree` are near-identical.**

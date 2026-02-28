@@ -17,7 +17,7 @@
   "2": {
     "0": false,
     "1": false,
-    "next": 5,
+    "next": 6,
     "op": "set_reg"
   },
   "3": {
@@ -30,6 +30,12 @@
     "op": "add"
   },
   "4": {
+    "0": false,
+    "1": false,
+    "next": 2,
+    "op": "set_reg"
+  },
+  "5": {
     "op": "notify",
     "txt": "Done"
   },

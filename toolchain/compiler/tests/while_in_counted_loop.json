@@ -1,0 +1,57 @@
+{
+  "0": {
+    "1": {
+      "num": 0
+    },
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "0": {
+      "num": 0
+    },
+    "1": "@loop",
+    "op": "set_number"
+  },
+  "2": {
+    "0": 7,
+    "2": "@loop",
+    "3": {
+      "num": 3
+    },
+    "next": 7,
+    "op": "check_number"
+  },
+  "3": {
+    "0": 6,
+    "2": "x",
+    "3": {
+      "num": 10
+    },
+    "next": 6,
+    "op": "check_number"
+  },
+  "4": {
+    "0": "x",
+    "1": {
+      "num": 1
+    },
+    "2": "x",
+    "next": 4,
+    "op": "add"
+  },
+  "5": {
+    "0": "@loop",
+    "1": {
+      "num": 1
+    },
+    "2": "@loop",
+    "next": 3,
+    "op": "add"
+  },
+  "6": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "While In Counted Loop"
+}
