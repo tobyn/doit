@@ -376,14 +376,16 @@ let a, b = 1, separate_coordinate coord   # separate_coordinate returns 2,
                                            # but only first is bound to b
 ```
 
-At behavior level, binding lists support mixed `let`/`var` modifiers and
-`_` discards (same syntax as multi-return function calls):
+Binding lists support mixed `let`/`var` modifiers and `_` discards (same
+syntax as multi-return function calls). This works at both behavior level
+and in function bodies:
 
 ```doit
 var a, let b, _, var c = 1, 2, 3, 4
 ```
 
-In function bodies, all bindings inherit the leading `let` or `var`
+Modifiers are sticky — bare identifiers inherit the most recent `let` or
+`var`. `_` discards the value at that position without changing the active
 modifier.
 
 ## Unit Registers

@@ -2200,6 +2200,30 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 		}
 	})
 
+	t.Run("fn_mixed_modifier_immutable_assign", func(t *testing.T) {
+		src := `fn f(coord) { var a, let b = separate_coordinate coord; b = a }
+		        behavior a { @name "A" f Coordinate(1, 2) }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error assigning to immutable let binding in mixed modifier list")
+		}
+		if !strings.Contains(err.Error(), "cannot assign to immutable variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_underscore_not_variable", func(t *testing.T) {
+		src := `fn f() { let _ = 5 }
+		        behavior a { @name "A" f }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error using _ as variable name")
+		}
+		if !strings.Contains(err.Error(), "'_' cannot be used as a variable name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestParseLocalePrefix(t *testing.T) {

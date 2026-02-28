@@ -423,17 +423,19 @@ for `_`) and passes it to `expandCall` (for single calls) or iterates
 `ExprListExpr.Exprs` (for expression lists). The `retVals []any`
 parameter on `expandCall` carries return targets through the call chain.
 
-**fn body multi-return**: In function bodies, `let` supports multi-return
-binding with `_` discards: `let x, y = separate_coordinate coord` and
-`let _, y = separate_coordinate coord`. No modifier switching — all names
-are `let` locals. Each binding becomes a `MultiBinding` in
-`MultiReturnStmt.Bindings` (with `Name` for idents, `Discard: true` for
-`_`). The RHS supports expression lists (same as behavior level).
+**fn body multi-return**: In function bodies, multi-return binding lists
+support mixed modifiers (same as behavior level):
+`var a, let b, _ = separate_coordinate coord`. `let`/`var` set the active
+modifier (sticky for subsequent bare idents), `_` discards without changing
+the modifier. `_` works in first position: `let _, y = fn args`. Each
+binding becomes a `MultiBinding` in `MultiReturnStmt.Bindings` (with
+`Name`/`Mutable` for idents, `Discard: true` for `_`). Per-binding
+mutability is registered via `bind.Mutable` (not the leading keyword's
+`mutable` flag). The RHS supports expression lists (same as behavior level).
 During emission, `emitFnBody` resolves bindings through `paramMap`
 and passes the result slice as `retVals` to the recursive `expandCall`.
 `var` is supported in fn bodies for mutable local variables. `let` is
-immutable. Multi-return binding lists in fn bodies use the modifier of
-the leading keyword (`let` or `var`) for all bindings.
+immutable.
 
 The `parseBhvCallArgs` helper (bhvast.go) extracts behavior-level
 positional + keyword arg parsing into a reusable method shared by bare

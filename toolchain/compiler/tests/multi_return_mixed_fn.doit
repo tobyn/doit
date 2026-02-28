@@ -1,0 +1,21 @@
+# AI-generated test
+# Mixed modifier binding lists and first-position discard in fn bodies
+fn mixed_bindings(coord) {
+    var a, let b = separate_coordinate coord
+    a += 1
+    notify "Done", value: a
+    set_reg b
+}
+
+fn discard_first(coord) {
+    let _, y = separate_coordinate coord
+    return y
+}
+
+behavior multi_return_mixed_fn {
+    @name "Mixed Return Fn"
+    let coord = get_location get_self
+    mixed_bindings coord
+    let y = discard_first coord
+    notify "Y", value: y
+}

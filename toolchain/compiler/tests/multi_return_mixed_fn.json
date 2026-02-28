@@ -1,0 +1,47 @@
+{
+    "0": {
+        "0": "@call",
+        "op": "get_self"
+    },
+    "1": {
+        "0": "@call",
+        "1": "coord",
+        "op": "get_location"
+    },
+    "2": {
+        "0": "coord",
+        "1": "a",
+        "2": "b",
+        "op": "separate_coordinate"
+    },
+    "3": {
+        "0": "a",
+        "1": {
+            "num": 1
+        },
+        "2": "a",
+        "op": "add"
+    },
+    "4": {
+        "0": "a",
+        "op": "notify",
+        "txt": "Done"
+    },
+    "5": {
+        "0": "b",
+        "1": false,
+        "op": "set_reg"
+    },
+    "6": {
+        "0": "coord",
+        "1": false,
+        "2": "y",
+        "op": "separate_coordinate"
+    },
+    "7": {
+        "0": "y",
+        "op": "notify",
+        "txt": "Y"
+    },
+    "name": "Mixed Return Fn"
+}

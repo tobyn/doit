@@ -3197,28 +3197,72 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 	if err != nil {
 		return nil, err
 	}
-	if varTok.val == "_" {
-		return nil, p.errorf(varTok.pos, "'_' cannot be used as a variable name")
+	// Handle _ as first binding in multi-return
+	firstDiscard := varTok.val == "_"
+	if firstDiscard {
+		// Peek for comma — if present, this is a multi-return with first discard
+		sep, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if sep.kind != tokComma {
+			return nil, p.errorf(varTok.pos, "'_' cannot be used as a variable name")
+		}
 	}
-	sep, err := p.next()
-	if err != nil {
-		return nil, err
+	var sep token
+	if !firstDiscard {
+		sep, err = p.next()
+		if err != nil {
+			return nil, err
+		}
 	}
-	if sep.kind == tokComma {
+	if firstDiscard || sep.kind == tokComma {
 		// Multi-return: let a, b, _ = fnCall args... OR instruction
-		bindings := []MultiBinding{{Name: varTok.val, Mutable: mutable}}
+		// Supports mixed modifiers: var a, let b, _ = ...
+		var bindings []MultiBinding
+		if firstDiscard {
+			bindings = append(bindings, MultiBinding{Discard: true})
+		} else {
+			bindings = append(bindings, MultiBinding{Name: varTok.val, Mutable: mutable})
+		}
+		// activeModifier: 0=let, 1=var
+		activeModifier := 0
+		if mutable {
+			activeModifier = 1
+		}
 		for {
 			bindTok, err := p.next()
 			if err != nil {
 				return nil, err
 			}
-			if bindTok.kind != tokIdent {
-				return nil, p.errorf(bindTok.pos, "expected identifier or '_' in binding list, got %s", bindTok.describe())
+			if bindTok.kind == tokEquals {
+				break
 			}
-			if bindTok.val == "_" {
+			if bindTok.kind != tokIdent {
+				return nil, p.errorf(bindTok.pos, "expected identifier, '_', 'let', 'var', or '=' in binding list, got %s", bindTok.describe())
+			}
+			switch bindTok.val {
+			case "_":
 				bindings = append(bindings, MultiBinding{Discard: true})
-			} else {
-				bindings = append(bindings, MultiBinding{Name: bindTok.val, Mutable: mutable})
+			case "let":
+				activeModifier = 0
+				nameTok, err := p.expect(tokIdent)
+				if err != nil {
+					return nil, err
+				}
+				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: false})
+			case "var":
+				activeModifier = 1
+				nameTok, err := p.expect(tokIdent)
+				if err != nil {
+					return nil, err
+				}
+				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: true})
+			default:
+				bindings = append(bindings, MultiBinding{
+					Name:    bindTok.val,
+					Mutable: activeModifier == 1,
+				})
 			}
 			next, err := p.next()
 			if err != nil {
@@ -3255,7 +3299,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 			}
 			for _, bind := range bindings {
 				if !bind.Discard {
-					ctx.fnVars[bind.Name] = mutable
+					ctx.fnVars[bind.Name] = bind.Mutable
 				}
 			}
 			return []Stmt{&MultiReturnStmt{
@@ -3379,7 +3423,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 		// Register variables
 		for _, bind := range bindings {
 			if !bind.Discard {
-				ctx.fnVars[bind.Name] = mutable
+				ctx.fnVars[bind.Name] = bind.Mutable
 			}
 		}
 

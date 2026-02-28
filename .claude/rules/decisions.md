@@ -73,10 +73,10 @@ parsed as loop labels.
   Extra values receive `false`.
 - **`_` as discard**: `let _, y = fn args` skips the first output.
   Maps to `false` in compiled output.
-- **Mixed modifier binding lists** (behavior level only):
-  `var a, b, _, let c, var d = fn args`. Modifiers are sticky. Bare
-  idents inherit the active modifier. Must start with `_`, `let`, or
-  `var`.
+- **Mixed modifier binding lists**: `var a, b, _, let c, var d = fn args`.
+  Modifiers are sticky. Bare idents inherit the active modifier. Must
+  start with `_`, `let`, or `var`. Works at both behavior level and in
+  fn bodies.
 - **Multi-value `return`**: `return x, y, z` with comma-separated
   identifiers, number literals, or `null`. Literals are desugared into
   synthetic body calls with `@retK` names.
