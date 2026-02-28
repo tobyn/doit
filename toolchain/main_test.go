@@ -1241,6 +1241,29 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("unit_constructor", func(t *testing.T) {
+		src := `behavior a { let x = Unit("foo") }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "Unit has no constructor") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unit_constructor_fn_body", func(t *testing.T) {
+		src := `fn f() { let x = Unit("foo") }
+behavior a { f }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "Unit has no constructor") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	// --- Scanner errors ---
 
 	t.Run("single_pipe_error", func(t *testing.T) {

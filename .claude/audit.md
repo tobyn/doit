@@ -76,3 +76,79 @@ dimensions in a single pass:
   pairs into single implementations (~500+ lines saved). Large
   architectural change — needs developer input.
 
+### HIGH
+
+- **"undeclared variable" when the user meant a function call.** When
+  a user writes `let x = frobnicate y` and `frobnicate` doesn't exist,
+  the error is "undeclared variable `frobnicate`" because the name
+  fails the function lookup and falls through to variable resolution.
+  The error is technically correct but misleading — the user likely
+  intended a function call. Should say something like "unknown function
+  or variable `frobnicate`".
+
+- **`errorf(0, ...)` reports wrong source position in 8 error paths.**
+  `parseBhvModeBlockExpr` (bhvast.go:2131, 2137),
+  `parseBhvIfExprBranch` (bhvast.go:2158, 2163),
+  `parseFnBodyModeBlockExpr` (parse.go:2633, 2638), and
+  `parseFnBodyIfExprBranch` (parse.go:2659, 2664) all pass `0` as
+  the position to `errorf`. This makes errors like "empty mode block
+  expression" and "last item in if-expression branch must be a
+  value-producing expression" report as `1:1` regardless of where
+  the block actually appears in the source. Fix: capture the `{`
+  token position and thread it through.
+
+### MEDIUM
+
+- **`parseBhvConstructorExpr` / `parseFnBodyConstructorExpr`
+  duplication.** ~100 lines of nearly identical constructor parsing
+  in bhvast.go:570–700 and parse.go:234–332. The Item/Component/
+  Technology/Value, Coordinate, and Range branches are structurally
+  identical — the only difference is the arg parser (`parseBhvArgExpr`
+  vs `parseFnBodyExpr`) and the bhv version's inline `&` handling
+  after Item/Component/Coordinate. Extractable into a shared
+  `parseConstructorExpr(nameTok, parseArg func)` with `&` handling
+  left to callers or an optional callback.
+
+- **`parseBhvVarInit` / `parseBhvDefaultStmt` RHS parsing
+  duplication.** Within bhvast.go, the RHS parsing for `let`/`var`
+  init (lines ~1020–1175) and assignment (lines ~1300–1430) follow
+  the same structure: boolean/null literal handling, function call +
+  continuation, parenthesized expression, and bang/minus routing.
+  Each branch differs only in producing `LetStmt` vs `AssignStmt`.
+  ~150 lines of structural duplication. Extractable into a shared
+  `parseBhvRHSExpr(syms, resolve, comment)` that returns the parsed
+  expression and any continuation statements, with the caller
+  wrapping the result in the appropriate statement type.
+
+- **`emitBhvBoolExprTo` / `emitFnBoolExprTo` post-resolve body
+  duplication.** After the resolve step, bhvast.go:2910–2945 and
+  parse.go:947–982 contain ~35 lines of identical code: single
+  non-negated leaf delegation to `emitComparison`/`emitTypeCheck`/
+  `emitTruthyCheck`, followed by the chain/group path with
+  `emitResolvedBoolFrames` + false/true `set_reg` frame emission.
+  Extractable into `emitResolvedBoolExprTo(resolved, target, b,
+  comment)`. Independent of the larger emitContext unification —
+  this is a small targeted extraction.
+
+- **`errorf` / `warnf` duplicated position-to-line:col calculation.**
+  scanner.go:126–136 (`warnf`) and scanner.go:156–166 (`errorf`)
+  contain identical 10-line loops converting a byte offset to a
+  line:column pair. Extract into a shared `posToLineCol(pos int)
+  (line, col int)` method on `scanner`.
+
+- **`arithmeticOpName` / `compoundAssignOpName` duplicated op→name
+  mapping.** codegen.go:653–667 and codegen.go:689–703 map different
+  token kinds to the same opcode names (`tokPlus`→`"add"` vs
+  `tokPlusEquals`→`"add"`, etc.). `compoundAssignOpName` could strip
+  the `Equals` part and delegate to `arithmeticOpName`, or both
+  could use a shared lookup table.
+
+### LOW
+
+- **`ReturnStmt` missing `Comment` field.** All 14 other statement
+  types in ast.go have a `Comment string` field, but `ReturnStmt`
+  (ast.go:92–94) does not. This means `#!` doc comments on return
+  statements are silently lost. The emitter (`emitFnBody`) uses
+  the calling context's comment for return frames, so this is a
+  feature gap rather than a bug — users cannot annotate return
+  statements independently.

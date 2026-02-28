@@ -80,6 +80,9 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 		if isConstructor(tok.val) {
 			return p.parseArithConstructor(tok, resolve)
 		}
+		if tok.val == "Unit" {
+			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
+		}
 		if p.callExprParser != nil && p.fns[tok.val] != nil && p.fns[tok.val].hasReturn() {
 			return p.callExprParser(p.fns[tok.val], tok)
 		}
@@ -289,6 +292,9 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
 	}
 	if _, ok := syms.lookupVar(tok.val); !ok {
+		if tok.val == "Unit" {
+			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
+		}
 		return nil, p.errorf(tok.pos, "undeclared variable %q", tok.val)
 	}
 	syms.markUsed(tok.val)
