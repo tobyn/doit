@@ -123,16 +123,22 @@ type parser struct {
 }
 
 // warnf appends a formatted warning message with line:column prefix.
-func (p *parser) warnf(pos int, format string, args ...any) {
-	line, col := 1, 1
-	for i := 0; i < pos && i < len(p.src); i++ {
-		if p.src[i] == '\n' {
+// posToLineCol converts a byte offset in the source to a 1-based line and column.
+func (s *scanner) posToLineCol(pos int) (line, col int) {
+	line, col = 1, 1
+	for i := 0; i < pos && i < len(s.src); i++ {
+		if s.src[i] == '\n' {
 			line++
 			col = 1
 		} else {
 			col++
 		}
 	}
+	return line, col
+}
+
+func (p *parser) warnf(pos int, format string, args ...any) {
+	line, col := p.posToLineCol(pos)
 	p.warnings = append(p.warnings, fmt.Sprintf("%d:%d: %s", line, col, fmt.Sprintf(format, args...)))
 }
 
@@ -154,15 +160,7 @@ func (p *parser) exitLoop(label string) {
 }
 
 func (s *scanner) errorf(pos int, format string, args ...any) error {
-	line, col := 1, 1
-	for i := 0; i < pos && i < len(s.src); i++ {
-		if s.src[i] == '\n' {
-			line++
-			col = 1
-		} else {
-			col++
-		}
-	}
+	line, col := s.posToLineCol(pos)
 	return fmt.Errorf("%d:%d: %s", line, col, fmt.Sprintf(format, args...))
 }
 

@@ -109,12 +109,6 @@ dimensions in a single pass:
   comment)`. Independent of the larger emitContext unification —
   this is a small targeted extraction.
 
-- **`errorf` / `warnf` duplicated position-to-line:col calculation.**
-  scanner.go:126–136 (`warnf`) and scanner.go:156–166 (`errorf`)
-  contain identical 10-line loops converting a byte offset to a
-  line:column pair. Extract into a shared `posToLineCol(pos int)
-  (line, col int)` method on `scanner`.
-
 - **`arithmeticOpName` / `compoundAssignOpName` duplicated op→name
   mapping.** codegen.go:653–667 and codegen.go:689–703 map different
   token kinds to the same opcode names (`tokPlus`→`"add"` vs
