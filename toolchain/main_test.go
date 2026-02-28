@@ -473,6 +473,29 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("param_count_limit", func(t *testing.T) {
+		src := `behavior a {
+			@param in a "A"
+			@param in b "B"
+			@param in c "C"
+			@param in d "D"
+			@param in e "E"
+			@param in f "F"
+			@param in g "G"
+			@param in h "H"
+			@param in i "I"
+			@param in j "J"
+			@param in k "K"
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many parameters") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("dollar_sign_alone", func(t *testing.T) {
 		src := `behavior a { domove $ }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "")

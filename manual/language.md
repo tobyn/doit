@@ -251,12 +251,15 @@ Declare an immutable variable with `let`:
 let x = 5
 ```
 
-The right-hand side of `var` and `let` can be a number literal, a function
-call that has a return value, a type constructor expression, an
+The right-hand side of `var` and `let` can be a number literal, a boolean
+literal (`true`, `false`, `null`), another variable, a function call that
+has a return value, a type constructor expression, an
 [arithmetic expression](#arithmetic-expressions), a
 [comparison expression](#comparison-expressions), a
-[type check expression](#type-check-expressions), or an
-[`instruction`](instruction.md) expression:
+[type check expression](#type-check-expressions), an
+[`instruction`](instruction.md) expression, a
+[mode block expression](#mode-block-expressions), or an
+[if-expression](#if-expressions):
 
 ```doit
 let me = get_self
@@ -269,6 +272,8 @@ let in_range = count > 0 && count < 100
 let same = a == b
 let is_unit = me is Unit
 let me = instruction "get_self" { 0: @1 }
+let done = true
+var backup = loc
 ```
 
 When initialized with a number, a `set_number` instruction is emitted. When
@@ -433,8 +438,8 @@ a function call, the caller can bind fewer values than the function returns.
 Extra return values are silently discarded:
 
 ```doit
-let a, b = 1, separate_coordinate coord   # separate_coordinate returns 2,
-                                           # but only first is bound to b
+let a, b = 1, separate_coordinate coord   # separate_coordinate returns 2 values;
+                                           # b captures only the first
 ```
 
 Binding lists support mixed `let`/`var` modifiers and `_` discards (same

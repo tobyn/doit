@@ -29,9 +29,9 @@ the stdlib).
 
 ## Language ergonomics audit
 
-See `.claude/audit.md` for the full audit process, history, and open
-items. The `-Werror` flag item below originated from the audit but
-lives here as a general future feature.
+See `.claude/audit.md` for the full audit process and open items. The
+`-Werror` flag item below originated from the audit but lives here as
+a general future feature.
 
 - **`-Werror` style flag for promoting warnings to errors.** The
   compiler now supports warnings (returned alongside compiled output).

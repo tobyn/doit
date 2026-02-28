@@ -15,71 +15,21 @@ semantics, or potential footguns.
    (`toolchain/compiler/`) end-to-end. Identify anything that would
    surprise a developer coming from Go/Python/JS/Rust.
 3. Categorize each finding as HIGH (likely bugs/confusion), MEDIUM
-   (design decision needed), or LOW (minor gap). Cross-reference
-   against the resolved list below to avoid re-reporting fixed issues.
+   (design decision needed), or LOW (minor gap). Do not re-report
+   issues that have already been fixed — check git history if unsure.
 4. Add new findings to the open items list in this file.
-5. Repeat from step 1 until no open items remain above LOW priority.
-6. Keep working autonomously — do not stop to ask the developer for
-   confirmation. The developer will interrupt if needed.
-
-## Resolved items
-
-### Rounds 1–2
-
-(Pre-date this file. No detailed records.)
-
-### Rounds 3–4
-
-- `break` with misspelled label (now errors)
-- `describe()` keyword vs identifier (now distinguishes)
-- Single `|` error (now hints `||`)
-- `=` in boolean context (now hints `==`)
-- `//` comments (now hints `#`)
-- `return`/`else` at behavior level (now specific errors)
-- "unknown statement" (now "unknown function")
-- Nested `fn`/`behavior` definitions (now specific errors)
-- `let` shadowing warned at same scope level (unused re-declaration
-  warning)
-- Variables no longer leak from block scopes (block scoping implemented)
-
-### Round 5
-
-- `index.md` hello world `name` → `@name`
-- `language.md` examples using `//` → `#`
-- Missing `checkVarName` in fn body `let`/`var` declarations (now errors
-  on keywords/constructors)
-- `++`/`--`/`=` on keywords/constructors (now errors)
-- Assignment error positions always 1:1 (now correct)
-- `continue` gives "unknown function" (now specific error with hint)
-- `Range(...) & n` gives confusing error (now specific error explaining
-  step field conflict)
-- `let x = y` at behavior level errors as "unknown function" (now allows
-  variable and parameter copies like fn bodies)
-- `is Number` and `is Range` give generic "unknown type" error (now
-  explain why not supported)
-- String escape sequences undocumented (now in manual)
-
-### Round 6
-
-- `let x = true`/`let x = false`/`let x = null` and assignment forms
-  at behavior level gave "unknown function" (now correctly produces
-  literal values matching fn body and function argument behavior)
-
-### Round 7
-
-- `_ = fn_call` syntax undocumented (now in manual)
-
-### Round 8
-
-- `for` loop iteration variable scoping (already fixed by block scoping
-  implementation — push/pop scope in both parser and emitter)
-- `&` on plain variables gives confusing error (now specific error
-  explaining `&` requires a type constructor)
-- `let x = fn_call > 5` intermediate write (fn result now goes to temp
-  variable, only comparison result is written to target)
-- `let x = "string"` error message now explains strings have no runtime
-  representation
-- `wait 0` semantics documented
+5. Repeat from step 1 until no new actionable items are found in a
+   round.
+6. **When only design-decision items remain**, stop and ask the
+   developer for input on each one. Present the trade-offs and your
+   recommendation, then wait for direction before proceeding. Do not
+   silently skip these and end the audit — the developer needs to
+   weigh in.
+7. Keep working autonomously on non-design-decision items — do not
+   stop to ask the developer for confirmation on those. The developer
+   will interrupt if needed.
+8. **Do not add resolved items to this file.** History is tracked in
+   git commits. Only open items belong here.
 
 ## Open items
 
