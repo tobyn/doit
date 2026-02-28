@@ -648,23 +648,19 @@ func isArithmeticOp(kind tokenKind) bool {
 	return kind == tokPlus || kind == tokMinus || kind == tokStar || kind == tokSlash || kind == tokPercent
 }
 
+// arithOpNames maps both arithmetic (tokPlus, etc.) and compound assignment
+// (tokPlusEquals, etc.) token kinds to their stdlib opcode names.
+var arithOpNames = map[tokenKind]string{
+	tokPlus: "add", tokPlusEquals: "add",
+	tokMinus: "sub", tokMinusEquals: "sub",
+	tokStar: "mul", tokStarEquals: "mul",
+	tokSlash: "div", tokSlashEquals: "div",
+	tokPercent: "modulo", tokPercentEquals: "modulo",
+}
+
 // arithmeticOpName maps an arithmetic token kind to the stdlib function
 // opcode name.
-func arithmeticOpName(kind tokenKind) string {
-	switch kind {
-	case tokPlus:
-		return "add"
-	case tokMinus:
-		return "sub"
-	case tokStar:
-		return "mul"
-	case tokSlash:
-		return "div"
-	case tokPercent:
-		return "modulo"
-	}
-	return ""
-}
+func arithmeticOpName(kind tokenKind) string { return arithOpNames[kind] }
 
 // isHighPriorityArithOp reports whether the token kind is * or / (higher PEMDAS
 // precedence than + and -).
@@ -686,21 +682,7 @@ func isCompoundAssignOp(kind tokenKind) bool {
 
 // compoundAssignOpName maps a compound assignment token kind to the stdlib
 // function opcode name.
-func compoundAssignOpName(kind tokenKind) string {
-	switch kind {
-	case tokPlusEquals:
-		return "add"
-	case tokMinusEquals:
-		return "sub"
-	case tokStarEquals:
-		return "mul"
-	case tokSlashEquals:
-		return "div"
-	case tokPercentEquals:
-		return "modulo"
-	}
-	return ""
-}
+func compoundAssignOpName(kind tokenKind) string { return arithOpNames[kind] }
 
 // isComparisonOp reports whether the token kind is a comparison operator
 // (>, <, >=, <=, ==, !=).

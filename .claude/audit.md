@@ -109,13 +109,6 @@ dimensions in a single pass:
   comment)`. Independent of the larger emitContext unification —
   this is a small targeted extraction.
 
-- **`arithmeticOpName` / `compoundAssignOpName` duplicated op→name
-  mapping.** codegen.go:653–667 and codegen.go:689–703 map different
-  token kinds to the same opcode names (`tokPlus`→`"add"` vs
-  `tokPlusEquals`→`"add"`, etc.). `compoundAssignOpName` could strip
-  the `Equals` part and delegate to `arithmeticOpName`, or both
-  could use a shared lookup table.
-
 ### LOW
 
 - **`ReturnStmt` missing `Comment` field.** All 14 other statement
