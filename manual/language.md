@@ -418,6 +418,12 @@ set_number null, 5, x
 
 `null` compiles to `false` in the behavior JSON.
 
+**Important:** At runtime, `false`, `null`, and `0` are all indistinguishable
+— they all represent an empty register. There is no way to tell whether a
+value was "explicitly false", "no value", or "zero". Comparisons like
+`x == null`, `x == false`, and `x == 0` all test the same thing: whether the
+register is empty.
+
 ## Boolean Literals
 
 `true` and `false` represent boolean values:
@@ -429,8 +435,8 @@ set_number true, 5
 ```
 
 In the VM, `true` compiles to `{"num": 1}` (a register with numeric value
-1) and `false` compiles to `false` (an empty register, same as `null`).
-Boolean literals can be used anywhere a value is expected: variable
+1) and `false` compiles to `false` (an empty register, same as `null` and
+`0`). Boolean literals can be used anywhere a value is expected: variable
 initialization, function arguments, comparisons, and return values.
 
 `true` and `false` are reserved keywords and cannot be used as variable
@@ -764,8 +770,10 @@ let is_bot = x != Component("behavior") # constructor with !=
 the numeric component of register values (using the `check_number`
 instruction). `==` and `!=` compare full register composites — both the
 typed value and numeric component (using the `compare_register`
-instruction). This means `==` and `!=` can distinguish between different
-item types, coordinates, etc., not just numbers.
+instruction). This is an important distinction: `Item("metalbar") & 5 > 3`
+is true (compares only the numeric 5 vs 3), but
+`Item("metalbar") & 5 == Item("copperbar") & 5` is false (different items,
+even though the numbers match).
 
 #### Type Check Expressions
 

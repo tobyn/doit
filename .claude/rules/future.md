@@ -27,14 +27,3 @@ This would also enable recursion. Needs investigation into how the
 `call` instruction works (it's currently a not-implementable stub in
 the stdlib).
 
-## Documentation improvements
-
-Items that can't be fixed by the compiler but should be documented
-more prominently to avoid confusion:
-
-- **`false == null` at runtime**: Both compile to empty register.
-  No way to distinguish "explicitly false" from "no value."
-- **Comparison semantics split**: `>`, `<`, `>=`, `<=` compare only
-  numeric component; `==`, `!=` compare full register composite.
-
-
