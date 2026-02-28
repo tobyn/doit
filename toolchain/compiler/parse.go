@@ -3289,6 +3289,11 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 	}
 	// Handle _ as first binding in multi-return
 	firstDiscard := varTok.val == "_"
+	if !firstDiscard {
+		if err := p.checkVarName(varTok.val, nil, varTok.pos); err != nil {
+			return nil, err
+		}
+	}
 	if firstDiscard {
 		// Peek for comma — if present, this is a multi-return with first discard
 		sep, err := p.next()
@@ -3340,6 +3345,9 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 				if err != nil {
 					return nil, err
 				}
+				if err := p.checkVarName(nameTok.val, nil, nameTok.pos); err != nil {
+					return nil, err
+				}
 				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: false, Pos: nameTok.pos})
 			case "var":
 				activeModifier = 1
@@ -3347,8 +3355,14 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 				if err != nil {
 					return nil, err
 				}
+				if err := p.checkVarName(nameTok.val, nil, nameTok.pos); err != nil {
+					return nil, err
+				}
 				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: true, Pos: nameTok.pos})
 			default:
+				if err := p.checkVarName(bindTok.val, nil, bindTok.pos); err != nil {
+					return nil, err
+				}
 				bindings = append(bindings, MultiBinding{
 					Name:    bindTok.val,
 					Mutable: activeModifier == 1,
@@ -3945,11 +3959,8 @@ func (p *parser) parseFnBodyForStmt(ctx *fnBodyContext, comment string, label ..
 	if err != nil {
 		return nil, err
 	}
-	if isConstructor(iterTok.val) {
-		return nil, p.errorf(iterTok.pos, "%q is a type constructor and cannot be used as a variable name", iterTok.val)
-	}
-	if Keywords[iterTok.val] {
-		return nil, p.errorf(iterTok.pos, "%q is a reserved keyword and cannot be used as a variable name", iterTok.val)
+	if err := p.checkVarName(iterTok.val, nil, iterTok.pos); err != nil {
+		return nil, err
 	}
 
 	inTok, err := p.expect(tokIdent)

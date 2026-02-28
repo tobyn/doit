@@ -1736,6 +1736,50 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("fn_body_let_keyword", func(t *testing.T) {
+		src := "fn bad() { let true = 5 }\nbehavior a { bad }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_var_constructor", func(t *testing.T) {
+		src := "fn bad() { var Item = 5 }\nbehavior a { bad }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "type constructor") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_for_keyword_iter", func(t *testing.T) {
+		src := "fn bad() { for null in Range(5) { notify \"hi\" } }\nbehavior a { bad }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_multi_let_keyword", func(t *testing.T) {
+		src := "fn bad(x) { let false, b = separate_coordinate x }\nbehavior a { let c = Coordinate(1,2); bad c }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "reserved keyword") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("bhv_break_outside_loop", func(t *testing.T) {
 		src := "behavior a { break }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "")
