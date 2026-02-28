@@ -2430,6 +2430,10 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			stmts = append(stmts, &BreakStmt{Label: label, Comment: comment})
 		case "return":
 			return nil, p.errorf(tok.pos, "'return' can only be used inside function bodies")
+		case "fn", "private":
+			return nil, p.errorf(tok.pos, "function definitions cannot be nested inside behavior bodies")
+		case "behavior":
+			return nil, p.errorf(tok.pos, "behavior definitions cannot be nested")
 		case "else":
 			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
 		default:

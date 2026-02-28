@@ -2997,6 +2997,15 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			}
 			astBody = append(astBody, &BreakStmt{Label: label, Comment: comment})
 
+		case "fn", "private":
+			return nil, p.errorf(tok.pos, "function definitions cannot be nested")
+
+		case "behavior":
+			return nil, p.errorf(tok.pos, "behavior definitions cannot be nested")
+
+		case "else":
+			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
+
 		default:
 			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
 			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {

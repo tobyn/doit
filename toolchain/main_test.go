@@ -1264,6 +1264,39 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("fn_nested_in_fn_body", func(t *testing.T) {
+		src := `behavior a { f } fn f() { fn g() { } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot be nested") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_nested_in_behavior", func(t *testing.T) {
+		src := `behavior a { fn g() { } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot be nested") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("behavior_nested_in_behavior", func(t *testing.T) {
+		src := `behavior a { behavior b { } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot be nested") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("double_slash_comment", func(t *testing.T) {
 		src := `behavior a { // this is a comment }`
 		_, err := compiler.CompileString(src, stdlib, "", "")
