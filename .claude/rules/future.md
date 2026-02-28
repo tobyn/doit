@@ -57,7 +57,8 @@ Resolved in round 5: `index.md` hello world `name` → `@name`,
 fn body `let`/`var` declarations (now errors on keywords/constructors),
 `++`/`--`/`=` on keywords/constructors (now errors), assignment error
 positions always 1:1 (now correct), `continue` gives "unknown function"
-(now specific error with hint).
+(now specific error with hint), `Range(...) & n` gives confusing error
+(now specific error explaining step field conflict).
 
 ### Medium priority (design decisions needed)
 

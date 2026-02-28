@@ -125,6 +125,9 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 		return nil, err
 	}
 	if peek.kind == tokAmpersand {
+		if ctor, ok := base.(*ConstructorExpr); ok && ctor.TypeName == "Range" {
+			return nil, p.errorf(peek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+		}
 		numExpr, err := p.parseFnBodyExpr()
 		if err != nil {
 			return nil, err
@@ -3193,6 +3196,9 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						}
 						var tailExpr Expr = ctor
 						if peek2.kind == tokAmpersand {
+							if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
+								return nil, p.errorf(peek2.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+							}
 							numExpr, err := p.parseFnBodyExpr()
 							if err != nil {
 								return nil, err
@@ -3653,6 +3659,9 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 			return nil, err
 		}
 		if peek.kind == tokAmpersand {
+			if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
+				return nil, p.errorf(peek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+			}
 			numExpr, err := p.parseFnBodyExpr()
 			if err != nil {
 				return nil, err

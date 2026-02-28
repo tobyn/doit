@@ -548,6 +548,9 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 		return nil, err
 	}
 	if peek.kind == tokAmpersand {
+		if ctor, ok := base.(*ConstructorExpr); ok && ctor.TypeName == "Range" {
+			return nil, p.errorf(peek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+		}
 		numExpr, err := p.parseBhvArgExpr(syms)
 		if err != nil {
 			return nil, err
@@ -973,6 +976,17 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		ctor, err := p.parseBhvConstructorExpr(rhsTok, syms)
 		if err != nil {
 			return nil, err
+		}
+		// Range constructor doesn't handle & internally; check and error
+		if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
+			peek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if peek.kind == tokAmpersand {
+				return nil, p.errorf(peek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+			}
+			p.unget(peek)
 		}
 		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: ctor, Comment: comment}}, nil
@@ -2492,6 +2506,17 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 					ctor, err := p.parseBhvConstructorExpr(tok, syms)
 					if err != nil {
 						return nil, err
+					}
+					// Range constructor doesn't handle & internally; check and error
+					if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
+						peek, err := p.next()
+						if err != nil {
+							return nil, err
+						}
+						if peek.kind == tokAmpersand {
+							return nil, p.errorf(peek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+						}
+						p.unget(peek)
 					}
 					if _, err := p.expect(tokRBrace); err != nil {
 						return nil, err
