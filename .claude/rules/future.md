@@ -69,11 +69,15 @@ go through `parseArithExprFromFull` + `maybeExprContinuation`. The fn
 body variable path also replaced manual continuation with
 `maybeExprContinuation` for consistency.
 
-### 6. Compound assignment RHS limitations
+### ~~6. Compound assignment RHS limitations~~ (Done)
 
-`x += get_number y` and `x += (a > 5)` fail. Compound assignment
-RHS only accepts arithmetic expressions. Function calls, comparisons,
-and boolean expressions are not supported.
+Compound assignment RHS now accepts the full expression language:
+function calls (`x += get_resource_num y`), comparisons (`x -= a > 5`),
+boolean chains (`x += (a > 5 && b < 10)`), type checks, and negation.
+Replaced `parseArithExpr` with `parseBoolExpr` + `TruthyExpr` unwrapping
+in both behavior-level (`parseBhvDefaultStmt`) and fn body
+(`parseFnBodyStmtsInner`) compound assignment paths. Same pattern as
+`parseFnBodyRHSExpr`.
 
 ## Documentation improvements
 

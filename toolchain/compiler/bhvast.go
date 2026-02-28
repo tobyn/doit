@@ -1356,9 +1356,13 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 	}
 
 	if isCompoundAssignOp(tok2.kind) {
-		rhs, err := p.parseArithExpr(resolve)
+		rhs, err := p.parseBoolExpr(resolve)
 		if err != nil {
 			return nil, err
+		}
+		// Unwrap TruthyExpr for plain arithmetic/value results
+		if truthy, ok := rhs.(*TruthyExpr); ok {
+			rhs = truthy.Value
 		}
 		return []Stmt{&CompoundAssignStmt{Target: tok.val, Op: tok2.kind, Value: rhs, Comment: comment}}, nil
 	}

@@ -329,14 +329,19 @@ x++
 x--
 ```
 
-The right-hand side of `+=`, `-=`, `*=`, `/=` can be an arithmetic
-expression (number literals, variables, and `+`, `-`, `*`, `/` with PEMDAS
-precedence). `++` adds 1, `--` subtracts 1:
+The right-hand side of `+=`, `-=`, `*=`, `/=`, `%=` accepts the full
+expression language — arithmetic, function calls, comparisons, type
+checks, and boolean expressions:
 
 ```doit
 x += y + 1
 x -= a * 2
+x += get_resource_num y
+x -= a > 5
+x += (a > 5 && b < 10)
 ```
+
+`++` adds 1, `--` subtracts 1.
 
 Assignment targets can also be unit registers (`$store = 5`) or parameters.
 

@@ -1519,7 +1519,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number, variable, or '(' in arithmetic expression") {
+		if !strings.Contains(err.Error(), "expected identifier, number, or '(' in boolean expression") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

@@ -3058,9 +3058,13 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
 					return nil, err
 				}
-				rhs, err := p.parseArithExpr(ctx.resolve)
+				rhs, err := p.parseBoolExpr(ctx.resolve)
 				if err != nil {
 					return nil, err
+				}
+				// Unwrap TruthyExpr for plain arithmetic/value results
+				if truthy, ok := rhs.(*TruthyExpr); ok {
+					rhs = truthy.Value
 				}
 				astBody = append(astBody, &CompoundAssignStmt{Target: tok.val, Op: peek.kind, Value: rhs, Comment: comment})
 			} else if peek.kind == tokPlusPlus {

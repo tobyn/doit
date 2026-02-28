@@ -1,0 +1,10 @@
+# AI-generated test
+# Compound assignment with full expression RHS (function call, comparison, boolean)
+behavior compound_full_expr {
+    @name "Compound Full Expr"
+    var x = 10
+    var y = 5
+    x += get_resource_num y
+    x -= y > 3
+    x += (y > 3 && x < 20)
+}

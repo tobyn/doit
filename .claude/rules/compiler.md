@@ -540,8 +540,10 @@ At behavior level, `parseBhvArithExpr` (in `bhvast.go`) produces nested
 `arithCounter` to allocate `@arith`-prefixed temp variables for
 intermediate results. The outermost operation writes directly to the
 caller's target. Parenthesized arithmetic `(b + c) * d` is supported.
-Compound assignment (`+=`, `-=`, `*=`, `/=`) and decrement (`--`) are
-also supported.
+Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`) RHS accepts the full
+expression language (arithmetic, function calls, comparisons, type checks,
+boolean chains, negation) via `parseBoolExpr` with `TruthyExpr` unwrapping.
+Decrement (`--`) is also supported.
 
 **Comparison expressions**: `>`, `<`, `>=`, `<=`, `==`, and `!=` work as
 boolean expression operators in `let`/`var` init and assignment RHS at

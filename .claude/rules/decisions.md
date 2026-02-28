@@ -268,8 +268,10 @@ compound assignment RHS, fn bodies) benefit automatically.
 ## Compound assignment and increment/decrement
 
 `+=`, `-=`, `*=`, `/=`, `%=` compile to a single instruction frame where
-target appears in both input and output. RHS accepts both number
-literals and variables.
+target appears in both input and output. RHS accepts the full expression
+language: arithmetic, function calls, comparisons, type checks, boolean
+chains, and negation. The RHS is parsed via `parseBoolExpr` with
+`TruthyExpr` unwrapping (same pattern as `parseFnBodyRHSExpr`).
 
 `++`/`--` are sugar for `+= 1`/`-= 1`.
 
