@@ -43,12 +43,6 @@ semantics, or potential footguns.
 
 ## Open items
 
-### Medium priority
-
-- **Labeled loops section omits `for`.** `language.md` line 1131 says
-  labels work with `loop`, counted `loop`, and `while` but doesn't
-  mention `for`, which is also supported.
-
 ### Medium priority (design decisions needed)
 
 - **`private fn` visibility is not enforced.** The compiler parses

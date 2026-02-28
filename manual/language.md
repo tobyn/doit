@@ -1139,7 +1139,7 @@ outer: loop {
 }
 ```
 
-Labels work with `loop`, counted `loop`, and `while`:
+Labels work with `loop`, counted `loop`, `while`, and `for`:
 
 ```doit
 scan: while has_targets {
