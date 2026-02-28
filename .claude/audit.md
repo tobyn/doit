@@ -69,10 +69,34 @@ dimensions in a single pass:
   file-level scoping structurally impossible. Deferred to the module
   system implementation.
 
-- **Full emitter unification via `emitContext` interface.** After the
-  child builder elimination, the bhv and fn emitter pairs differ only
-  in operand resolution, scope management, and body emission dispatch.
-  An interface abstracting these would allow merging all 17+ emitter
-  pairs into single implementations (~500+ lines saved). Large
+- **Full emitter unification via `emitContext` interface.** The bhv
+  and fn emitter pairs differ only in operand resolution, scope
+  management, and body emission dispatch. Detailed analysis of the
+  8 emitter pairs shows:
+  - Control flow emitters (`emitIfStmt`, `emitWhileStmt`,
+    `emitLoopStmt`, `emitCountedLoop`, `emitForStmt*`,
+    `emitWaitStmt`) are **84–96% structurally identical** — only
+    3–4 callback points differ (resolveBool, emitBody,
+    exprGetValue, scope push/pop). ~250–300 lines saveable.
+  - Statement dispatch (`emitBhvStmtSimple` vs `emitFnBody` switch)
+    is ~70% identical, differing in variable declaration and comment
+    merging.
+  - Expression emission (`emitBhvExprTo` vs `emitExprTo`) is ~50%
+    identical — a smaller win.
+
+  An `emitContext` interface with `resolveBool()`, `emitBody()`,
+  `exprGetValue()`, and scope callbacks would allow merging the
+  control flow emitters into single implementations. Large
   architectural change — needs developer input.
+
+### LOW
+
+- **Direction error messages use `%s` in codegen.go but `%q` in
+  parse.go.** Three error messages in codegen.go format parameter
+  names with bare `%s` (`checkReadable` line 114,
+  `resolveAssignTarget` lines 557 and 560), while the matching
+  messages in parse.go use `%q`. This causes the same error to
+  produce different output depending on whether it's triggered at
+  behavior level or in a fn body — e.g., `cannot read from output
+  parameter $x` vs `cannot read from output parameter "$x"`.
 
