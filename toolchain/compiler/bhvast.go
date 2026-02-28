@@ -3571,16 +3571,7 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 		})
 		jumpsToPatch = append(jumpsToPatch, jumpIdx)
 
-		// Patch false branches to here (next branch or else)
-		falseTarget := frameRef(b.pos())
-		for j := checkStart; j < checkStart+checkCount; j++ {
-			f := b.get(j)
-			for k, v := range f {
-				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-					f[k] = falseTarget
-				}
-			}
-		}
+		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
 	}
 
 	// Emit else body + tail (or null for missing else)
@@ -3695,15 +3686,7 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 		})
 		jumpsToPatch = append(jumpsToPatch, jumpIdx)
 
-		falseTarget := frameRef(b.pos())
-		for j := checkStart; j < checkStart+checkCount; j++ {
-			f := b.get(j)
-			for k, v := range f {
-				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-					f[k] = falseTarget
-				}
-			}
-		}
+		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
 	}
 
 	// Else body + tail (or null for missing else)
@@ -3833,16 +3816,7 @@ func (p *parser) emitBhvIfStmt(s *IfStmt, b *frameBuilder, syms *symbolTable) er
 			jumpsToPatch = append(jumpsToPatch, jumpIdx)
 		}
 
-		// Patch false branches to here (next branch or else)
-		falseTarget := frameRef(b.pos())
-		for j := checkStart; j < checkStart+checkCount; j++ {
-			f := b.get(j)
-			for k, v := range f {
-				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-					f[k] = falseTarget
-				}
-			}
-		}
+		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
 	}
 
 	// Emit else body if present
@@ -3992,16 +3966,8 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 		})
 	}
 
-	// Patch false branches to after the loop
 	afterLoop := frameRef(b.pos())
-	for j := checkStart; j < checkStart+checkCount; j++ {
-		f := b.get(j)
-		for k, v := range f {
-			if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-				f[k] = afterLoop
-			}
-		}
-	}
+	patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, afterLoop)
 
 	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 

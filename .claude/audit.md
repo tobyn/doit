@@ -56,12 +56,6 @@ semantics, or potential footguns.
   to direct emission (matching the fn body approach). Add regression
   test.
 
-- **False-branch patching block duplicated 11 times.** The ~7-line
-  loop that replaces `falsePlaceholder` `frameRef` values with the
-  actual false-branch target is copied in 6 bhv emitters and 5 fn
-  body emitters. Extract into a shared `patchFalseBranches` helper
-  in `codegen.go`.
-
 ### Medium priority
 
 - **`resolveBhvBoolTree` / `resolveFnBoolTree` are near-identical.**

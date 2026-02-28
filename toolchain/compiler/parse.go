@@ -1446,16 +1446,7 @@ func (p *parser) emitFnIfStmt(s *IfStmt, b *frameBuilder, paramMap map[string]an
 			jumpsToPatch = append(jumpsToPatch, jumpIdx)
 		}
 
-		// Patch false branch of all check frames in this condition to here
-		falseTarget := frameRef(b.pos())
-		for j := checkStart; j < checkStart+checkCount; j++ {
-			f := b.get(j)
-			for k, v := range f {
-				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-					f[k] = falseTarget
-				}
-			}
-		}
+		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
 	}
 
 	// Emit else body if present
@@ -1530,16 +1521,7 @@ func (p *parser) emitFnIfExpr(e *IfExpr, target any, b *frameBuilder, paramMap m
 		})
 		jumpsToPatch = append(jumpsToPatch, jumpIdx)
 
-		// Patch false branches
-		falseTarget := frameRef(b.pos())
-		for j := checkStart; j < checkStart+checkCount; j++ {
-			f := b.get(j)
-			for k, v := range f {
-				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-					f[k] = falseTarget
-				}
-			}
-		}
+		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
 	}
 
 	// Else body + tail (or null for missing else)
@@ -1622,15 +1604,7 @@ func (p *parser) emitFnIfExprMulti(e *IfExpr, retVals []any, b *frameBuilder, pa
 		})
 		jumpsToPatch = append(jumpsToPatch, jumpIdx)
 
-		falseTarget := frameRef(b.pos())
-		for j := checkStart; j < checkStart+checkCount; j++ {
-			f := b.get(j)
-			for k, v := range f {
-				if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-					f[k] = falseTarget
-				}
-			}
-		}
+		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
 	}
 
 	// Else body + tail (or null for missing else)
@@ -1788,16 +1762,8 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 		})
 	}
 
-	// Patch false branches to after the loop
 	afterLoop := frameRef(b.pos())
-	for j := checkStart; j < checkStart+checkCount; j++ {
-		f := b.get(j)
-		for k, v := range f {
-			if ref, ok := v.(frameRef); ok && ref == falsePlaceholder {
-				f[k] = afterLoop
-			}
-		}
-	}
+	patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, afterLoop)
 
 	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
 

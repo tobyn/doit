@@ -1067,6 +1067,20 @@ func (p *parser) resolveLocalize() (string, error) {
 	return entries[idx].name, nil
 }
 
+// patchFalseBranches replaces falsePlaceholder frameRef values in check
+// frames at positions [start, start+count) with target. Used by if/while
+// emitters in both behavior-level and fn body paths.
+func patchFalseBranches(b *frameBuilder, start, count int, placeholder, target frameRef) {
+	for j := start; j < start+count; j++ {
+		f := b.get(j)
+		for k, v := range f {
+			if ref, ok := v.(frameRef); ok && ref == placeholder {
+				f[k] = target
+			}
+		}
+	}
+}
+
 // patchBreakPlaceholders replaces @break placeholder frames in
 // b.frames[from:] whose label matches (or is empty) with a noop jump
 // to target. Used by all loop emitters (while, loop, counted loop, for)
