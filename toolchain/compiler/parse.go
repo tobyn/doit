@@ -924,55 +924,12 @@ func (p *parser) emitAmpersandTo(amp *AmpersandExpr, target any, b *frameBuilder
 }
 
 // emitFnArithTo emits an arithmetic expression writing the result to target.
-// Mirrors emitBhvArithTo but resolves operands through paramMap.
 func (p *parser) emitFnArithTo(expr *ArithExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	ac := &arithCounter{}
-	_, err := p.emitFnArithNode(expr, target, b, paramMap, usedVars, comment, pos, ac)
+	_, err := p.emitArithNode(expr, target, b, usedVars, comment, ac, func(e Expr) (any, error) {
+		return p.emitExprGetValue(e, b, paramMap, usedVars, "", pos)
+	})
 	return err
-}
-
-func (p *parser) emitFnArithNode(expr *ArithExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int, ac *arithCounter) (any, error) {
-	var lhs any
-	if sub, ok := expr.LHS.(*ArithExpr); ok {
-		tmp := ac.next(usedVars)
-		val, err := p.emitFnArithNode(sub, tmp, b, paramMap, usedVars, "", pos, ac)
-		if err != nil {
-			return nil, err
-		}
-		lhs = val
-	} else {
-		val, err := p.emitExprGetValue(expr.LHS, b, paramMap, usedVars, "", pos)
-		if err != nil {
-			return nil, err
-		}
-		lhs = val
-	}
-
-	var rhs any
-	if sub, ok := expr.RHS.(*ArithExpr); ok {
-		tmp := ac.next(usedVars)
-		val, err := p.emitFnArithNode(sub, tmp, b, paramMap, usedVars, "", pos, ac)
-		if err != nil {
-			return nil, err
-		}
-		rhs = val
-	} else {
-		val, err := p.emitExprGetValue(expr.RHS, b, paramMap, usedVars, "", pos)
-		if err != nil {
-			return nil, err
-		}
-		rhs = val
-	}
-
-	f := map[string]any{
-		"op": arithmeticOpName(expr.Op),
-		"1":  lhs,
-		"2":  rhs,
-		"3":  target,
-	}
-	setComment(f, comment)
-	b.emit(f)
-	return target, nil
 }
 
 // emitFnBoolExprTo emits a boolean expression (comparison/typecheck/truthy/chain)

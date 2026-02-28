@@ -45,10 +45,6 @@ semantics, or potential footguns.
 
 ### Medium priority
 
-- **`emitBhvArithNode` / `emitFnArithNode` are near-identical.**
-  Same callback-parameterization opportunity as the bool tree
-  resolvers. Unify into a single `emitArithNode`.
-
 - **`fnBodyContext` tracks variables in two redundant maps.**
   `fnVars map[string]bool` (mutability flag) and
   `fnVarInfo map[string]fnVarInfo` (depth, used tracking) must be

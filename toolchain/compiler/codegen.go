@@ -881,6 +881,54 @@ func (p *parser) resolveBoolTree(expr Expr, emit func(Expr) (any, error)) (*reso
 	}
 }
 
+// emitArithNode recursively emits an ArithExpr node. Non-ArithExpr children
+// are resolved via the emit callback. ArithExpr children are emitted
+// recursively with a shared arithCounter. The last (outermost) operation
+// writes directly to the caller's target.
+func (p *parser) emitArithNode(expr *ArithExpr, target any, b *frameBuilder, usedVars map[string]bool, comment string, ac *arithCounter, emit func(Expr) (any, error)) (any, error) {
+	var lhs any
+	if sub, ok := expr.LHS.(*ArithExpr); ok {
+		tmp := ac.next(usedVars)
+		val, err := p.emitArithNode(sub, tmp, b, usedVars, "", ac, emit)
+		if err != nil {
+			return nil, err
+		}
+		lhs = val
+	} else {
+		val, err := emit(expr.LHS)
+		if err != nil {
+			return nil, err
+		}
+		lhs = val
+	}
+
+	var rhs any
+	if sub, ok := expr.RHS.(*ArithExpr); ok {
+		tmp := ac.next(usedVars)
+		val, err := p.emitArithNode(sub, tmp, b, usedVars, "", ac, emit)
+		if err != nil {
+			return nil, err
+		}
+		rhs = val
+	} else {
+		val, err := emit(expr.RHS)
+		if err != nil {
+			return nil, err
+		}
+		rhs = val
+	}
+
+	f := map[string]any{
+		"op": arithmeticOpName(expr.Op),
+		"1":  lhs,
+		"2":  rhs,
+		"3":  target,
+	}
+	setComment(f, comment)
+	b.emit(f)
+	return target, nil
+}
+
 func (p *parser) emitBoolCheckFrame(term *comparisonTerm, trueTarget, falseTarget frameRef, b *frameBuilder, comment string) {
 	if term.negated {
 		trueTarget, falseTarget = falseTarget, trueTarget

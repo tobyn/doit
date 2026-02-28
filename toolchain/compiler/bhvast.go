@@ -2827,62 +2827,12 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 }
 
 // emitBhvArithTo emits an arithmetic expression chain writing to target.
-// The last operation writes directly to target (matching rewriteLastArithTarget).
-// Uses a per-tree counter for intermediate temp naming: @arith1, @arith2, etc.
 func (p *parser) emitBhvArithTo(expr *ArithExpr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
 	ac := &arithCounter{}
-	_, err := p.emitBhvArithNode(expr, target, syms, b, comment, ac)
+	_, err := p.emitArithNode(expr, target, b, syms.usedVars, comment, ac, func(e Expr) (any, error) {
+		return p.emitBhvExprGetValue(e, syms, b, "")
+	})
 	return err
-}
-
-// emitBhvArithNode recursively emits an ArithExpr node. Non-ArithExpr children
-// are resolved via emitBhvExprGetValue. ArithExpr children are emitted
-// recursively with a shared arithCounter. The last (outermost) operation
-// writes directly to the caller's target.
-func (p *parser) emitBhvArithNode(expr *ArithExpr, target any, syms *symbolTable, b *frameBuilder, comment string, ac *arithCounter) (any, error) {
-	// Resolve LHS
-	var lhs any
-	if sub, ok := expr.LHS.(*ArithExpr); ok {
-		tmp := ac.next(syms.usedVars)
-		val, err := p.emitBhvArithNode(sub, tmp, syms, b, "", ac)
-		if err != nil {
-			return nil, err
-		}
-		lhs = val
-	} else {
-		val, err := p.emitBhvExprGetValue(expr.LHS, syms, b, "")
-		if err != nil {
-			return nil, err
-		}
-		lhs = val
-	}
-
-	// Resolve RHS
-	var rhs any
-	if sub, ok := expr.RHS.(*ArithExpr); ok {
-		tmp := ac.next(syms.usedVars)
-		val, err := p.emitBhvArithNode(sub, tmp, syms, b, "", ac)
-		if err != nil {
-			return nil, err
-		}
-		rhs = val
-	} else {
-		val, err := p.emitBhvExprGetValue(expr.RHS, syms, b, "")
-		if err != nil {
-			return nil, err
-		}
-		rhs = val
-	}
-
-	f := map[string]any{
-		"op": arithmeticOpName(expr.Op),
-		"1":  lhs,
-		"2":  rhs,
-		"3":  target,
-	}
-	setComment(f, comment)
-	b.emit(f)
-	return target, nil
 }
 
 // emitBhvConstructorTo emits a constructor expression to target.
