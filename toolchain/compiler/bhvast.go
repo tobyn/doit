@@ -1095,18 +1095,21 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 
 		callExpr := &CallExpr{Name: rhsTok.val, Args: args, KwArgs: kwArgs}
 
-		// Check for comparison/boolean continuation after fn call
-		contExpr, handled, err := p.maybeBhvExprContinuation(&IdentExpr{Name: nameTok.val}, syms)
+		// Check for comparison/boolean continuation after fn call.
+		// Use a temp variable for the fn result so the intermediate value
+		// is not observable in the target variable.
+		tmp := allocUniqueVar("@call", syms.usedVars)
+		contExpr, handled, err := p.maybeBhvExprContinuation(&IdentExpr{Name: tmp}, syms)
 		if err != nil {
 			return nil, err
 		}
 		if handled {
-			// Two stmts: call writes to var, then boolean overwrites it
 			return []Stmt{
-				&LetStmt{Name: nameTok.val, Mutable: mutable, Value: callExpr, Comment: comment},
-				&AssignStmt{Target: nameTok.val, Value: contExpr, Comment: "", Internal: true},
+				&LetStmt{Name: tmp, Mutable: false, Value: callExpr, Comment: comment},
+				&LetStmt{Name: nameTok.val, Mutable: mutable, Value: contExpr, Comment: ""},
 			}, nil
 		}
+		delete(syms.usedVars, tmp) // undo temp allocation when unused
 
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: callExpr, Comment: comment}}, nil
 	}
@@ -1373,17 +1376,21 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 
 			callExpr := &CallExpr{Name: rhsTok.val, Args: args, KwArgs: kwArgs}
 
-			// Check for continuation after fn call
-			contExpr, handled, err := p.maybeBhvExprContinuation(&IdentExpr{Name: tok.val}, syms)
+			// Check for continuation after fn call.
+			// Use a temp variable for the fn result so the intermediate value
+			// is not observable in the target variable.
+			tmp := allocUniqueVar("@call", syms.usedVars)
+			contExpr, handled, err := p.maybeBhvExprContinuation(&IdentExpr{Name: tmp}, syms)
 			if err != nil {
 				return nil, err
 			}
 			if handled {
 				return []Stmt{
-					&AssignStmt{Target: tok.val, Value: callExpr, Comment: comment, Pos: tok.pos},
+					&LetStmt{Name: tmp, Mutable: false, Value: callExpr, Comment: comment},
 					&AssignStmt{Target: tok.val, Value: contExpr, Comment: "", Pos: tok.pos},
 				}, nil
 			}
+			delete(syms.usedVars, tmp) // undo temp allocation when unused
 			return []Stmt{&AssignStmt{Target: tok.val, Value: callExpr, Comment: comment, Pos: tok.pos}}, nil
 		}
 

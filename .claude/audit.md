@@ -73,6 +73,10 @@ semantics, or potential footguns.
 
 - `for` loop iteration variable scoping (already fixed by block scoping
   implementation — push/pop scope in both parser and emitter)
+- `&` on plain variables gives confusing error (now specific error
+  explaining `&` requires a type constructor)
+- `let x = fn_call > 5` intermediate write (fn result now goes to temp
+  variable, only comparison result is written to target)
 
 ## Open items
 
@@ -92,23 +96,12 @@ semantics, or potential footguns.
   catch the common typo case. The challenge is backward compatibility
   and distinguishing intentional "dynamic" register names from typos.
 
-- **`&` operator on plain variables gives confusing error.** `let x =
-  myvar & 5` gives "expected statement, got '&'" instead of explaining
-  that `&` requires a typed value (constructor) on the left side.
-
 - **`private fn` visibility is not enforced.** The compiler parses
   `private fn` but does not restrict its visibility — it is callable
   from any behavior in the same compilation unit. The current
   architecture (single source string, no file boundaries) makes
   file-level scoping structurally impossible. Either document the
   limitation, remove the feature, or repurpose it.
-
-- **`let x = fn_call > 5` emits observable intermediate write.** When
-  combining a function call with a comparison continuation, the compiler
-  emits two frames: one writing the raw return value to `x`, another
-  overwriting with the boolean result. The intermediate value is visible
-  in the game's behavior editor. Could be fixed by storing the fn result
-  in a temp variable instead.
 
 ### Low priority
 

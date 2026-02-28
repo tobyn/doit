@@ -12,12 +12,12 @@
     "2": {
         "op": "get_number",
         "0": "x",
-        "2": "a"
+        "2": "@call"
     },
     "3": {
         "op": "compare_register",
         "0": 7,
-        "1": "a",
+        "1": "@call",
         "2": false,
         "next": 5
     },
