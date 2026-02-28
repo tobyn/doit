@@ -3147,7 +3147,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				if err != nil {
 					return nil, err
 				}
-				astBody = append(astBody, &AssignStmt{Target: tok.val, Value: expr, Comment: comment})
+				astBody = append(astBody, &AssignStmt{Target: tok.val, Value: expr, Comment: comment, Pos: tok.pos})
 			} else if isCompoundAssignOp(peek.kind) {
 				// Compound assignment: x += <expr>
 				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
@@ -3161,17 +3161,17 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				if truthy, ok := rhs.(*TruthyExpr); ok {
 					rhs = truthy.Value
 				}
-				astBody = append(astBody, &CompoundAssignStmt{Target: tok.val, Op: peek.kind, Value: rhs, Comment: comment})
+				astBody = append(astBody, &CompoundAssignStmt{Target: tok.val, Op: peek.kind, Value: rhs, Comment: comment, Pos: tok.pos})
 			} else if peek.kind == tokPlusPlus {
 				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
 					return nil, err
 				}
-				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokPlusPlus, Comment: comment})
+				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokPlusPlus, Comment: comment, Pos: tok.pos})
 			} else if peek.kind == tokMinusMinus {
 				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
 					return nil, err
 				}
-				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment})
+				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment, Pos: tok.pos})
 			} else {
 				p.unget(peek)
 				callee := p.fns[tok.val]

@@ -40,6 +40,7 @@ type AssignStmt struct {
 	Value    Expr
 	Comment  string
 	Internal bool // true for compiler-generated assigns (skip mutability check)
+	Pos      int  // source position of the target (for diagnostics)
 }
 
 // CompoundAssignStmt is a compound assignment: `x += 3`
@@ -48,6 +49,7 @@ type CompoundAssignStmt struct {
 	Op      tokenKind // tokPlusEquals, tokMinusEquals, etc.
 	Value   Expr
 	Comment string
+	Pos     int // source position of the target (for diagnostics)
 }
 
 // IncrDecrStmt is an increment or decrement: `x++`, `x--`
@@ -55,6 +57,7 @@ type IncrDecrStmt struct {
 	Target  string
 	Op      tokenKind // tokPlusPlus or tokMinusMinus
 	Comment string
+	Pos     int // source position of the target (for diagnostics)
 }
 
 // MultiReturnStmt is a multi-return binding: `let x, y = fn args`

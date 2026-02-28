@@ -1144,10 +1144,10 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 	}
 
 	if tok2.kind == tokPlusPlus {
-		return []Stmt{&IncrDecrStmt{Target: tok.val, Op: tokPlusPlus, Comment: comment}}, nil
+		return []Stmt{&IncrDecrStmt{Target: tok.val, Op: tokPlusPlus, Comment: comment, Pos: tok.pos}}, nil
 	}
 	if tok2.kind == tokMinusMinus {
-		return []Stmt{&IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment}}, nil
+		return []Stmt{&IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment, Pos: tok.pos}}, nil
 	}
 
 	if tok2.kind == tokEquals {
@@ -1172,9 +1172,9 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				return nil, err
 			}
 			if handled {
-				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
 			}
-			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
+			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 		}
 
 		// If-expression RHS: x = if cond { ... } else { ... }
@@ -1193,9 +1193,9 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				return nil, err
 			}
 			if handled {
-				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
 			}
-			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
+			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 		}
 
 		if rhsTok.kind == tokNumber {
@@ -1211,9 +1211,9 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				return nil, err
 			}
 			if handled {
-				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
 			}
-			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
+			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 		}
 
 		if rhsTok.kind == tokIdent && isConstructor(rhsTok.val) {
@@ -1222,7 +1222,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			if err != nil {
 				return nil, err
 			}
-			return []Stmt{&AssignStmt{Target: tok.val, Value: ctor, Comment: comment}}, nil
+			return []Stmt{&AssignStmt{Target: tok.val, Value: ctor, Comment: comment, Pos: tok.pos}}, nil
 		}
 
 		if rhsTok.kind == tokIdent && rhsTok.val == "instruction" {
@@ -1240,6 +1240,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				Target:  tok.val,
 				Value:   &InstructionExpr{Frame: rawFrame},
 				Comment: comment,
+				Pos:     tok.pos,
 			}}, nil
 		}
 
@@ -1261,13 +1262,13 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 					return nil, err
 				}
 				if handled {
-					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
 				}
 
 				if result == resolved {
 					return nil, p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
 				}
-				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
+				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 			}
 			if !fn.hasReturn() {
 				return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
@@ -1286,11 +1287,11 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			}
 			if handled {
 				return []Stmt{
-					&AssignStmt{Target: tok.val, Value: callExpr, Comment: comment},
-					&AssignStmt{Target: tok.val, Value: contExpr, Comment: ""},
+					&AssignStmt{Target: tok.val, Value: callExpr, Comment: comment, Pos: tok.pos},
+					&AssignStmt{Target: tok.val, Value: contExpr, Comment: "", Pos: tok.pos},
 				}, nil
 			}
-			return []Stmt{&AssignStmt{Target: tok.val, Value: callExpr, Comment: comment}}, nil
+			return []Stmt{&AssignStmt{Target: tok.val, Value: callExpr, Comment: comment, Pos: tok.pos}}, nil
 		}
 
 		if rhsTok.kind == tokLParen {
@@ -1311,9 +1312,9 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 					return nil, err
 				}
 				if handled {
-					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
 				}
-				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
+				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 			}
 
 			// Check for continuation after parenthesized expression
@@ -1323,11 +1324,11 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			}
 			if handled {
 				return []Stmt{
-					&AssignStmt{Target: tok.val, Value: expr, Comment: comment},
-					&AssignStmt{Target: tok.val, Value: contExpr, Comment: ""},
+					&AssignStmt{Target: tok.val, Value: expr, Comment: comment, Pos: tok.pos},
+					&AssignStmt{Target: tok.val, Value: contExpr, Comment: "", Pos: tok.pos},
 				}, nil
 			}
-			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment}}, nil
+			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment, Pos: tok.pos}}, nil
 		}
 
 		if rhsTok.kind == tokBang || rhsTok.kind == tokMinus {
@@ -1345,12 +1346,12 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 					return nil, err
 				}
 				if handled {
-					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment}}, nil
+					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
 				}
-				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment}}, nil
+				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 			}
 
-			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment}}, nil
+			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment, Pos: tok.pos}}, nil
 		}
 
 		return nil, p.errorf(rhsTok.pos, "expected number, function call, constructor, or instruction after '=', got %s", rhsTok.describe())
@@ -1365,7 +1366,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		if truthy, ok := rhs.(*TruthyExpr); ok {
 			rhs = truthy.Value
 		}
-		return []Stmt{&CompoundAssignStmt{Target: tok.val, Op: tok2.kind, Value: rhs, Comment: comment}}, nil
+		return []Stmt{&CompoundAssignStmt{Target: tok.val, Op: tok2.kind, Value: rhs, Comment: comment, Pos: tok.pos}}, nil
 	}
 
 	// Function call
@@ -3167,7 +3168,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 			target = s.Target
 		} else {
 			var err error
-			target, err = p.resolveAssignTarget(s.Target, syms, 0, false)
+			target, err = p.resolveAssignTarget(s.Target, syms, s.Pos, false)
 			if err != nil {
 				return err
 			}
@@ -3175,7 +3176,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		return p.emitBhvExprTo(s.Value, target, syms, b, s.Comment)
 
 	case *CompoundAssignStmt:
-		target, err := p.resolveAssignTarget(s.Target, syms, 0, true)
+		target, err := p.resolveAssignTarget(s.Target, syms, s.Pos, true)
 		if err != nil {
 			return err
 		}
@@ -3194,7 +3195,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		return nil
 
 	case *IncrDecrStmt:
-		target, err := p.resolveAssignTarget(s.Target, syms, 0, true)
+		target, err := p.resolveAssignTarget(s.Target, syms, s.Pos, true)
 		if err != nil {
 			return err
 		}
