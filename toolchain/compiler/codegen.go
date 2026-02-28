@@ -1090,6 +1090,110 @@ func (p *parser) parseParamAttr(syms *symbolTable, pos int) error {
 	return nil
 }
 
+// parseConstructorExpr parses a type constructor call into a ConstructorExpr.
+// The constructor name token has already been consumed. parseArg is called to
+// parse each argument expression (parseBhvArgExpr at behavior level,
+// parseFnBodyExpr in fn bodies). The caller handles any trailing & operator.
+func (p *parser) parseConstructorExpr(nameTok token, parseArg func() (Expr, error)) (Expr, error) {
+	if _, err := p.expect(tokLParen); err != nil {
+		return nil, p.errorf(nameTok.pos, "expected '(' after %s", nameTok.val)
+	}
+	switch nameTok.val {
+	case "Item", "Component", "Technology", "Value":
+		argTok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if argTok.kind != tokString {
+			return nil, p.errorf(argTok.pos, "expected string argument, got %s", argTok.describe())
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return &ConstructorExpr{
+			TypeName: nameTok.val,
+			Args:     []Expr{&LiteralExpr{Value: argTok.val}},
+		}, nil
+	case "Coordinate":
+		x, err := parseArg()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokComma); err != nil {
+			return nil, err
+		}
+		y, err := parseArg()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return &ConstructorExpr{
+			TypeName: "Coordinate",
+			Args:     []Expr{x, y},
+		}, nil
+	case "Range":
+		arg1, err := parseArg()
+		if err != nil {
+			return nil, err
+		}
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokRParen {
+			return &ConstructorExpr{
+				TypeName: "Range",
+				Args: []Expr{
+					&LiteralExpr{Value: map[string]any{"num": 0}},
+					arg1,
+					&LiteralExpr{Value: map[string]any{"num": 1}},
+				},
+			}, nil
+		}
+		if peek.kind != tokComma {
+			return nil, p.errorf(peek.pos, "expected ',' or ')' after Range argument, got %s", peek.describe())
+		}
+		arg2, err := parseArg()
+		if err != nil {
+			return nil, err
+		}
+		peek, err = p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokRParen {
+			return &ConstructorExpr{
+				TypeName: "Range",
+				Args:     []Expr{arg1, arg2, &LiteralExpr{Value: map[string]any{"num": 1}}},
+			}, nil
+		}
+		if peek.kind != tokComma {
+			return nil, p.errorf(peek.pos, "expected ',' or ')' after Range argument, got %s", peek.describe())
+		}
+		arg3, err := parseArg()
+		if err != nil {
+			return nil, err
+		}
+		if lit, ok := arg3.(*LiteralExpr); ok {
+			if m, ok := lit.Value.(map[string]any); ok {
+				if n, ok := m["num"]; ok && n == 0 {
+					return nil, p.errorf(nameTok.pos, "Range step cannot be zero")
+				}
+			}
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return &ConstructorExpr{
+			TypeName: "Range",
+			Args:     []Expr{arg1, arg2, arg3},
+		}, nil
+	}
+	return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
+}
+
 // checkVarName validates that a variable name doesn't conflict with existing
 // declarations or reserved names.
 func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {

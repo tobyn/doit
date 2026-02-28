@@ -78,16 +78,6 @@ dimensions in a single pass:
 
 ### MEDIUM
 
-- **`parseBhvConstructorExpr` / `parseFnBodyConstructorExpr`
-  duplication.** ~100 lines of nearly identical constructor parsing
-  in bhvast.go:570–700 and parse.go:234–332. The Item/Component/
-  Technology/Value, Coordinate, and Range branches are structurally
-  identical — the only difference is the arg parser (`parseBhvArgExpr`
-  vs `parseFnBodyExpr`) and the bhv version's inline `&` handling
-  after Item/Component/Coordinate. Extractable into a shared
-  `parseConstructorExpr(nameTok, parseArg func)` with `&` handling
-  left to callers or an optional callback.
-
 - **`parseBhvVarInit` / `parseBhvDefaultStmt` RHS parsing
   duplication.** Within bhvast.go, the RHS parsing for `let`/`var`
   init (lines ~1020–1175) and assignment (lines ~1300–1430) follow

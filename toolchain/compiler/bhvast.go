@@ -573,136 +573,31 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 }
 
 // parseBhvConstructorExpr parses a type constructor call into an Expr.
+// Delegates to the shared parseConstructorExpr, then checks for trailing &.
 func (p *parser) parseBhvConstructorExpr(nameTok token, syms *symbolTable) (Expr, error) {
-	if _, err := p.expect(tokLParen); err != nil {
-		return nil, p.errorf(nameTok.pos, "expected '(' after %s", nameTok.val)
+	parseArg := func() (Expr, error) { return p.parseBhvArgExpr(syms) }
+	base, err := p.parseConstructorExpr(nameTok, parseArg)
+	if err != nil {
+		return nil, err
 	}
-	switch nameTok.val {
-	case "Item", "Component", "Technology", "Value":
-		argTok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if argTok.kind != tokString {
-			return nil, p.errorf(argTok.pos, "expected string argument, got %s", argTok.describe())
-		}
-		if _, err := p.expect(tokRParen); err != nil {
-			return nil, err
-		}
-		base := Expr(&ConstructorExpr{
-			TypeName: nameTok.val,
-			Args:     []Expr{&LiteralExpr{Value: argTok.val}},
-		})
-		// Check for & operator
-		peek, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek.kind == tokAmpersand {
-			numExpr, err := p.parseBhvArgExpr(syms)
-			if err != nil {
-				return nil, err
-			}
-			return &AmpersandExpr{Value: base, Num: numExpr}, nil
-		}
-		p.unget(peek)
+	// Range doesn't support &; Item/Component/Technology/Value/Coordinate do.
+	if ctorExpr, ok := base.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
 		return base, nil
-	case "Coordinate":
-		x, err := p.parseBhvArgExpr(syms)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokComma); err != nil {
-			return nil, err
-		}
-		y, err := p.parseBhvArgExpr(syms)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokRParen); err != nil {
-			return nil, err
-		}
-		base := Expr(&ConstructorExpr{
-			TypeName: "Coordinate",
-			Args:     []Expr{x, y},
-		})
-		// Check for & operator
-		peek, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek.kind == tokAmpersand {
-			numExpr, err := p.parseBhvArgExpr(syms)
-			if err != nil {
-				return nil, err
-			}
-			return &AmpersandExpr{Value: base, Num: numExpr}, nil
-		}
-		p.unget(peek)
-		return base, nil
-	case "Range":
-		// Range(stop), Range(start, stop), Range(start, stop, step)
-		arg1, err := p.parseBhvArgExpr(syms)
-		if err != nil {
-			return nil, err
-		}
-		peek, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek.kind == tokRParen {
-			// Range(stop) → start=0, stop=stop, step=1
-			return &ConstructorExpr{
-				TypeName: "Range",
-				Args: []Expr{
-					&LiteralExpr{Value: map[string]any{"num": 0}},
-					arg1,
-					&LiteralExpr{Value: map[string]any{"num": 1}},
-				},
-			}, nil
-		}
-		if peek.kind != tokComma {
-			return nil, p.errorf(peek.pos, "expected ',' or ')' after Range argument, got %s", peek.describe())
-		}
-		arg2, err := p.parseBhvArgExpr(syms)
-		if err != nil {
-			return nil, err
-		}
-		peek, err = p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek.kind == tokRParen {
-			// Range(start, stop) → step=1
-			return &ConstructorExpr{
-				TypeName: "Range",
-				Args:     []Expr{arg1, arg2, &LiteralExpr{Value: map[string]any{"num": 1}}},
-			}, nil
-		}
-		if peek.kind != tokComma {
-			return nil, p.errorf(peek.pos, "expected ',' or ')' after Range argument, got %s", peek.describe())
-		}
-		arg3, err := p.parseBhvArgExpr(syms)
-		if err != nil {
-			return nil, err
-		}
-		// Check for literal step=0
-		if lit, ok := arg3.(*LiteralExpr); ok {
-			if m, ok := lit.Value.(map[string]any); ok {
-				if n, ok := m["num"]; ok && n == 0 {
-					return nil, p.errorf(nameTok.pos, "Range step cannot be zero")
-				}
-			}
-		}
-		if _, err := p.expect(tokRParen); err != nil {
-			return nil, err
-		}
-		return &ConstructorExpr{
-			TypeName: "Range",
-			Args:     []Expr{arg1, arg2, arg3},
-		}, nil
 	}
-	return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
+	// Check for & operator
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek.kind == tokAmpersand {
+		numExpr, err := p.parseBhvArgExpr(syms)
+		if err != nil {
+			return nil, err
+		}
+		return &AmpersandExpr{Value: base, Num: numExpr}, nil
+	}
+	p.unget(peek)
+	return base, nil
 }
 
 // parseBhvCallArgs parses a function call's argument list into AST Exprs.
