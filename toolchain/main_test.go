@@ -1807,6 +1807,28 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("break_unknown_label_behavior", func(t *testing.T) {
+		src := `behavior a { var i = 0 outer: loop { loop { if i >= 5 { break typo } i += 1 } } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown loop label") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("break_unknown_label_fn_body", func(t *testing.T) {
+		src := `behavior a { f } fn f() { var i = 0 outer: loop { loop { if i >= 5 { break typo } i += 1 } } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown loop label") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("if_expr_no_else_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X" let r = if $x > 1 { 5 } notify "done", value: r }`
 		_, err := compiler.CompileString(src, stdlib, "", "")

@@ -1039,10 +1039,8 @@ scan: while has_targets {
 
 Label names follow the same rules as variable names (letters, digits,
 underscores; must start with a letter or underscore). Duplicate labels
-on nested loops are a compile error. `break` with an unknown label is
-not an error — the label is treated as the next statement (which will
-likely produce its own error). `break` outside of any loop is a compile
-error.
+on nested loops are a compile error. `break` with an unknown label is a compile error. `break` outside of
+any loop is also a compile error.
 
 ### `for` loops
 

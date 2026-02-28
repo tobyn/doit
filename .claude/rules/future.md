@@ -44,15 +44,6 @@ below and any that have been resolved since.
 
 ### High priority
 
-- **`break` with a misspelled label silently falls through.** When the
-  token after `break` is an identifier that is not a registered loop
-  label, the parser ungets it and treats `break` as unlabeled. If the
-  identifier happens to be a valid statement (e.g., a function name),
-  the code compiles with silently wrong behavior — the wrong loop is
-  broken and an unrelated call is emitted. Fix: when `break` is
-  followed by an identifier that is not a loop label, emit a compile
-  error instead of ungetting.
-
 - **`describe()` calls all identifiers "keyword" in error messages.**
   `scanner.go` line 445 returns `keyword "x"` for every `tokIdent`,
   including user-defined names. Error messages like
