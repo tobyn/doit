@@ -76,19 +76,6 @@ dimensions in a single pass:
   pairs into single implementations (~500+ lines saved). Large
   architectural change — needs developer input.
 
-### MEDIUM
-
-- **`parseBhvVarInit` / `parseBhvDefaultStmt` RHS parsing
-  duplication.** Within bhvast.go, the RHS parsing for `let`/`var`
-  init (lines ~1020–1175) and assignment (lines ~1300–1430) follow
-  the same structure: boolean/null literal handling, function call +
-  continuation, parenthesized expression, and bang/minus routing.
-  Each branch differs only in producing `LetStmt` vs `AssignStmt`.
-  ~150 lines of structural duplication. Extractable into a shared
-  `parseBhvRHSExpr(syms, resolve, comment)` that returns the parsed
-  expression and any continuation statements, with the caller
-  wrapping the result in the appropriate statement type.
-
 ### LOW
 
 - **`ReturnStmt` missing `Comment` field.** All 14 other statement
