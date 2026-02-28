@@ -1231,6 +1231,17 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("double_slash_comment", func(t *testing.T) {
+		src := `behavior a { // this is a comment }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "use '#' for comments") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("single_equals_in_condition", func(t *testing.T) {
 		src := `behavior a { var x = 1; if x = 5 { } }`
 		_, err := compiler.CompileString(src, stdlib, "", "")

@@ -308,6 +308,8 @@ func (s *scanner) next() (token, error) {
 	case c == '*':
 		s.pos++
 		return token{tokStar, "*", start}, nil
+	case c == '/' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '/':
+		return token{}, s.errorf(start, "unexpected '//' — use '#' for comments")
 	case c == '/' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
 		s.pos += 2
 		return token{tokSlashEquals, "/=", start}, nil
