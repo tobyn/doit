@@ -512,7 +512,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected number") {
+		if !strings.Contains(err.Error(), "strings have no runtime representation") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1642,7 +1642,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "expected identifier, number, or '(' in boolean expression") {
+		if !strings.Contains(err.Error(), "strings have no runtime representation") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1919,6 +1919,39 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "'&' requires a type constructor on the left side") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_let_string_error", func(t *testing.T) {
+		src := `behavior a { let x = "hello" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "strings have no runtime representation") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("bhv_assign_string_error", func(t *testing.T) {
+		src := `behavior a { var x = 1` + "\n" + `x = "hello" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "strings have no runtime representation") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_body_let_string_error", func(t *testing.T) {
+		src := `fn bad() { let x = "hello" }` + "\n" + `behavior a { bad }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "strings have no runtime representation") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

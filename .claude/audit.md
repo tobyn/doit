@@ -77,6 +77,8 @@ semantics, or potential footguns.
   explaining `&` requires a type constructor)
 - `let x = fn_call > 5` intermediate write (fn result now goes to temp
   variable, only comparison result is written to target)
+- `let x = "string"` error message now explains strings have no runtime
+  representation
 
 ## Open items
 
@@ -104,10 +106,6 @@ semantics, or potential footguns.
   limitation, remove the feature, or repurpose it.
 
 ### Low priority
-
-- **Error message for `let x = "string"` could explain why.** The
-  current message is accurate but doesn't explain that strings have no
-  runtime representation and cannot be stored in variables.
 
 - **`wait 0` semantics are undocumented.** The manual doesn't explain
   whether zero ticks is a no-op or has a minimum tick wait.

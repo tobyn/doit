@@ -327,6 +327,8 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
+	} else if tok.kind == tokString {
+		return nil, p.errorf(tok.pos, "strings have no runtime representation and cannot be stored in variables; use them directly as function arguments (e.g., notify \"hello\")")
 	} else {
 		return nil, p.errorf(tok.pos, "expected identifier, number, or '(' in boolean expression, got %s", tok.describe())
 	}
@@ -1179,6 +1181,9 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: expr, Comment: comment}}, nil
 	}
 
+	if rhsTok.kind == tokString {
+		return nil, p.errorf(rhsTok.pos, "strings have no runtime representation and cannot be stored in variables; use them directly as function arguments (e.g., notify \"hello\")")
+	}
 	return nil, p.errorf(rhsTok.pos, "expected number, function call, or constructor after '=', got %s", rhsTok.describe())
 }
 
@@ -1454,6 +1459,9 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment, Pos: tok.pos}}, nil
 		}
 
+		if rhsTok.kind == tokString {
+			return nil, p.errorf(rhsTok.pos, "strings have no runtime representation and cannot be stored in variables; use them directly as function arguments (e.g., notify \"hello\")")
+		}
 		return nil, p.errorf(rhsTok.pos, "expected number, function call, constructor, or instruction after '=', got %s", rhsTok.describe())
 	}
 
