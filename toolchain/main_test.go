@@ -1925,6 +1925,28 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("is_number_error", func(t *testing.T) {
+		src := "behavior a { let x = 1\nlet b = x is Number }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'is Number' is not supported") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("is_range_error", func(t *testing.T) {
+		src := "fn bad(x) { let b = x is Range }\nbehavior a { bad 1 }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'is Range' is not supported") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("bhv_break_outside_loop", func(t *testing.T) {
 		src := "behavior a { break }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "")

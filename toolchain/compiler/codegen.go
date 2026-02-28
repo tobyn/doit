@@ -732,7 +732,14 @@ func (p *parser) parseIsRHS() (string, error) {
 	}
 	slot, ok := typeCheckSlot(tok.val)
 	if !ok {
-		return "", p.errorf(tok.pos, "unknown type %q in 'is' expression; expected Item, Unit, Component, Technology, Value, or Coordinate", tok.val)
+		switch tok.val {
+		case "Number":
+			return "", p.errorf(tok.pos, "'is Number' is not supported; value_type cannot distinguish numbers from empty registers")
+		case "Range":
+			return "", p.errorf(tok.pos, "'is Range' is not supported; Range uses Coordinate at the VM level")
+		default:
+			return "", p.errorf(tok.pos, "unknown type %q in 'is' expression; expected Item, Unit, Component, Technology, Value, or Coordinate", tok.val)
+		}
 	}
 	return slot, nil
 }
