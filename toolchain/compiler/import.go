@@ -505,6 +505,12 @@ func (p *parser) processImports() error {
 			}
 			p.fns[imp.Alias] = fn
 			p.namedImports[imp.Alias] = true
+			// When a glob and a rename coexist in the same statement,
+			// the rename replaces the original name — remove the
+			// glob-imported original so only the alias is accessible.
+			if stmt.Glob && imp.Alias != imp.Name {
+				delete(p.fns, imp.Name)
+			}
 		}
 
 		// Process namespace imports

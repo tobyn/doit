@@ -3340,6 +3340,50 @@ behavior a { greet }`)},
 		}
 	})
 
+	t.Run("glob_rename_replaces_original", func(t *testing.T) {
+		// import *, greet as hi — greet should only be accessible as hi
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import *, greet as hi from "./lib"
+behavior a { hi }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }
+fn farewell() { notify "Bye" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_rename_original_not_accessible", func(t *testing.T) {
+		// The original name should not be accessible when renamed via glob+alias
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import *, greet as hi from "./lib"
+behavior a { greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatalf("expected error for accessing renamed function by original name")
+		}
+	})
+
+	t.Run("glob_rename_other_fns_still_accessible", func(t *testing.T) {
+		// Other glob-imported functions (not renamed) should still be accessible
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import *, greet as hi from "./lib"
+behavior a { farewell }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }
+fn farewell() { notify "Bye" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("import_behaviors_ignored", func(t *testing.T) {
 		sourceFS := fstest.MapFS{
 			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./lib"

@@ -106,6 +106,17 @@ Glob imports add all non-private functions to the current scope. If
 multiple glob imports define the same name, the last one wins. Named
 imports and same-file functions always take priority over glob imports.
 
+Glob imports can be combined with named renames to import everything while
+giving specific functions a different name:
+
+```doit
+import *, hello_world as hw from "./my_library"
+```
+
+This imports all public functions via `*`, but `hello_world` is only
+accessible as `hw` — the rename replaces the original name. Other functions
+from the file remain accessible under their original names.
+
 ### Namespace imports
 
 Import an entire file as a namespace:
@@ -134,7 +145,8 @@ as `lib`.
 
 Import paths must start with `./` (relative to current file), `../`
 (parent directory), or `std:` (standard library). The `.doit` extension
-is added automatically:
+is added automatically. Paths always use `/` as a separator regardless
+of platform:
 
 ```doit
 import helper from "./utils"       # resolves to ./utils.doit
@@ -155,6 +167,11 @@ Attempting to import a private function (either by name or via namespace
 access) is a compile error. Private functions are excluded from glob
 imports.
 
+### What can be imported
+
+Only functions are importable. Behaviors are program entry points and cannot
+be called or imported — behaviors in imported files are silently skipped.
+
 ### Import ordering and collisions
 
 - Import statements must appear before all `fn` and `behavior` declarations
@@ -163,6 +180,17 @@ imports.
   name is a compile error
 - A same-file function name that shadows a glob import is allowed (same-file
   wins)
+- Behavior IDs never collide with imports — a behavior named `greet` and an
+  import named `greet` can coexist
+- Local variables can shadow imported names within their scope:
+
+```doit
+import greet from "./my_library"
+
+behavior main {
+    let greet = 1    # shadows the imported function in this scope
+}
+```
 
 ### Transitive dependencies
 
@@ -180,6 +208,10 @@ import greet from "./greet"   # say is available transitively
 behavior main { greet }
 ```
 
+### Self-imports
+
+Importing from the current file is a compile error.
+
 ### Circular imports
 
 Circular import chains are detected and reported as compile errors:
@@ -188,6 +220,20 @@ Circular import chains are detected and reported as compile errors:
 # a.doit — imports from b.doit, which imports from a.doit → error
 import helper from "./b"
 ```
+
+### Re-exports
+
+Re-exporting imported functions is not supported. If file A imports `greet`
+from file B, file C cannot import `greet` through file A — it must import
+directly from file B. (Transitive *dependencies* still work: if A defines a
+function that calls `greet`, C can import that function and the call to
+`greet` will resolve automatically.)
+
+### Errors in imported files
+
+Parse or compile errors in an imported file cause the entire compilation to
+fail. Error messages include the imported file's path and point to the
+correct source location within it.
 
 ### Stdin limitation
 

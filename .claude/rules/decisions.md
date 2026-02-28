@@ -609,9 +609,11 @@ statements must appear before all `fn` and `behavior` declarations.
 
 **Path resolution**: `./` and `../` are relative to the importing file
 (via `path.Join(sourceDir, importPath+".doit")`). `std:` resolves
-against the stdlib `fs.FS`. The compiler API takes `sourceFS fs.FS`
+against the stdlib `fs.FS`. Paths always use `/` as a separator
+regardless of platform. The compiler API takes `sourceFS fs.FS`
 and `sourcePath string` for filesystem context. When compiling from
 stdin, `sourceFS` is nil and imports produce a compile error.
+Self-imports (importing the current file) are detected and rejected.
 
 **Namespace resolution**: `resolveFnName(tok)` peeks for `tokDot`
 after an identifier. If the identifier is a known namespace name and
@@ -633,7 +635,9 @@ checked against both after `collectUserFns`. Glob imports silently add
 functions to `p.fns` and can be overridden by named imports or same-file
 functions (no error). Named import vs named import or namespace vs
 namespace collisions are detected across all import statements via
-`allAliases` in `parseImports`.
+`allAliases` in `parseImports`. Behavior IDs never collide with imports
+(behaviors are invisible to the import system). Local variables can
+shadow imported names within their scope.
 
 **Private functions**: `fnDef.private` is set by `private fn` syntax.
 Private functions are included in `parseImportedFile`'s return map (for
@@ -643,6 +647,26 @@ errors when accessed via named import or namespace dot access.
 **Circular imports**: Detected via `parser.importStack []string`. Each
 `parseImportedFile` call checks if the target path is already in the
 stack. The cycle is reported with the full chain.
+
+**Only functions are importable**: Behaviors in imported files are
+silently skipped — they are entry points and have no mechanism to be
+called or referenced from other files.
+
+**No re-exports**: Imported functions are not re-exported. If file A
+imports `greet` from file B, file C cannot import `greet` through A.
+Transitive *dependencies* (functions called by imported functions) are
+resolved automatically via `fnDef.scope`, but the imported names
+themselves are not visible to further importers.
+
+**Glob + rename**: `import *, hello as hw from "./lib"` imports all
+public functions via `*`, but `hello` is only accessible as `hw` — the
+named rename removes the glob-imported original from `p.fns` so only
+the alias is accessible. Other non-renamed functions remain under their
+original names.
+
+**Imported file errors**: Parse or compile errors in imported files
+propagate as errors in the importing compilation. Error messages include
+the imported file's path for correct source location reporting.
 
 **File caching**: `processImports` uses a `fileCache` to avoid
 re-parsing files imported multiple times within the same file's import
