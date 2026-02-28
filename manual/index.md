@@ -8,7 +8,7 @@ to the Base62 behavior strings that Desynced uses for import and export.
 
 ```doit
 behavior hello_world {
-    name "Hello World"
+    @name "Hello World"
     notify "Hello, World!"
 }
 ```
