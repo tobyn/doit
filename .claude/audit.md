@@ -52,7 +52,3 @@ semantics, or potential footguns.
   file-level scoping structurally impossible. Deferred to the module
   system implementation.
 
-### Low priority
-
-- **Fn body expression list omits `%`.** `functions.md` line 295 lists
-  `+`, `-`, `*`, `/` without `%` (modulo).

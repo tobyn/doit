@@ -310,7 +310,7 @@ fn compute(a, b) {
 }
 ```
 
-Arithmetic (`+`, `-`, `*`, `/`), comparison (`>`, `<`, `>=`, `<=`, `==`,
+Arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`>`, `<`, `>=`, `<=`, `==`,
 `!=`), type checks (`is`), boolean operators (`&&`, `||`), and
 parenthesized grouping all work inside `fn` bodies.
 
