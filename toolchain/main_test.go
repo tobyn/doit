@@ -1231,6 +1231,39 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("return_at_behavior_level", func(t *testing.T) {
+		src := `behavior a { return }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "only be used inside function bodies") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("return_in_behavior_block", func(t *testing.T) {
+		src := `behavior a { if true { return } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "only be used inside function bodies") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("else_without_if", func(t *testing.T) {
+		src := `behavior a { else { } }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'else' without matching 'if'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("double_slash_comment", func(t *testing.T) {
 		src := `behavior a { // this is a comment }`
 		_, err := compiler.CompileString(src, stdlib, "", "")

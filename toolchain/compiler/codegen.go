@@ -437,6 +437,12 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			}
 			stmts = append(stmts, waitStmt)
 
+		case "return":
+			return nil, p.errorf(tok.pos, "'return' can only be used inside function bodies")
+
+		case "else":
+			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
+
 		default:
 			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
 			// Save doc comment before label lookahead — p.next() resets it.
