@@ -83,8 +83,14 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 		if tok.val == "Unit" {
 			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
-		if p.callExprParser != nil && p.fns[tok.val] != nil && p.fns[tok.val].hasReturn() {
-			return p.callExprParser(p.fns[tok.val], tok)
+		if p.callExprParser != nil {
+			name, callee, err := p.resolveFnName(tok)
+			if err != nil {
+				return nil, err
+			}
+			if callee != nil && callee.hasReturn() {
+				return p.callExprParser(callee, token{kind: tokIdent, val: name, pos: tok.pos})
+			}
 		}
 		return resolve(tok)
 	default:
@@ -945,7 +951,10 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
 		}
 
-		fn := p.fns[rhsTok.val]
+		rhsName, fn, fnErr := p.resolveFnName(rhsTok)
+		if fnErr != nil {
+			return nil, fnErr
+		}
 		if fn == nil {
 			// Not a function — parse as value with arithmetic/comparison/boolean
 			resolved, err := resolve(rhsTok)
@@ -981,15 +990,15 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
 		}
 		if !fn.hasReturn() {
-			return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
+			return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsName)
 		}
 		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
-		args, kwArgs, err := p.parseBhvCallArgs(fn, rhsTok, syms)
+		args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: rhsName, pos: rhsTok.pos}, syms)
 		if err != nil {
 			return nil, err
 		}
 
-		callExpr := &CallExpr{Name: rhsTok.val, Args: args, KwArgs: kwArgs}
+		callExpr := &CallExpr{Name: rhsName, Args: args, KwArgs: kwArgs}
 
 		// Check for comparison/boolean continuation after fn call.
 		// Use a temp variable for the fn result so the intermediate value
@@ -1224,7 +1233,10 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 			}
 
-			fn := p.fns[rhsTok.val]
+			rhsName, fn, fnErr := p.resolveFnName(rhsTok)
+			if fnErr != nil {
+				return nil, fnErr
+			}
 			if fn == nil {
 				// Not a function — value + arithmetic/comparison/boolean
 				resolved, err := resolve(rhsTok)
@@ -1257,14 +1269,14 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 			}
 			if !fn.hasReturn() {
-				return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
+				return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsName)
 			}
-			args, kwArgs, err := p.parseBhvCallArgs(fn, rhsTok, syms)
+			args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: rhsName, pos: rhsTok.pos}, syms)
 			if err != nil {
 				return nil, err
 			}
 
-			callExpr := &CallExpr{Name: rhsTok.val, Args: args, KwArgs: kwArgs}
+			callExpr := &CallExpr{Name: rhsName, Args: args, KwArgs: kwArgs}
 
 			// Check for continuation after fn call.
 			// Use a temp variable for the fn result so the intermediate value
@@ -1364,15 +1376,18 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 
 	// Function call
 	p.unget(tok2)
-	fn := p.fns[tok.val]
+	name, fn, fnErr := p.resolveFnName(tok)
+	if fnErr != nil {
+		return nil, fnErr
+	}
 	if fn == nil {
 		return nil, p.errorf(tok.pos, "unknown function %q", tok.val)
 	}
-	args, kwArgs, err := p.parseBhvCallArgs(fn, tok, syms)
+	args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
 	if err != nil {
 		return nil, err
 	}
-	return []Stmt{&CallStmt{Name: tok.val, Args: args, KwArgs: kwArgs, Comment: comment}}, nil
+	return []Stmt{&CallStmt{Name: name, Args: args, KwArgs: kwArgs, Comment: comment}}, nil
 }
 
 // parseBhvIfStmt parses an if/else-if/else statement with full boolean
@@ -1909,9 +1924,13 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		}
 
 		if tok.kind == tokIdent {
-			if fn := p.fns[tok.val]; fn != nil {
+			name, fn, fnErr := p.resolveFnName(tok)
+			if fnErr != nil {
+				return nil, fnErr
+			}
+			if fn != nil {
 				if !fn.hasReturn() {
-					return nil, p.errorf(tok.pos, "function %q has no return value", tok.val)
+					return nil, p.errorf(tok.pos, "function %q has no return value", name)
 				}
 				// Register variables before parsing args (they may be referenced)
 				if !varsRegistered {
@@ -1922,11 +1941,11 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 					}
 					varsRegistered = true
 				}
-				args, kwArgs, err := p.parseBhvCallArgs(fn, tok, syms)
+				args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
 				if err != nil {
 					return nil, err
 				}
-				items = append(items, &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs})
+				items = append(items, &CallExpr{Name: name, Args: args, KwArgs: kwArgs})
 				bindingsConsumed += fn.returnCount()
 				continue
 			}

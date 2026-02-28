@@ -537,3 +537,37 @@ func (p *parser) checkImportCollisions(fnNames []string) error {
 	}
 	return nil
 }
+
+// resolveFnName resolves a potential qualified function name (ns.fn).
+// If the token is a namespace name, peeks for a dot and resolves the qualified
+// function. Otherwise returns the unqualified p.fns lookup.
+// Returns the effective name (either "fn" or "ns.fn"), the fnDef, and any error.
+// A nil fnDef with no error means the name was not found as a function.
+func (p *parser) resolveFnName(tok token) (string, *fnDef, error) {
+	if p.namespaces != nil {
+		if nsFns, ok := p.namespaces[tok.val]; ok {
+			peek, err := p.next()
+			if err != nil {
+				return "", nil, err
+			}
+			if peek.kind == tokDot {
+				fnTok, err := p.expect(tokIdent)
+				if err != nil {
+					return "", nil, err
+				}
+				fn, exists := nsFns[fnTok.val]
+				if !exists {
+					return "", nil, p.errorf(fnTok.pos, "function %q not found in namespace %q", fnTok.val, tok.val)
+				}
+				if fn.private {
+					return "", nil, p.errorf(fnTok.pos, "cannot access private function %q in namespace %q", fnTok.val, tok.val)
+				}
+				qualName := tok.val + "." + fnTok.val
+				p.fns[qualName] = fn
+				return qualName, fn, nil
+			}
+			p.unget(peek)
+		}
+	}
+	return tok.val, p.fns[tok.val], nil
+}

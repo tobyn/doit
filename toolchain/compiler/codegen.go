@@ -384,16 +384,19 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				if err != nil {
 					return nil, err
 				}
-				fn := p.fns[calleeTok.val]
+				name, fn, fnErr := p.resolveFnName(calleeTok)
+				if fnErr != nil {
+					return nil, fnErr
+				}
 				if fn == nil {
 					return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
 				}
-				args, kwArgs, err := p.parseBhvCallArgs(fn, calleeTok, syms)
+				args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
 				if err != nil {
 					return nil, err
 				}
 				stmts = append(stmts, &CallStmt{
-					Name:    calleeTok.val,
+					Name:    name,
 					Args:    args,
 					KwArgs:  kwArgs,
 					Comment: p.docComment,

@@ -3455,6 +3455,137 @@ fn greet() { say }`)},
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("namespace_qualified_call", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main { lib.greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_qualified_call_with_return", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main { let me = lib.get_me }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn get_me() { return instruction "get_self" { 0: @1 } }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_qualified_call_in_fn_body", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+fn do_greet() { lib.greet }
+behavior main { do_greet }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_private_fn_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main { lib.secret }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`private fn secret() { notify "Secret" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error for private function access")
+		}
+		if !strings.Contains(err.Error(), "private") {
+			t.Fatalf("expected private function error, got: %v", err)
+		}
+	})
+
+	t.Run("namespace_fn_not_found_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main { lib.nonexistent }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error for nonexistent function")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected function not found error, got: %v", err)
+		}
+	})
+
+	t.Run("namespace_qualified_in_let_rhs", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+fn wrapper() { let me = lib.get_me; return me }
+behavior main { let u = wrapper }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn get_me() { return instruction "get_self" { 0: @1 } }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_qualified_in_assignment", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main {
+	var me = lib.get_me
+	me = lib.get_me
+}`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn get_me() { return instruction "get_self" { 0: @1 } }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_qualified_in_call_arg", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main { set_reg lib.get_me }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn get_me() { return instruction "get_self" { 0: @1 } }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_with_named_imports", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import greet from "./lib" as lib
+behavior main {
+	greet
+	lib.greet
+}`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestCompileErrorFlag(t *testing.T) {

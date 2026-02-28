@@ -202,12 +202,18 @@ func (p *parser) parseFnBodyArgExpr(ctx *fnBodyContext) (Expr, error) {
 		}
 		return p.parseArithExprFromFull(Expr(ifExpr), ctx.resolve)
 	}
-	if tok.kind == tokIdent && p.callExprParser != nil && p.fns[tok.val] != nil && p.fns[tok.val].hasReturn() {
-		callExpr, err := p.callExprParser(p.fns[tok.val], tok)
-		if err != nil {
-			return nil, err
+	if tok.kind == tokIdent && p.callExprParser != nil {
+		name, callee, fnErr := p.resolveFnName(tok)
+		if fnErr != nil {
+			return nil, fnErr
 		}
-		return p.parseArithExprFromFull(callExpr, ctx.resolve)
+		if callee != nil && callee.hasReturn() {
+			callExpr, err := p.callExprParser(callee, token{kind: tokIdent, val: name, pos: tok.pos})
+			if err != nil {
+				return nil, err
+			}
+			return p.parseArithExprFromFull(callExpr, ctx.resolve)
+		}
 	}
 	if tok.kind == tokLParen {
 		// Parenthesized expression: (a > 5), (a + 1), etc.
@@ -2939,7 +2945,11 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment, Pos: tok.pos})
 			} else {
 				p.unget(peek)
-				callee := p.fns[tok.val]
+				calleeName, callee, calleeErr := p.resolveFnName(tok)
+				if calleeErr != nil {
+					return nil, calleeErr
+				}
+				calleeTok := token{kind: tokIdent, val: calleeName, pos: tok.pos}
 
 				if exprTail {
 					// In exprTail mode, check for expr tail before treating as statement
@@ -2987,11 +2997,11 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						return astBody, nil
 					}
 					if callee != nil && callee.hasReturn() {
-						args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx)
+						args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
 						if err != nil {
 							return nil, err
 						}
-						result := Expr(&CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs})
+						result := Expr(&CallExpr{Name: calleeName, Args: args, KwArgs: kwArgs})
 						result, err = p.parseArithExprFromFull(result, ctx.resolve)
 						if err != nil {
 							return nil, err
@@ -3038,12 +3048,12 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				if callee == nil {
 					return nil, p.errorf(tok.pos, "unknown function %q", tok.val)
 				}
-				args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx)
+				args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
 				if err != nil {
 					return nil, err
 				}
 				astBody = append(astBody, &CallStmt{
-					Name:    tok.val,
+					Name:    calleeName,
 					Args:    args,
 					KwArgs:  kwArgs,
 					Comment: comment,
@@ -3238,15 +3248,19 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 			}
 
 			if tok.kind == tokIdent {
-				if callee := p.fns[tok.val]; callee != nil {
+				name, callee, fnErr := p.resolveFnName(tok)
+				if fnErr != nil {
+					return nil, fnErr
+				}
+				if callee != nil {
 					if !callee.hasReturn() {
-						return nil, p.errorf(tok.pos, "function %q has no return value", tok.val)
+						return nil, p.errorf(tok.pos, "function %q has no return value", name)
 					}
-					args, kwArgs, err := p.parseFnBodyCallArgs(callee, tok, ctx)
+					args, kwArgs, err := p.parseFnBodyCallArgs(callee, token{kind: tokIdent, val: name, pos: tok.pos}, ctx)
 					if err != nil {
 						return nil, err
 					}
-					items = append(items, &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs})
+					items = append(items, &CallExpr{Name: name, Args: args, KwArgs: kwArgs})
 					bindingsConsumed += callee.returnCount()
 					continue
 				}
@@ -3433,16 +3447,19 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 
 	// Function call RHS
 	if rhsTok.kind == tokIdent {
-		callee := p.fns[rhsTok.val]
+		rhsName, callee, fnErr := p.resolveFnName(rhsTok)
+		if fnErr != nil {
+			return nil, fnErr
+		}
 		if callee != nil {
 			if !callee.hasReturn() {
-				return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsTok.val)
+				return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsName)
 			}
-			args, kwArgs, err := p.parseFnBodyCallArgs(callee, rhsTok, ctx)
+			args, kwArgs, err := p.parseFnBodyCallArgs(callee, token{kind: tokIdent, val: rhsName, pos: rhsTok.pos}, ctx)
 			if err != nil {
 				return nil, err
 			}
-			return &CallExpr{Name: rhsTok.val, Args: args, KwArgs: kwArgs}, nil
+			return &CallExpr{Name: rhsName, Args: args, KwArgs: kwArgs}, nil
 		}
 	}
 
