@@ -42,15 +42,6 @@ or result in unexpected behavior from a normal developer" — the same
 prompt that generated rounds 1–3. Cross-reference against the items
 below and any that have been resolved since.
 
-### High priority
-
-- **`describe()` calls all identifiers "keyword" in error messages.**
-  `scanner.go` line 445 returns `keyword "x"` for every `tokIdent`,
-  including user-defined names. Error messages like
-  `expected statement, got keyword "myvar"` mislead users into thinking
-  their name is reserved. Fix: check `Keywords[t.val]` and use
-  `"identifier"` for non-keywords.
-
 ### Medium priority
 
 - **`let` shadowing is silent at the same scope level.**

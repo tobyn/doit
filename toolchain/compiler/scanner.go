@@ -443,7 +443,10 @@ func (t token) describe() string {
 	case tokEOF:
 		return "end of file"
 	case tokIdent:
-		return fmt.Sprintf("keyword %q", t.val)
+		if Keywords[t.val] {
+			return fmt.Sprintf("keyword %q", t.val)
+		}
+		return fmt.Sprintf("identifier %q", t.val)
 	case tokString:
 		return fmt.Sprintf("string %q", t.val)
 	case tokLBrace:
