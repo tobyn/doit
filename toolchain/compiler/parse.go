@@ -4045,7 +4045,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool) error {
 	fn := p.fns[name]
 	if fn == nil {
-		return p.errorf(pos, "unknown statement %q", name)
+		return p.errorf(pos, "unknown function %q", name)
 	}
 
 	paramMap := map[string]any{}

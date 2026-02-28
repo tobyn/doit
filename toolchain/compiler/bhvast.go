@@ -1374,7 +1374,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 	p.unget(tok2)
 	fn := p.fns[tok.val]
 	if fn == nil {
-		return nil, p.errorf(tok.pos, "unknown statement %q", tok.val)
+		return nil, p.errorf(tok.pos, "unknown function %q", tok.val)
 	}
 	args, kwArgs, err := p.parseBhvCallArgs(fn, tok, syms)
 	if err != nil {

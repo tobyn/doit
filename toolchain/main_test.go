@@ -313,7 +313,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "unknown statement") {
+		if !strings.Contains(err.Error(), "unknown function") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
