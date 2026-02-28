@@ -15,5 +15,5 @@ fn caller(a) {
 behavior paren_cmp_fn_arg {
     @name "Paren Cmp Fn Arg"
     @param in a "a"
-    let x = caller a
+    let x = caller $a
 }

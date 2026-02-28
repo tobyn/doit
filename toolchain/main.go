@@ -70,6 +70,8 @@ func cmdCompile(args []string) (err error) {
 	stdlibPath := flags.String("stdlib", "", "override stdlib path")
 	jsonFlag := flags.Bool("j", false, "output JSON instead of Base62")
 	jsonLongFlag := flags.Bool("json", false, "output JSON instead of Base62")
+	errorFlag := flags.Bool("e", false, "treat warnings as errors")
+	errorLongFlag := flags.Bool("error", false, "treat warnings as errors")
 	localeFlag := flags.String("l", "", "locale for @name resolution")
 	localeLongFlag := flags.String("locale", "", "locale for @name resolution")
 	if err := flags.Parse(args); err != nil {
@@ -105,10 +107,16 @@ func cmdCompile(args []string) (err error) {
 		stdlib, _ = fs.Sub(stdlibFS, "stdlib")
 	}
 
+	treatWarningsAsErrors := *errorFlag || *errorLongFlag
+
 	if *jsonFlag || *jsonLongFlag {
 		obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale)
 		if compileErr != nil {
 			err = compileErr
+			return
+		}
+		if treatWarningsAsErrors && len(warnings) > 0 {
+			err = fmt.Errorf("%s", warnings[0])
 			return
 		}
 		for _, w := range warnings {
@@ -124,6 +132,10 @@ func cmdCompile(args []string) (err error) {
 	obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale)
 	if compileErr != nil {
 		err = compileErr
+		return
+	}
+	if treatWarningsAsErrors && len(warnings) > 0 {
+		err = fmt.Errorf("%s", warnings[0])
 		return
 	}
 	for _, w := range warnings {

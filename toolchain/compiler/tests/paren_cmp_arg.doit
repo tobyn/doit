@@ -3,5 +3,5 @@
 behavior paren_cmp_arg {
     @name "Paren Cmp Arg"
     @param in a "a"
-    let x = set_reg (a > 5)
+    let x = set_reg ($a > 5)
 }

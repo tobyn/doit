@@ -14,7 +14,7 @@
         "op": "get_resource_num"
     },
     "3": {
-        "0": "x",
+        "0": 1,
         "1": "@ctor_2",
         "2": false,
         "op": "add"

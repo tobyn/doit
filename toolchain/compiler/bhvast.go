@@ -288,6 +288,9 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		}
 		return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
 	}
+	if _, ok := syms.lookupVar(tok.val); !ok {
+		return nil, p.errorf(tok.pos, "undeclared variable %q", tok.val)
+	}
 	syms.markUsed(tok.val)
 	return &IdentExpr{Name: tok.val}, nil
 }
@@ -1074,16 +1077,6 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 				return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
 			}
 
-			// Check if any arithmetic or continuation happened — bare identifier
-			// with no arithmetic/comparison/boolean continuation is a variable copy
-			// (if the variable exists) or an error (unknown function).
-			// Bare LiteralExpr results are valid $-prefixed parameter/register refs.
-			if _, isIdent := result.(*IdentExpr); isIdent {
-				if _, ok := syms.lookupVar(rhsTok.val); !ok {
-					return nil, p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
-				}
-			}
-
 			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
 		}
 		if !fn.hasReturn() {
@@ -1360,15 +1353,6 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 					return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
 				}
 
-				if result == resolved {
-					// Bare identifier with no arithmetic/comparison continuation:
-					// allow if it's a known variable or $-prefixed ref, error otherwise.
-					if _, isIdent := result.(*IdentExpr); isIdent {
-						if _, ok := syms.lookupVar(rhsTok.val); !ok {
-							return nil, p.errorf(rhsTok.pos, "unknown function %q", rhsTok.val)
-						}
-					}
-				}
 				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 			}
 			if !fn.hasReturn() {

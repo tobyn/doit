@@ -239,6 +239,10 @@ direction keyword — see [Direction annotations](functions.md#direction-annotat
 
 ## Variables
 
+All variables must be declared with `var` or `let` before use. Using an
+undeclared variable name — whether as a function argument, in an expression,
+or as an assignment target — is a compile error.
+
 Declare a mutable variable with `var` and an initial numeric value:
 
 ```doit

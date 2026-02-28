@@ -3,5 +3,5 @@
 behavior nested_call_arith {
     @name "Nested Call Arith"
     @param in x "X"
-    add x, get_resource_num x + 5
+    add $x, get_resource_num $x + 5
 }

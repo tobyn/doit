@@ -8,5 +8,5 @@ fn my_fn(x) {
 behavior nested_call_fn {
     @name "Nested Call Fn"
     @param in x "X"
-    my_fn x
+    my_fn $x
 }

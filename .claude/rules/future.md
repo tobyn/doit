@@ -29,12 +29,4 @@ the stdlib).
 
 ## Language ergonomics audit
 
-See `.claude/audit.md` for the full audit process and open items. The
-`-Werror` flag item below originated from the audit but lives here as
-a general future feature.
-
-- **`-Werror` style flag for promoting warnings to errors.** The
-  compiler now supports warnings (returned alongside compiled output).
-  A flag to treat warnings as errors would be useful for CI/strict
-  mode. Needs a CLI flag (`-Werror` or similar) and plumbing through
-  the `Compile`/`CompileString` API.
+See `.claude/audit.md` for the full audit process and open items.

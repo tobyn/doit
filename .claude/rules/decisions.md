@@ -558,3 +558,27 @@ parser call `ctx.markFnVarUsed()` or `ctx.markExprUsed()`.
 **Warning infrastructure**: `parser.warnings []string` field,
 `parser.warnf(pos, format, args...)` method. Format matches error
 messages: `line:col: message`.
+
+**`-e`/`--error` CLI flag**: Treats warnings as errors. When enabled
+and warnings are present, `cmdCompile` returns the first warning as an
+error instead of printing warnings to stderr and continuing.
+
+## Undeclared variable errors
+
+All variables must be declared (`let`/`var`) or be `@param` parameters
+before use. Using an undeclared name is a compile error ("undeclared
+variable"). This replaces the previous behavior where bare identifiers
+silently compiled as runtime register references.
+
+**Behavior level**: `resolveBhvOperand` checks `syms.lookupVar()` for
+non-`$` identifiers. `resolveAssignTarget` errors on names not in
+`syms.vars` or `syms.paramMap`. The old "unknown function" error for
+bare identifiers in `let x = nonexistent` is subsumed — `resolve()`
+now catches it first with "undeclared variable".
+
+**Fn bodies**: `fnBodyResolver` checks `ctx.paramDirs` and `ctx.fnVars`.
+`canAssign` errors on names not in either map. For call arguments and
+return items parsed via `parseFnBodyExpr()` (which creates `IdentExpr`
+without going through the resolver), `checkFnBodyExprDeclared` validates
+all `IdentExpr` nodes in the result. This covers `IdentExpr`,
+`ArithExpr`, `AmpersandExpr`, and `ConstructorExpr` recursively.

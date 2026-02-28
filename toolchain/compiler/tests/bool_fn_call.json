@@ -7,7 +7,7 @@
     "1": {
         "op": "compare_register",
         "0": 5,
-        "1": "d",
+        "1": 1,
         "2": false,
         "next": 3
     },

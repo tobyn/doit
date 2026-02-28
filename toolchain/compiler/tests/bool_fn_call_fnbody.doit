@@ -15,5 +15,5 @@ fn checker(d) {
 behavior bool_fn_call_fnbody {
     @name "Bool Fn Call Fn"
     @param in d "d"
-    let r = checker d
+    let r = checker $d
 }

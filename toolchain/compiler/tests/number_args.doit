@@ -2,6 +2,7 @@
 # Number literals as function arguments
 behavior number_args {
     @name "Number Args"
+    var x = 0
     x = add x, 10
     wait 5
 }

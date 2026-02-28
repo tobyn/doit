@@ -37,6 +37,38 @@ func isDirection(val string) bool {
 
 // --- AST-based fn body parsing ---
 
+// checkFnBodyExprDeclared checks that all IdentExpr nodes in an expression
+// produced by parseFnBodyExpr are declared (as parameters or local variables).
+func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int) error {
+	switch e := expr.(type) {
+	case *IdentExpr:
+		if _, ok := ctx.paramDirs[e.Name]; ok {
+			return nil
+		}
+		if _, ok := ctx.fnVars[e.Name]; ok {
+			return nil
+		}
+		return p.errorf(pos, "undeclared variable %q", e.Name)
+	case *ArithExpr:
+		if err := p.checkFnBodyExprDeclared(e.LHS, ctx, pos); err != nil {
+			return err
+		}
+		return p.checkFnBodyExprDeclared(e.RHS, ctx, pos)
+	case *AmpersandExpr:
+		if err := p.checkFnBodyExprDeclared(e.Value, ctx, pos); err != nil {
+			return err
+		}
+		return p.checkFnBodyExprDeclared(e.Num, ctx, pos)
+	case *ConstructorExpr:
+		for _, arg := range e.Args {
+			if err := p.checkFnBodyExprDeclared(arg, ctx, pos); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // fnBodyResolver returns an operandResolver for fn body contexts.
 // It resolves $registers to literals, checks out-only params are not read,
 // marks fn body variables as used, and returns IdentExpr for all other identifiers.
@@ -48,8 +80,12 @@ func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 			}
 			return nil, p.errorf(tok.pos, "unknown unit register %q", tok.val)
 		}
-		if dir, ok := ctx.paramDirs[tok.val]; ok && dir == "out" {
-			return nil, p.errorf(tok.pos, "cannot read from output parameter %q", tok.val)
+		if dir, ok := ctx.paramDirs[tok.val]; ok {
+			if dir == "out" {
+				return nil, p.errorf(tok.pos, "cannot read from output parameter %q", tok.val)
+			}
+		} else if _, ok := ctx.fnVars[tok.val]; !ok {
+			return nil, p.errorf(tok.pos, "undeclared variable %q", tok.val)
 		}
 		ctx.markFnVarUsed(tok.val)
 		return &IdentExpr{Name: tok.val}, nil
@@ -184,6 +220,9 @@ func (p *parser) parseFnBodyArgExpr(ctx *fnBodyContext) (Expr, error) {
 	p.unget(tok)
 	expr, err := p.parseFnBodyExpr()
 	if err != nil {
+		return nil, err
+	}
+	if err := p.checkFnBodyExprDeclared(expr, ctx, tok.pos); err != nil {
 		return nil, err
 	}
 	ctx.markExprUsed(expr)
@@ -2421,7 +2460,7 @@ func (ctx *fnBodyContext) canAssign(name string, p *parser, pos int) error {
 		}
 		return nil
 	}
-	return nil // unknown name — will be caught during emission
+	return p.errorf(pos, "undeclared variable %q", name)
 }
 
 // canRead checks whether name can be read from in a fn body context
@@ -2763,6 +2802,9 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 	p.unget(tok)
 	expr, err := p.parseFnBodyExpr()
 	if err != nil {
+		return nil, err
+	}
+	if err := p.checkFnBodyExprDeclared(expr, ctx, tok.pos); err != nil {
 		return nil, err
 	}
 	ctx.markExprUsed(expr)

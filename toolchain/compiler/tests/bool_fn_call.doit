@@ -10,5 +10,5 @@ fn get_flag() {
 behavior bool_fn_call {
     @name "Bool Fn Call"
     @param in d "d"
-    let r = d || get_flag
+    let r = $d || get_flag
 }

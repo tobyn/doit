@@ -30,31 +30,21 @@ semantics, or potential footguns.
    will interrupt if needed.
 8. **Do not add resolved items to this file.** History is tracked in
    git commits. Only open items belong here.
+9. **Keep this file in sync with the repo.** The commit that fixes an
+   item must also remove that item from the open items list below.
+   This file should reflect the current state of the codebase at all
+   times — it is a real-time work log, not an append-only record.
 
 ## Open items
 
 ### Medium priority (design decisions needed)
 
-- **`-Werror` style flag for promoting warnings to errors.** The
-  compiler now supports warnings (returned alongside compiled output).
-  A flag to treat warnings as errors would be useful for CI/strict
-  mode. Needs a CLI flag (`-Werror` or similar) and plumbing through
-  the `Compile`/`CompileString` API.
-
-- **Undeclared variable names silently succeed as function arguments.**
-  `set_reg completely_undeclared_var` compiles without error or warning.
-  The compiler treats the name as a runtime register reference. A typo
-  in a variable name passed as a function argument has no compile-time
-  feedback. Adding a warning for names not in the symbol table would
-  catch the common typo case. The challenge is backward compatibility
-  and distinguishing intentional "dynamic" register names from typos.
-
 - **`private fn` visibility is not enforced.** The compiler parses
   `private fn` but does not restrict its visibility — it is callable
   from any behavior in the same compilation unit. The current
   architecture (single source string, no file boundaries) makes
-  file-level scoping structurally impossible. Either document the
-  limitation, remove the feature, or repurpose it.
+  file-level scoping structurally impossible. Deferred to the module
+  system implementation.
 
 ### Low priority
 

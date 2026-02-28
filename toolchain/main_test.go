@@ -524,7 +524,7 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "unknown function") {
+		if !strings.Contains(err.Error(), "undeclared variable") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -635,7 +635,7 @@ func TestCompileErrors(t *testing.T) {
 
 	t.Run("return_variable_in_stdlib", func(t *testing.T) {
 		// After unification, return <ident> is valid fn body syntax
-		stdlibSrc := "fn wrapper() { return foo }"
+		stdlibSrc := "fn wrapper(foo) { return foo }"
 		err := compiler.TestParseStdlibFile(stdlibSrc)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -2009,7 +2009,51 @@ func TestCompileErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "unknown function") {
+		if !strings.Contains(err.Error(), "undeclared variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("undeclared_var_in_call_arg", func(t *testing.T) {
+		src := `behavior a { @name "A"; set_reg undeclared }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "undeclared variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("undeclared_var_assign_target", func(t *testing.T) {
+		src := `behavior a { @name "A"; undeclared = 5 }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "undeclared variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("undeclared_var_fn_body_operand", func(t *testing.T) {
+		src := "fn f() { set_reg undeclared }\nbehavior a { @name \"A\"; f }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "undeclared variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("undeclared_var_fn_body_assign", func(t *testing.T) {
+		src := "fn f() { undeclared = 5 }\nbehavior a { @name \"A\"; f }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "undeclared variable") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2458,7 +2502,7 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("paren_cmp_arg_unclosed", func(t *testing.T) {
-		src := `behavior a { @param in x "x"; let r = set_reg (x > 5 }`
+		src := `behavior a { @param in x "x"; let r = set_reg ($x > 5 }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
 			t.Fatal("expected error for unclosed parenthesized expression")
@@ -2472,7 +2516,7 @@ func TestCompileErrors(t *testing.T) {
 		src := `
 fn helper(val) { return instruction "set_reg" { 0: val; 1: @1 } }
 fn caller(x) { let r = helper (x > 5; return r }
-behavior a { @param in x "x"; let r = caller x }
+behavior a { @param in x "x"; let r = caller $x }
 `
 		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err == nil {
@@ -2484,7 +2528,7 @@ behavior a { @param in x "x"; let r = caller x }
 	})
 
 	t.Run("paren_cmp_arg_compiles", func(t *testing.T) {
-		src := `behavior a { @param in x "x"; let r = set_reg (x > 5) }`
+		src := `behavior a { @param in x "x"; let r = set_reg ($x > 5) }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -2494,7 +2538,7 @@ behavior a { @param in x "x"; let r = caller x }
 	t.Run("bool_fn_call_compiles", func(t *testing.T) {
 		src := `
 fn get_flag() { return instruction "get_var" { 0: "flag"; 1: @1 } }
-behavior a { @param in d "d"; let r = d || get_flag }
+behavior a { @param in d "d"; let r = $d || get_flag }
 `
 		_, _, err := compiler.CompileString(src, stdlib, "", "")
 		if err != nil {
@@ -2918,6 +2962,46 @@ func TestCompileWarnings(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("expected shadowing warning for var x, got warnings: %v", warnings)
+		}
+	})
+}
+
+func TestCompileErrorFlag(t *testing.T) {
+	// Write source that produces a shadowing warning.
+	src := "behavior a {\n\t@name \"A\"\n\tlet x = 5\n\tlet x = 10\n\tset_reg x\n}\n"
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "warn.doit")
+	if err := os.WriteFile(srcPath, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("without_flag_succeeds", func(t *testing.T) {
+		outPath := filepath.Join(tmpDir, "out1.txt")
+		err := cmdCompile([]string{"-o", outPath, srcPath})
+		if err != nil {
+			t.Fatalf("expected success without -e flag, got: %v", err)
+		}
+	})
+
+	t.Run("short_flag_fails", func(t *testing.T) {
+		outPath := filepath.Join(tmpDir, "out2.txt")
+		err := cmdCompile([]string{"-e", "-o", outPath, srcPath})
+		if err == nil {
+			t.Fatal("expected error with -e flag")
+		}
+		if !strings.Contains(err.Error(), "shadows") {
+			t.Fatalf("expected shadowing warning as error, got: %v", err)
+		}
+	})
+
+	t.Run("long_flag_fails", func(t *testing.T) {
+		outPath := filepath.Join(tmpDir, "out3.txt")
+		err := cmdCompile([]string{"-error", "-o", outPath, srcPath})
+		if err == nil {
+			t.Fatal("expected error with --error flag")
+		}
+		if !strings.Contains(err.Error(), "shadows") {
+			t.Fatalf("expected shadowing warning as error, got: %v", err)
 		}
 	})
 }

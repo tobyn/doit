@@ -563,7 +563,7 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, co
 		}
 		return nil, p.errorf(pos, "unknown register %q", name)
 	}
-	return name, nil // regular variable name
+	return nil, p.errorf(pos, "undeclared variable %q", name)
 }
 
 // emitComparison emits a 3-frame comparison pattern that produces a boolean

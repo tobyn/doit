@@ -1,6 +1,6 @@
 Compile doit source into a Base62-encoded behavior string.
 
-doit compile [--stdlib stdlib_path] [-j|--json] [-b behavior_id] [-l locale|--locale locale] [-o output_path] [input_path]
+doit compile [--stdlib stdlib_path] [-e|--error] [-j|--json] [-b behavior_id] [-l locale|--locale locale] [-o output_path] [input_path]
 
 Reads doit source from input_path, or stdin if no path is given. If the source
 contains a single behavior it is compiled into its Base62 string representation,
@@ -8,6 +8,9 @@ which is written to output_path if -o is provided, or stdout otherwise.
 
 If the source contains multiple behaviors the `-b` option must be used to select
 the compilation target by its behavior ID.
+
+If the `-e` or `--error` option is given, any compiler warnings will be treated
+as errors and compilation will fail.
 
 The `-l` or `--locale` option sets the locale used to resolve localized `@name`
 blocks. If not specified, the locale is auto-detected from the operating system.
