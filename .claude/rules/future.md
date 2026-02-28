@@ -59,11 +59,6 @@ below and any that have been resolved since.
   deeper design issue — fixing it requires scope stacking in the symbol
   table — but it interacts with the `let` shadowing issue above.
 
-- **Single `|` gives a cryptic error.** Writing `a | b` (bitwise OR
-  in most languages) produces `unexpected character '|'` with no hint
-  to use `||` for logical OR or the `bitwise_op` stdlib function.
-  A targeted error message would help.
-
 ### Low priority
 
 - **Error message for `let x = "string"` could explain why.** The

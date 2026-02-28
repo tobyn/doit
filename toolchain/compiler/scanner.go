@@ -344,6 +344,8 @@ func (s *scanner) next() (token, error) {
 	case c == '|' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '|':
 		s.pos += 2
 		return token{tokDoublePipe, "||", start}, nil
+	case c == '|':
+		return token{}, s.errorf(start, "unexpected '|' — use '||' for logical OR")
 	case c == '!' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
 		s.pos += 2
 		return token{tokNotEquals, "!=", start}, nil

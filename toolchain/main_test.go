@@ -1218,6 +1218,19 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	// --- Scanner errors ---
+
+	t.Run("single_pipe_error", func(t *testing.T) {
+		src := `behavior a { let x = a | b }`
+		_, err := compiler.CompileString(src, stdlib, "", "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "use '||' for logical OR") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	// --- Comparison expression errors ---
 
 	t.Run("comparison_string_rhs", func(t *testing.T) {
