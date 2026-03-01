@@ -80,13 +80,6 @@ dimensions in a single pass:
 
 ### Deferred
 
-- **`private fn` visibility is not enforced.** The compiler parses
-  `private fn` but does not restrict its visibility — it is callable
-  from any behavior in the same compilation unit. The current
-  architecture (single source string, no file boundaries) makes
-  file-level scoping structurally impossible. Deferred to the module
-  system implementation.
-
 - **Full emitter unification via `emitContext` interface.** The bhv
   and fn emitter pairs differ only in operand resolution, scope
   management, and body emission dispatch. Detailed analysis of the
@@ -109,6 +102,9 @@ dimensions in a single pass:
 
 ### Rejected
 
+- **`private fn` visibility within the same file.** Not a bug —
+  `private` means file-scoped (not importable), and within a file
+  everything is visible. Matches Go/Python/Rust module semantics.
 - **`parseBhvVarInit` / `parseBhvDefaultStmt` RHS parsing
   duplication.** Investigated and rejected — extraction would require
   a complex return type and interleaving protocol (variable
