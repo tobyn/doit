@@ -1205,6 +1205,7 @@ func (p *parser) emitFnIfStmt(s *IfStmt, b *frameBuilder, paramMap map[string]an
 		} else {
 			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
 		}
+		stripFallThrough(b, checkStart, checkCount)
 
 		// Emit true body
 		if err := p.emitFnBody(br.body, b, paramMap, usedVars, "", pos); err != nil {
@@ -1279,6 +1280,7 @@ func (p *parser) emitFnIfExpr(e *IfExpr, retVals []any, b *frameBuilder, paramMa
 		} else {
 			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
 		}
+		stripFallThrough(b, checkStart, checkCount)
 
 		// Emit body
 		if err := p.emitFnBody(br.body, b, paramMap, usedVars, "", pos); err != nil {
@@ -1437,6 +1439,7 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 	} else {
 		p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, comment)
 	}
+	stripFallThrough(b, checkStart, checkCount)
 
 	origLen := len(b.frames)
 

@@ -1,37 +1,42 @@
 {
     "0": {
-        "op": "check_number",
-        "0": 2,
         "1": 4,
-        "2": {"num": 10},
-        "3": {"num": 5},
-        "next": 4
+        "2": {
+            "num": 10
+        },
+        "3": {
+            "num": 5
+        },
+        "next": 4,
+        "op": "check_number"
     },
     "1": {
-        "op": "set_reg",
-        "0": {"num": 10},
-        "1": "r"
+        "0": {
+            "num": 10
+        },
+        "1": "r",
+        "op": "set_reg"
     },
     "2": {
-        "op": "set_reg",
         "0": false,
         "1": false,
-        "next": 6
+        "next": 6,
+        "op": "set_reg"
     },
     "3": {
-        "op": "set_reg",
         "0": false,
-        "1": "r"
+        "1": "r",
+        "op": "set_reg"
     },
     "4": {
-        "op": "set_reg",
         "0": false,
         "1": false,
-        "next": 6
+        "next": 6,
+        "op": "set_reg"
     },
     "5": {
-        "op": "notify",
         "0": "r",
+        "op": "notify",
         "txt": "Done"
     },
     "name": "Return In If"

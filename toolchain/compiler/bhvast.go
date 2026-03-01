@@ -3465,6 +3465,7 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, retVals []any, syms *symbolTable, b *f
 		} else {
 			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
 		}
+		stripFallThrough(b, checkStart, checkCount)
 
 		// Emit body
 		savedScope := syms.pushScope()
