@@ -538,49 +538,44 @@ func (p *parser) checkImportCollisions(fnNames []string, constNames []string) er
 // A nil fnDef with no error means the name was not found as a function
 // (it might be a constant — the caller should check p.consts).
 func (p *parser) resolveFnName(tok token) (string, *fnDef, error) {
-	if p.namespaces != nil || p.namespaceConsts != nil {
-		isNs := false
-		if p.namespaces != nil {
-			_, isNs = p.namespaces[tok.val]
+	_, isNs := p.namespaces[tok.val]
+	if !isNs {
+		_, isNs = p.namespaceConsts[tok.val]
+	}
+	if isNs {
+		peek, err := p.next()
+		if err != nil {
+			return "", nil, err
 		}
-		if !isNs && p.namespaceConsts != nil {
-			_, isNs = p.namespaceConsts[tok.val]
-		}
-		if isNs {
-			peek, err := p.next()
+		if peek.kind == tokDot {
+			memberTok, err := p.expect(tokIdent)
 			if err != nil {
 				return "", nil, err
 			}
-			if peek.kind == tokDot {
-				memberTok, err := p.expect(tokIdent)
-				if err != nil {
-					return "", nil, err
-				}
-				qualName := tok.val + "." + memberTok.val
-				// Check functions first
-				if nsFns, ok := p.namespaces[tok.val]; ok {
-					if fn, exists := nsFns[memberTok.val]; exists {
-						if fn.private {
-							return "", nil, p.errorf(memberTok.pos, "cannot access private function %q in namespace %q", memberTok.val, tok.val)
-						}
-						p.fns[qualName] = fn
-						return qualName, fn, nil
+			qualName := tok.val + "." + memberTok.val
+			// Check functions first
+			if nsFns, ok := p.namespaces[tok.val]; ok {
+				if fn, exists := nsFns[memberTok.val]; exists {
+					if fn.private {
+						return "", nil, p.errorf(memberTok.pos, "cannot access private function %q in namespace %q", memberTok.val, tok.val)
 					}
+					p.fns[qualName] = fn
+					return qualName, fn, nil
 				}
-				// Then check constants
-				if nsConsts, ok := p.namespaceConsts[tok.val]; ok {
-					if c, exists := nsConsts[memberTok.val]; exists {
-						if c.private {
-							return "", nil, p.errorf(memberTok.pos, "cannot access private constant %q in namespace %q", memberTok.val, tok.val)
-						}
-						p.consts[qualName] = c
-						return qualName, nil, nil
-					}
-				}
-				return "", nil, p.errorf(memberTok.pos, "%q not found in namespace %q", memberTok.val, tok.val)
 			}
-			p.unget(peek)
+			// Then check constants
+			if nsConsts, ok := p.namespaceConsts[tok.val]; ok {
+				if c, exists := nsConsts[memberTok.val]; exists {
+					if c.private {
+						return "", nil, p.errorf(memberTok.pos, "cannot access private constant %q in namespace %q", memberTok.val, tok.val)
+					}
+					p.consts[qualName] = c
+					return qualName, nil, nil
+				}
+			}
+			return "", nil, p.errorf(memberTok.pos, "%q not found in namespace %q", memberTok.val, tok.val)
 		}
+		p.unget(peek)
 	}
 	return tok.val, p.fns[tok.val], nil
 }

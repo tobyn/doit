@@ -112,11 +112,6 @@ dimensions in a single pass:
   if callComment == "" { callComment = comment }` pattern. A one-line
   helper would save ~42 lines.
 
-- **Redundant nil guards in `resolveFnName`.** (import.go:607-614)
-  The `p.namespaces != nil` and `p.namespaceConsts != nil` checks
-  are unnecessary — Go map lookups on nil maps are safe (return zero
-  value). Removing them reduces nesting depth.
-
 - **Spurious `_ = name` in `collectImportedFns`.** (import.go:456)
   After `name, err := p.parseConstDecl(true)`, should be `_, err :=`.
 
