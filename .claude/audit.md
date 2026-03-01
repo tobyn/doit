@@ -76,14 +76,6 @@ dimensions in a single pass:
 
 ### Medium
 
-- **`emitBhvIfExpr`/`emitBhvIfExprMulti` duplication (~85 lines), and
-  same for fn body counterparts.** The single-target and multi-target
-  if-expression emitters share identical branch-collection, condition
-  resolution, check-frame emission, body emission, and jump-patching
-  structure. Only the tail-emission step differs (single target vs
-  slice). Could parameterize with a tail-emission callback, or handle
-  single targets as a `[]any{target}` slice.
-
 ### Low
 
 ### Deferred

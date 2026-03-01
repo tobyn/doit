@@ -121,7 +121,7 @@ output format.
   fn body AST emission (`emitFnBody`, `emitExprGetValue`, `emitExprTo`,
   `emitFnArithTo`, `emitFnArithNode`, `emitFnBoolExprTo`,
   `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnIfExpr`/
-  `emitFnIfExprMulti`/`emitFnIfExprTailMulti`,
+  `emitFnIfExprTailMulti`,
   `emitFnWhileStmt`, `emitFnLoopStmt`,
   `emitFnCountedLoop`, `emitFnForStmt`/`emitFnForStmtRange`/
   `emitFnForStmtRuntime`, `emitFnWaitStmt`,
@@ -199,7 +199,7 @@ output format.
   `emitBhvModeBlock` (mode block statement emission with on-the-fly
   transitions), `emitBhvModeBlockExpr`/`emitBhvModeBlockExprMulti`
   (mode block expression emission),
-  `emitBhvIfExpr`/`emitBhvIfExprMulti`/`emitBhvIfExprTailMulti`
+  `emitBhvIfExpr`/`emitBhvIfExprTailMulti`
   (if-expression emission),
   `emitBhvIfStmt`/`emitBhvIfBreak`/`emitBhvWhileStmt`/
   `emitBhvLoopStmt`/`emitBhvCountedLoop`/`emitBhvForStmt`/

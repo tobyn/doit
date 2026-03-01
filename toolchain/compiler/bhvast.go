@@ -2793,7 +2793,7 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 		return tmp, nil
 	case *IfExpr:
 		tmp := allocUniqueVar("@if", syms.usedVars)
-		if err := p.emitBhvIfExpr(e, tmp, syms, b, comment); err != nil {
+		if err := p.emitBhvIfExpr(e, []any{tmp}, syms, b, comment); err != nil {
 			return nil, err
 		}
 		return tmp, nil
@@ -2883,7 +2883,7 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 	case *ModeBlockExpr:
 		return p.emitBhvModeBlockExpr(e, target, syms, b, comment)
 	case *IfExpr:
-		return p.emitBhvIfExpr(e, target, syms, b, comment)
+		return p.emitBhvIfExpr(e, []any{target}, syms, b, comment)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitBhvExprTo", expr)
 }
@@ -3273,7 +3273,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		case *ModeBlockExpr:
 			return p.emitBhvModeBlockExprMulti(v, retVals, syms, b, s.Comment)
 		case *IfExpr:
-			return p.emitBhvIfExprMulti(v, retVals, syms, b, s.Comment)
+			return p.emitBhvIfExpr(v, retVals, syms, b, s.Comment)
 		case *InstructionExpr:
 			resolved := resolveInstructionFrame(v.Frame, retVals, nil, nil, s.Comment)
 			b.emit(resolved)
@@ -3331,13 +3331,13 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 					}
 					if ifArity == 1 {
 						if !s.Bindings[bindIdx].Discard {
-							if err := p.emitBhvIfExpr(e, retVals[bindIdx], syms, b, s.Comment); err != nil {
+							if err := p.emitBhvIfExpr(e, []any{retVals[bindIdx]}, syms, b, s.Comment); err != nil {
 								return err
 							}
 						}
 					} else {
 						ifRetVals := retVals[bindIdx : bindIdx+ifArity]
-						if err := p.emitBhvIfExprMulti(e, ifRetVals, syms, b, s.Comment); err != nil {
+						if err := p.emitBhvIfExpr(e, ifRetVals, syms, b, s.Comment); err != nil {
 							return err
 						}
 					}
@@ -3427,9 +3427,9 @@ func (p *parser) emitBhvModeBlockExprMulti(e *ModeBlockExpr, retVals []any, syms
 	return nil
 }
 
-// emitBhvIfExpr emits an if-expression writing each branch's tail to target.
-// Uses forward-jump patching (same pattern as emitFnIfStmt).
-func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
+// emitBhvIfExpr emits an if-expression directing each branch's tail to
+// the retVals targets. For single-target callers, pass []any{target}.
+func (p *parser) emitBhvIfExpr(e *IfExpr, retVals []any, syms *symbolTable, b *frameBuilder, comment string) error {
 	// Collect all conditional branches
 	type branch struct {
 		cond Expr
@@ -3472,8 +3472,8 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 			return err
 		}
 
-		// Emit tail expression to target
-		if err := p.emitBhvExprTo(br.tail, target, syms, b, ""); err != nil {
+		// Emit tail to retVals
+		if err := p.emitBhvIfExprTailMulti(br.tail, retVals, syms, b); err != nil {
 			return err
 		}
 		syms.popScope(savedScope)
@@ -3498,95 +3498,6 @@ func (p *parser) emitBhvIfExpr(e *IfExpr, target any, syms *symbolTable, b *fram
 			return err
 		}
 
-		if err := p.emitBhvExprTo(e.ElsTail, target, syms, b, ""); err != nil {
-			return err
-		}
-		syms.popScope(savedScope)
-	} else {
-		// No else clause — assign null to target
-		b.emit(map[string]any{
-			"op": "set_reg",
-			"1":  false,
-			"2":  target,
-		})
-	}
-
-	// Patch all jumps-to-continuation
-	afterAll := frameRef(b.pos())
-	for _, idx := range jumpsToPatch {
-		b.get(idx)["next"] = afterAll
-	}
-
-	return nil
-}
-
-// emitBhvIfExprMulti emits an if-expression with multi-return tails,
-// directing return values to the given retVals slice.
-func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable, b *frameBuilder, comment string) error {
-	type branch struct {
-		cond Expr
-		body []Stmt
-		tail Expr
-	}
-	branches := []branch{{cond: e.Cond, body: e.Body, tail: e.Tail}}
-	for _, elif := range e.ElseIfs {
-		branches = append(branches, branch{cond: elif.Cond, body: elif.Body, tail: elif.Tail})
-	}
-
-	var jumpsToPatch []int
-
-	for i, br := range branches {
-		brComment := ""
-		if i == 0 {
-			brComment = comment
-		}
-
-		resolved, err := p.resolveBhvBoolTree(br.cond, syms, b)
-		if err != nil {
-			return err
-		}
-
-		checkStart := b.pos()
-		checkCount := resolved.frameCount()
-		trueBranch := frameRef(checkStart + checkCount)
-		falsePlaceholder := frameRef(0)
-
-		if resolved.isLeaf() {
-			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
-		} else {
-			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
-		}
-
-		savedScope := syms.pushScope()
-		if _, err := p.emitBehaviorStmts(br.body, b, syms); err != nil {
-			return err
-		}
-
-		// Emit tail to retVals
-		if err := p.emitBhvIfExprTailMulti(br.tail, retVals, syms, b); err != nil {
-			return err
-		}
-		syms.popScope(savedScope)
-
-		jumpIdx := b.pos()
-		b.emit(map[string]any{
-			"op":   "set_reg",
-			"1":    false,
-			"2":    false,
-			"next": frameRef(0),
-		})
-		jumpsToPatch = append(jumpsToPatch, jumpIdx)
-
-		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
-	}
-
-	// Else body + tail (or null for missing else)
-	if e.ElsTail != nil {
-		savedScope := syms.pushScope()
-		if _, err := p.emitBehaviorStmts(e.ElsBody, b, syms); err != nil {
-			return err
-		}
-
 		if err := p.emitBhvIfExprTailMulti(e.ElsTail, retVals, syms, b); err != nil {
 			return err
 		}
@@ -3602,6 +3513,7 @@ func (p *parser) emitBhvIfExprMulti(e *IfExpr, retVals []any, syms *symbolTable,
 		}
 	}
 
+	// Patch all jumps-to-continuation
 	afterAll := frameRef(b.pos())
 	for _, idx := range jumpsToPatch {
 		b.get(idx)["next"] = afterAll

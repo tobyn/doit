@@ -737,7 +737,7 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 	case *ModeBlockExpr:
 		return p.emitFnModeBlockExpr(e, target, b, paramMap, usedVars, comment, pos)
 	case *IfExpr:
-		return p.emitFnIfExpr(e, target, b, paramMap, usedVars, comment, pos)
+		return p.emitFnIfExpr(e, []any{target}, b, paramMap, usedVars, comment, pos)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitExprTo", expr)
 }
@@ -949,7 +949,7 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 					return err
 				}
 			case *IfExpr:
-				if err := p.emitFnIfExprMulti(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
+				if err := p.emitFnIfExpr(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
 					return err
 				}
 			case *InstructionExpr:
@@ -1005,13 +1005,13 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 						}
 						if ifArity == 1 {
 							if !s.Bindings[bindIdx].Discard {
-								if err := p.emitFnIfExpr(e, retVals[bindIdx], b, paramMap, usedVars, callComment, pos); err != nil {
+								if err := p.emitFnIfExpr(e, []any{retVals[bindIdx]}, b, paramMap, usedVars, callComment, pos); err != nil {
 									return err
 								}
 							}
 						} else {
 							ifRetVals := retVals[bindIdx : bindIdx+ifArity]
-							if err := p.emitFnIfExprMulti(e, ifRetVals, b, paramMap, usedVars, callComment, pos); err != nil {
+							if err := p.emitFnIfExpr(e, ifRetVals, b, paramMap, usedVars, callComment, pos); err != nil {
 								return err
 							}
 						}
@@ -1243,8 +1243,9 @@ func (p *parser) emitFnIfStmt(s *IfStmt, b *frameBuilder, paramMap map[string]an
 	return nil
 }
 
-// emitFnIfExpr emits an if-expression in a fn body, writing the result to target.
-func (p *parser) emitFnIfExpr(e *IfExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+// emitFnIfExpr emits an if-expression in a fn body, directing each branch's
+// tail to the retVals targets. For single-target callers, pass []any{target}.
+func (p *parser) emitFnIfExpr(e *IfExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	type branch struct {
 		cond Expr
 		body []Stmt
@@ -1284,95 +1285,12 @@ func (p *parser) emitFnIfExpr(e *IfExpr, target any, b *frameBuilder, paramMap m
 			return err
 		}
 
-		// Emit tail to target
-		if err := p.emitExprTo(br.tail, target, b, paramMap, usedVars, "", pos); err != nil {
-			return err
-		}
-
-		// Jump-to-continuation
-		jumpIdx := b.pos()
-		b.emit(map[string]any{
-			"op":   "set_reg",
-			"1":    false,
-			"2":    false,
-			"next": frameRef(0),
-		})
-		jumpsToPatch = append(jumpsToPatch, jumpIdx)
-
-		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
-	}
-
-	// Else body + tail (or null for missing else)
-	if e.ElsTail != nil {
-		if err := p.emitFnBody(e.ElsBody, b, paramMap, usedVars, "", pos); err != nil {
-			return err
-		}
-		if err := p.emitExprTo(e.ElsTail, target, b, paramMap, usedVars, "", pos); err != nil {
-			return err
-		}
-	} else {
-		// No else clause — assign null to target
-		b.emit(map[string]any{
-			"op": "set_reg",
-			"1":  false,
-			"2":  target,
-		})
-	}
-
-	// Patch jumps
-	afterAll := frameRef(b.pos())
-	for _, idx := range jumpsToPatch {
-		b.get(idx)["next"] = afterAll
-	}
-
-	return nil
-}
-
-// emitFnIfExprMulti emits an if-expression with multi-return tails in a fn body.
-func (p *parser) emitFnIfExprMulti(e *IfExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	type branch struct {
-		cond Expr
-		body []Stmt
-		tail Expr
-	}
-	branches := []branch{{cond: e.Cond, body: e.Body, tail: e.Tail}}
-	for _, elif := range e.ElseIfs {
-		branches = append(branches, branch{cond: elif.Cond, body: elif.Body, tail: elif.Tail})
-	}
-
-	var jumpsToPatch []int
-
-	for i, br := range branches {
-		brComment := ""
-		if i == 0 {
-			brComment = comment
-		}
-
-		resolved, err := p.resolveFnBoolTree(br.cond, b, paramMap, usedVars, pos)
-		if err != nil {
-			return err
-		}
-
-		checkStart := b.pos()
-		checkCount := resolved.frameCount()
-		trueBranch := frameRef(checkStart + checkCount)
-		falsePlaceholder := frameRef(0)
-
-		if resolved.isLeaf() {
-			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
-		} else {
-			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
-		}
-
-		if err := p.emitFnBody(br.body, b, paramMap, usedVars, "", pos); err != nil {
-			return err
-		}
-
 		// Emit tail to retVals
 		if err := p.emitFnIfExprTailMulti(br.tail, retVals, b, paramMap, usedVars, pos); err != nil {
 			return err
 		}
 
+		// Jump-to-continuation
 		jumpIdx := b.pos()
 		b.emit(map[string]any{
 			"op":   "set_reg",
@@ -1404,6 +1322,7 @@ func (p *parser) emitFnIfExprMulti(e *IfExpr, retVals []any, b *frameBuilder, pa
 		}
 	}
 
+	// Patch jumps
 	afterAll := frameRef(b.pos())
 	for _, idx := range jumpsToPatch {
 		b.get(idx)["next"] = afterAll
