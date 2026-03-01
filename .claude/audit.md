@@ -91,13 +91,6 @@ dimensions in a single pass:
   differs. ~40 lines each, 4 copies. A helper like
   `parseBhvLetVarStmt(mutable, syms)` would replace all four.
 
-- **Loop back-edge pattern duplicated 10 times.** The "check if last
-  frame is `@break` → emit noop; else if no `next` → set back-edge;
-  else emit noop" pattern appears in 5 bhv emitters and 5 fn emitters.
-  Two variants: (a) while/infinite-loop version (~8 lines, 4 copies)
-  and (b) counted/for-loop "last body frame next to incr" version
-  (~7 lines, 6 copies). Each could be a single helper.
-
 - **Stdlib re-parsed for every imported file.** `parseImportedFile`
   (import.go:345) calls `parseStdlib(p.stdlibFS)` for each imported
   file. The stdlib is immutable during compilation and only needs to be

@@ -1560,26 +1560,7 @@ func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[str
 	}
 
 	// Jump back to loop start.
-	// When the last frame is @break, emit a back-edge noop so the
-	// if/break's false branch can reach it and continue the loop.
-	lastFrame := b.get(b.pos() - 1)
-	if op, _ := lastFrame["op"].(string); op == "@break" {
-		b.emit(map[string]any{
-			"op":   "set_reg",
-			"1":    false,
-			"2":    false,
-			"next": frameRef(loopStart),
-		})
-	} else if _, hasNext := lastFrame["next"]; !hasNext {
-		lastFrame["next"] = frameRef(loopStart)
-	} else {
-		b.emit(map[string]any{
-			"op":   "set_reg",
-			"1":    false,
-			"2":    false,
-			"next": frameRef(loopStart),
-		})
-	}
+	emitLoopBackEdge(b, loopStart, frameRef(loopStart))
 
 	afterLoop := frameRef(b.pos())
 	patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, afterLoop)
@@ -1606,28 +1587,7 @@ func (p *parser) emitFnLoopStmt(s *LoopStmt, b *frameBuilder, paramMap map[strin
 	}
 
 	// Jump back to loop start.
-	// When the last frame is @break, emit a back-edge noop so the
-	// if/break's false branch can reach it and continue the loop.
-	if b.pos() > loopStart {
-		lastFrame := b.get(b.pos() - 1)
-		if op, _ := lastFrame["op"].(string); op == "@break" {
-			b.emit(map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": frameRef(loopStart),
-			})
-		} else if _, hasNext := lastFrame["next"]; !hasNext {
-			lastFrame["next"] = frameRef(loopStart)
-		} else {
-			b.emit(map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": frameRef(loopStart),
-			})
-		}
-	}
+	emitLoopBackEdge(b, loopStart, frameRef(loopStart))
 
 	afterLoop := frameRef(b.pos())
 	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
@@ -1678,14 +1638,7 @@ func (p *parser) emitFnCountedLoop(s *LoopStmt, b *frameBuilder, paramMap map[st
 	})
 
 	// Set last body frame's "next" to incr
-	if b.pos()-1 > origLen-1 {
-		lastBodyFrame := b.get(incrFrame - 1)
-		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
-			if _, hasNext := lastBodyFrame["next"]; !hasNext {
-				lastBodyFrame["next"] = frameRef(incrFrame)
-			}
-		}
-	}
+	patchLastBodyNext(b, origLen, incrFrame)
 
 	// Patch CHECK exits: larger and equal → afterLoop
 	afterLoop := frameRef(b.pos())
@@ -1775,14 +1728,7 @@ func (p *parser) emitFnForStmtRange(s *ForStmt, ctor *ConstructorExpr, counterVa
 	})
 
 	// Set last body frame's "next" to incr
-	if b.pos()-1 > origLen-1 {
-		lastBodyFrame := b.get(incrFrame - 1)
-		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
-			if _, hasNext := lastBodyFrame["next"]; !hasNext {
-				lastBodyFrame["next"] = frameRef(incrFrame)
-			}
-		}
-	}
+	patchLastBodyNext(b, origLen, incrFrame)
 
 	afterLoop := frameRef(b.pos())
 	if stepSign > 0 {
@@ -1860,14 +1806,7 @@ func (p *parser) emitFnForStmtRuntime(s *ForStmt, counterVar string, b *frameBui
 		"next": frameRef(stepCheckFrame),
 	})
 
-	if b.pos()-1 > origLen-1 {
-		lastBodyFrame := b.get(incrFrame - 1)
-		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
-			if _, hasNext := lastBodyFrame["next"]; !hasNext {
-				lastBodyFrame["next"] = frameRef(incrFrame)
-			}
-		}
-	}
+	patchLastBodyNext(b, origLen, incrFrame)
 
 	afterLoop := frameRef(b.pos())
 

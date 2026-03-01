@@ -3852,29 +3852,7 @@ func (p *parser) emitBhvWhileStmt(s *WhileStmt, b *frameBuilder, syms *symbolTab
 	syms.popScope(savedScope)
 
 	// Jump back to loop start.
-	// When the last frame is @break (from if/break as last statement),
-	// we must emit a back-edge noop so the if/break's false branch
-	// can reach it and continue the loop. Setting "next" on @break
-	// directly doesn't work because patchBreakPlaceholders replaces
-	// the entire frame.
-	lastFrame := b.get(b.pos() - 1)
-	if op, _ := lastFrame["op"].(string); op == "@break" {
-		b.emit(map[string]any{
-			"op":   "set_reg",
-			"1":    false,
-			"2":    false,
-			"next": frameRef(loopStart),
-		})
-	} else if _, hasNext := lastFrame["next"]; !hasNext {
-		lastFrame["next"] = frameRef(loopStart)
-	} else {
-		b.emit(map[string]any{
-			"op":   "set_reg",
-			"1":    false,
-			"2":    false,
-			"next": frameRef(loopStart),
-		})
-	}
+	emitLoopBackEdge(b, loopStart, frameRef(loopStart))
 
 	afterLoop := frameRef(b.pos())
 	patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, afterLoop)
@@ -3901,29 +3879,7 @@ func (p *parser) emitBhvLoopStmt(s *LoopStmt, b *frameBuilder, syms *symbolTable
 	syms.popScope(savedScope)
 
 	// Loop back: set last frame's "next" to loop start.
-	// When the last frame is @break (from if/break as last statement),
-	// we must still emit a back-edge noop so the if/break's false branch
-	// can reach it and continue the loop.
-	if b.pos() > loopStart {
-		lastFrame := b.get(b.pos() - 1)
-		if op, _ := lastFrame["op"].(string); op == "@break" {
-			b.emit(map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": frameRef(loopStart),
-			})
-		} else if _, hasNext := lastFrame["next"]; !hasNext {
-			lastFrame["next"] = frameRef(loopStart)
-		} else {
-			b.emit(map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": frameRef(loopStart),
-			})
-		}
-	}
+	emitLoopBackEdge(b, loopStart, frameRef(loopStart))
 
 	afterLoop := frameRef(b.pos())
 	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
@@ -3975,14 +3931,7 @@ func (p *parser) emitBhvCountedLoop(s *LoopStmt, b *frameBuilder, syms *symbolTa
 	})
 
 	// Set last body frame's "next" to incr (if not already set by inner control flow)
-	if b.pos()-1 > origLen-1 {
-		lastBodyFrame := b.get(incrFrame - 1)
-		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
-			if _, hasNext := lastBodyFrame["next"]; !hasNext {
-				lastBodyFrame["next"] = frameRef(incrFrame)
-			}
-		}
-	}
+	patchLastBodyNext(b, origLen, incrFrame)
 
 	// Patch CHECK exits: larger and equal → afterLoop
 	afterLoop := frameRef(b.pos())
@@ -4079,14 +4028,7 @@ func (p *parser) emitBhvForStmtRange(s *ForStmt, ctor *ConstructorExpr, b *frame
 	})
 
 	// Set last body frame's "next" to incr (if not already set by inner control flow)
-	if b.pos()-1 > origLen-1 {
-		lastBodyFrame := b.get(incrFrame - 1)
-		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
-			if _, hasNext := lastBodyFrame["next"]; !hasNext {
-				lastBodyFrame["next"] = frameRef(incrFrame)
-			}
-		}
-	}
+	patchLastBodyNext(b, origLen, incrFrame)
 
 	afterLoop := frameRef(b.pos())
 	if stepSign > 0 {
@@ -4167,14 +4109,7 @@ func (p *parser) emitBhvForStmtRuntime(s *ForStmt, b *frameBuilder, syms *symbol
 	})
 
 	// Set last body frame's "next" to incr (if not already set by inner control flow)
-	if b.pos()-1 > origLen-1 {
-		lastBodyFrame := b.get(incrFrame - 1)
-		if op, _ := lastBodyFrame["op"].(string); op != "@break" {
-			if _, hasNext := lastBodyFrame["next"]; !hasNext {
-				lastBodyFrame["next"] = frameRef(incrFrame)
-			}
-		}
-	}
+	patchLastBodyNext(b, origLen, incrFrame)
 
 	afterLoop := frameRef(b.pos())
 

@@ -1327,3 +1327,38 @@ func patchBreakPlaceholders(b *frameBuilder, from int, label string, target fram
 		}
 	}
 }
+
+// emitLoopBackEdge emits the back-edge jump for while and infinite loops.
+// If the last body frame is @break, a noop jump is emitted (the @break frame
+// will be patched separately). If the last frame has no "next", it gets one.
+// Otherwise a noop jump is emitted to avoid clobbering inner control flow.
+// The bodyStart parameter guards against empty bodies (no frames emitted).
+func emitLoopBackEdge(b *frameBuilder, bodyStart int, target frameRef) {
+	if b.pos() <= bodyStart {
+		return
+	}
+	lastFrame := b.get(b.pos() - 1)
+	if op, _ := lastFrame["op"].(string); op == "@break" {
+		b.emit(map[string]any{"op": "set_reg", "1": false, "2": false, "next": target})
+	} else if _, hasNext := lastFrame["next"]; !hasNext {
+		lastFrame["next"] = target
+	} else {
+		b.emit(map[string]any{"op": "set_reg", "1": false, "2": false, "next": target})
+	}
+}
+
+// patchLastBodyNext sets "next" on the last body frame to point to nextFrame
+// (typically the INCR frame in counted/for loops). Skips if the last frame
+// is @break (will be patched separately) or already has a "next".
+// bodyStart is the frame index where the body began.
+func patchLastBodyNext(b *frameBuilder, bodyStart int, nextFrame int) {
+	if b.pos()-1 < bodyStart {
+		return
+	}
+	lastBodyFrame := b.get(nextFrame - 1)
+	if op, _ := lastBodyFrame["op"].(string); op != "@break" {
+		if _, hasNext := lastBodyFrame["next"]; !hasNext {
+			lastBodyFrame["next"] = frameRef(nextFrame)
+		}
+	}
+}
