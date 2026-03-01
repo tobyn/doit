@@ -413,12 +413,6 @@ fn equip_component_remotely(unit, component) {
     #   "1": "No Component" [exec], "2": component [in], "3": slot_index [in]}
 }
 
-# Stops execution of the behavior.
-fn exit() {
-    # control flow: terminal instruction
-    # frame: {"op": "exit"} (terminal)
-}
-
 # Counts the number of the passed item in the faction's logistics network.
 #   item [in] - item to count
 #   result [out] - number of this item in the faction

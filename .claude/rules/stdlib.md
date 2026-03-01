@@ -37,6 +37,10 @@ Note: `wait` is **not** in the stdlib. It was removed from the stdlib and
 is now a language keyword with optional condition block syntax. See
 `manual/language.md` for usage.
 
+Note: `exit` is **not** in the stdlib. It is a language keyword that emits
+`{"op": "exit"}` with no successor. The compiler knows it is terminal and
+detects unreachable code after it.
+
 Each function body contains a `# frame:` comment showing the inferred JSON structure of the
 compiled instruction. These were derived from `instructions.lua` by mapping:
 

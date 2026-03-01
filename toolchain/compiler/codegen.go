@@ -203,6 +203,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 
 	// Phase 1: Parse attributes and statements into AST nodes.
 	var stmts []Stmt
+	var terminal Stmt // non-nil when the last statement was terminal
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -213,6 +214,14 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		}
 		if tok.kind == tokEOF {
 			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+		if terminal != nil {
+			p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
+			p.unget(tok)
+			if err := p.skipToCloseBrace(); err != nil {
+				return nil, err
+			}
+			break
 		}
 		if tok.kind == tokAt {
 			attr, err := p.expect(tokIdent)
@@ -255,6 +264,9 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		}
 		if handled {
 			stmts = append(stmts, parsed...)
+			if last := stmts[len(stmts)-1]; isTerminalStmt(last) {
+				terminal = last
+			}
 			continue
 		}
 

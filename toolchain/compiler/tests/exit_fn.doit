@@ -1,0 +1,12 @@
+# AI-generated test
+fn maybe_exit(x) {
+    if x {
+        exit
+    }
+    notify "still running"
+}
+
+behavior a {
+    let x = 5
+    maybe_exit x
+}

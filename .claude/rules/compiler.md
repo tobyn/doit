@@ -12,10 +12,12 @@ output format.
 ## Architecture
 
 - **`compiler/ast.go`** — AST node type definitions: `Stmt` interface
-  (16 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
+  (17 concrete types: `CallStmt`, `LetStmt`, `AssignStmt`,
   `CompoundAssignStmt`, `IncrDecrStmt`, `MultiReturnStmt`,
   `InstructionStmt`, `ModeBlockStmt`, `ReturnStmt`, `IfStmt`, `WhileStmt`,
-  `LoopStmt`, `ForStmt`, `BreakStmt`, `WaitStmt`, `exprTailStmt`) and `Expr` interface
+  `LoopStmt`, `ForStmt`, `BreakStmt`, `ExitStmt`, `WaitStmt`,
+  `exprTailStmt`), `isTerminalStmt` and `terminalKeyword` helpers for
+  unreachable code detection, and `Expr` interface
   (15 concrete types: `LiteralExpr`, `IdentExpr`, `CallExpr`,
   `InstructionExpr`, `ArithExpr`, `CompareExpr`, `TypeCheckExpr`,
   `TruthyExpr`, `BoolChainExpr`, `NotExpr`, `ConstructorExpr`,
@@ -99,8 +101,10 @@ output format.
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),
   `Keywords` map (includes `"import"`, `"from"`, `"as"`, `"is"`,
-  `"wait"`, `"true"`, `"false"`, `"const"`, `"enum"`, type constructor
-  names, direction keywords, and `locked`/`unlocked`), `isConstructor`
+  `"exit"`, `"wait"`, `"true"`, `"false"`, `"const"`, `"enum"`, type
+  constructor names, direction keywords, and `locked`/`unlocked`),
+  `skipToCloseBrace` (brace-depth-aware token skip for unreachable
+  code), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
   `#!` comments
@@ -205,7 +209,7 @@ output format.
   `declareIterVar` uses `syms.declareVar`).
   Emitter functions: `emitBehaviorStmts` (top-level
   behavior emitter returning `(int, error)` where int is mainFrameCount,
-  with `@break`/`BreakStmt` handling,
+  with `@break`/`BreakStmt` handling, `ExitStmt` emission,
   if/break detection via `isIfBreak`, and mode tracking),
   `stripFallThrough` (removes redundant frameRef branch slots pointing
   to natural fall-through position),
@@ -222,7 +226,8 @@ output format.
   leaves via De Morgan's law)
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
   `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +
-  statements into `[]Stmt` via `parseBhvOneStmt`/`tryParseLabeledLoop`
+  statements into `[]Stmt` via `parseBhvOneStmt`/`tryParseLabeledLoop`,
+  with unreachable code detection after terminal statements
   — then emit via `emitBehaviorStmts` with `frameBuilder.mode` tracking),
   `resolveInstructionFrame` (0→1 key conversion
   and slot substitution), `frameHasReturnSlot`/`frameReturnCount`,

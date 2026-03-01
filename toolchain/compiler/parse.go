@@ -1117,6 +1117,12 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			}
 			b.emit(f)
 
+		case *ExitStmt:
+			callComment := inheritComment(s.Comment, comment)
+			f := map[string]any{"op": "exit"}
+			setComment(f, callComment)
+			b.emit(f)
+
 		case *ReturnStmt:
 			// Emit values to @retK targets, then emit @return jump placeholder
 			callComment := inheritComment(s.Comment, comment)
@@ -2158,6 +2164,8 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 			}
 		case *BreakStmt:
 			return &constEvalStatus{broke: true, breakLabel: s.Label}, true
+		case *ExitStmt:
+			return nil, false // bail: runtime-only
 		case *ModeBlockStmt:
 			// Mode is irrelevant at compile time
 			status, ok := p.tryEvalStmts(s.Body, env)
@@ -3152,12 +3160,21 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 	savedInfo, savedDepth := ctx.pushFnScope()
 	defer ctx.popFnScope(savedInfo, savedDepth)
 	var astBody []Stmt
+	var terminal Stmt // non-nil when the last statement was terminal
 	for {
 		tok, err := p.next()
 		if err != nil {
 			return nil, err
 		}
 		if tok.kind == tokRBrace {
+			break
+		}
+		if terminal != nil {
+			p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
+			p.unget(tok)
+			if err := p.skipToCloseBrace(); err != nil {
+				return nil, err
+			}
 			break
 		}
 		if tok.kind != tokIdent {
@@ -3321,7 +3338,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			if err != nil {
 				return nil, err
 			}
-			if peek.kind == tokIdent {
+			if peek.kind == tokIdent && !Keywords[peek.val] && p.fns[peek.val] == nil {
 				if !p.loopLabels[peek.val] {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
 				}
@@ -3330,6 +3347,9 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				p.unget(peek)
 			}
 			astBody = append(astBody, &BreakStmt{Label: label, Comment: comment})
+
+		case "exit":
+			astBody = append(astBody, &ExitStmt{Comment: comment})
 
 		case "fn", "private":
 			return nil, p.errorf(tok.pos, "function definitions cannot be nested")
@@ -3546,6 +3566,11 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 					KwArgs:  kwArgs,
 					Comment: comment,
 				})
+			}
+		}
+		if len(astBody) > 0 {
+			if last := astBody[len(astBody)-1]; isTerminalStmt(last) {
+				terminal = last
 			}
 		}
 	}

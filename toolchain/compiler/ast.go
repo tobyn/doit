@@ -140,6 +140,11 @@ type BreakStmt struct {
 	Comment string
 }
 
+// ExitStmt terminates the behavior: `exit`
+type ExitStmt struct {
+	Comment string
+}
+
 // WaitStmt is a wait statement: `wait <ticks>` or `wait <ticks> { body; cond }`.
 type WaitStmt struct {
 	Ticks   Expr   // ticks expression (evaluated once)
@@ -280,6 +285,7 @@ func (*WhileStmt) stmtNode()          {}
 func (*LoopStmt) stmtNode()           {}
 func (*ForStmt) stmtNode()            {}
 func (*BreakStmt) stmtNode()          {}
+func (*ExitStmt) stmtNode()           {}
 func (*WaitStmt) stmtNode()           {}
 func (*exprTailStmt) stmtNode()       {}
 
@@ -298,3 +304,26 @@ func (*AmpersandExpr) exprNode()    {}
 func (*ExprListExpr) exprNode()     {}
 func (*ModeBlockExpr) exprNode()    {}
 func (*IfExpr) exprNode()           {}
+
+// isTerminalStmt reports whether a statement terminates control flow
+// (exit, break, or return), making any following code unreachable.
+func isTerminalStmt(s Stmt) bool {
+	switch s.(type) {
+	case *ExitStmt, *BreakStmt, *ReturnStmt:
+		return true
+	}
+	return false
+}
+
+// terminalKeyword returns the keyword name for a terminal statement.
+func terminalKeyword(s Stmt) string {
+	switch s.(type) {
+	case *ExitStmt:
+		return "exit"
+	case *BreakStmt:
+		return "break"
+	case *ReturnStmt:
+		return "return"
+	}
+	return ""
+}

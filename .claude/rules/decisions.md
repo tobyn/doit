@@ -19,6 +19,31 @@ Separately, `@break` and `@return` are **control-flow placeholder
 opcodes** (not variable names). They appear in intermediate frames and
 are patched to real jump targets before finalization.
 
+## `exit` keyword
+
+`exit` is a language keyword (not a stdlib function). It emits
+`{"op": "exit"}` with no `"next"` field — a terminal instruction.
+Works in both behavior bodies and function bodies. The `ExitStmt`
+AST node mirrors `BreakStmt` in structure. The old `exit()` stdlib
+stub was removed.
+
+## Unreachable code warnings
+
+Code after `exit`, `break`, or `return` is unreachable. The compiler
+warns and skips remaining statements in the block (brace-depth-aware
+skip via `skipToCloseBrace`). Detected in three places:
+`parseBehaviorBody`, `parseBhvStmtBlockInner`, and
+`parseFnBodyStmtsInner`. The `isTerminalStmt` helper identifies
+`*ExitStmt`, `*BreakStmt`, and `*ReturnStmt`.
+
+**Break label disambiguation**: When `break` is followed by an
+identifier, the parser checks if it's a known loop label. Previously,
+any non-label identifier (like a function name) would error as
+"unknown loop label". Now, keywords and known functions (`p.fns`)
+are excluded from label consideration — they cause the break to be
+treated as unlabeled, allowing the unreachable code check to fire on
+the next iteration.
+
 ## Behaviors as top-level functions
 
 A behavior is conceptually a top-level function with extra syntax sugar

@@ -2597,6 +2597,8 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 			return nil, false, err
 		}
 		return []Stmt{waitStmt}, true, nil
+	case "exit":
+		return []Stmt{&ExitStmt{Comment: comment}}, true, nil
 	case "return":
 		return nil, false, p.errorf(tok.pos, "'return' can only be used inside function bodies")
 	case "fn", "private":
@@ -2620,6 +2622,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 	saved := syms.pushScope()
 	defer syms.popScope(saved)
 	var stmts []Stmt
+	var terminal Stmt // non-nil when the last statement was terminal
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -2630,6 +2633,14 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 		}
 		if tok.kind == tokEOF {
 			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+		if terminal != nil {
+			p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
+			p.unget(tok)
+			if err := p.skipToCloseBrace(); err != nil {
+				return nil, err
+			}
+			break
 		}
 		if tok.kind != tokIdent {
 			if allowExprTail && tok.kind == tokNumber {
@@ -2678,7 +2689,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			if err != nil {
 				return nil, err
 			}
-			if peek.kind == tokIdent {
+			if peek.kind == tokIdent && !Keywords[peek.val] && p.fns[peek.val] == nil {
 				if !p.loopLabels[peek.val] {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
 				}
@@ -2686,7 +2697,9 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			} else {
 				p.unget(peek)
 			}
-			stmts = append(stmts, &BreakStmt{Label: label, Comment: comment})
+			stmt := &BreakStmt{Label: label, Comment: comment}
+			stmts = append(stmts, stmt)
+			terminal = stmt
 			continue
 		}
 
@@ -2714,6 +2727,9 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 		}
 		if handled {
 			stmts = append(stmts, parsed...)
+			if last := stmts[len(stmts)-1]; isTerminalStmt(last) {
+				terminal = last
+			}
 			continue
 		}
 
@@ -3211,6 +3227,11 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 			if s.Label != "" {
 				f["label"] = s.Label
 			}
+			b.emit(f)
+
+		case *ExitStmt:
+			f := map[string]any{"op": "exit"}
+			setComment(f, s.Comment)
 			b.emit(f)
 
 		default:

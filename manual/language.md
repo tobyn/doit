@@ -1602,6 +1602,64 @@ game-engine-dependent.
 
 `wait` works in both behavior bodies and function bodies.
 
+### `exit`
+
+Immediately stops execution of the behavior. Unlike reaching the end of
+a behavior (which restarts from the beginning), `exit` terminates
+permanently — the behavior controller will not restart.
+
+```doit
+behavior patrol {
+    if $done {
+        exit
+    }
+    notify "patrolling"
+}
+```
+
+`exit` works in both behavior bodies and function bodies:
+
+```doit
+fn maybe_stop(flag) {
+    if flag {
+        exit
+    }
+}
+```
+
+### Unreachable Code
+
+Code after `exit`, `break`, or `return` can never execute. The compiler
+warns about unreachable code:
+
+```doit
+behavior a {
+    exit
+    notify "this is unreachable"   # warning: unreachable code after 'exit'
+}
+```
+
+```doit
+fn f() {
+    return 5
+    notify "this is unreachable"   # warning: unreachable code after 'return'
+}
+```
+
+Unreachable code is detected inside nested blocks as well:
+
+```doit
+behavior a {
+    if $done {
+        exit
+        notify "unreachable"       # warning
+    }
+    notify "still reachable"       # no warning — the exit is in a branch
+}
+```
+
+The `-e` / `--error` compiler flag promotes warnings to errors.
+
 ## Execution Mode
 
 Behavior controllers start each execution cycle in **locked** mode, running

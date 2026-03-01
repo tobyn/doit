@@ -65,6 +65,7 @@ var Keywords = map[string]bool{
 	"const":       true,
 	"else":        true,
 	"enum":        true,
+	"exit":        true,
 	"false":       true,
 	"fn":          true,
 	"for":         true,
@@ -491,6 +492,27 @@ func (s *scanner) expect(kind tokenKind) (token, error) {
 		return tok, s.errorf(tok.pos, "unexpected %s", tok.describe())
 	}
 	return tok, nil
+}
+
+// skipToCloseBrace consumes tokens until the matching '}' is found,
+// accounting for nested brace pairs. Used to skip unreachable code.
+func (s *scanner) skipToCloseBrace() error {
+	depth := 1
+	for depth > 0 {
+		tok, err := s.next()
+		if err != nil {
+			return err
+		}
+		switch tok.kind {
+		case tokLBrace:
+			depth++
+		case tokRBrace:
+			depth--
+		case tokEOF:
+			return s.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+	}
+	return nil
 }
 
 func (t token) describe() string {

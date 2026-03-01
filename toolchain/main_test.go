@@ -3467,6 +3467,132 @@ func TestCompileWarnings(t *testing.T) {
 			t.Fatalf("expected shadowing warning for var x, got warnings: %v", warnings)
 		}
 	})
+
+	t.Run("unreachable_after_exit_bhv", func(t *testing.T) {
+		src := `behavior a {
+			exit
+			notify "dead"
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(warnings) == 0 {
+			t.Fatal("expected unreachable code warning")
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'exit'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after exit, got: %v", warnings)
+		}
+	})
+
+	t.Run("unreachable_after_exit_fn", func(t *testing.T) {
+		src := `fn f() {
+			exit
+			notify "dead"
+		}
+		behavior a { f }`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'exit'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after exit in fn body, got: %v", warnings)
+		}
+	})
+
+	t.Run("unreachable_after_break", func(t *testing.T) {
+		src := `behavior a {
+			loop {
+				break
+				notify "dead"
+			}
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'break'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after break, got: %v", warnings)
+		}
+	})
+
+	t.Run("unreachable_after_return", func(t *testing.T) {
+		src := `fn f() {
+			return 1
+			notify "dead"
+		}
+		behavior a { let x = f }`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'return'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after return, got: %v", warnings)
+		}
+	})
+
+	t.Run("unreachable_after_exit_in_nested_block", func(t *testing.T) {
+		src := `behavior a {
+			@param in p "P"
+			if $p {
+				exit
+				notify "dead"
+			}
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'exit'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning in nested block, got: %v", warnings)
+		}
+	})
+
+	t.Run("no_unreachable_warning_when_terminal_is_last", func(t *testing.T) {
+		src := `behavior a {
+			notify "hello"
+			exit
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable") {
+				t.Fatalf("expected no unreachable warning when exit is last, got: %s", w)
+			}
+		}
+	})
 }
 
 func TestImports(t *testing.T) {
