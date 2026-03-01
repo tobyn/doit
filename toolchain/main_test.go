@@ -3008,6 +3008,44 @@ behavior a { @param in x "X"; if get_count $x > 5 { notify "big" } }
 		}
 	})
 
+	// --- Duplicate function errors ---
+
+	t.Run("fn_duplicate_name", func(t *testing.T) {
+		src := `fn greet() { notify "hi" }
+fn greet() { notify "hello" }
+behavior a { greet }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_duplicate_private", func(t *testing.T) {
+		src := `fn greet() { notify "hi" }
+private fn greet() { notify "hello" }
+behavior a { greet }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_override_stdlib_ok", func(t *testing.T) {
+		// Overriding a stdlib function with a same-name user fn should be allowed
+		src := `fn notify(txt) { instruction "notify" { txt: txt } }
+behavior a { notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	// --- Constant declaration errors ---
 
 	t.Run("const_duplicate_name", func(t *testing.T) {

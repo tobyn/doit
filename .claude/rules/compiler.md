@@ -21,19 +21,24 @@ output format.
   `TruthyExpr`, `BoolChainExpr`, `NotExpr`, `ConstructorExpr`,
   `AmpersandExpr`, `ExprListExpr`, `ModeBlockExpr`, `IfExpr`)
 - **`compiler/import.go`** — Import system: `ImportStmt`/`ImportName`
-  types, import parsing (`parseImports`, `parseImportStmt`,
-  `parseImportNames`), validation (`validateImportPath`,
-  `validateImportAlias`), pass 2 skip (`skipToNextDecl`), file
-  resolution (`resolveImportPath`), imported file parsing
-  (`parseImportedFile`, `collectImportedFns` — delegates to
-  `collectDecls`), import processing
-  (`processImports`), collision checking (`checkImportCollisions`),
-  qualified name resolution (`resolveFnName`)
+  types, `importedFile` (type alias for `symbolSet`), import parsing
+  (`parseImports`, `parseImportStmt`, `parseImportNames`), validation
+  (`validateImportPath`, `validateImportAlias`), pass 2 skip
+  (`skipToNextDecl`), file resolution (`resolveImportPath`), imported
+  file parsing (`parseImportedFile`, `collectImportedFns` — delegates to
+  `collectDecls`), import processing (`processImports` — uses `symbolSet`
+  methods for glob merge, named import, and namespace storage), collision
+  checking (`checkImportCollisions` — takes single `[]string` of all
+  same-file names), qualified name resolution (`resolveFnName` — uses
+  `namespaceSets` for unified namespace lookup)
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString` — both
   accept `sourceFS fs.FS` and `sourcePath string` for import resolution,
   return `(*codec.Object, []string, error)` where the middle value is
   compiler warnings), shared types
-  (`constDef` with `value any` and `private bool` for compile-time constants,
+  (`symbolSet` with `fns`/`consts`/`enums` maps and helper methods
+  (`has`, `isPrivate`, `mergeNonPrivate`, `clone`, `deleteAll`,
+  `addNonPrivateNames`) for unified symbol handling in imports,
+  `constDef` with `value any` and `private bool` for compile-time constants,
   `enumDef` with `values map[string]int`, `members []string`, and `private bool`
   for compile-time enums,
   `fnDef` with `scope` for transitive import dependencies,
@@ -76,14 +81,12 @@ output format.
   across imports — cloned per imported file instead of re-parsing),
   `importStack []string` for circular import detection,
   `namedImports map[string]bool` and `namespaceNames map[string]bool`
-  for collision checking, `namespaces map[string]map[string]*fnDef`
-  for namespace-qualified function lookup,
+  for collision checking, `importedNames map[string]bool` for tracking
+  all import-provided names (used by `checkDeclName` to distinguish
+  import overrides from same-file duplicates),
+  `namespaceSets map[string]*symbolSet` for namespace-qualified lookup,
   `consts map[string]*constDef` for compile-time constants,
-  `namespaceConsts map[string]map[string]*constDef`
-  for namespace-qualified constant lookup,
-  `enums map[string]*enumDef` for compile-time enums,
-  `namespaceEnums map[string]map[string]*enumDef`
-  for namespace-qualified enum lookup),
+  `enums map[string]*enumDef` for compile-time enums),
   token types (including `tokDot` for `.` (namespace separator),
   `tokDoubleColon` for `::` (enum member access),
   `tokAmpersand` for `&`,
@@ -102,7 +105,11 @@ output format.
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
   `#!` comments
 - **`compiler/parse.go`** — Stdlib parsing (delegates to `parseUserFn`),
-  file-level parsing, function definitions with `instruction` support,
+  file-level parsing, `checkDeclName` (unified collision detection for
+  fn/const/enum declarations — handles all pairwise checks including
+  same-kind duplicates; excludes stdlib and imported names for function
+  duplicate detection via `p.stdlibFns` and `p.importedNames`),
+  function definitions with `instruction` support,
   `fnBodyResolver` (operandResolver for fn bodies),
   `fnBodyContext` (tracks paramDirs, fnVarInfo, fnScopeDepth,
   resolve for fn body parsing; block scoping via `pushFnScope`/`popFnScope`,

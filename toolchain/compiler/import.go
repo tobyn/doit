@@ -316,11 +316,7 @@ func (p *parser) resolveImportPath(importPath string, pos int) (string, fs.FS, e
 }
 
 // importedFile holds the parsed results from an imported file.
-type importedFile struct {
-	fns    map[string]*fnDef
-	consts map[string]*constDef
-	enums  map[string]*enumDef
-}
+type importedFile = symbolSet
 
 // parseImportedFile reads and parses a file, returning its exported function and constant definitions.
 // The returned maps include private entries (with private=true) for error reporting.
@@ -399,7 +395,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		resultFns[name] = fn
 	}
 
-	return &importedFile{fns: resultFns, consts: ip.consts, enums: ip.enums}, nil
+	return &symbolSet{fns: resultFns, consts: ip.consts, enums: ip.enums}, nil
 }
 
 // collectImportedFns collects function and constant definitions from an imported file.
@@ -408,7 +404,7 @@ func (p *parser) collectImportedFns() error {
 }
 
 // processImports resolves all parsed import statements and merges imported
-// functions and constants into the parser's tables.
+// symbols into the parser's tables.
 func (p *parser) processImports() error {
 	if len(p.imports) == 0 {
 		return nil
@@ -417,9 +413,13 @@ func (p *parser) processImports() error {
 	// Cache of already-parsed files to avoid re-parsing the same file
 	fileCache := map[string]*importedFile{}
 
-	// Track named imports and namespace names for post-collectUserFns collision checking
+	// Track named imports, namespace names, and all imported names
 	p.namedImports = map[string]bool{}
 	p.namespaceNames = map[string]bool{}
+	p.importedNames = map[string]bool{}
+
+	// Wrap the parser's own maps so symbolSet methods can merge into them
+	dst := &symbolSet{fns: p.fns, consts: p.consts, enums: p.enums}
 
 	for _, stmt := range p.imports {
 		filePath, fsys, err := p.resolveImportPath(stmt.Path, stmt.Pos)
@@ -437,118 +437,63 @@ func (p *parser) processImports() error {
 			fileCache[filePath] = imported
 		}
 
-		fns := imported.fns
-		consts := imported.consts
-		enums := imported.enums
-
 		// Process glob imports — add all non-private functions, constants, and enums.
 		// Globs are last-wins: later glob imports shadow earlier ones.
 		if stmt.Glob {
-			for name, fn := range fns {
-				if !fn.private {
-					p.fns[name] = fn
-				}
-			}
-			for name, c := range consts {
-				if !c.private {
-					p.consts[name] = c
-				}
-			}
-			for name, e := range enums {
-				if !e.private {
-					p.enums[name] = e
-				}
-			}
+			dst.mergeNonPrivate(imported)
+			imported.addNonPrivateNames(p.importedNames)
 		}
 
 		// Process named imports
 		for _, imp := range stmt.Names {
-			fn, fnExists := fns[imp.Name]
-			c, cExists := consts[imp.Name]
-			e, eExists := enums[imp.Name]
-			if !fnExists && !cExists && !eExists {
+			if !imported.has(imp.Name) {
 				return p.errorf(imp.Pos, "%q not found in %q", imp.Name, stmt.Path)
 			}
-			if fnExists {
-				if fn.private {
-					return p.errorf(imp.Pos, "cannot import private function %q from %q", imp.Name, stmt.Path)
-				}
+			if imported.isPrivate(imp.Name) {
+				return p.errorf(imp.Pos, "cannot import private symbol %q from %q", imp.Name, stmt.Path)
+			}
+			if fn, ok := imported.fns[imp.Name]; ok {
 				p.fns[imp.Alias] = fn
 			}
-			if cExists {
-				if c.private {
-					return p.errorf(imp.Pos, "cannot import private constant %q from %q", imp.Name, stmt.Path)
-				}
+			if c, ok := imported.consts[imp.Name]; ok {
 				p.consts[imp.Alias] = c
 			}
-			if eExists {
-				if e.private {
-					return p.errorf(imp.Pos, "cannot import private enum %q from %q", imp.Name, stmt.Path)
-				}
+			if e, ok := imported.enums[imp.Name]; ok {
 				p.enums[imp.Alias] = e
 			}
 			p.namedImports[imp.Alias] = true
+			p.importedNames[imp.Alias] = true
 			// When a glob and a rename coexist in the same statement,
 			// the rename replaces the original name — remove the
 			// glob-imported original so only the alias is accessible.
 			if stmt.Glob && imp.Alias != imp.Name {
-				delete(p.fns, imp.Name)
-				delete(p.consts, imp.Name)
-				delete(p.enums, imp.Name)
+				dst.deleteAll(imp.Name)
+				delete(p.importedNames, imp.Name)
 			}
 		}
 
 		// Process namespace imports
 		if stmt.Namespace != "" {
-			nsFns := maps.Clone(fns)
-			if p.namespaces == nil {
-				p.namespaces = map[string]map[string]*fnDef{}
+			if p.namespaceSets == nil {
+				p.namespaceSets = map[string]*symbolSet{}
 			}
-			p.namespaces[stmt.Namespace] = nsFns
+			p.namespaceSets[stmt.Namespace] = imported.clone()
 			p.namespaceNames[stmt.Namespace] = true
-
-			nsConsts := maps.Clone(consts)
-			if p.namespaceConsts == nil {
-				p.namespaceConsts = map[string]map[string]*constDef{}
-			}
-			p.namespaceConsts[stmt.Namespace] = nsConsts
-
-			nsEnums := maps.Clone(enums)
-			if p.namespaceEnums == nil {
-				p.namespaceEnums = map[string]map[string]*enumDef{}
-			}
-			p.namespaceEnums[stmt.Namespace] = nsEnums
 		}
 	}
 
 	return nil
 }
 
-// checkImportCollisions checks for collisions between same-file function/constant/enum
-// definitions and named imports or namespace names. Called after collectUserFns.
-func (p *parser) checkImportCollisions(fnNames []string, constNames []string, enumNames []string) error {
-	for _, name := range fnNames {
+// checkImportCollisions checks for collisions between same-file declarations
+// and named imports or namespace names. Called after collectUserFns.
+func (p *parser) checkImportCollisions(declNames []string) error {
+	for _, name := range declNames {
 		if p.namedImports[name] {
-			return fmt.Errorf("function %q conflicts with a named import", name)
+			return fmt.Errorf("%q conflicts with a named import", name)
 		}
 		if p.namespaceNames[name] {
-			return fmt.Errorf("function %q conflicts with an import namespace", name)
-		}
-	}
-	for _, name := range constNames {
-		if p.namedImports[name] {
-			return fmt.Errorf("constant %q conflicts with a named import", name)
-		}
-		if p.namespaceNames[name] {
-			return fmt.Errorf("constant %q conflicts with an import namespace", name)
-		}
-	}
-	for _, name := range enumNames {
-		if p.namedImports[name] {
-			return fmt.Errorf("enum %q conflicts with a named import", name)
-		}
-		if p.namespaceNames[name] {
-			return fmt.Errorf("enum %q conflicts with an import namespace", name)
+			return fmt.Errorf("%q conflicts with an import namespace", name)
 		}
 	}
 	return nil
@@ -560,57 +505,40 @@ func (p *parser) checkImportCollisions(fnNames []string, constNames []string, en
 // A nil fnDef with no error means the name was not found as a function
 // (it might be a constant or enum — the caller should check p.consts and p.enums).
 func (p *parser) resolveFnName(tok token) (string, *fnDef, error) {
-	_, isNs := p.namespaces[tok.val]
-	if !isNs {
-		_, isNs = p.namespaceConsts[tok.val]
+	ns := p.namespaceSets[tok.val]
+	if ns == nil {
+		return tok.val, p.fns[tok.val], nil
 	}
-	if !isNs {
-		_, isNs = p.namespaceEnums[tok.val]
+	peek, err := p.next()
+	if err != nil {
+		return "", nil, err
 	}
-	if isNs {
-		peek, err := p.next()
-		if err != nil {
-			return "", nil, err
-		}
-		if peek.kind == tokDot {
-			memberTok, err := p.expect(tokIdent)
-			if err != nil {
-				return "", nil, err
-			}
-			qualName := tok.val + "." + memberTok.val
-			// Check functions first
-			if nsFns, ok := p.namespaces[tok.val]; ok {
-				if fn, exists := nsFns[memberTok.val]; exists {
-					if fn.private {
-						return "", nil, p.errorf(memberTok.pos, "cannot access private function %q in namespace %q", memberTok.val, tok.val)
-					}
-					p.fns[qualName] = fn
-					return qualName, fn, nil
-				}
-			}
-			// Then check constants
-			if nsConsts, ok := p.namespaceConsts[tok.val]; ok {
-				if c, exists := nsConsts[memberTok.val]; exists {
-					if c.private {
-						return "", nil, p.errorf(memberTok.pos, "cannot access private constant %q in namespace %q", memberTok.val, tok.val)
-					}
-					p.consts[qualName] = c
-					return qualName, nil, nil
-				}
-			}
-			// Then check enums
-			if nsEnums, ok := p.namespaceEnums[tok.val]; ok {
-				if e, exists := nsEnums[memberTok.val]; exists {
-					if e.private {
-						return "", nil, p.errorf(memberTok.pos, "cannot access private enum %q in namespace %q", memberTok.val, tok.val)
-					}
-					p.enums[qualName] = e
-					return qualName, nil, nil
-				}
-			}
-			return "", nil, p.errorf(memberTok.pos, "%q not found in namespace %q", memberTok.val, tok.val)
-		}
+	if peek.kind != tokDot {
 		p.unget(peek)
+		return tok.val, p.fns[tok.val], nil
 	}
-	return tok.val, p.fns[tok.val], nil
+	memberTok, err := p.expect(tokIdent)
+	if err != nil {
+		return "", nil, err
+	}
+	qualName := tok.val + "." + memberTok.val
+	if ns.isPrivate(memberTok.val) {
+		return "", nil, p.errorf(memberTok.pos, "cannot access private symbol %q in namespace %q", memberTok.val, tok.val)
+	}
+	// Check functions first
+	if fn, ok := ns.fns[memberTok.val]; ok {
+		p.fns[qualName] = fn
+		return qualName, fn, nil
+	}
+	// Then constants
+	if c, ok := ns.consts[memberTok.val]; ok {
+		p.consts[qualName] = c
+		return qualName, nil, nil
+	}
+	// Then enums
+	if e, ok := ns.enums[memberTok.val]; ok {
+		p.enums[qualName] = e
+		return qualName, nil, nil
+	}
+	return "", nil, p.errorf(memberTok.pos, "%q not found in namespace %q", memberTok.val, tok.val)
 }

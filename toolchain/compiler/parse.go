@@ -1271,6 +1271,40 @@ func (p *parser) parseBehaviorID() (token, error) {
 	return tok, nil
 }
 
+// --- Declaration collision checking ---
+
+// checkDeclName checks that name doesn't collide with any existing function,
+// constant, or enum declaration. kind is the type of the new declaration
+// ("function", "constant", or "enum"). For functions, stdlib and imported
+// names are excluded (user functions may override both).
+func (p *parser) checkDeclName(name, kind string, pos int) error {
+	if _, ok := p.fns[name]; ok {
+		if kind == "function" {
+			// Functions can override stdlib and imports; only duplicate
+			// same-file user fns are errors.
+			if p.stdlibFns[name] == nil && !p.importedNames[name] {
+				return p.errorf(pos, "duplicate function %q", name)
+			}
+		} else {
+			// Consts/enums cannot shadow any function (including stdlib)
+			return p.errorf(pos, "%s %q conflicts with a function of the same name", kind, name)
+		}
+	}
+	if _, ok := p.consts[name]; ok {
+		if kind == "constant" {
+			return p.errorf(pos, "duplicate constant %q", name)
+		}
+		return p.errorf(pos, "%s %q conflicts with a constant of the same name", kind, name)
+	}
+	if _, ok := p.enums[name]; ok {
+		if kind == "enum" {
+			return p.errorf(pos, "duplicate enum %q", name)
+		}
+		return p.errorf(pos, "%s %q conflicts with an enum of the same name", kind, name)
+	}
+	return nil
+}
+
 // --- Compile-time constants ---
 
 // parseConstDecl parses a const declaration after the `const` keyword.
@@ -1288,14 +1322,8 @@ func (p *parser) parseConstDecl(private bool) (string, error) {
 	if name == "_" {
 		return "", p.errorf(nameTok.pos, "'_' cannot be used as a constant name")
 	}
-	if _, ok := p.consts[name]; ok {
-		return "", p.errorf(nameTok.pos, "duplicate constant %q", name)
-	}
-	if _, ok := p.fns[name]; ok {
-		return "", p.errorf(nameTok.pos, "constant %q conflicts with a function of the same name", name)
-	}
-	if _, ok := p.enums[name]; ok {
-		return "", p.errorf(nameTok.pos, "constant %q conflicts with an enum of the same name", name)
+	if err := p.checkDeclName(name, "constant", nameTok.pos); err != nil {
+		return "", err
 	}
 	if _, err := p.expect(tokEquals); err != nil {
 		return "", err
@@ -1398,14 +1426,8 @@ func (p *parser) parseEnumDecl(private bool) (string, error) {
 	if name == "_" {
 		return "", p.errorf(nameTok.pos, "'_' cannot be used as an enum name")
 	}
-	if _, ok := p.enums[name]; ok {
-		return "", p.errorf(nameTok.pos, "duplicate enum %q", name)
-	}
-	if _, ok := p.fns[name]; ok {
-		return "", p.errorf(nameTok.pos, "enum %q conflicts with a function of the same name", name)
-	}
-	if _, ok := p.consts[name]; ok {
-		return "", p.errorf(nameTok.pos, "enum %q conflicts with a constant of the same name", name)
+	if err := p.checkDeclName(name, "enum", nameTok.pos); err != nil {
+		return "", err
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -2503,9 +2525,7 @@ func (p *parser) collectUserFns() error {
 // is performed. When false, behavior IDs are collected and same-file names
 // are checked against imports.
 func (p *parser) collectDecls(isImport bool) error {
-	var sameFileFns []string
-	var sameFileConsts []string
-	var sameFileEnums []string
+	var sameFileNames []string
 
 	for {
 		tok, err := p.next()
@@ -2543,7 +2563,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				}
 				p.fns[name].private = true
 				if !isImport {
-					sameFileFns = append(sameFileFns, name)
+					sameFileNames = append(sameFileNames, name)
 				}
 			case "const":
 				name, err := p.parseConstDecl(true)
@@ -2551,7 +2571,7 @@ func (p *parser) collectDecls(isImport bool) error {
 					return err
 				}
 				if !isImport {
-					sameFileConsts = append(sameFileConsts, name)
+					sameFileNames = append(sameFileNames, name)
 				}
 			case "enum":
 				name, err := p.parseEnumDecl(true)
@@ -2559,7 +2579,7 @@ func (p *parser) collectDecls(isImport bool) error {
 					return err
 				}
 				if !isImport {
-					sameFileEnums = append(sameFileEnums, name)
+					sameFileNames = append(sameFileNames, name)
 				}
 			default:
 				return p.errorf(fnTok.pos, "expected 'fn', 'const', or 'enum' after 'private', got %q", fnTok.val)
@@ -2570,7 +2590,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				return err
 			}
 			if !isImport {
-				sameFileFns = append(sameFileFns, name)
+				sameFileNames = append(sameFileNames, name)
 			}
 		case "const":
 			name, err := p.parseConstDecl(false)
@@ -2578,7 +2598,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				return err
 			}
 			if !isImport {
-				sameFileConsts = append(sameFileConsts, name)
+				sameFileNames = append(sameFileNames, name)
 			}
 		case "enum":
 			name, err := p.parseEnumDecl(false)
@@ -2586,7 +2606,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				return err
 			}
 			if !isImport {
-				sameFileEnums = append(sameFileEnums, name)
+				sameFileNames = append(sameFileNames, name)
 			}
 		case "import":
 			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
@@ -2596,7 +2616,7 @@ func (p *parser) collectDecls(isImport bool) error {
 	}
 
 	if !isImport {
-		return p.checkImportCollisions(sameFileFns, sameFileConsts, sameFileEnums)
+		return p.checkImportCollisions(sameFileNames)
 	}
 	return nil
 }
@@ -2702,11 +2722,8 @@ func (p *parser) parseUserFn() (string, error) {
 	if Keywords[nameTok.val] {
 		return "", p.errorf(nameTok.pos, "%q is a reserved keyword and cannot be used as a function name", nameTok.val)
 	}
-	if _, ok := p.consts[nameTok.val]; ok {
-		return "", p.errorf(nameTok.pos, "function %q conflicts with a constant of the same name", nameTok.val)
-	}
-	if _, ok := p.enums[nameTok.val]; ok {
-		return "", p.errorf(nameTok.pos, "function %q conflicts with an enum of the same name", nameTok.val)
+	if err := p.checkDeclName(nameTok.val, "function", nameTok.pos); err != nil {
+		return "", err
 	}
 
 	params, err := p.parseParamList()

@@ -131,11 +131,10 @@ type parser struct {
 	importStack    []string                   // import path stack for cycle detection
 	namedImports   map[string]bool            // names from named imports (for collision checking)
 	namespaceNames map[string]bool            // namespace names (for collision checking)
-	namespaces     map[string]map[string]*fnDef // namespace → fn name → fnDef
-	consts         map[string]*constDef              // compile-time constants
-	namespaceConsts map[string]map[string]*constDef  // namespace → const name → constDef
-	enums          map[string]*enumDef               // compile-time enums
-	namespaceEnums map[string]map[string]*enumDef    // namespace → enum name → enumDef
+	importedNames  map[string]bool            // all names from imports: glob + named (for dup detection)
+	namespaceSets  map[string]*symbolSet      // namespace → symbolSet (fns, consts, enums)
+	consts         map[string]*constDef       // compile-time constants
+	enums          map[string]*enumDef        // compile-time enums
 	evalStepLimit  int                               // step limit for compile-time evaluation
 	loopDepth      int                        // >0 when inside a loop body
 	loopLabels  map[string]bool  // labels of enclosing loops

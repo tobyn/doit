@@ -176,10 +176,10 @@ be called or imported — behaviors in imported files are silently skipped.
 
 - Import statements must appear before all `fn` and `behavior` declarations
 - Duplicate import names (across all import statements) are compile errors
-- A same-file function name that conflicts with a named import or namespace
-  name is a compile error
-- A same-file function name that shadows a glob import is allowed (same-file
-  wins)
+- A same-file declaration name that conflicts with a named import or
+  namespace name is a compile error
+- A same-file declaration name that shadows a glob import is allowed
+  (same-file wins)
 - Behavior IDs never collide with imports — a behavior named `greet` and an
   import named `greet` can coexist
 - Local variables can shadow imported names within their scope:
@@ -379,6 +379,23 @@ import * from "./types"
 import "./types" as types
 let d = types.Direction::North
 ```
+
+### Shared namespace
+
+Functions, constants, and enums share a single namespace. Declaring two
+things with the same name — by any combination of `fn`, `const`, and `enum`
+— is a compile error:
+
+```doit
+fn greet() { notify "hi" }
+fn greet() { notify "hello" }   # error: duplicate function "greet"
+const greet = 5                 # error: constant "greet" conflicts with a function
+enum greet { A }                # error: enum "greet" conflicts with a function
+```
+
+User-defined functions may override standard library functions with the same
+name. Same-file declarations also override glob imports (but collide with
+named imports).
 
 ## Statements
 

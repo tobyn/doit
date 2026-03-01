@@ -183,6 +183,106 @@ type enumDef struct {
 	private bool           // true for private enum (not visible as import)
 }
 
+// symbolSet groups the three top-level declaration maps (functions, constants,
+// enums) that share a namespace. Used by the import system and namespace storage
+// to operate on all three uniformly.
+type symbolSet struct {
+	fns    map[string]*fnDef
+	consts map[string]*constDef
+	enums  map[string]*enumDef
+}
+
+// newSymbolSet creates an empty symbolSet.
+func newSymbolSet() *symbolSet {
+	return &symbolSet{
+		fns:    map[string]*fnDef{},
+		consts: map[string]*constDef{},
+		enums:  map[string]*enumDef{},
+	}
+}
+
+// has reports whether name exists in any of the three maps.
+func (s *symbolSet) has(name string) bool {
+	if _, ok := s.fns[name]; ok {
+		return true
+	}
+	if _, ok := s.consts[name]; ok {
+		return true
+	}
+	if _, ok := s.enums[name]; ok {
+		return true
+	}
+	return false
+}
+
+// isPrivate reports whether name exists and is private.
+func (s *symbolSet) isPrivate(name string) bool {
+	if fn, ok := s.fns[name]; ok {
+		return fn.private
+	}
+	if c, ok := s.consts[name]; ok {
+		return c.private
+	}
+	if e, ok := s.enums[name]; ok {
+		return e.private
+	}
+	return false
+}
+
+// mergeNonPrivate copies all non-private entries from src into s.
+func (s *symbolSet) mergeNonPrivate(src *symbolSet) {
+	for name, fn := range src.fns {
+		if !fn.private {
+			s.fns[name] = fn
+		}
+	}
+	for name, c := range src.consts {
+		if !c.private {
+			s.consts[name] = c
+		}
+	}
+	for name, e := range src.enums {
+		if !e.private {
+			s.enums[name] = e
+		}
+	}
+}
+
+// clone returns a shallow copy of the symbolSet (maps are cloned).
+func (s *symbolSet) clone() *symbolSet {
+	return &symbolSet{
+		fns:    maps.Clone(s.fns),
+		consts: maps.Clone(s.consts),
+		enums:  maps.Clone(s.enums),
+	}
+}
+
+// deleteAll removes name from all three maps.
+func (s *symbolSet) deleteAll(name string) {
+	delete(s.fns, name)
+	delete(s.consts, name)
+	delete(s.enums, name)
+}
+
+// addNonPrivateNames adds all non-private symbol names to the provided set.
+func (s *symbolSet) addNonPrivateNames(names map[string]bool) {
+	for name, fn := range s.fns {
+		if !fn.private {
+			names[name] = true
+		}
+	}
+	for name, c := range s.consts {
+		if !c.private {
+			names[name] = true
+		}
+	}
+	for name, e := range s.enums {
+		if !e.private {
+			names[name] = true
+		}
+	}
+}
+
 type fnDef struct {
 	params  []paramDef
 	rets    []string       // return names (nil = no return)
