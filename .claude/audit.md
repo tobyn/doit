@@ -76,17 +76,6 @@ dimensions in a single pass:
 
 ### Medium
 
-- **`parseBehaviorBody` duplicates `parseBhvStmtBlockInner` statement
-  parsing (~260 lines).** The statement-parsing loop in
-  `parseBehaviorBody` (codegen.go:250-510) is a near-copy of
-  `parseBhvStmtBlockInner` (bhvast.go:2396-2761). Both handle the same
-  statement types with the same switch structure. `parseBehaviorBody`
-  additionally handles `@name`/`@param` attributes, but the rest is
-  duplicated. The `resolveFnName` bug above is a direct consequence of
-  this duplication. `parseBehaviorBody` could call
-  `parseBhvStmtBlockInner` for statement parsing with `@name`/`@param`
-  as a pre-processing step.
-
 - **`emitBhvIfExpr`/`emitBhvIfExprMulti` duplication (~85 lines), and
   same for fn body counterparts.** The single-target and multi-target
   if-expression emitters share identical branch-collection, condition

@@ -248,194 +248,30 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 
 		hasInstruction = true
 
-		switch tok.val {
-		case "instruction":
-			rawFrame, err := p.parseInstruction()
-			if err != nil {
-				return nil, err
-			}
-			if err := p.checkInstructionDirections(rawFrame, syms, tok.pos); err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &InstructionStmt{Frame: rawFrame, Comment: p.docComment})
-
-		case "locked":
-			comment := p.docComment
-			if _, err := p.expect(tokLBrace); err != nil {
-				return nil, err
-			}
-			body, err := p.parseBhvStmtBlockInner(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &ModeBlockStmt{Unlock: false, Body: body, Comment: comment})
-
-		case "unlocked":
-			comment := p.docComment
-			if _, err := p.expect(tokLBrace); err != nil {
-				return nil, err
-			}
-			body, err := p.parseBhvStmtBlockInner(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &ModeBlockStmt{Unlock: true, Body: body, Comment: comment})
-
-		case "var":
-			parsed, err := p.parseBhvLetVarStmt(true, syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, parsed...)
-
-		case "let":
-			parsed, err := p.parseBhvLetVarStmt(false, syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, parsed...)
-
-		case "_":
-			sep, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if sep.kind == tokComma {
-				parsed, err := p.parseBhvMultiReturn(tok, false, true, syms)
-				if err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, parsed...)
-			} else if sep.kind == tokEquals {
-				// _ = fn args → bare call, discard returns
-				calleeTok, err := p.expect(tokIdent)
-				if err != nil {
-					return nil, err
-				}
-				name, fn, fnErr := p.resolveFnName(calleeTok)
-				if fnErr != nil {
-					return nil, fnErr
-				}
-				if fn == nil {
-					return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
-				}
-				args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
-				if err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &CallStmt{
-					Name:    name,
-					Args:    args,
-					KwArgs:  kwArgs,
-					Comment: p.docComment,
-				})
-			} else {
-				return nil, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
-			}
-
-		case "loop":
-			loopStmt, err := p.parseBhvLoopStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, loopStmt)
-
-		case "if":
-			ifStmt, err := p.parseBhvIfStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, ifStmt)
-
-		case "while":
-			whileStmt, err := p.parseBhvWhileStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, whileStmt)
-
-		case "for":
-			forStmt, err := p.parseBhvForStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, forStmt)
-
-		case "wait":
-			waitStmt, err := p.parseBhvWaitStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, waitStmt)
-
-		case "return":
-			return nil, p.errorf(tok.pos, "'return' can only be used inside function bodies")
-
-		case "fn", "private":
-			return nil, p.errorf(tok.pos, "function definitions cannot be nested inside behavior bodies")
-
-		case "behavior":
-			return nil, p.errorf(tok.pos, "behavior definitions cannot be nested")
-
-		case "else":
-			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
-
-		case "continue":
-			return nil, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop")
-
-		default:
-			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
-			// Save doc comment before label lookahead — p.next() resets it.
-			savedComment := p.docComment
-			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {
-				peek, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if peek.kind == tokColon {
-					peek2, err := p.next()
-					if err != nil {
-						return nil, err
-					}
-					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while" || peek2.val == "for") {
-						label := tok.val
-						if p.loopLabels[label] {
-							return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
-						}
-						switch peek2.val {
-						case "loop":
-							loopStmt, err := p.parseBhvLoopStmt(syms, label)
-							if err != nil {
-								return nil, err
-							}
-							stmts = append(stmts, loopStmt)
-						case "while":
-							whileStmt, err := p.parseBhvWhileStmt(syms, label)
-							if err != nil {
-								return nil, err
-							}
-							stmts = append(stmts, whileStmt)
-						case "for":
-							forStmt, err := p.parseBhvForStmt(syms, label)
-							if err != nil {
-								return nil, err
-							}
-							stmts = append(stmts, forStmt)
-						}
-						continue
-					}
-					p.unget(peek2)
-				}
-				p.unget(peek)
-			}
-
-			p.docComment = savedComment
-			parsed, err := p.parseBhvDefaultStmt(tok, syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, parsed...)
+		// Try shared keyword cases
+		parsed, handled, err := p.parseBhvOneStmt(tok, syms)
+		if err != nil {
+			return nil, err
 		}
+		if handled {
+			stmts = append(stmts, parsed...)
+			continue
+		}
+
+		// Default case: labeled loops or regular statement
+		labeled, err := p.tryParseLabeledLoop(tok, syms)
+		if err != nil {
+			return nil, err
+		}
+		if labeled != nil {
+			stmts = append(stmts, labeled)
+			continue
+		}
+		parsed, err = p.parseBhvDefaultStmt(tok, syms)
+		if err != nil {
+			return nil, err
+		}
+		stmts = append(stmts, parsed...)
 	}
 
 	// Phase 2: Emit frames from AST.

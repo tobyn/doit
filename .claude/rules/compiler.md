@@ -172,11 +172,14 @@ output format.
   (variadic `label ...string`) → `LoopStmt`, `parseBhvForStmt`
   (variadic `label ...string`) → `ForStmt`, `parseBhvWaitStmt`
   → `WaitStmt`, `parseBhvMultiReturn`
-  → `MultiReturnStmt`, `parseBhvStmtBlock`/`parseBhvStmtBlockInner`
-  (full statement set in inner blocks including var/let/instruction/
-  control flow/break; uses `p.loopDepth > 0` for break validation;
-  detects `ident: loop`/`ident: while`/`ident: for` label syntax in
-  default case;
+  → `MultiReturnStmt`, `parseBhvOneStmt` (shared keyword statement
+  dispatch used by both `parseBehaviorBody` and `parseBhvStmtBlockInner`;
+  returns `([]Stmt, bool, error)` where the bool indicates whether the
+  token was handled), `tryParseLabeledLoop` (labeled loop detection:
+  `ident: loop/while/for`; returns parsed statement or nil with parser
+  state restored), `parseBhvStmtBlock`/`parseBhvStmtBlockInner`
+  (inner blocks with break and exprTail support; delegates keyword
+  cases to `parseBhvOneStmt`;
   accepts variadic `exprTail` for mode block expression
   tail detection), `parseBhvModeBlockExpr`, `exprArity`/`ifExprArity`
   (generalized arity helper for `CallExpr`/`IfExpr`/`ModeBlockExpr`),
@@ -207,9 +210,8 @@ output format.
   leaves via De Morgan's law)
 - **`compiler/codegen.go`** — Behavior body dispatch and shared helpers:
   `parseBehaviorBody` (two-phase: parse `@name`/`@param` attributes +
-  statements into `[]Stmt` via `parseBhv*` functions — default case
-  detects `ident: loop`/`ident: while`/`ident: for` label syntax — then emit via
-  `emitBehaviorStmts` with `frameBuilder.mode` tracking),
+  statements into `[]Stmt` via `parseBhvOneStmt`/`tryParseLabeledLoop`
+  — then emit via `emitBehaviorStmts` with `frameBuilder.mode` tracking),
   `resolveInstructionFrame` (0→1 key conversion
   and slot substitution), `frameHasReturnSlot`/`frameReturnCount`,
   direction enforcement (`argDirection`, `checkReadable`,

@@ -2354,6 +2354,171 @@ func (p *parser) parseBhvLetVarStmt(mutable bool, syms *symbolTable) ([]Stmt, er
 	return nil, p.errorf(sep.pos, "expected ',' or '=' after %s identifier, got %s", keyword, sep.describe())
 }
 
+// tryParseLabeledLoop checks if the current token starts a labeled loop
+// (label: loop/while/for). Returns the parsed statement if a labeled loop is
+// found. Returns nil if not. Restores parser state on non-match.
+func (p *parser) tryParseLabeledLoop(tok token, syms *symbolTable) (Stmt, error) {
+	savedComment := p.docComment
+	if isConstructor(tok.val) || tok.val == "null" || tok.val == "true" || tok.val == "false" {
+		return nil, nil
+	}
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek.kind == tokColon {
+		peek2, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while" || peek2.val == "for") {
+			label := tok.val
+			if p.loopLabels[label] {
+				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
+			}
+			switch peek2.val {
+			case "loop":
+				return p.parseBhvLoopStmt(syms, label)
+			case "while":
+				return p.parseBhvWhileStmt(syms, label)
+			case "for":
+				return p.parseBhvForStmt(syms, label)
+			}
+		}
+		p.unget(peek2)
+	}
+	p.unget(peek)
+	p.docComment = savedComment
+	return nil, nil
+}
+
+// parseBhvOneStmt parses a single behavior-level statement from the given
+// token. Returns (stmts, true, nil) on success, or (nil, false, nil) if the
+// token is not a recognized statement keyword (the "default" case). Both
+// parseBehaviorBody and parseBhvStmtBlockInner delegate to this for the
+// shared keyword cases.
+func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, error) {
+	comment := p.docComment
+	switch tok.val {
+	case "instruction":
+		rawFrame, err := p.parseInstruction()
+		if err != nil {
+			return nil, false, err
+		}
+		if err := p.checkInstructionDirections(rawFrame, syms, tok.pos); err != nil {
+			return nil, false, err
+		}
+		return []Stmt{&InstructionStmt{Frame: rawFrame, Comment: comment}}, true, nil
+	case "locked":
+		if _, err := p.expect(tokLBrace); err != nil {
+			return nil, false, err
+		}
+		body, err := p.parseBhvStmtBlockInner(syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{&ModeBlockStmt{Unlock: false, Body: body, Comment: comment}}, true, nil
+	case "unlocked":
+		if _, err := p.expect(tokLBrace); err != nil {
+			return nil, false, err
+		}
+		body, err := p.parseBhvStmtBlockInner(syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{&ModeBlockStmt{Unlock: true, Body: body, Comment: comment}}, true, nil
+	case "var":
+		parsed, err := p.parseBhvLetVarStmt(true, syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return parsed, true, nil
+	case "let":
+		parsed, err := p.parseBhvLetVarStmt(false, syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return parsed, true, nil
+	case "_":
+		sep, err := p.next()
+		if err != nil {
+			return nil, false, err
+		}
+		if sep.kind == tokComma {
+			parsed, err := p.parseBhvMultiReturn(tok, false, true, syms)
+			if err != nil {
+				return nil, false, err
+			}
+			return parsed, true, nil
+		} else if sep.kind == tokEquals {
+			calleeTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, false, err
+			}
+			name, fn, fnErr := p.resolveFnName(calleeTok)
+			if fnErr != nil {
+				return nil, false, fnErr
+			}
+			if fn == nil {
+				return nil, false, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+			}
+			args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
+			if err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&CallStmt{
+				Name:    name,
+				Args:    args,
+				KwArgs:  kwArgs,
+				Comment: comment,
+			}}, true, nil
+		}
+		return nil, false, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
+	case "loop":
+		loopStmt, err := p.parseBhvLoopStmt(syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{loopStmt}, true, nil
+	case "if":
+		ifStmt, err := p.parseBhvIfStmt(syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{ifStmt}, true, nil
+	case "while":
+		whileStmt, err := p.parseBhvWhileStmt(syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{whileStmt}, true, nil
+	case "for":
+		forStmt, err := p.parseBhvForStmt(syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{forStmt}, true, nil
+	case "wait":
+		waitStmt, err := p.parseBhvWaitStmt(syms)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{waitStmt}, true, nil
+	case "return":
+		return nil, false, p.errorf(tok.pos, "'return' can only be used inside function bodies")
+	case "fn", "private":
+		return nil, false, p.errorf(tok.pos, "function definitions cannot be nested inside behavior bodies")
+	case "behavior":
+		return nil, false, p.errorf(tok.pos, "behavior definitions cannot be nested")
+	case "else":
+		return nil, false, p.errorf(tok.pos, "'else' without matching 'if'")
+	case "continue":
+		return nil, false, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop")
+	default:
+		return nil, false, nil
+	}
+}
+
 // parseBhvStmtBlockInner parses a brace-delimited block of statements.
 // 'break' is allowed when p.loopDepth > 0. If exprTail is true, the last
 // item may be a bare expression (wrapped in exprTailStmt).
@@ -2410,131 +2575,8 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 		}
 		comment := p.docComment
 
-		switch tok.val {
-		case "locked":
-			if _, err := p.expect(tokLBrace); err != nil {
-				return nil, err
-			}
-			body, err := p.parseBhvStmtBlockInner(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &ModeBlockStmt{Unlock: false, Body: body, Comment: comment})
-		case "unlocked":
-			if _, err := p.expect(tokLBrace); err != nil {
-				return nil, err
-			}
-			body, err := p.parseBhvStmtBlockInner(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &ModeBlockStmt{Unlock: true, Body: body, Comment: comment})
-		case "instruction":
-			rawFrame, err := p.parseInstruction()
-			if err != nil {
-				return nil, err
-			}
-			if err := p.checkInstructionDirections(rawFrame, syms, tok.pos); err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &InstructionStmt{Frame: rawFrame, Comment: comment})
-		case "var":
-			parsed, err := p.parseBhvLetVarStmt(true, syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, parsed...)
-		case "let":
-			parsed, err := p.parseBhvLetVarStmt(false, syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, parsed...)
-		case "_":
-			sep, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if sep.kind == tokComma {
-				parsed, err := p.parseBhvMultiReturn(tok, false, true, syms)
-				if err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, parsed...)
-			} else if sep.kind == tokEquals {
-				calleeTok, err := p.expect(tokIdent)
-				if err != nil {
-					return nil, err
-				}
-				name, fn, fnErr := p.resolveFnName(calleeTok)
-				if fnErr != nil {
-					return nil, fnErr
-				}
-				if fn == nil {
-					return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
-				}
-				args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
-				if err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &CallStmt{
-					Name:    name,
-					Args:    args,
-					KwArgs:  kwArgs,
-					Comment: comment,
-				})
-			} else {
-				return nil, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
-			}
-		case "if":
-			if allowExprTail {
-				// Try as if-expression tail
-				ifExpr, err := p.parseBhvIfExpr(syms, comment)
-				if err != nil {
-					return nil, err
-				}
-				// Check if this was the last item in the block
-				peek, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if peek.kind == tokRBrace {
-					stmts = append(stmts, &exprTailStmt{Expr: ifExpr})
-					return stmts, nil
-				}
-				// Not the tail — cannot use if-expression as a statement
-				return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
-			}
-			ifStmt, err := p.parseBhvIfStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, ifStmt)
-		case "while":
-			whileStmt, err := p.parseBhvWhileStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, whileStmt)
-		case "loop":
-			loopStmt, err := p.parseBhvLoopStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, loopStmt)
-		case "for":
-			forStmt, err := p.parseBhvForStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, forStmt)
-		case "wait":
-			waitStmt, err := p.parseBhvWaitStmt(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, waitStmt)
-		case "break":
+		// Block-only: break
+		if tok.val == "break" {
 			if p.loopDepth == 0 {
 				return nil, p.errorf(tok.pos, "'break' outside of loop")
 			}
@@ -2552,164 +2594,143 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				p.unget(peek)
 			}
 			stmts = append(stmts, &BreakStmt{Label: label, Comment: comment})
-		case "return":
-			return nil, p.errorf(tok.pos, "'return' can only be used inside function bodies")
-		case "fn", "private":
-			return nil, p.errorf(tok.pos, "function definitions cannot be nested inside behavior bodies")
-		case "behavior":
-			return nil, p.errorf(tok.pos, "behavior definitions cannot be nested")
-		case "else":
-			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
-		case "continue":
-			return nil, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop")
-		default:
-			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
-			// Save doc comment before label lookahead — p.next() resets it.
-			savedComment := p.docComment
-			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {
-				peek, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if peek.kind == tokColon {
-					peek2, err := p.next()
-					if err != nil {
-						return nil, err
-					}
-					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while" || peek2.val == "for") {
-						label := tok.val
-						if p.loopLabels[label] {
-							return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
-						}
-						switch peek2.val {
-						case "loop":
-							loopStmt, err := p.parseBhvLoopStmt(syms, label)
-							if err != nil {
-								return nil, err
-							}
-							stmts = append(stmts, loopStmt)
-						case "while":
-							whileStmt, err := p.parseBhvWhileStmt(syms, label)
-							if err != nil {
-								return nil, err
-							}
-							stmts = append(stmts, whileStmt)
-						case "for":
-							forStmt, err := p.parseBhvForStmt(syms, label)
-							if err != nil {
-								return nil, err
-							}
-							stmts = append(stmts, forStmt)
-						}
-						continue
-					}
-					p.unget(peek2)
-				}
-				p.unget(peek)
-			}
-			p.docComment = savedComment
+			continue
+		}
 
-			if allowExprTail {
-				name, fn, fnErr := p.resolveFnName(tok)
-				if fnErr != nil {
-					return nil, fnErr
-				}
-				peek, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				p.unget(peek)
-
-				// Constructor as tail expression
-				if isConstructor(tok.val) {
-					ctor, err := p.parseBhvConstructorExpr(tok, syms)
-					if err != nil {
-						return nil, err
-					}
-					// Range constructor doesn't handle & internally; check and error
-					if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
-						peek, err := p.next()
-						if err != nil {
-							return nil, err
-						}
-						if peek.kind == tokAmpersand {
-							return nil, p.errorf(peek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
-						}
-						p.unget(peek)
-					}
-					if _, err := p.expect(tokRBrace); err != nil {
-						return nil, err
-					}
-					stmts = append(stmts, &exprTailStmt{Expr: ctor})
-					return stmts, nil
-				}
-
-				// null/true/false as tail expression
-				if tok.val == "null" || tok.val == "false" {
-					if _, err := p.expect(tokRBrace); err != nil {
-						return nil, err
-					}
-					stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
-					return stmts, nil
-				}
-				if tok.val == "true" {
-					if _, err := p.expect(tokRBrace); err != nil {
-						return nil, err
-					}
-					stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: map[string]any{"num": 1}}})
-					return stmts, nil
-				}
-
-				isExprTail := false
-				if fn != nil && fn.hasReturn() && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
-					isExprTail = true
-				} else if fn == nil && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
-					isExprTail = true
-				}
-
-				if isExprTail {
-					resolve := p.bhvResolver(syms)
-					var result Expr
-					if fn != nil && fn.hasReturn() {
-						// Function call as initial expression
-						args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
-						if err != nil {
-							return nil, err
-						}
-						result = &CallExpr{Name: name, Args: args, KwArgs: kwArgs}
-					} else {
-						// Variable or value as initial expression
-						resolved, err := resolve(tok)
-						if err != nil {
-							return nil, err
-						}
-						result = resolved
-					}
-					result, err = p.parseArithExprFromFull(result, resolve)
-					if err != nil {
-						return nil, err
-					}
-					final, handled, err := p.maybeBhvExprContinuation(result, syms)
-					if err != nil {
-						return nil, err
-					}
-					if handled {
-						result = final
-					}
-					if _, err := p.expect(tokRBrace); err != nil {
-						return nil, err
-					}
-					stmts = append(stmts, &exprTailStmt{Expr: result})
-					return stmts, nil
-				}
-			}
-
-			parsed, err := p.parseBhvDefaultStmt(tok, syms)
+		// ExprTail: if-expression
+		if allowExprTail && tok.val == "if" {
+			ifExpr, err := p.parseBhvIfExpr(syms, comment)
 			if err != nil {
 				return nil, err
 			}
-			stmts = append(stmts, parsed...)
+			peek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if peek.kind == tokRBrace {
+				stmts = append(stmts, &exprTailStmt{Expr: ifExpr})
+				return stmts, nil
+			}
+			return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
 		}
+
+		// Try shared keyword cases
+		parsed, handled, err := p.parseBhvOneStmt(tok, syms)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			stmts = append(stmts, parsed...)
+			continue
+		}
+
+		// Default case: labeled loops, exprTail, or regular statement
+		labeled, err := p.tryParseLabeledLoop(tok, syms)
+		if err != nil {
+			return nil, err
+		}
+		if labeled != nil {
+			stmts = append(stmts, labeled)
+			continue
+		}
+
+		if allowExprTail {
+			name, fn, fnErr := p.resolveFnName(tok)
+			if fnErr != nil {
+				return nil, fnErr
+			}
+			peek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			p.unget(peek)
+
+			// Constructor as tail expression
+			if isConstructor(tok.val) {
+				ctor, err := p.parseBhvConstructorExpr(tok, syms)
+				if err != nil {
+					return nil, err
+				}
+				if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
+					peek, err := p.next()
+					if err != nil {
+						return nil, err
+					}
+					if peek.kind == tokAmpersand {
+						return nil, p.errorf(peek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+					}
+					p.unget(peek)
+				}
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &exprTailStmt{Expr: ctor})
+				return stmts, nil
+			}
+
+			// null/true/false as tail expression
+			if tok.val == "null" || tok.val == "false" {
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
+				return stmts, nil
+			}
+			if tok.val == "true" {
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: map[string]any{"num": 1}}})
+				return stmts, nil
+			}
+
+			isExprTail := false
+			if fn != nil && fn.hasReturn() && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
+				isExprTail = true
+			} else if fn == nil && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
+				isExprTail = true
+			}
+
+			if isExprTail {
+				resolve := p.bhvResolver(syms)
+				var result Expr
+				if fn != nil && fn.hasReturn() {
+					args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
+					if err != nil {
+						return nil, err
+					}
+					result = &CallExpr{Name: name, Args: args, KwArgs: kwArgs}
+				} else {
+					resolved, err := resolve(tok)
+					if err != nil {
+						return nil, err
+					}
+					result = resolved
+				}
+				result, err = p.parseArithExprFromFull(result, resolve)
+				if err != nil {
+					return nil, err
+				}
+				final, handled, err := p.maybeBhvExprContinuation(result, syms)
+				if err != nil {
+					return nil, err
+				}
+				if handled {
+					result = final
+				}
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &exprTailStmt{Expr: result})
+				return stmts, nil
+			}
+		}
+
+		parsed, err = p.parseBhvDefaultStmt(tok, syms)
+		if err != nil {
+			return nil, err
+		}
+		stmts = append(stmts, parsed...)
 	}
 	return stmts, nil
 }
