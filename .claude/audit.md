@@ -101,10 +101,6 @@ dimensions in a single pass:
 
 ### Low
 
-- **`arithmeticOpName` and `compoundAssignOpName` are identical
-  functions.** Both return `arithOpNames[kind]` (codegen.go:664-688).
-  Could merge into a single `opName` function.
-
 - **`exprArity`/`ifExprArity` vs `exprArityStatic`/`ifExprArityStatic`
   duplication.** The method versions (bhvast.go:2177-2205) use `p.fns`,
   the free-function versions (parse.go:3498-3526) take a `fns` map

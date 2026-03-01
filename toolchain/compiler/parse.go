@@ -1054,7 +1054,7 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 				return err
 			}
 			f := map[string]any{
-				"op": compoundAssignOpName(s.Op),
+				"op": arithOpName(s.Op),
 				"1":  target,
 				"2":  rhs,
 				"3":  target,

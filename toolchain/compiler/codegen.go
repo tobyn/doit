@@ -655,9 +655,9 @@ var arithOpNames = map[tokenKind]string{
 	tokPercent: "modulo", tokPercentEquals: "modulo",
 }
 
-// arithmeticOpName maps an arithmetic token kind to the stdlib function
-// opcode name.
-func arithmeticOpName(kind tokenKind) string { return arithOpNames[kind] }
+// arithOpName maps an arithmetic or compound assignment token kind to the
+// stdlib function opcode name.
+func arithOpName(kind tokenKind) string { return arithOpNames[kind] }
 
 // isHighPriorityArithOp reports whether the token kind is * or / (higher PEMDAS
 // precedence than + and -).
@@ -676,10 +676,6 @@ func isLowPriorityArithOp(kind tokenKind) bool {
 func isCompoundAssignOp(kind tokenKind) bool {
 	return kind == tokPlusEquals || kind == tokMinusEquals || kind == tokStarEquals || kind == tokSlashEquals || kind == tokPercentEquals
 }
-
-// compoundAssignOpName maps a compound assignment token kind to the stdlib
-// function opcode name.
-func compoundAssignOpName(kind tokenKind) string { return arithOpNames[kind] }
 
 // isComparisonOp reports whether the token kind is a comparison operator
 // (>, <, >=, <=, ==, !=).
@@ -944,7 +940,7 @@ func (p *parser) emitArithNode(expr *ArithExpr, target any, b *frameBuilder, use
 	}
 
 	f := map[string]any{
-		"op": arithmeticOpName(expr.Op),
+		"op": arithOpName(expr.Op),
 		"1":  lhs,
 		"2":  rhs,
 		"3":  target,

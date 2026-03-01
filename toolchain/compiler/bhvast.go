@@ -3236,7 +3236,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 			return err
 		}
 		f := map[string]any{
-			"op": compoundAssignOpName(s.Op),
+			"op": arithOpName(s.Op),
 			"1":  target,
 			"2":  rhs,
 			"3":  target,

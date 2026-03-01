@@ -218,8 +218,8 @@ output format.
   emitters (`emitComparison`, `emitTypeCheck`, `emitTruthyCheck`,
   `emitBoolCheckFrame`, `comparisonTerm` type with `negated` field),
   arithmetic/comparison
-  op helpers (`arithmeticOpName`, `isComparisonOp`,
-  `isEqualityOp`, `isCompoundAssignOp`, `compoundAssignOpName`,
+  op helpers (`arithOpName`, `isComparisonOp`,
+  `isEqualityOp`, `isCompoundAssignOp`,
   `isHighPriorityArithOp`, `isLowPriorityArithOp`), type check helpers
   (`isTypeCheckOp`, `parseIsRHS`), `parseParamAttr`, `checkVarName`,
   `parseName`, `parseLocalize`, `matchLocale` shared BCP 47 helper
