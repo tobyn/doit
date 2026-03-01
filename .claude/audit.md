@@ -112,10 +112,6 @@ dimensions in a single pass:
   if callComment == "" { callComment = comment }` pattern. A one-line
   helper would save ~42 lines.
 
-- **`allAliases` map stores unused positions.** (import.go:31,54-66)
-  Declared as `map[string]int` but the stored position is immediately
-  discarded with `_ = prevPos`. Should be `map[string]bool`.
-
 - **Redundant nil guards in `resolveFnName`.** (import.go:607-614)
   The `p.namespaces != nil` and `p.namespaceConsts != nil` checks
   are unnecessary — Go map lookups on nil maps are safe (return zero

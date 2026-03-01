@@ -28,7 +28,7 @@ type ImportName struct {
 // Stores results into p.imports.
 func (p *parser) parseImports() error {
 	// Track all aliases (named imports + namespace names) for collision detection
-	allAliases := map[string]int{} // alias → source position
+	allAliases := map[string]bool{}
 
 	for {
 		tok, err := p.next()
@@ -51,18 +51,16 @@ func (p *parser) parseImports() error {
 
 		// Check for duplicate aliases within and across statements
 		for _, name := range stmt.Names {
-			if prevPos, ok := allAliases[name.Alias]; ok {
-				_ = prevPos
+			if allAliases[name.Alias] {
 				return p.errorf(name.Pos, "duplicate import name %q", name.Alias)
 			}
-			allAliases[name.Alias] = name.Pos
+			allAliases[name.Alias] = true
 		}
 		if stmt.Namespace != "" {
-			if prevPos, ok := allAliases[stmt.Namespace]; ok {
-				_ = prevPos
+			if allAliases[stmt.Namespace] {
 				return p.errorf(stmt.Pos, "duplicate import name %q", stmt.Namespace)
 			}
-			allAliases[stmt.Namespace] = stmt.Pos
+			allAliases[stmt.Namespace] = true
 		}
 
 		p.imports = append(p.imports, stmt)
