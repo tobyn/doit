@@ -413,6 +413,36 @@ func (p *parser) parseArithExprFromFull(first Expr, resolve operandResolver) (Ex
 	return p.parseArithExprFrom(termResult, resolve)
 }
 
+// parseSimpleExpr parses a simple numeric expression from an already-consumed
+// token. Handles number literals (with arithmetic continuation), parenthesized
+// expressions, and identifiers. errContext is used in the error message for
+// unexpected tokens (e.g., "after 'loop'", "after 'wait'").
+func (p *parser) parseSimpleExpr(tok token, resolve operandResolver, errContext string) (Expr, error) {
+	switch tok.kind {
+	case tokNumber:
+		num, _ := strconv.Atoi(tok.val)
+		expr := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
+		return p.parseArithExprFromFull(expr, resolve)
+	case tokLParen:
+		expr, err := p.parseArithExpr(resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		return expr, nil
+	case tokIdent:
+		resolved, err := resolve(tok)
+		if err != nil {
+			return nil, err
+		}
+		return p.parseArithExprFromFull(resolved, resolve)
+	default:
+		return nil, p.errorf(tok.pos, "expected %s, got %s", errContext, tok.describe())
+	}
+}
+
 // resolveBhvOperand validates an identifier as readable and resolves it:
 // $register → LiteralExpr{int}, $param → LiteralExpr{int}, else → IdentExpr.
 func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
@@ -1732,34 +1762,9 @@ func (p *parser) parseBhvLoopStmt(syms *symbolTable, label ...string) (*LoopStmt
 
 	// Counted loop: parse count expression
 	resolve := p.bhvResolver(syms)
-	switch peek.kind {
-	case tokNumber:
-		num, _ := strconv.Atoi(peek.val)
-		count = &LiteralExpr{Value: map[string]any{"num": num}}
-		// Check for arithmetic continuation
-		count, err = p.parseArithExprFromFull(count, resolve)
-		if err != nil {
-			return nil, err
-		}
-	case tokLParen:
-		count, err = p.parseArithExpr(resolve)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokRParen); err != nil {
-			return nil, err
-		}
-	case tokIdent:
-		resolved, err := resolve(peek)
-		if err != nil {
-			return nil, err
-		}
-		count, err = p.parseArithExprFromFull(resolved, resolve)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, p.errorf(peek.pos, "expected '{' or count expression after 'loop', got %s", peek.describe())
+	count, err = p.parseSimpleExpr(peek, resolve, "'{' or count expression after 'loop'")
+	if err != nil {
+		return nil, err
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -1786,33 +1791,9 @@ func (p *parser) parseBhvWaitStmt(syms *symbolTable) (*WaitStmt, error) {
 	}
 
 	var ticks Expr
-	switch peek.kind {
-	case tokNumber:
-		num, _ := strconv.Atoi(peek.val)
-		ticks = &LiteralExpr{Value: map[string]any{"num": num}}
-		ticks, err = p.parseArithExprFromFull(ticks, resolve)
-		if err != nil {
-			return nil, err
-		}
-	case tokLParen:
-		ticks, err = p.parseArithExpr(resolve)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokRParen); err != nil {
-			return nil, err
-		}
-	case tokIdent:
-		resolved, err := resolve(peek)
-		if err != nil {
-			return nil, err
-		}
-		ticks, err = p.parseArithExprFromFull(resolved, resolve)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, p.errorf(peek.pos, "expected ticks expression after 'wait', got %s", peek.describe())
+	ticks, err = p.parseSimpleExpr(peek, resolve, "ticks expression after 'wait'")
+	if err != nil {
+		return nil, err
 	}
 
 	// Check for optional condition block

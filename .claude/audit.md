@@ -111,13 +111,6 @@ dimensions in a single pass:
   slice). Could parameterize with a tail-emission callback, or handle
   single targets as a `[]any{target}` slice.
 
-- **Ticks/count expression parsing duplicated 4 times.** The three-way
-  switch on `tokNumber`/`tokLParen`/`tokIdent` for parsing a simple
-  expression appears in `parseBhvLoopStmt`, `parseBhvWaitStmt`,
-  `parseFnBodyLoopStmt`, and `parseFnBodyWaitStmt` (~25 lines each).
-  A shared `parseSingleExpr(resolve, errContext)` helper would
-  eliminate all four copies.
-
 - **`tryEvalExpr`/`tryEvalStmts` duplicate call-argument evaluation 3
   times.** The "evaluate positional args, evaluate keyword args, call
   `tryEvalCall`" pattern is copy-pasted in the `*CallExpr` case of

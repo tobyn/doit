@@ -4649,34 +4649,9 @@ func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string, label .
 	}
 
 	// Counted loop: parse count expression
-	var count Expr
-	switch peek.kind {
-	case tokNumber:
-		num, _ := strconv.Atoi(peek.val)
-		count = &LiteralExpr{Value: map[string]any{"num": num}}
-		count, err = p.parseArithExprFromFull(count, ctx.resolve)
-		if err != nil {
-			return nil, err
-		}
-	case tokLParen:
-		count, err = p.parseArithExpr(ctx.resolve)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokRParen); err != nil {
-			return nil, err
-		}
-	case tokIdent:
-		resolved, err := ctx.resolve(peek)
-		if err != nil {
-			return nil, err
-		}
-		count, err = p.parseArithExprFromFull(resolved, ctx.resolve)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, p.errorf(peek.pos, "expected '{' or count expression after 'loop', got %s", peek.describe())
+	count, err := p.parseSimpleExpr(peek, ctx.resolve, "'{' or count expression after 'loop'")
+	if err != nil {
+		return nil, err
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
@@ -4699,34 +4674,9 @@ func (p *parser) parseFnBodyWaitStmt(ctx *fnBodyContext, comment string) (*WaitS
 		return nil, err
 	}
 
-	var ticks Expr
-	switch peek.kind {
-	case tokNumber:
-		num, _ := strconv.Atoi(peek.val)
-		ticks = &LiteralExpr{Value: map[string]any{"num": num}}
-		ticks, err = p.parseArithExprFromFull(ticks, ctx.resolve)
-		if err != nil {
-			return nil, err
-		}
-	case tokLParen:
-		ticks, err = p.parseArithExpr(ctx.resolve)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(tokRParen); err != nil {
-			return nil, err
-		}
-	case tokIdent:
-		resolved, err := ctx.resolve(peek)
-		if err != nil {
-			return nil, err
-		}
-		ticks, err = p.parseArithExprFromFull(resolved, ctx.resolve)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, p.errorf(peek.pos, "expected ticks expression after 'wait', got %s", peek.describe())
+	ticks, err := p.parseSimpleExpr(peek, ctx.resolve, "ticks expression after 'wait'")
+	if err != nil {
+		return nil, err
 	}
 
 	// Check for optional condition block
