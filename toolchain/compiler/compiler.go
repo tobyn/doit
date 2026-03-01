@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"path"
 	"strconv"
 
@@ -45,10 +46,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 	}
 	// Clone stdlib fns for the parser's working map (user fns will be added to it).
 	// The original is kept as stdlibFns so imported files can clone it cheaply.
-	workingFns := make(map[string]*fnDef, len(fns))
-	for k, v := range fns {
-		workingFns[k] = v
-	}
+	workingFns := maps.Clone(fns)
 	p := &parser{
 		scanner:    scanner{src: src, locale: locale},
 		fns:        workingFns,

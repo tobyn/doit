@@ -78,11 +78,6 @@ dimensions in a single pass:
 
 ### Low
 
-- **Manual map cloning instead of `maps.Clone()`.** Four instances of
-  manual `for k, v := range` map cloning in `compiler.go:48-51` and
-  `import.go:340-342, 489-491, 499-501`. `maps.Clone()` is already
-  used in `parse.go`.
-
 - **Dead guard in `patchLastBodyNext`.** The guard
   `b.pos()-1 < bodyStart` at `codegen.go:1115` never triggers because
   at the call point, `b.pos()-1` always equals `nextFrame` (the INCR

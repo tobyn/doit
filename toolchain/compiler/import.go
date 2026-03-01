@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 	"io/fs"
+	"maps"
 	"path"
 	"strings"
 )
@@ -337,10 +338,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 	}
 
 	// Clone the cached stdlib fns for this imported file's parser.
-	stdlibFns := make(map[string]*fnDef, len(p.stdlibFns))
-	for k, v := range p.stdlibFns {
-		stdlibFns[k] = v
-	}
+	stdlibFns := maps.Clone(p.stdlibFns)
 
 	sourceDir := path.Dir(filePath)
 	if sourceDir == "." {
@@ -486,20 +484,14 @@ func (p *parser) processImports() error {
 
 		// Process namespace imports
 		if stmt.Namespace != "" {
-			nsFns := map[string]*fnDef{}
-			for name, fn := range fns {
-				nsFns[name] = fn
-			}
+			nsFns := maps.Clone(fns)
 			if p.namespaces == nil {
 				p.namespaces = map[string]map[string]*fnDef{}
 			}
 			p.namespaces[stmt.Namespace] = nsFns
 			p.namespaceNames[stmt.Namespace] = true
 
-			nsConsts := map[string]*constDef{}
-			for name, c := range consts {
-				nsConsts[name] = c
-			}
+			nsConsts := maps.Clone(consts)
 			if p.namespaceConsts == nil {
 				p.namespaceConsts = map[string]map[string]*constDef{}
 			}
