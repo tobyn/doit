@@ -78,13 +78,6 @@ dimensions in a single pass:
 
 ### Low
 
-- **Dead guard in `patchLastBodyNext`.** The guard
-  `b.pos()-1 < bodyStart` at `codegen.go:1115` never triggers because
-  at the call point, `b.pos()-1` always equals `nextFrame` (the INCR
-  frame index), which is always >= `bodyStart`. The correct guard is
-  `nextFrame-1 < bodyStart`. Practically harmless since even for empty
-  bodies, the target frame already has `"next"` set.
-
 ### Deferred
 
 - **`private fn` visibility is not enforced.** The compiler parses

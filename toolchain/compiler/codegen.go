@@ -1108,11 +1108,11 @@ func emitLoopBackEdge(b *frameBuilder, bodyStart int, target frameRef) {
 }
 
 // patchLastBodyNext sets "next" on the last body frame to point to nextFrame
-// (typically the INCR frame in counted/for loops). Skips if the last frame
-// is @break (will be patched separately) or already has a "next".
-// bodyStart is the frame index where the body began.
+// (typically the INCR frame in counted/for loops). Skips if the body is
+// empty, or if the last frame is @break (will be patched separately) or
+// already has a "next". bodyStart is the frame index where the body began.
 func patchLastBodyNext(b *frameBuilder, bodyStart int, nextFrame int) {
-	if b.pos()-1 < bodyStart {
+	if nextFrame-1 < bodyStart {
 		return
 	}
 	lastBodyFrame := b.get(nextFrame - 1)
