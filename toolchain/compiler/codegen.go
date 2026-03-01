@@ -1122,3 +1122,575 @@ func patchLastBodyNext(b *frameBuilder, bodyStart int, nextFrame int) {
 		}
 	}
 }
+
+// -----------------------------------------------------------------------
+// Unified control flow emitters
+//
+// These methods on *parser take an *emitContext to abstract the
+// differences between behavior-level and fn body emission. Each replaces
+// a bhv/fn pair of near-identical functions.
+// -----------------------------------------------------------------------
+
+// emitTailMulti emits a tail expression directing values to retVals.
+// If the tail is a CallExpr, uses expandCallExpr. Otherwise, emits to
+// retVals[0] and zeros remaining slots.
+func (p *parser) emitTailMulti(ctx *emitContext, tail Expr, retVals []any, comment string) error {
+	if ce, ok := tail.(*CallExpr); ok {
+		return ctx.expandCallExpr(ce, retVals, comment)
+	}
+	if err := ctx.exprTo(tail, retVals[0], comment); err != nil {
+		return err
+	}
+	for i := 1; i < len(retVals); i++ {
+		ctx.b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
+	}
+	return nil
+}
+
+// emitLoopStmt emits a loop/break (infinite or counted).
+func (p *parser) emitLoopStmt(s *LoopStmt, ctx *emitContext, comment string) error {
+	if s.Count != nil {
+		return p.emitCountedLoop(s, ctx, comment)
+	}
+
+	loopStart := ctx.b.pos()
+	origLen := len(ctx.b.frames)
+
+	ctx.pushScope()
+	if err := ctx.emitBody(s.Body); err != nil {
+		ctx.popScope()
+		return err
+	}
+	ctx.popScope()
+
+	emitLoopBackEdge(ctx.b, loopStart, frameRef(loopStart))
+
+	afterLoop := frameRef(ctx.b.pos())
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	return nil
+}
+
+// emitCountedLoop emits a counted loop: loop N { ... }
+func (p *parser) emitCountedLoop(s *LoopStmt, ctx *emitContext, comment string) error {
+	counterVar := allocUniqueVar("@loop", ctx.usedVars)
+
+	limit, err := ctx.exprGetValue(s.Count, "")
+	if err != nil {
+		return err
+	}
+
+	// INIT: set_number 0 → counter
+	ctx.b.emit(map[string]any{
+		"op": "set_number",
+		"2":  map[string]any{"num": 0},
+		"3":  counterVar,
+	})
+
+	// CHECK: check_number counter vs limit
+	checkFrame := ctx.b.emit(map[string]any{
+		"op":        "check_number",
+		checkValue:  counterVar,
+		checkTarget: limit,
+	})
+	setComment(ctx.b.get(checkFrame), comment)
+
+	origLen := len(ctx.b.frames)
+
+	ctx.pushScope()
+	if err := ctx.emitBody(s.Body); err != nil {
+		ctx.popScope()
+		return err
+	}
+	ctx.popScope()
+
+	// INCR: add counter + 1 → counter, next → CHECK
+	incrFrame := ctx.b.emit(map[string]any{
+		"op":   "add",
+		"1":    counterVar,
+		"2":    map[string]any{"num": 1},
+		"3":    counterVar,
+		"next": frameRef(checkFrame),
+	})
+
+	patchLastBodyNext(ctx.b, origLen, incrFrame)
+
+	afterLoop := frameRef(ctx.b.pos())
+	check := ctx.b.get(checkFrame)
+	check[checkLarger] = afterLoop
+	check["next"] = afterLoop
+
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	return nil
+}
+
+// emitWhileStmt emits a while loop.
+func (p *parser) emitWhileStmt(s *WhileStmt, ctx *emitContext, comment string) error {
+	loopStart := ctx.b.pos()
+
+	resolved, err := ctx.resolveBool(s.Cond)
+	if err != nil {
+		return err
+	}
+
+	checkStart := ctx.b.pos()
+	checkCount := resolved.frameCount()
+	trueBranch := frameRef(checkStart + checkCount)
+	falsePlaceholder := frameRef(0)
+
+	if resolved.isLeaf() {
+		p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, ctx.b, comment)
+	} else {
+		p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, ctx.b, comment)
+	}
+	stripFallThrough(ctx.b, checkStart, checkCount)
+
+	origLen := len(ctx.b.frames)
+
+	ctx.pushScope()
+	if err := ctx.emitBody(s.Body); err != nil {
+		ctx.popScope()
+		return err
+	}
+	ctx.popScope()
+
+	emitLoopBackEdge(ctx.b, loopStart, frameRef(loopStart))
+
+	afterLoop := frameRef(ctx.b.pos())
+	patchFalseBranches(ctx.b, checkStart, checkCount, falsePlaceholder, afterLoop)
+
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	return nil
+}
+
+// emitWaitStmt emits a wait statement.
+func (p *parser) emitWaitStmt(s *WaitStmt, ctx *emitContext, comment string) error {
+	ticksVal, err := ctx.exprGetValue(s.Ticks, "")
+	if err != nil {
+		return err
+	}
+
+	if s.Tail == nil {
+		f := map[string]any{"op": "wait", "1": ticksVal}
+		setComment(f, comment)
+		ctx.b.emit(f)
+		return nil
+	}
+
+	// Snapshot ticks if needed.
+	ticksVar := ticksVal
+	needsSnapshot := true
+	if lit, ok := s.Ticks.(*LiteralExpr); ok {
+		if _, isMap := lit.Value.(map[string]any); isMap {
+			needsSnapshot = false
+		}
+	}
+	if needsSnapshot {
+		tmp := allocUniqueVar("@wait", ctx.usedVars)
+		ctx.b.emit(map[string]any{
+			"op": "set_reg",
+			"1":  ticksVal,
+			"2":  tmp,
+		})
+		ticksVar = tmp
+	}
+
+	waitFrame := map[string]any{"op": "wait", "1": ticksVar}
+	setComment(waitFrame, comment)
+	waitPos := ctx.b.emit(waitFrame)
+
+	ctx.pushScope()
+	if err := ctx.emitBody(s.Body); err != nil {
+		ctx.popScope()
+		return err
+	}
+	ctx.popScope()
+
+	condVar := allocUniqueVar("@wcond", ctx.usedVars)
+	if err := ctx.exprTo(s.Tail, condVar, ""); err != nil {
+		return err
+	}
+
+	afterWait := frameRef(ctx.b.pos() + 1)
+	ctx.b.emit(map[string]any{
+		"op":                "compare_register",
+		compareRegDifferent: afterWait,
+		compareRegValue1:    condVar,
+		compareRegValue2:    false,
+		"next":              frameRef(waitPos),
+	})
+
+	return nil
+}
+
+// emitModeBlockExpr emits a mode block expression.
+func (p *parser) emitModeBlockExpr(e *ModeBlockExpr, retVals []any, ctx *emitContext, comment string) error {
+	mbeComment := e.Comment
+	if mbeComment == "" {
+		mbeComment = comment
+	}
+	savedMode := emitModeEntry(ctx.b, e.Unlock, mbeComment)
+	ctx.pushScope()
+	if err := ctx.emitBody(e.Body); err != nil {
+		ctx.popScope()
+		emitModeExit(ctx.b, savedMode)
+		return err
+	}
+	if err := p.emitTailMulti(ctx, e.Tail, retVals, mbeComment); err != nil {
+		ctx.popScope()
+		emitModeExit(ctx.b, savedMode)
+		return err
+	}
+	ctx.popScope()
+	emitModeExit(ctx.b, savedMode)
+	return nil
+}
+
+// emitForStmt emits a for-in loop.
+func (p *parser) emitForStmt(s *ForStmt, ctx *emitContext, comment string) error {
+	ctx.pushScope()
+	iterVar := ctx.declareIterVar(s.IterVar)
+
+	var err error
+	ctor, isCtor := s.Range.(*ConstructorExpr)
+	if isCtor && ctor.TypeName == "Range" {
+		err = p.emitForStmtRange(s, ctor, iterVar, ctx, comment)
+	} else {
+		err = p.emitForStmtRuntime(s, iterVar, ctx, comment)
+	}
+	ctx.popScope()
+	return err
+}
+
+// emitForStmtRange emits a for loop when the Range constructor is directly visible.
+func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar string, ctx *emitContext, comment string) error {
+	stepLit, stepIsLit := ctor.Args[2].(*LiteralExpr)
+	var stepSign int
+	if stepIsLit {
+		if m, ok := stepLit.Value.(map[string]any); ok {
+			if n, ok := m["num"].(int); ok {
+				if n > 0 {
+					stepSign = 1
+				} else {
+					stepSign = -1
+				}
+			}
+		}
+	}
+
+	if !stepIsLit || stepSign == 0 {
+		return p.emitForStmtRuntime(s, iterVar, ctx, comment)
+	}
+
+	startVal, err := ctx.exprGetValue(ctor.Args[0], "")
+	if err != nil {
+		return err
+	}
+	stopVal, err := ctx.exprGetValue(ctor.Args[1], "")
+	if err != nil {
+		return err
+	}
+	stepVal, err := ctx.exprGetValue(ctor.Args[2], "")
+	if err != nil {
+		return err
+	}
+
+	// INIT
+	ctx.b.emit(map[string]any{
+		"op": "set_reg",
+		"1":  startVal,
+		"2":  iterVar,
+	})
+
+	// CHECK
+	check := map[string]any{
+		"op":        "check_number",
+		checkValue:  iterVar,
+		checkTarget: stopVal,
+	}
+	setComment(check, comment)
+	checkFrame := ctx.b.emit(check)
+
+	origLen := len(ctx.b.frames)
+
+	if err := ctx.emitBody(s.Body); err != nil {
+		return err
+	}
+
+	// INCR
+	incrFrame := ctx.b.emit(map[string]any{
+		"op":   "add",
+		"1":    iterVar,
+		"2":    stepVal,
+		"3":    iterVar,
+		"next": frameRef(checkFrame),
+	})
+
+	patchLastBodyNext(ctx.b, origLen, incrFrame)
+
+	afterLoop := frameRef(ctx.b.pos())
+	if stepSign > 0 {
+		check[checkLarger] = afterLoop
+		check["next"] = afterLoop
+	} else {
+		check[checkSmaller] = afterLoop
+		check["next"] = afterLoop
+	}
+
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	return nil
+}
+
+// emitForStmtRuntime emits a for loop where the range is a runtime value (Path C).
+func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext, comment string) error {
+	rangeVal, err := ctx.exprGetValue(s.Range, "")
+	if err != nil {
+		return err
+	}
+
+	stepVar := allocUniqueVar("@step", ctx.usedVars)
+	startVar := allocUniqueVar("@start", ctx.usedVars)
+	stopVar := allocUniqueVar("@stop", ctx.usedVars)
+	retVals := []any{stepVar, false, false, startVar, stopVar}
+	if err := p.expandCall("separate_register", []any{rangeVal}, nil, retVals, ctx.b, 0, "", ctx.usedVars); err != nil {
+		return err
+	}
+
+	// INIT
+	ctx.b.emit(map[string]any{
+		"op": "set_reg",
+		"1":  startVar,
+		"2":  iterVar,
+	})
+
+	// STEP_CHK
+	stepCheck := map[string]any{
+		"op":        "check_number",
+		checkValue:  stepVar,
+		checkTarget: map[string]any{"num": 0},
+	}
+	setComment(stepCheck, comment)
+	stepCheckFrame := ctx.b.emit(stepCheck)
+
+	// CHECK_POS
+	checkPos := map[string]any{
+		"op":        "check_number",
+		checkValue:  iterVar,
+		checkTarget: stopVar,
+	}
+	checkPosFrame := ctx.b.emit(checkPos)
+
+	// CHECK_NEG
+	checkNeg := map[string]any{
+		"op":        "check_number",
+		checkValue:  iterVar,
+		checkTarget: stopVar,
+	}
+	checkNegFrame := ctx.b.emit(checkNeg)
+
+	origLen := len(ctx.b.frames)
+
+	if err := ctx.emitBody(s.Body); err != nil {
+		return err
+	}
+
+	// INCR
+	incrFrame := ctx.b.emit(map[string]any{
+		"op":   "add",
+		"1":    iterVar,
+		"2":    stepVar,
+		"3":    iterVar,
+		"next": frameRef(stepCheckFrame),
+	})
+
+	patchLastBodyNext(ctx.b, origLen, incrFrame)
+
+	afterLoop := frameRef(ctx.b.pos())
+
+	stepCheck[checkLarger] = frameRef(checkPosFrame)
+	stepCheck[checkSmaller] = frameRef(checkNegFrame)
+	stepCheck["next"] = afterLoop
+
+	bodyStart := frameRef(origLen)
+	checkPos[checkSmaller] = bodyStart
+	checkPos[checkLarger] = afterLoop
+	checkPos["next"] = afterLoop
+
+	checkNeg[checkLarger] = bodyStart
+	checkNeg[checkSmaller] = afterLoop
+	checkNeg["next"] = afterLoop
+
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	return nil
+}
+
+// emitIfStmt emits an if/else if/else statement using forward-jump patching.
+func (p *parser) emitIfStmt(s *IfStmt, ctx *emitContext, comment string) error {
+	type branch struct {
+		cond Expr
+		body []Stmt
+	}
+	branches := []branch{{cond: s.Cond, body: s.Body}}
+	for _, elif := range s.ElseIfs {
+		branches = append(branches, branch{cond: elif.Cond, body: elif.Body})
+	}
+
+	var jumpsToPatch []int
+
+	for i, br := range branches {
+		brComment := ""
+		if i == 0 {
+			brComment = comment
+		}
+
+		resolved, err := ctx.resolveBool(br.cond)
+		if err != nil {
+			return err
+		}
+
+		checkStart := ctx.b.pos()
+		checkCount := resolved.frameCount()
+		trueBranch := frameRef(checkStart + checkCount)
+		falsePlaceholder := frameRef(0)
+
+		if resolved.isLeaf() {
+			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, ctx.b, brComment)
+		} else {
+			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, ctx.b, brComment)
+		}
+		stripFallThrough(ctx.b, checkStart, checkCount)
+
+		ctx.pushScope()
+		if err := ctx.emitBody(br.body); err != nil {
+			ctx.popScope()
+			return err
+		}
+		ctx.popScope()
+
+		hasMore := i < len(branches)-1 || len(s.Else) > 0
+		if hasMore {
+			jumpIdx := ctx.b.pos()
+			ctx.b.emit(map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": frameRef(0),
+			})
+			jumpsToPatch = append(jumpsToPatch, jumpIdx)
+		}
+
+		patchFalseBranches(ctx.b, checkStart, checkCount, falsePlaceholder, frameRef(ctx.b.pos()))
+	}
+
+	if len(s.Else) > 0 {
+		ctx.pushScope()
+		if err := ctx.emitBody(s.Else); err != nil {
+			ctx.popScope()
+			return err
+		}
+		ctx.popScope()
+	}
+
+	afterAll := frameRef(ctx.b.pos())
+	for _, idx := range jumpsToPatch {
+		ctx.b.get(idx)["next"] = afterAll
+	}
+
+	return nil
+}
+
+// emitIfExpr emits an if-expression directing each branch's tail to retVals.
+func (p *parser) emitIfExpr(e *IfExpr, retVals []any, ctx *emitContext, comment string) error {
+	type branch struct {
+		cond Expr
+		body []Stmt
+		tail Expr
+	}
+	branches := []branch{{cond: e.Cond, body: e.Body, tail: e.Tail}}
+	for _, elif := range e.ElseIfs {
+		branches = append(branches, branch{cond: elif.Cond, body: elif.Body, tail: elif.Tail})
+	}
+
+	var jumpsToPatch []int
+
+	for i, br := range branches {
+		brComment := ""
+		if i == 0 {
+			brComment = comment
+		}
+
+		resolved, err := ctx.resolveBool(br.cond)
+		if err != nil {
+			return err
+		}
+
+		checkStart := ctx.b.pos()
+		checkCount := resolved.frameCount()
+		trueBranch := frameRef(checkStart + checkCount)
+		falsePlaceholder := frameRef(0)
+
+		if resolved.isLeaf() {
+			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, ctx.b, brComment)
+		} else {
+			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, ctx.b, brComment)
+		}
+		stripFallThrough(ctx.b, checkStart, checkCount)
+
+		ctx.pushScope()
+		if err := ctx.emitBody(br.body); err != nil {
+			ctx.popScope()
+			return err
+		}
+
+		if err := p.emitTailMulti(ctx, br.tail, retVals, ""); err != nil {
+			ctx.popScope()
+			return err
+		}
+		ctx.popScope()
+
+		jumpIdx := ctx.b.pos()
+		ctx.b.emit(map[string]any{
+			"op":   "set_reg",
+			"1":    false,
+			"2":    false,
+			"next": frameRef(0),
+		})
+		jumpsToPatch = append(jumpsToPatch, jumpIdx)
+
+		patchFalseBranches(ctx.b, checkStart, checkCount, falsePlaceholder, frameRef(ctx.b.pos()))
+	}
+
+	// Else body + tail (or null for missing else)
+	if e.ElsTail != nil {
+		ctx.pushScope()
+		if err := ctx.emitBody(e.ElsBody); err != nil {
+			ctx.popScope()
+			return err
+		}
+
+		if err := p.emitTailMulti(ctx, e.ElsTail, retVals, ""); err != nil {
+			ctx.popScope()
+			return err
+		}
+		ctx.popScope()
+	} else {
+		for _, rv := range retVals {
+			ctx.b.emit(map[string]any{
+				"op": "set_reg",
+				"1":  false,
+				"2":  rv,
+			})
+		}
+	}
+
+	afterAll := frameRef(ctx.b.pos())
+	for _, idx := range jumpsToPatch {
+		ctx.b.get(idx)["next"] = afterAll
+	}
+
+	return nil
+}

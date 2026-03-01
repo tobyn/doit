@@ -735,43 +735,13 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 	case *CompareExpr, *TypeCheckExpr, *TruthyExpr, *BoolChainExpr, *NotExpr:
 		return p.emitFnBoolExprTo(expr, target, b, paramMap, usedVars, comment, pos)
 	case *ModeBlockExpr:
-		return p.emitFnModeBlockExpr(e, []any{target}, b, paramMap, usedVars, comment, pos)
+		ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+		return p.emitModeBlockExpr(e, []any{target}, ctx, comment)
 	case *IfExpr:
-		return p.emitFnIfExpr(e, []any{target}, b, paramMap, usedVars, comment, pos)
+		ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+		return p.emitIfExpr(e, []any{target}, ctx, comment)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitExprTo", expr)
-}
-
-// emitFnModeBlockExpr emits a mode block expression in a fn body context,
-// directing the tail to the retVals targets. For single-target callers,
-// pass []any{target}.
-func (p *parser) emitFnModeBlockExpr(e *ModeBlockExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	mbeComment := e.Comment
-	if mbeComment == "" {
-		mbeComment = comment
-	}
-	saved := emitModeEntry(b, e.Unlock, mbeComment)
-	if err := p.emitFnBody(e.Body, b, paramMap, usedVars, comment, pos); err != nil {
-		return err
-	}
-	if ce, ok := e.Tail.(*CallExpr); ok {
-		resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(ce.Args, ce.KwArgs, b, paramMap, usedVars, pos)
-		if err != nil {
-			return err
-		}
-		if err := p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, mbeComment, usedVars); err != nil {
-			return err
-		}
-	} else {
-		if err := p.emitExprTo(e.Tail, retVals[0], b, paramMap, usedVars, mbeComment, pos); err != nil {
-			return err
-		}
-		for i := 1; i < len(retVals); i++ {
-			b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
-		}
-	}
-	emitModeExit(b, saved)
-	return nil
 }
 
 // emitConstructorTo emits a type constructor writing the result to target.
@@ -869,6 +839,40 @@ func (p *parser) resolveFnBoolTree(expr Expr, b *frameBuilder, paramMap map[stri
 	})
 }
 
+// fnEmitCtx constructs an emitContext for fn body emission.
+func (p *parser) fnEmitCtx(b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) *emitContext {
+	return &emitContext{
+		b:        b,
+		usedVars: usedVars,
+		resolveBool: func(expr Expr) (*resolvedBoolExpr, error) {
+			return p.resolveFnBoolTree(expr, b, paramMap, usedVars, pos)
+		},
+		emitBody: func(stmts []Stmt) error {
+			return p.emitFnBody(stmts, b, paramMap, usedVars, comment, pos)
+		},
+		exprGetValue: func(expr Expr, cmt string) (any, error) {
+			return p.emitExprGetValue(expr, b, paramMap, usedVars, cmt, pos)
+		},
+		exprTo: func(expr Expr, target any, cmt string) error {
+			return p.emitExprTo(expr, target, b, paramMap, usedVars, cmt, pos)
+		},
+		expandCallExpr: func(ce *CallExpr, retVals []any, cmt string) error {
+			resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(ce.Args, ce.KwArgs, b, paramMap, usedVars, pos)
+			if err != nil {
+				return err
+			}
+			return p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, cmt, usedVars)
+		},
+		pushScope:      func() {},
+		popScope:       func() {},
+		declareIterVar: func(name string) string {
+			counterVar := allocUniqueVar(name, usedVars)
+			paramMap[name] = counterVar
+			return counterVar
+		},
+	}
+}
+
 // inheritComment returns stmtComment if non-empty, otherwise falls back to
 // the caller's comment. Used in emitFnBody to propagate doc comments.
 func inheritComment(stmtComment, callerComment string) string {
@@ -934,17 +938,20 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 					return err
 				}
 			case *ModeBlockExpr:
-				if err := p.emitFnModeBlockExpr(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
+				ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+				if err := p.emitModeBlockExpr(v, retVals, ctx, callComment); err != nil {
 					return err
 				}
 			case *IfExpr:
-				if err := p.emitFnIfExpr(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
+				ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+				if err := p.emitIfExpr(v, retVals, ctx, callComment); err != nil {
 					return err
 				}
 			case *InstructionExpr:
 				resolved := resolveInstructionFrame(v.Frame, retVals, paramMap, nil, callComment)
 				b.emit(resolved)
 			case *ExprListExpr:
+				ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
 				bindIdx := 0
 				for _, expr := range v.Exprs {
 					switch e := expr.(type) {
@@ -974,13 +981,13 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 						}
 						if mbeArity == 1 {
 							if !s.Bindings[bindIdx].Discard {
-								if err := p.emitFnModeBlockExpr(e, []any{retVals[bindIdx]}, b, paramMap, usedVars, callComment, pos); err != nil {
+								if err := p.emitModeBlockExpr(e, []any{retVals[bindIdx]}, ctx, callComment); err != nil {
 									return err
 								}
 							}
 						} else {
 							mbeRetVals := retVals[bindIdx : bindIdx+mbeArity]
-							if err := p.emitFnModeBlockExpr(e, mbeRetVals, b, paramMap, usedVars, callComment, pos); err != nil {
+							if err := p.emitModeBlockExpr(e, mbeRetVals, ctx, callComment); err != nil {
 								return err
 							}
 						}
@@ -994,13 +1001,13 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 						}
 						if ifArity == 1 {
 							if !s.Bindings[bindIdx].Discard {
-								if err := p.emitFnIfExpr(e, []any{retVals[bindIdx]}, b, paramMap, usedVars, callComment, pos); err != nil {
+								if err := p.emitIfExpr(e, []any{retVals[bindIdx]}, ctx, callComment); err != nil {
 									return err
 								}
 							}
 						} else {
 							ifRetVals := retVals[bindIdx : bindIdx+ifArity]
-							if err := p.emitFnIfExpr(e, ifRetVals, b, paramMap, usedVars, callComment, pos); err != nil {
+							if err := p.emitIfExpr(e, ifRetVals, ctx, callComment); err != nil {
 								return err
 							}
 						}
@@ -1057,36 +1064,41 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 
 		case *IfStmt:
 			callComment := inheritComment(s.Comment, comment)
-			if err := p.emitFnIfStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
+			ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+			if err := p.emitIfStmt(s, ctx, callComment); err != nil {
 				return err
 			}
 
 		case *WhileStmt:
 			callComment := inheritComment(s.Comment, comment)
-			if err := p.emitFnWhileStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
+			ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+			if err := p.emitWhileStmt(s, ctx, callComment); err != nil {
 				return err
 			}
 
 		case *LoopStmt:
 			callComment := inheritComment(s.Comment, comment)
-			if err := p.emitFnLoopStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
+			ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+			if err := p.emitLoopStmt(s, ctx, callComment); err != nil {
 				return err
 			}
 
 		case *ForStmt:
 			callComment := inheritComment(s.Comment, comment)
-			if err := p.emitFnForStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
+			ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+			if err := p.emitForStmt(s, ctx, callComment); err != nil {
 				return err
 			}
 
 		case *WaitStmt:
 			callComment := inheritComment(s.Comment, comment)
-			if err := p.emitFnWaitStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
+			ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+			if err := p.emitWaitStmt(s, ctx, callComment); err != nil {
 				return err
 			}
 
 		case *BreakStmt:
-			// Emit placeholder frame that emitFnLoopStmt/emitFnWhileStmt will patch
+			// Emit placeholder frame that emitLoopStmt/emitWhileStmt will patch
 			f := map[string]any{"op": "@break"}
 			if s.Label != "" {
 				f["label"] = s.Label
@@ -1152,557 +1164,6 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			})
 		}
 	}
-	return nil
-}
-
-// emitFnIfStmt emits an if/else if/else statement in a fn body using
-// forward-jump patching.
-func (p *parser) emitFnIfStmt(s *IfStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	// Collect all branches: condition + body pairs, plus optional else
-	type branch struct {
-		cond Expr
-		body []Stmt
-	}
-	branches := []branch{{cond: s.Cond, body: s.Body}}
-	for _, elif := range s.ElseIfs {
-		branches = append(branches, branch{cond: elif.Cond, body: elif.Body})
-	}
-
-	// Track positions of jump-to-continuation frames that need patching
-	var jumpsToPatch []int
-
-	for i, br := range branches {
-		brComment := ""
-		if i == 0 {
-			brComment = comment
-		}
-
-		// Emit condition check with placeholder false branch
-		resolved, err := p.resolveFnBoolTree(br.cond, b, paramMap, usedVars, pos)
-		if err != nil {
-			return err
-		}
-
-		// For a single check, emit it inline. For chains, emit recursive tree.
-		checkStart := b.pos()
-		checkCount := resolved.frameCount()
-		trueBranch := frameRef(checkStart + checkCount) // true body starts right after checks
-		falsePlaceholder := frameRef(0)                 // patched later
-
-		if resolved.isLeaf() {
-			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
-		} else {
-			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
-		}
-		stripFallThrough(b, checkStart, checkCount)
-
-		// Emit true body
-		if err := p.emitFnBody(br.body, b, paramMap, usedVars, "", pos); err != nil {
-			return err
-		}
-
-		// If there's more branches or an else, emit jump-to-continuation
-		hasMore := i < len(branches)-1 || len(s.Else) > 0
-		if hasMore {
-			jumpIdx := b.pos()
-			b.emit(map[string]any{
-				"op":   "set_reg",
-				"1":    false,
-				"2":    false,
-				"next": frameRef(0), // patched to after all branches
-			})
-			jumpsToPatch = append(jumpsToPatch, jumpIdx)
-		}
-
-		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
-	}
-
-	// Emit else body if present
-	if len(s.Else) > 0 {
-		if err := p.emitFnBody(s.Else, b, paramMap, usedVars, "", pos); err != nil {
-			return err
-		}
-	}
-
-	// Patch all jumps-to-continuation to point to after everything
-	afterAll := frameRef(b.pos())
-	for _, idx := range jumpsToPatch {
-		b.get(idx)["next"] = afterAll
-	}
-
-	return nil
-}
-
-// emitFnIfExpr emits an if-expression in a fn body, directing each branch's
-// tail to the retVals targets. For single-target callers, pass []any{target}.
-func (p *parser) emitFnIfExpr(e *IfExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	type branch struct {
-		cond Expr
-		body []Stmt
-		tail Expr
-	}
-	branches := []branch{{cond: e.Cond, body: e.Body, tail: e.Tail}}
-	for _, elif := range e.ElseIfs {
-		branches = append(branches, branch{cond: elif.Cond, body: elif.Body, tail: elif.Tail})
-	}
-
-	var jumpsToPatch []int
-
-	for i, br := range branches {
-		brComment := ""
-		if i == 0 {
-			brComment = comment
-		}
-
-		resolved, err := p.resolveFnBoolTree(br.cond, b, paramMap, usedVars, pos)
-		if err != nil {
-			return err
-		}
-
-		checkStart := b.pos()
-		checkCount := resolved.frameCount()
-		trueBranch := frameRef(checkStart + checkCount)
-		falsePlaceholder := frameRef(0)
-
-		if resolved.isLeaf() {
-			p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, brComment)
-		} else {
-			p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, brComment)
-		}
-		stripFallThrough(b, checkStart, checkCount)
-
-		// Emit body
-		if err := p.emitFnBody(br.body, b, paramMap, usedVars, "", pos); err != nil {
-			return err
-		}
-
-		// Emit tail to retVals
-		if err := p.emitFnIfExprTailMulti(br.tail, retVals, b, paramMap, usedVars, pos); err != nil {
-			return err
-		}
-
-		// Jump-to-continuation
-		jumpIdx := b.pos()
-		b.emit(map[string]any{
-			"op":   "set_reg",
-			"1":    false,
-			"2":    false,
-			"next": frameRef(0),
-		})
-		jumpsToPatch = append(jumpsToPatch, jumpIdx)
-
-		patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, frameRef(b.pos()))
-	}
-
-	// Else body + tail (or null for missing else)
-	if e.ElsTail != nil {
-		if err := p.emitFnBody(e.ElsBody, b, paramMap, usedVars, "", pos); err != nil {
-			return err
-		}
-		if err := p.emitFnIfExprTailMulti(e.ElsTail, retVals, b, paramMap, usedVars, pos); err != nil {
-			return err
-		}
-	} else {
-		// No else clause — zero all retVal slots
-		for _, rv := range retVals {
-			b.emit(map[string]any{
-				"op": "set_reg",
-				"1":  false,
-				"2":  rv,
-			})
-		}
-	}
-
-	// Patch jumps
-	afterAll := frameRef(b.pos())
-	for _, idx := range jumpsToPatch {
-		b.get(idx)["next"] = afterAll
-	}
-
-	return nil
-}
-
-// emitFnIfExprTailMulti emits a tail expression directing values to retVals in fn body context.
-func (p *parser) emitFnIfExprTailMulti(tail Expr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, pos int) error {
-	if ce, ok := tail.(*CallExpr); ok {
-		resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(ce.Args, ce.KwArgs, b, paramMap, usedVars, pos)
-		if err != nil {
-			return err
-		}
-		return p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, "", usedVars)
-	}
-	// Single-return tail: emit to first retVal, zero rest
-	if err := p.emitExprTo(tail, retVals[0], b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-	for i := 1; i < len(retVals); i++ {
-		b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
-	}
-	return nil
-}
-
-// emitFnWaitStmt emits a wait statement in a fn body.
-func (p *parser) emitFnWaitStmt(s *WaitStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	// Resolve ticks expression
-	ticksVal, err := p.emitExprGetValue(s.Ticks, b, paramMap, usedVars, "", pos)
-	if err != nil {
-		return err
-	}
-
-	if s.Tail == nil {
-		// Simple wait: just emit the wait frame
-		f := map[string]any{"op": "wait", "1": ticksVal}
-		setComment(f, comment)
-		b.emit(f)
-		return nil
-	}
-
-	// Block wait: snapshot ticks if needed, then wait → body → cond → loop back
-
-	// Snapshot: copy ticks to temp var so they're only evaluated once.
-	// Skip for pure number literals (they can't change between iterations).
-	ticksVar := ticksVal
-	needsSnapshot := true
-	if lit, ok := s.Ticks.(*LiteralExpr); ok {
-		if _, isMap := lit.Value.(map[string]any); isMap {
-			needsSnapshot = false // pure number literal like {"num": 5}
-		}
-	}
-	if needsSnapshot {
-		tmp := allocUniqueVar("@wait", usedVars)
-		b.emit(map[string]any{
-			"op": "set_reg",
-			"1":  ticksVal,
-			"2":  tmp,
-		})
-		ticksVar = tmp
-	}
-
-	// Emit wait frame
-	waitFrame := map[string]any{"op": "wait", "1": ticksVar}
-	setComment(waitFrame, comment)
-	waitPos := b.emit(waitFrame)
-
-	// Emit body
-	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-
-	// Emit tail condition to temp var
-	condVar := allocUniqueVar("@wcond", usedVars)
-	if err := p.emitExprTo(s.Tail, condVar, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-
-	// Emit truthy check: compare_register condVar, false
-	// Different (truthy) → afterWait, Equal (falsy / next) → waitPos
-	afterWait := frameRef(b.pos() + 1)
-	b.emit(map[string]any{
-		"op":                "compare_register",
-		compareRegDifferent: afterWait,
-		compareRegValue1:    condVar,
-		compareRegValue2:    false,
-		"next":              frameRef(waitPos),
-	})
-
-	return nil
-}
-
-// emitFnWhileStmt emits a while loop in a fn body.
-func (p *parser) emitFnWhileStmt(s *WhileStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	loopStart := b.pos()
-
-	// Emit condition check
-	resolved, err := p.resolveFnBoolTree(s.Cond, b, paramMap, usedVars, pos)
-	if err != nil {
-		return err
-	}
-
-	checkStart := b.pos()
-	checkCount := resolved.frameCount()
-	trueBranch := frameRef(checkStart + checkCount)
-	falsePlaceholder := frameRef(0)
-
-	if resolved.isLeaf() {
-		p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, comment)
-	} else {
-		p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, b, comment)
-	}
-	stripFallThrough(b, checkStart, checkCount)
-
-	origLen := len(b.frames)
-
-	// Emit body
-	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-
-	// Jump back to loop start.
-	emitLoopBackEdge(b, loopStart, frameRef(loopStart))
-
-	afterLoop := frameRef(b.pos())
-	patchFalseBranches(b, checkStart, checkCount, falsePlaceholder, afterLoop)
-
-	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
-
-	return nil
-}
-
-// emitFnLoopStmt emits a loop/break in a fn body.
-func (p *parser) emitFnLoopStmt(s *LoopStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	if s.Count != nil {
-		return p.emitFnCountedLoop(s, b, paramMap, usedVars, comment, pos)
-	}
-
-	loopStart := b.pos()
-
-	// Track break frame indices for patching
-	origLen := len(b.frames)
-
-	// Emit body
-	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-
-	// Jump back to loop start.
-	emitLoopBackEdge(b, loopStart, frameRef(loopStart))
-
-	afterLoop := frameRef(b.pos())
-	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
-
-	return nil
-}
-
-// emitFnCountedLoop emits a counted loop in a fn body.
-func (p *parser) emitFnCountedLoop(s *LoopStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	counterVar := allocUniqueVar("@loop", usedVars)
-
-	// Resolve count expression
-	limit, err := p.emitExprGetValue(s.Count, b, paramMap, usedVars, "", pos)
-	if err != nil {
-		return err
-	}
-
-	// INIT: set_number 0 → counter
-	b.emit(map[string]any{
-		"op": "set_number",
-		"2":  map[string]any{"num": 0},
-		"3":  counterVar,
-	})
-
-	// CHECK: check_number counter vs limit
-	checkFrame := b.emit(map[string]any{
-		"op":        "check_number",
-		checkValue:  counterVar,
-		checkTarget: limit,
-	})
-	setComment(b.get(checkFrame), comment)
-
-	// Track body start for @break scanning
-	origLen := len(b.frames)
-
-	// Emit body
-	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-
-	// INCR: add counter + 1 → counter, next → CHECK
-	incrFrame := b.emit(map[string]any{
-		"op":   "add",
-		"1":    counterVar,
-		"2":    map[string]any{"num": 1},
-		"3":    counterVar,
-		"next": frameRef(checkFrame),
-	})
-
-	// Set last body frame's "next" to incr
-	patchLastBodyNext(b, origLen, incrFrame)
-
-	// Patch CHECK exits: larger and equal → afterLoop
-	afterLoop := frameRef(b.pos())
-	check := b.get(checkFrame)
-	check[checkLarger] = afterLoop
-	check["next"] = afterLoop
-
-	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
-
-	return nil
-}
-
-// emitFnForStmt emits a for-in loop in a fn body.
-func (p *parser) emitFnForStmt(s *ForStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	counterVar := allocUniqueVar(s.IterVar, usedVars)
-	paramMap[s.IterVar] = counterVar
-
-	ctor, isCtor := s.Range.(*ConstructorExpr)
-	if isCtor && ctor.TypeName == "Range" {
-		return p.emitFnForStmtRange(s, ctor, counterVar, b, paramMap, usedVars, comment, pos)
-	}
-	return p.emitFnForStmtRuntime(s, counterVar, b, paramMap, usedVars, comment, pos)
-}
-
-func (p *parser) emitFnForStmtRange(s *ForStmt, ctor *ConstructorExpr, counterVar string, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	stepLit, stepIsLit := ctor.Args[2].(*LiteralExpr)
-	var stepSign int
-	if stepIsLit {
-		if m, ok := stepLit.Value.(map[string]any); ok {
-			if n, ok := m["num"].(int); ok {
-				if n > 0 {
-					stepSign = 1
-				} else {
-					stepSign = -1
-				}
-			}
-		}
-	}
-
-	if !stepIsLit || stepSign == 0 {
-		return p.emitFnForStmtRuntime(s, counterVar, b, paramMap, usedVars, comment, pos)
-	}
-
-	startVal, err := p.emitExprGetValue(ctor.Args[0], b, paramMap, usedVars, "", pos)
-	if err != nil {
-		return err
-	}
-	stopVal, err := p.emitExprGetValue(ctor.Args[1], b, paramMap, usedVars, "", pos)
-	if err != nil {
-		return err
-	}
-	stepVal, err := p.emitExprGetValue(ctor.Args[2], b, paramMap, usedVars, "", pos)
-	if err != nil {
-		return err
-	}
-
-	// INIT
-	b.emit(map[string]any{
-		"op": "set_reg",
-		"1":  startVal,
-		"2":  counterVar,
-	})
-
-	// CHECK
-	check := map[string]any{
-		"op":        "check_number",
-		checkValue:  counterVar,
-		checkTarget: stopVal,
-	}
-	setComment(check, comment)
-	checkFrame := b.emit(check)
-
-	origLen := len(b.frames)
-
-	// Emit body
-	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-
-	// INCR
-	incrFrame := b.emit(map[string]any{
-		"op":   "add",
-		"1":    counterVar,
-		"2":    stepVal,
-		"3":    counterVar,
-		"next": frameRef(checkFrame),
-	})
-
-	// Set last body frame's "next" to incr
-	patchLastBodyNext(b, origLen, incrFrame)
-
-	afterLoop := frameRef(b.pos())
-	if stepSign > 0 {
-		check[checkLarger] = afterLoop
-		check["next"] = afterLoop
-	} else {
-		check[checkSmaller] = afterLoop
-		check["next"] = afterLoop
-	}
-
-	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
-
-	return nil
-}
-
-func (p *parser) emitFnForStmtRuntime(s *ForStmt, counterVar string, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	rangeVal, err := p.emitExprGetValue(s.Range, b, paramMap, usedVars, "", pos)
-	if err != nil {
-		return err
-	}
-
-	stepVar := allocUniqueVar("@step", usedVars)
-	startVar := allocUniqueVar("@start", usedVars)
-	stopVar := allocUniqueVar("@stop", usedVars)
-	retVals := []any{stepVar, false, false, startVar, stopVar}
-	if err := p.expandCall("separate_register", []any{rangeVal}, nil, retVals, b, pos, "", usedVars); err != nil {
-		return err
-	}
-
-	// INIT
-	b.emit(map[string]any{
-		"op": "set_reg",
-		"1":  startVar,
-		"2":  counterVar,
-	})
-
-	// STEP_CHK
-	stepCheck := map[string]any{
-		"op":        "check_number",
-		checkValue:  stepVar,
-		checkTarget: map[string]any{"num": 0},
-	}
-	setComment(stepCheck, comment)
-	stepCheckFrame := b.emit(stepCheck)
-
-	// CHECK_POS
-	checkPos := map[string]any{
-		"op":        "check_number",
-		checkValue:  counterVar,
-		checkTarget: stopVar,
-	}
-	checkPosFrame := b.emit(checkPos)
-
-	// CHECK_NEG
-	checkNeg := map[string]any{
-		"op":        "check_number",
-		checkValue:  counterVar,
-		checkTarget: stopVar,
-	}
-	checkNegFrame := b.emit(checkNeg)
-
-	origLen := len(b.frames)
-
-	// Emit body
-	if err := p.emitFnBody(s.Body, b, paramMap, usedVars, "", pos); err != nil {
-		return err
-	}
-
-	// INCR
-	incrFrame := b.emit(map[string]any{
-		"op":   "add",
-		"1":    counterVar,
-		"2":    stepVar,
-		"3":    counterVar,
-		"next": frameRef(stepCheckFrame),
-	})
-
-	patchLastBodyNext(b, origLen, incrFrame)
-
-	afterLoop := frameRef(b.pos())
-
-	stepCheck[checkLarger] = frameRef(checkPosFrame)
-	stepCheck[checkSmaller] = frameRef(checkNegFrame)
-	stepCheck["next"] = afterLoop
-
-	bodyStart := frameRef(origLen)
-	checkPos[checkSmaller] = bodyStart
-	checkPos[checkLarger] = afterLoop
-	checkPos["next"] = afterLoop
-
-	checkNeg[checkLarger] = bodyStart
-	checkNeg[checkSmaller] = afterLoop
-	checkNeg["next"] = afterLoop
-
-	patchBreakPlaceholders(b, origLen, s.Label, afterLoop)
-
 	return nil
 }
 

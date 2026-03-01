@@ -453,3 +453,18 @@ func (b *frameBuilder) finalize(value map[string]any) {
 		value[strconv.Itoa(i+1)] = resolved
 	}
 }
+
+// emitContext abstracts the differences between behavior-level and fn body
+// emission paths, allowing unified control flow emitters.
+type emitContext struct {
+	b              *frameBuilder
+	usedVars       map[string]bool
+	resolveBool    func(expr Expr) (*resolvedBoolExpr, error)
+	emitBody       func(stmts []Stmt) error
+	exprGetValue   func(expr Expr, comment string) (any, error)
+	exprTo         func(expr Expr, target any, comment string) error
+	expandCallExpr func(ce *CallExpr, retVals []any, comment string) error
+	pushScope      func()
+	popScope       func()
+	declareIterVar func(name string) string
+}

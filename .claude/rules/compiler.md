@@ -54,7 +54,11 @@ output format.
   `execMode` type with `modeLocked`/`modeUnlocked`
   constants for compile-time execution mode tracking,
   `emitModeEntry`/`emitModeExit` helpers for structured mode transitions
-  (used by both statement and expression mode blocks)
+  (used by both statement and expression mode blocks),
+  `emitContext` struct (abstracts differences between behavior-level
+  and fn body emission for unified control flow emitters; fields:
+  `b`, `usedVars`, `resolveBool`, `emitBody`, `exprGetValue`, `exprTo`,
+  `expandCallExpr`, `pushScope`, `popScope`, `declareIterVar`)
 - **`compiler/scanner.go`** — `scanner` struct (embedded by `parser`, holds `locale`
   field), `parser` struct (embeds `scanner`, adds `fns`, `target`,
   `behaviorIDs`, `warnings []string` for non-fatal compiler warnings,
@@ -118,14 +122,12 @@ output format.
   `fnBodyExprDir`, `checkFnBodyCallDirectionsExpr`),
   post-parse analysis (`collectReturnStmts`, `returnStmtArity`,
   `tryPromoteInstruction`),
+  `fnEmitCtx` (constructs `*emitContext` for fn body emission —
+  closures capture `paramMap`/`usedVars`/`pos`; `pushScope`/`popScope`
+  are no-ops; `declareIterVar` uses `allocUniqueVar` + `paramMap`),
   fn body AST emission (`emitFnBody`, `emitExprGetValue`, `emitExprTo`,
   `emitFnArithTo`, `emitFnArithNode`, `emitFnBoolExprTo`,
-  `resolveFnBoolTree`, `emitFnIfStmt`, `emitFnIfExpr`/
-  `emitFnIfExprTailMulti`,
-  `emitFnWhileStmt`, `emitFnLoopStmt`,
-  `emitFnCountedLoop`, `emitFnForStmt`/`emitFnForStmtRange`/
-  `emitFnForStmtRuntime`, `emitFnWaitStmt`,
-  `emitFnModeBlockExpr`,
+  `resolveFnBoolTree`,
   `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
   `collectASTOutputVars`, `collectExprOutputVars`,
   `ifExprArityStatic`/`exprArityStatic`,
@@ -184,6 +186,9 @@ output format.
   tail detection), `parseBhvModeBlockExpr`, `exprArity`/`ifExprArity`
   (generalized arity helper for `CallExpr`/`IfExpr`/`ModeBlockExpr`),
   `parseBhvIfExprBranch`/`parseBhvIfExpr` → `IfExpr`.
+  `bhvEmitCtx` (constructs `*emitContext` for behavior-level emission —
+  closures capture `syms`/`b`; manages a `scopeStack` for push/pop;
+  `declareIterVar` uses `syms.declareVar`).
   Emitter functions: `emitBehaviorStmts` (top-level
   behavior emitter returning `(int, error)` where int is mainFrameCount,
   with `@break`/`BreakStmt` handling,
@@ -197,14 +202,7 @@ output format.
   single-leaf delegation to `emitComparison`/`emitTypeCheck`/
   `emitTruthyCheck`), `emitBhvCallStmt` (function call emission),
   `emitBhvModeBlock` (mode block statement emission with on-the-fly
-  transitions), `emitBhvModeBlockExpr`
-  (mode block expression emission),
-  `emitBhvIfExpr`/`emitBhvIfExprTailMulti`
-  (if-expression emission),
-  `emitBhvIfStmt`/`emitBhvIfBreak`/`emitBhvWhileStmt`/
-  `emitBhvLoopStmt`/`emitBhvCountedLoop`/`emitBhvForStmt`/
-  `emitBhvForStmtRange`/`emitBhvForStmtRuntime`/
-  `emitBhvWaitStmt` (control flow emission).
+  transitions), `emitBhvIfBreak` (optimized if/break emission).
   Internal types: `resolvedBoolExpr` (pre-resolved boolean
   tree for emission), `negateResolved` helper (pushes negation to
   leaves via De Morgan's law)
@@ -224,7 +222,13 @@ output format.
   `isEqualityOp`, `isCompoundAssignOp`,
   `isHighPriorityArithOp`, `isLowPriorityArithOp`), type check helpers
   (`isTypeCheckOp`, `parseIsRHS`), `parseParamAttr`, `checkVarName`,
-  `parseName`, `parseLocalize`, `matchLocale` shared BCP 47 helper
+  `parseName`, `parseLocalize`, `matchLocale` shared BCP 47 helper,
+  unified control flow emitters via `emitContext` (`emitLoopStmt`,
+  `emitCountedLoop`, `emitWhileStmt`, `emitWaitStmt`,
+  `emitModeBlockExpr`/`emitTailMulti`, `emitForStmt`/`emitForStmtRange`/
+  `emitForStmtRuntime`, `emitIfStmt`, `emitIfExpr`) — each replaces a
+  bhv/fn emitter pair, taking `*emitContext` to abstract resolution/
+  body/scope differences
 - **`compiler/tests/`** — Test case pairs: `.doit` (source) + `.json` (expected compiled
   output)
 

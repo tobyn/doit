@@ -284,14 +284,26 @@ validation at parse time via `canAssign`/`canCompound`.
 ## Control flow emission (unified)
 
 Both behavior-level and fn body `if`/`else if`/`else`, `while`,
-`loop`/`break`, `for`, `wait` emit directly into the parent
-`frameBuilder` — no child builders or `rebaseFrameRefs`. Condition
-check frames use `frameRef(0)` as a false-branch placeholder, patched
-after body emission. `stripFallThrough` removes redundant branch slots
-that point to the natural next frame. `break` emits
-`{"op": "@break"}` placeholder. In fn bodies, `return` emits values to
-`@retK` targets then `{"op": "@return"}` placeholder; `expandCall`
-patches these to jump past the function expansion.
+`loop`/`break`, `for`, `wait` share a single set of emitters in
+`codegen.go`, parameterized by `*emitContext`. The `emitContext` struct
+has function fields for `resolveBool`, `emitBody`, `exprGetValue`,
+`exprTo`, `expandCallExpr`, `pushScope`/`popScope`, and
+`declareIterVar`. Two constructors — `bhvEmitCtx` (in `bhvast.go`) and
+`fnEmitCtx` (in `parse.go`) — build the context with closures that
+capture the relevant resolution state. All 10 control flow emitters
+(`emitIfStmt`, `emitIfExpr`, `emitWhileStmt`, `emitLoopStmt`,
+`emitCountedLoop`, `emitForStmt`/`emitForStmtRange`/
+`emitForStmtRuntime`, `emitWaitStmt`, `emitModeBlockExpr`) are methods
+on `*parser` taking `*emitContext`.
+
+Emission is direct into the parent `frameBuilder` — no child builders
+or `rebaseFrameRefs`. Condition check frames use `frameRef(0)` as a
+false-branch placeholder, patched after body emission.
+`stripFallThrough` removes redundant branch slots that point to the
+natural next frame. `break` emits `{"op": "@break"}` placeholder. In
+fn bodies, `return` emits values to `@retK` targets then
+`{"op": "@return"}` placeholder; `expandCall` patches these to jump
+past the function expansion.
 
 Loop back-edges (counted loop INCR, infinite loop jump-back) check
 `!hasNext` on the last body frame before setting `"next"`, preserving

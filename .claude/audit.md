@@ -80,26 +80,6 @@ dimensions in a single pass:
 
 ### Deferred
 
-- **Full emitter unification via `emitContext` interface.** The bhv
-  and fn emitter pairs differ only in operand resolution, scope
-  management, and body emission dispatch. Detailed analysis of the
-  8 emitter pairs shows:
-  - Control flow emitters (`emitIfStmt`, `emitWhileStmt`,
-    `emitLoopStmt`, `emitCountedLoop`, `emitForStmt*`,
-    `emitWaitStmt`) are **84–96% structurally identical** — only
-    3–4 callback points differ (resolveBool, emitBody,
-    exprGetValue, scope push/pop). ~250–300 lines saveable.
-  - Statement dispatch (`emitBhvStmtSimple` vs `emitFnBody` switch)
-    is ~70% identical, differing in variable declaration and comment
-    merging.
-  - Expression emission (`emitBhvExprTo` vs `emitExprTo`) is ~50%
-    identical — a smaller win.
-
-  An `emitContext` interface with `resolveBool()`, `emitBody()`,
-  `exprGetValue()`, and scope callbacks would allow merging the
-  control flow emitters into single implementations. Large
-  architectural change — needs developer input.
-
 ### Rejected
 
 - **`private fn` visibility within the same file.** Not a bug —
