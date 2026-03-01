@@ -39,8 +39,7 @@ output format.
   `paramDef` (with `direction` field, `effectiveDirection()`)
   and `paramInfo` (with `direction` field) types, direction compatibility
   via `canPass(paramDir, argDir)`, `frameBuilder`/`frameRef` abstraction
-  for frame management, `rebaseFrameRefs` for shifting `frameRef` values
-  when transplanting body frames into a parent builder,
+  for frame management,
   `check_number` slot constants (`checkLarger`,
   `checkSmaller`, `checkValue`, `checkTarget`),
   `compare_register` slot constants (`compareRegDifferent`,
@@ -636,12 +635,6 @@ Function call results can compose with boolean operators:
 `maybeExprContinuation` (resolver-parameterized) handles peeking for
 comparison/is/&&/|| after a computed value; `maybeBhvExprContinuation`
 wraps it with `bhvResolver(syms)`.
-
-**`rebaseFrameRefs`**: Returns a new slice of frame maps with all `frameRef`
-values shifted by an offset. Non-destructive (creates copies). Used when
-transplanting body frames compiled with a local `frameBuilder` into a
-parent builder at a non-zero position (e.g., if-expression branches,
-mode block expression bodies).
 
 ## Test Case Format
 

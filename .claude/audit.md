@@ -72,12 +72,6 @@ dimensions in a single pass:
 
 ### High
 
-- **`rebaseFrameRefs` is dead code, documented as active.** The function
-  (compiler.go:436-453) is defined but never called. `decisions.md`
-  explicitly states control flow now uses "no child builders or
-  `rebaseFrameRefs`". However, `compiler.md` still documents it as a
-  live helper. The function should be removed and `compiler.md` updated.
-
 - **`skipImportStmt` and `skipConstDecl` are exact duplicates.**
   `skipImportStmt` (import.go:268-291) and `skipConstDecl`
   (parse.go:4949-4970) have identical logic — skip tokens until the next
