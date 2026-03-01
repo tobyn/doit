@@ -735,15 +735,17 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 	case *CompareExpr, *TypeCheckExpr, *TruthyExpr, *BoolChainExpr, *NotExpr:
 		return p.emitFnBoolExprTo(expr, target, b, paramMap, usedVars, comment, pos)
 	case *ModeBlockExpr:
-		return p.emitFnModeBlockExpr(e, target, b, paramMap, usedVars, comment, pos)
+		return p.emitFnModeBlockExpr(e, []any{target}, b, paramMap, usedVars, comment, pos)
 	case *IfExpr:
 		return p.emitFnIfExpr(e, []any{target}, b, paramMap, usedVars, comment, pos)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitExprTo", expr)
 }
 
-// emitFnModeBlockExpr emits a mode block expression in a fn body context.
-func (p *parser) emitFnModeBlockExpr(e *ModeBlockExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+// emitFnModeBlockExpr emits a mode block expression in a fn body context,
+// directing the tail to the retVals targets. For single-target callers,
+// pass []any{target}.
+func (p *parser) emitFnModeBlockExpr(e *ModeBlockExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	mbeComment := e.Comment
 	if mbeComment == "" {
 		mbeComment = comment
@@ -752,34 +754,21 @@ func (p *parser) emitFnModeBlockExpr(e *ModeBlockExpr, target any, b *frameBuild
 	if err := p.emitFnBody(e.Body, b, paramMap, usedVars, comment, pos); err != nil {
 		return err
 	}
-	if err := p.emitExprTo(e.Tail, target, b, paramMap, usedVars, mbeComment, pos); err != nil {
-		return err
-	}
-	emitModeExit(b, saved)
-	return nil
-}
-
-// emitFnModeBlockExprMulti emits a mode block expression with a multi-return
-// tail, directing return values to the given retVals slice.
-func (p *parser) emitFnModeBlockExprMulti(e *ModeBlockExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
-	mbeComment := e.Comment
-	if mbeComment == "" {
-		mbeComment = comment
-	}
-	saved := emitModeEntry(b, e.Unlock, mbeComment)
-	if err := p.emitFnBody(e.Body, b, paramMap, usedVars, comment, pos); err != nil {
-		return err
-	}
-	ce, ok := e.Tail.(*CallExpr)
-	if !ok {
-		return fmt.Errorf("multi-return mode block expression tail must be a call, got %T", e.Tail)
-	}
-	resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(ce.Args, ce.KwArgs, b, paramMap, usedVars, pos)
-	if err != nil {
-		return err
-	}
-	if err := p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, mbeComment, usedVars); err != nil {
-		return err
+	if ce, ok := e.Tail.(*CallExpr); ok {
+		resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(ce.Args, ce.KwArgs, b, paramMap, usedVars, pos)
+		if err != nil {
+			return err
+		}
+		if err := p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, mbeComment, usedVars); err != nil {
+			return err
+		}
+	} else {
+		if err := p.emitExprTo(e.Tail, retVals[0], b, paramMap, usedVars, mbeComment, pos); err != nil {
+			return err
+		}
+		for i := 1; i < len(retVals); i++ {
+			b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
+		}
 	}
 	emitModeExit(b, saved)
 	return nil
@@ -945,7 +934,7 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 					return err
 				}
 			case *ModeBlockExpr:
-				if err := p.emitFnModeBlockExprMulti(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
+				if err := p.emitFnModeBlockExpr(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
 					return err
 				}
 			case *IfExpr:
@@ -985,13 +974,13 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 						}
 						if mbeArity == 1 {
 							if !s.Bindings[bindIdx].Discard {
-								if err := p.emitFnModeBlockExpr(e, retVals[bindIdx], b, paramMap, usedVars, callComment, pos); err != nil {
+								if err := p.emitFnModeBlockExpr(e, []any{retVals[bindIdx]}, b, paramMap, usedVars, callComment, pos); err != nil {
 									return err
 								}
 							}
 						} else {
 							mbeRetVals := retVals[bindIdx : bindIdx+mbeArity]
-							if err := p.emitFnModeBlockExprMulti(e, mbeRetVals, b, paramMap, usedVars, callComment, pos); err != nil {
+							if err := p.emitFnModeBlockExpr(e, mbeRetVals, b, paramMap, usedVars, callComment, pos); err != nil {
 								return err
 							}
 						}

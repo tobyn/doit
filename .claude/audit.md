@@ -76,13 +76,6 @@ dimensions in a single pass:
 
 ### Medium
 
-- **Mode block expression emitter single/multi duplication.**
-  `emitBhvModeBlockExpr` / `emitBhvModeBlockExprMulti` and
-  `emitFnModeBlockExpr` / `emitFnModeBlockExprMulti` are near-identical
-  pairs differing only in tail emission (single target vs retVals
-  slice). Same pattern as the if-expression emitters that were already
-  merged. ~60 lines saveable across both files.
-
 ### Low
 
 - **Manual map cloning instead of `maps.Clone()`.** Four instances of

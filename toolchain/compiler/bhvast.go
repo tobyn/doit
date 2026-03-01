@@ -2787,7 +2787,7 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 		return tmp, nil
 	case *ModeBlockExpr:
 		tmp := allocUniqueVar("@mode", syms.usedVars)
-		if err := p.emitBhvModeBlockExpr(e, tmp, syms, b, comment); err != nil {
+		if err := p.emitBhvModeBlockExpr(e, []any{tmp}, syms, b, comment); err != nil {
 			return nil, err
 		}
 		return tmp, nil
@@ -2881,7 +2881,7 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 	case *NotExpr:
 		return p.emitBhvBoolExprTo(expr, target, syms, b, comment)
 	case *ModeBlockExpr:
-		return p.emitBhvModeBlockExpr(e, target, syms, b, comment)
+		return p.emitBhvModeBlockExpr(e, []any{target}, syms, b, comment)
 	case *IfExpr:
 		return p.emitBhvIfExpr(e, []any{target}, syms, b, comment)
 	}
@@ -3271,7 +3271,7 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 			}
 			return p.expandCall(v.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, s.Comment, syms.usedVars)
 		case *ModeBlockExpr:
-			return p.emitBhvModeBlockExprMulti(v, retVals, syms, b, s.Comment)
+			return p.emitBhvModeBlockExpr(v, retVals, syms, b, s.Comment)
 		case *IfExpr:
 			return p.emitBhvIfExpr(v, retVals, syms, b, s.Comment)
 		case *InstructionExpr:
@@ -3311,13 +3311,13 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 					}
 					if mbeArity == 1 {
 						if !s.Bindings[bindIdx].Discard {
-							if err := p.emitBhvModeBlockExpr(e, retVals[bindIdx], syms, b, s.Comment); err != nil {
+							if err := p.emitBhvModeBlockExpr(e, []any{retVals[bindIdx]}, syms, b, s.Comment); err != nil {
 								return err
 							}
 						}
 					} else {
 						mbeRetVals := retVals[bindIdx : bindIdx+mbeArity]
-						if err := p.emitBhvModeBlockExprMulti(e, mbeRetVals, syms, b, s.Comment); err != nil {
+						if err := p.emitBhvModeBlockExpr(e, mbeRetVals, syms, b, s.Comment); err != nil {
 							return err
 						}
 					}
@@ -3376,7 +3376,7 @@ func (p *parser) emitBhvModeBlock(s *ModeBlockStmt, b *frameBuilder, syms *symbo
 // emitBhvModeBlockExpr emits a locked/unlocked block expression, writing
 // the tail expression's result to target. Handles multi-return tails via
 // retVals slice when target is a slice.
-func (p *parser) emitBhvModeBlockExpr(e *ModeBlockExpr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
+func (p *parser) emitBhvModeBlockExpr(e *ModeBlockExpr, retVals []any, syms *symbolTable, b *frameBuilder, comment string) error {
 	mbeComment := e.Comment
 	if mbeComment == "" {
 		mbeComment = comment
@@ -3386,41 +3386,25 @@ func (p *parser) emitBhvModeBlockExpr(e *ModeBlockExpr, target any, syms *symbol
 	if _, err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
 		return err
 	}
-	if err := p.emitBhvExprTo(e.Tail, target, syms, b, mbeComment); err != nil {
-		return err
-	}
-	syms.popScope(savedScope)
-	emitModeExit(b, savedMode)
-	return nil
-}
-
-// emitBhvModeBlockExprMulti emits a mode block expression with multi-return
-// tail, directing return values to the given retVals slice.
-func (p *parser) emitBhvModeBlockExprMulti(e *ModeBlockExpr, retVals []any, syms *symbolTable, b *frameBuilder, comment string) error {
-	mbeComment := e.Comment
-	if mbeComment == "" {
-		mbeComment = comment
-	}
-	savedMode := emitModeEntry(b, e.Unlock, mbeComment)
-	savedScope := syms.pushScope()
-	if _, err := p.emitBehaviorStmts(e.Body, b, syms); err != nil {
-		return err
-	}
-	// Tail must be a CallExpr for multi-return
-	ce, ok := e.Tail.(*CallExpr)
-	if !ok {
-		return fmt.Errorf("multi-return mode block expression tail must be a call, got %T", e.Tail)
-	}
-	resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(ce.Args, ce.KwArgs, syms, b)
-	if err != nil {
-		return err
-	}
-	fn := p.fns[ce.Name]
-	if err := p.checkCallDirections(fn, ce.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
-		return err
-	}
-	if err := p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, mbeComment, syms.usedVars); err != nil {
-		return err
+	if ce, ok := e.Tail.(*CallExpr); ok {
+		resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(ce.Args, ce.KwArgs, syms, b)
+		if err != nil {
+			return err
+		}
+		fn := p.fns[ce.Name]
+		if err := p.checkCallDirections(fn, ce.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+			return err
+		}
+		if err := p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, mbeComment, syms.usedVars); err != nil {
+			return err
+		}
+	} else {
+		if err := p.emitBhvExprTo(e.Tail, retVals[0], syms, b, mbeComment); err != nil {
+			return err
+		}
+		for i := 1; i < len(retVals); i++ {
+			b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
+		}
 	}
 	syms.popScope(savedScope)
 	emitModeExit(b, savedMode)

@@ -125,7 +125,7 @@ output format.
   `emitFnWhileStmt`, `emitFnLoopStmt`,
   `emitFnCountedLoop`, `emitFnForStmt`/`emitFnForStmtRange`/
   `emitFnForStmtRuntime`, `emitFnWaitStmt`,
-  `emitFnModeBlockExpr`, `emitFnModeBlockExprMulti`,
+  `emitFnModeBlockExpr`,
   `emitConstructorTo`, `emitAmpersandTo`, `emitCallExprArgs`,
   `collectASTOutputVars`, `collectExprOutputVars`,
   `ifExprArityStatic`/`exprArityStatic`,
@@ -197,7 +197,7 @@ output format.
   single-leaf delegation to `emitComparison`/`emitTypeCheck`/
   `emitTruthyCheck`), `emitBhvCallStmt` (function call emission),
   `emitBhvModeBlock` (mode block statement emission with on-the-fly
-  transitions), `emitBhvModeBlockExpr`/`emitBhvModeBlockExprMulti`
+  transitions), `emitBhvModeBlockExpr`
   (mode block expression emission),
   `emitBhvIfExpr`/`emitBhvIfExprTailMulti`
   (if-expression emission),
