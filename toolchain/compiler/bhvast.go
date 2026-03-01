@@ -2521,16 +2521,19 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				if err != nil {
 					return nil, err
 				}
-				fn := p.fns[calleeTok.val]
+				name, fn, fnErr := p.resolveFnName(calleeTok)
+				if fnErr != nil {
+					return nil, fnErr
+				}
 				if fn == nil {
 					return nil, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
 				}
-				args, kwArgs, err := p.parseBhvCallArgs(fn, calleeTok, syms)
+				args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
 				if err != nil {
 					return nil, err
 				}
 				stmts = append(stmts, &CallStmt{
-					Name:    calleeTok.val,
+					Name:    name,
 					Args:    args,
 					KwArgs:  kwArgs,
 					Comment: comment,
@@ -2662,7 +2665,10 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			p.docComment = savedComment
 
 			if allowExprTail {
-				fn := p.fns[tok.val]
+				name, fn, fnErr := p.resolveFnName(tok)
+				if fnErr != nil {
+					return nil, fnErr
+				}
 				peek, err := p.next()
 				if err != nil {
 					return nil, err
@@ -2721,11 +2727,11 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 					var result Expr
 					if fn != nil && fn.hasReturn() {
 						// Function call as initial expression
-						args, kwArgs, err := p.parseBhvCallArgs(fn, tok, syms)
+						args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
 						if err != nil {
 							return nil, err
 						}
-						result = &CallExpr{Name: tok.val, Args: args, KwArgs: kwArgs}
+						result = &CallExpr{Name: name, Args: args, KwArgs: kwArgs}
 					} else {
 						// Variable or value as initial expression
 						resolved, err := resolve(tok)

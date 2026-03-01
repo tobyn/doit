@@ -70,7 +70,116 @@ dimensions in a single pass:
 
 ## Open items
 
-(No actionable items.)
+### High
+
+- **`rebaseFrameRefs` is dead code, documented as active.** The function
+  (compiler.go:436-453) is defined but never called. `decisions.md`
+  explicitly states control flow now uses "no child builders or
+  `rebaseFrameRefs`". However, `compiler.md` still documents it as a
+  live helper. The function should be removed and `compiler.md` updated.
+
+- **`skipImportStmt` and `skipConstDecl` are exact duplicates.**
+  `skipImportStmt` (import.go:268-291) and `skipConstDecl`
+  (parse.go:4949-4970) have identical logic — skip tokens until the next
+  top-level keyword or EOF. Should be a single `skipToNextDecl` helper.
+
+- **`isArithmeticOp` is dead code.** (codegen.go:650-652) Defined but
+  never called. Superseded by `isHighPriorityArithOp` and
+  `isLowPriorityArithOp` for PEMDAS parsing.
+
+### Medium
+
+- **`parseBehaviorBody` duplicates `parseBhvStmtBlockInner` statement
+  parsing (~260 lines).** The statement-parsing loop in
+  `parseBehaviorBody` (codegen.go:250-510) is a near-copy of
+  `parseBhvStmtBlockInner` (bhvast.go:2396-2761). Both handle the same
+  statement types with the same switch structure. `parseBehaviorBody`
+  additionally handles `@name`/`@param` attributes, but the rest is
+  duplicated. The `resolveFnName` bug above is a direct consequence of
+  this duplication. `parseBehaviorBody` could call
+  `parseBhvStmtBlockInner` for statement parsing with `@name`/`@param`
+  as a pre-processing step.
+
+- **`var`/`let` case arms identical within both `parseBehaviorBody` and
+  `parseBhvStmtBlockInner` (4 copies).** The `var` and `let` cases in
+  both functions are structurally identical — only the `mutable` boolean
+  differs. ~40 lines each, 4 copies. A helper like
+  `parseBhvLetVarStmt(mutable, syms)` would replace all four.
+
+- **Loop back-edge pattern duplicated 10 times.** The "check if last
+  frame is `@break` → emit noop; else if no `next` → set back-edge;
+  else emit noop" pattern appears in 5 bhv emitters and 5 fn emitters.
+  Two variants: (a) while/infinite-loop version (~8 lines, 4 copies)
+  and (b) counted/for-loop "last body frame next to incr" version
+  (~7 lines, 6 copies). Each could be a single helper.
+
+- **Stdlib re-parsed for every imported file.** `parseImportedFile`
+  (import.go:345) calls `parseStdlib(p.stdlibFS)` for each imported
+  file. The stdlib is immutable during compilation and only needs to be
+  parsed once. With N imported files, the stdlib is parsed N+1 times.
+  Fix: pass the already-parsed stdlib map as a parameter and clone it.
+
+- **`collectImportedFns` and `collectUserFns` share most of their loop
+  body (~55 lines).** Both handle the same top-level keywords
+  (`behavior`, `private`, `fn`, `const`, `import`) with nearly identical
+  dispatch. The differences (behavior ID collection, collision tracking)
+  could be handled by a callback or options struct.
+
+- **`emitBhvIfExpr`/`emitBhvIfExprMulti` duplication (~85 lines), and
+  same for fn body counterparts.** The single-target and multi-target
+  if-expression emitters share identical branch-collection, condition
+  resolution, check-frame emission, body emission, and jump-patching
+  structure. Only the tail-emission step differs (single target vs
+  slice). Could parameterize with a tail-emission callback, or handle
+  single targets as a `[]any{target}` slice.
+
+- **Ticks/count expression parsing duplicated 4 times.** The three-way
+  switch on `tokNumber`/`tokLParen`/`tokIdent` for parsing a simple
+  expression appears in `parseBhvLoopStmt`, `parseBhvWaitStmt`,
+  `parseFnBodyLoopStmt`, and `parseFnBodyWaitStmt` (~25 lines each).
+  A shared `parseSingleExpr(resolve, errContext)` helper would
+  eliminate all four copies.
+
+- **`tryEvalExpr`/`tryEvalStmts` duplicate call-argument evaluation 3
+  times.** The "evaluate positional args, evaluate keyword args, call
+  `tryEvalCall`" pattern is copy-pasted in the `*CallExpr` case of
+  `tryEvalExpr`, the `*MultiReturnStmt`/`*CallExpr` case, and the
+  `*CallStmt` case of `tryEvalStmts`. A `tryEvalCallArgs` helper would
+  centralize this (~45 lines).
+
+### Low
+
+- **`arithmeticOpName` and `compoundAssignOpName` are identical
+  functions.** Both return `arithOpNames[kind]` (codegen.go:664-688).
+  Could merge into a single `opName` function.
+
+- **`exprArity`/`ifExprArity` vs `exprArityStatic`/`ifExprArityStatic`
+  duplication.** The method versions (bhvast.go:2177-2205) use `p.fns`,
+  the free-function versions (parse.go:3498-3526) take a `fns` map
+  parameter. If `returnStmtArity` were a method on `*parser`, the
+  free-function versions could be eliminated (~30 lines).
+
+- **Comment inheritance boilerplate in `emitFnBody` (14 occurrences).**
+  Every statement case repeats the 4-line `callComment := s.Comment;
+  if callComment == "" { callComment = comment }` pattern. A one-line
+  helper would save ~42 lines.
+
+- **`allAliases` map stores unused positions.** (import.go:31,54-66)
+  Declared as `map[string]int` but the stored position is immediately
+  discarded with `_ = prevPos`. Should be `map[string]bool`.
+
+- **Redundant nil guards in `resolveFnName`.** (import.go:607-614)
+  The `p.namespaces != nil` and `p.namespaceConsts != nil` checks
+  are unnecessary — Go map lookups on nil maps are safe (return zero
+  value). Removing them reduces nesting depth.
+
+- **Spurious `_ = name` in `collectImportedFns`.** (import.go:456)
+  After `name, err := p.parseConstDecl(true)`, should be `_, err :=`.
+
+- **Redundant `isConstructor` check at bhvast.go:2715.** The
+  `!isConstructor(tok.val)` guard in the `isExprTail` condition is
+  always true at that point — constructors are handled earlier with
+  an early return at line 2673.
 
 ### Deferred
 

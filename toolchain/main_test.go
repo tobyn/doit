@@ -3840,6 +3840,42 @@ behavior a { let x = lib.SECRET }`)},
 		}
 	})
 
+	t.Run("namespace_discard_call_in_nested_block", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main {
+	let x = 1
+	if x > 0 {
+		_ = lib.get_me
+	}
+}`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn get_me() { return instruction "get_self" { 0: @1 } }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_call_in_nested_block", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main {
+	let x = 1
+	if x > 0 {
+		lib.greet
+	}
+}`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`fn greet() { notify "Hello" }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("const_via_imported_fn", func(t *testing.T) {
 		sourceFS := fstest.MapFS{
 			"main.doit": &fstest.MapFile{Data: []byte(`import double from "./lib"
