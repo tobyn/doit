@@ -112,9 +112,6 @@ dimensions in a single pass:
   if callComment == "" { callComment = comment }` pattern. A one-line
   helper would save ~42 lines.
 
-- **Spurious `_ = name` in `collectImportedFns`.** (import.go:456)
-  After `name, err := p.parseConstDecl(true)`, should be `_, err :=`.
-
 - **Redundant `isConstructor` check at bhvast.go:2715.** The
   `!isConstructor(tok.val)` guard in the `isExprTail` condition is
   always true at that point — constructors are handled earlier with
