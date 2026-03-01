@@ -87,12 +87,6 @@ dimensions in a single pass:
   `parseBhvStmtBlockInner` for statement parsing with `@name`/`@param`
   as a pre-processing step.
 
-- **`var`/`let` case arms identical within both `parseBehaviorBody` and
-  `parseBhvStmtBlockInner` (4 copies).** The `var` and `let` cases in
-  both functions are structurally identical — only the `mutable` boolean
-  differs. ~40 lines each, 4 copies. A helper like
-  `parseBhvLetVarStmt(mutable, syms)` would replace all four.
-
 - **`emitBhvIfExpr`/`emitBhvIfExprMulti` duplication (~85 lines), and
   same for fn body counterparts.** The single-target and multi-target
   if-expression emitters share identical branch-collection, condition

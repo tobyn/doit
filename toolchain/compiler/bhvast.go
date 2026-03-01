@@ -2318,6 +2318,42 @@ func (p *parser) parseBhvStmtBlock(syms *symbolTable) ([]Stmt, error) {
 	return p.parseBhvStmtBlockInner(syms, false)
 }
 
+// parseBhvLetVarStmt parses a let or var declaration at behavior level.
+// mutable distinguishes var (true) from let (false).
+func (p *parser) parseBhvLetVarStmt(mutable bool, syms *symbolTable) ([]Stmt, error) {
+	keyword := "let"
+	if mutable {
+		keyword = "var"
+	}
+	nameTok, err := p.expect(tokIdent)
+	if err != nil {
+		return nil, err
+	}
+	if nameTok.val == "_" {
+		sep, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if sep.kind != tokComma {
+			return nil, p.errorf(nameTok.pos, "'_' cannot be used as a variable name")
+		}
+		return p.parseBhvMultiReturn(nameTok, mutable, true, syms)
+	}
+	if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
+		return nil, err
+	}
+	sep, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if sep.kind == tokComma {
+		return p.parseBhvMultiReturn(nameTok, mutable, false, syms)
+	} else if sep.kind == tokEquals {
+		return p.parseBhvVarInit(nameTok, mutable, syms)
+	}
+	return nil, p.errorf(sep.pos, "expected ',' or '=' after %s identifier, got %s", keyword, sep.describe())
+}
+
 // parseBhvStmtBlockInner parses a brace-delimited block of statements.
 // 'break' is allowed when p.loopDepth > 0. If exprTail is true, the last
 // item may be a bare expression (wrapped in exprTailStmt).
@@ -2403,89 +2439,17 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			}
 			stmts = append(stmts, &InstructionStmt{Frame: rawFrame, Comment: comment})
 		case "var":
-			nameTok, err := p.expect(tokIdent)
+			parsed, err := p.parseBhvLetVarStmt(true, syms)
 			if err != nil {
 				return nil, err
 			}
-			if nameTok.val == "_" {
-				sep, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if sep.kind != tokComma {
-					return nil, p.errorf(nameTok.pos, "'_' cannot be used as a variable name")
-				}
-				parsed, err := p.parseBhvMultiReturn(nameTok, true, true, syms)
-				if err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, parsed...)
-			} else {
-				if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
-					return nil, err
-				}
-				sep, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if sep.kind == tokComma {
-					parsed, err := p.parseBhvMultiReturn(nameTok, true, false, syms)
-					if err != nil {
-						return nil, err
-					}
-					stmts = append(stmts, parsed...)
-				} else if sep.kind == tokEquals {
-					parsed, err := p.parseBhvVarInit(nameTok, true, syms)
-					if err != nil {
-						return nil, err
-					}
-					stmts = append(stmts, parsed...)
-				} else {
-					return nil, p.errorf(sep.pos, "expected ',' or '=' after var identifier, got %s", sep.describe())
-				}
-			}
+			stmts = append(stmts, parsed...)
 		case "let":
-			nameTok, err := p.expect(tokIdent)
+			parsed, err := p.parseBhvLetVarStmt(false, syms)
 			if err != nil {
 				return nil, err
 			}
-			if nameTok.val == "_" {
-				sep, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if sep.kind != tokComma {
-					return nil, p.errorf(nameTok.pos, "'_' cannot be used as a variable name")
-				}
-				parsed, err := p.parseBhvMultiReturn(nameTok, false, true, syms)
-				if err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, parsed...)
-			} else {
-				if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
-					return nil, err
-				}
-				sep, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if sep.kind == tokComma {
-					parsed, err := p.parseBhvMultiReturn(nameTok, false, false, syms)
-					if err != nil {
-						return nil, err
-					}
-					stmts = append(stmts, parsed...)
-				} else if sep.kind == tokEquals {
-					parsed, err := p.parseBhvVarInit(nameTok, false, syms)
-					if err != nil {
-						return nil, err
-					}
-					stmts = append(stmts, parsed...)
-				} else {
-					return nil, p.errorf(sep.pos, "expected ',' or '=' after let identifier, got %s", sep.describe())
-				}
-			}
+			stmts = append(stmts, parsed...)
 		case "_":
 			sep, err := p.next()
 			if err != nil {
