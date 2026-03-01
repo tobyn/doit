@@ -3036,6 +3036,19 @@ behavior a { let x = greet }`
 		}
 	})
 
+	t.Run("fn_collides_with_const", func(t *testing.T) {
+		src := `const greet = 5
+fn greet() { notify "hi" }
+behavior a { let x = greet }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with a constant") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("const_forward_reference", func(t *testing.T) {
 		src := `const A = B
 const B = 5

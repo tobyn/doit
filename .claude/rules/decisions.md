@@ -706,6 +706,10 @@ evaluated during pass 1 (`collectUserFns`) and substituted as
 Stored in `parser.consts` (flat map) and `parser.namespaceConsts`
 (for namespace-qualified access). Constants are pure values with no
 transitive dependency concerns (unlike functions with `scope`).
+Constants and functions share a namespace — a constant and a function
+with the same name is a compile error regardless of declaration order.
+Both `parseConstDecl` (checks `p.fns`) and `parseUserFn` (checks
+`p.consts`) enforce this.
 
 **Evaluation**: `parseConstDecl` uses `parseBoolExpr` with a
 const-only `operandResolver` that resolves known constants to

@@ -2553,6 +2553,9 @@ func (p *parser) parseUserFn() (string, error) {
 	if Keywords[nameTok.val] {
 		return "", p.errorf(nameTok.pos, "%q is a reserved keyword and cannot be used as a function name", nameTok.val)
 	}
+	if _, ok := p.consts[nameTok.val]; ok {
+		return "", p.errorf(nameTok.pos, "function %q conflicts with a constant of the same name", nameTok.val)
+	}
 
 	params, err := p.parseParamList()
 	if err != nil {
