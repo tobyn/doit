@@ -103,12 +103,6 @@ dimensions in a single pass:
 
 ### Low
 
-- **`exprArity`/`ifExprArity` vs `exprArityStatic`/`ifExprArityStatic`
-  duplication.** The method versions (bhvast.go:2177-2205) use `p.fns`,
-  the free-function versions (parse.go:3498-3526) take a `fns` map
-  parameter. If `returnStmtArity` were a method on `*parser`, the
-  free-function versions could be eliminated (~30 lines).
-
 ### Deferred
 
 - **`private fn` visibility is not enforced.** The compiler parses

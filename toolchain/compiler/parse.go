@@ -3305,7 +3305,7 @@ func (p *parser) parseUserFn() (string, error) {
 		// or returns with literals/calls
 		maxArity := 0
 		for _, ret := range returns {
-			a := returnStmtArity(ret, p.fns)
+			a := p.returnStmtArity(ret)
 			if a > maxArity {
 				maxArity = a
 			}
@@ -3397,50 +3397,18 @@ func collectReturnStmts(stmts []Stmt) []*ReturnStmt {
 }
 
 // returnStmtArity computes the return arity of a single ReturnStmt.
-// ifExprArityStatic computes the max arity of an IfExpr using a fns map
-// (for use outside a parser context, e.g., returnStmtArity).
-func ifExprArityStatic(e *IfExpr, fns map[string]*fnDef) int {
-	max := exprArityStatic(e.Tail, fns)
-	for _, elif := range e.ElseIfs {
-		if a := exprArityStatic(elif.Tail, fns); a > max {
-			max = a
-		}
-	}
-	if e.ElsTail != nil {
-		if a := exprArityStatic(e.ElsTail, fns); a > max {
-			max = a
-		}
-	}
-	return max
-}
-
-// exprArityStatic computes arity using a fns map (no parser needed).
-func exprArityStatic(expr Expr, fns map[string]*fnDef) int {
-	switch e := expr.(type) {
-	case *CallExpr:
-		if fn, ok := fns[e.Name]; ok {
-			return fn.returnCount()
-		}
-	case *IfExpr:
-		return ifExprArityStatic(e, fns)
-	case *ModeBlockExpr:
-		return exprArityStatic(e.Tail, fns)
-	}
-	return 1
-}
-
-func returnStmtArity(ret *ReturnStmt, fns map[string]*fnDef) int {
+func (p *parser) returnStmtArity(ret *ReturnStmt) int {
 	arity := 0
 	for _, v := range ret.Values {
 		switch e := v.(type) {
 		case *CallExpr:
-			if fn, ok := fns[e.Name]; ok {
+			if fn := p.fns[e.Name]; fn != nil {
 				arity += fn.returnCount()
 			} else {
 				arity++
 			}
 		case *IfExpr:
-			arity += ifExprArityStatic(e, fns)
+			arity += p.ifExprArity(e)
 		case *InstructionExpr:
 			arity += frameReturnCount(e.Frame)
 		default:
