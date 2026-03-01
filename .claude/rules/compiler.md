@@ -23,7 +23,7 @@ output format.
 - **`compiler/import.go`** — Import system: `ImportStmt`/`ImportName`
   types, import parsing (`parseImports`, `parseImportStmt`,
   `parseImportNames`), validation (`validateImportPath`,
-  `validateImportAlias`), pass 2 skip (`skipImportStmt`), file
+  `validateImportAlias`), pass 2 skip (`skipToNextDecl`), file
   resolution (`resolveImportPath`), imported file parsing
   (`parseImportedFile`, `collectImportedFns`), import processing
   (`processImports`), collision checking (`checkImportCollisions`),

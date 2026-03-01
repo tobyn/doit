@@ -264,12 +264,10 @@ func validateImportAlias(p *parser, tok token) error {
 	return nil
 }
 
-// skipImportStmt skips over an import statement during pass 2.
-// The `import` keyword has already been consumed.
-func (p *parser) skipImportStmt() error {
-	// Skip tokens until we reach the next top-level declaration.
-	// Import statements don't contain braces, so we just skip until we
-	// see a token that starts a new top-level declaration or EOF.
+// skipToNextDecl skips tokens until the next top-level declaration keyword
+// (import, fn, private, behavior, const) or EOF. Used during pass 2 to skip
+// over import and const declarations whose keywords have already been consumed.
+func (p *parser) skipToNextDecl() error {
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -279,7 +277,6 @@ func (p *parser) skipImportStmt() error {
 			p.unget(tok)
 			return nil
 		}
-		// Import statements end when we see a top-level keyword
 		if tok.kind == tokIdent {
 			switch tok.val {
 			case "import", "fn", "private", "behavior", "const":

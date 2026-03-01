@@ -3069,7 +3069,7 @@ func (p *parser) parseFile() (*codec.Object, error) {
 					return nil, err
 				}
 			case "const":
-				if err := p.skipConstDecl(); err != nil {
+				if err := p.skipToNextDecl(); err != nil {
 					return nil, err
 				}
 			default:
@@ -3081,12 +3081,12 @@ func (p *parser) parseFile() (*codec.Object, error) {
 			}
 		case "const":
 			// Skip const declarations in pass 2 (already processed in pass 1)
-			if err := p.skipConstDecl(); err != nil {
+			if err := p.skipToNextDecl(); err != nil {
 				return nil, err
 			}
 		case "import":
 			// Skip import statements in pass 2 (already processed in pass 1)
-			if err := p.skipImportStmt(); err != nil {
+			if err := p.skipToNextDecl(); err != nil {
 				return nil, err
 			}
 		default:
@@ -4942,31 +4942,6 @@ func (p *parser) skipFnDef() error {
 		}
 	}
 	return p.skipBraceBlock()
-}
-
-// skipConstDecl skips a const declaration during pass 2.
-// The `const` keyword has already been consumed.
-func (p *parser) skipConstDecl() error {
-	// Skip tokens until we reach the next top-level declaration.
-	// Const declarations are single-line (no braces), so we skip until we
-	// see a token that starts a new top-level declaration or EOF.
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return err
-		}
-		if tok.kind == tokEOF {
-			p.unget(tok)
-			return nil
-		}
-		if tok.kind == tokIdent {
-			switch tok.val {
-			case "import", "fn", "private", "behavior", "const":
-				p.unget(tok)
-				return nil
-			}
-		}
-	}
 }
 
 func (p *parser) parseInstruction() (map[string]any, error) {

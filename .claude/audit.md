@@ -72,11 +72,6 @@ dimensions in a single pass:
 
 ### High
 
-- **`skipImportStmt` and `skipConstDecl` are exact duplicates.**
-  `skipImportStmt` (import.go:268-291) and `skipConstDecl`
-  (parse.go:4949-4970) have identical logic — skip tokens until the next
-  top-level keyword or EOF. Should be a single `skipToNextDecl` helper.
-
 - **`isArithmeticOp` is dead code.** (codegen.go:650-652) Defined but
   never called. Superseded by `isHighPriorityArithOp` and
   `isLowPriorityArithOp` for PEMDAS parsing.
