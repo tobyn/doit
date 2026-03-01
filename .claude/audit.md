@@ -109,11 +109,6 @@ dimensions in a single pass:
   parameter. If `returnStmtArity` were a method on `*parser`, the
   free-function versions could be eliminated (~30 lines).
 
-- **Comment inheritance boilerplate in `emitFnBody` (14 occurrences).**
-  Every statement case repeats the 4-line `callComment := s.Comment;
-  if callComment == "" { callComment = comment }` pattern. A one-line
-  helper would save ~42 lines.
-
 ### Deferred
 
 - **`private fn` visibility is not enforced.** The compiler parses

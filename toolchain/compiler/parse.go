@@ -880,6 +880,15 @@ func (p *parser) resolveFnBoolTree(expr Expr, b *frameBuilder, paramMap map[stri
 	})
 }
 
+// inheritComment returns stmtComment if non-empty, otherwise falls back to
+// the caller's comment. Used in emitFnBody to propagate doc comments.
+func inheritComment(stmtComment, callerComment string) string {
+	if stmtComment != "" {
+		return stmtComment
+	}
+	return callerComment
+}
+
 // emitFnBody emits frames for an AST body during call expansion.
 func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	collectASTOutputVars(stmts, paramMap, usedVars)
@@ -887,18 +896,12 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 	for _, stmt := range stmts {
 		switch s := stmt.(type) {
 		case *InstructionStmt:
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			resolved := resolveInstructionFrame(s.Frame, nil, paramMap, nil, callComment)
 			b.emit(resolved)
 
 		case *ModeBlockStmt:
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			saved := emitModeEntry(b, s.Unlock, callComment)
 			if err := p.emitFnBody(s.Body, b, paramMap, usedVars, comment, pos); err != nil {
 				return err
@@ -910,20 +913,14 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			if err != nil {
 				return err
 			}
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			if err := p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, pos, callComment, usedVars); err != nil {
 				return err
 			}
 
 		case *LetStmt:
 			target := resolveVarName(s.Name, paramMap)
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			if err := p.emitExprTo(s.Value, target, b, paramMap, usedVars, callComment, pos); err != nil {
 				return err
 			}
@@ -937,10 +934,7 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 					retVals[i] = resolveVarName(bind.Name, paramMap)
 				}
 			}
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			switch v := s.Value.(type) {
 			case *CallExpr:
 				resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(v.Args, v.KwArgs, b, paramMap, usedVars, pos)
@@ -1035,20 +1029,14 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 
 		case *AssignStmt:
 			target := resolveVarName(s.Target, paramMap)
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			if err := p.emitExprTo(s.Value, target, b, paramMap, usedVars, callComment, pos); err != nil {
 				return err
 			}
 
 		case *CompoundAssignStmt:
 			target := resolveVarName(s.Target, paramMap)
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			rhs, err := p.emitExprGetValue(s.Value, b, paramMap, usedVars, "", pos)
 			if err != nil {
 				return err
@@ -1064,10 +1052,7 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 
 		case *IncrDecrStmt:
 			target := resolveVarName(s.Target, paramMap)
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			op := "add"
 			if s.Op == tokMinusMinus {
 				op = "sub"
@@ -1082,46 +1067,31 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			b.emit(f)
 
 		case *IfStmt:
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			if err := p.emitFnIfStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
 				return err
 			}
 
 		case *WhileStmt:
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			if err := p.emitFnWhileStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
 				return err
 			}
 
 		case *LoopStmt:
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			if err := p.emitFnLoopStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
 				return err
 			}
 
 		case *ForStmt:
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			if err := p.emitFnForStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
 				return err
 			}
 
 		case *WaitStmt:
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			if err := p.emitFnWaitStmt(s, b, paramMap, usedVars, callComment, pos); err != nil {
 				return err
 			}
@@ -1136,10 +1106,7 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 
 		case *ReturnStmt:
 			// Emit values to @retK targets, then emit @return jump placeholder
-			callComment := s.Comment
-			if callComment == "" {
-				callComment = comment
-			}
+			callComment := inheritComment(s.Comment, comment)
 			retOffset := 0
 			for _, val := range s.Values {
 				switch e := val.(type) {
