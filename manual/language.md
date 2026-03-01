@@ -311,6 +311,75 @@ import "./config" as cfg
 let x = cfg.STACK_SIZE
 ```
 
+## Enums
+
+Enums define named groups of integer values:
+
+```doit
+enum Direction {
+    North       # 0 (auto-increments from 0)
+    South       # 1
+    East        # 2
+    West        # 3
+}
+
+enum Priority {
+    Low             # 0
+    Medium = 5      # explicit value
+    High            # 6 (continues from previous)
+    Critical = 100  # explicit value
+}
+```
+
+Access members with the `::` operator:
+
+```doit
+let d = Direction::North
+let p = Priority::High
+```
+
+Enum values are compile-time integer constants. They work anywhere a number
+is accepted: arithmetic, comparisons, function arguments, and more:
+
+```doit
+let x = Direction::East + 1
+let urgent = priority > Priority::Medium
+set_number target, Priority::Critical
+```
+
+Using an enum name without `::` is a compile error:
+
+```doit
+let x = Direction   # error: enum "Direction" requires '::' member access
+```
+
+Duplicate member names or values within an enum are compile errors.
+Negative explicit values are supported (`Member = -1`).
+
+### Private enums
+
+Mark an enum as private to prevent it from being imported:
+
+```doit
+private enum Internal { A; B; C }
+```
+
+### Importing enums
+
+Enums participate in the same import system as functions and constants:
+
+```doit
+# Named import
+import Direction from "./types"
+
+# Glob import (includes all non-private enums)
+import * from "./types"
+
+# Namespace import
+import "./types" as types
+let d = types.Direction::North
+```
+
 ## Statements
 
 Behavior bodies and control flow blocks contain sequences of statements. A

@@ -52,6 +52,9 @@ func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int)
 		if _, ok := p.consts[e.Name]; ok {
 			return nil
 		}
+		if _, ok := p.enums[e.Name]; ok {
+			return p.errorf(pos, "enum %q requires '::' member access (e.g., %s::Member)", e.Name, e.Name)
+		}
 		if e.Name == "Unit" {
 			return p.errorf(pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
@@ -95,6 +98,9 @@ func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 			// Check constants before erroring
 			if c, ok := p.consts[tok.val]; ok {
 				return &LiteralExpr{Value: c.value}, nil
+			}
+			if _, ok := p.enums[tok.val]; ok {
+				return nil, p.errorf(tok.pos, "enum %q requires '::' member access (e.g., %s::Member)", tok.val, tok.val)
 			}
 			if tok.val == "Unit" {
 				return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
@@ -164,6 +170,12 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 			}
 		} else if c, ok := p.consts[tok.val]; ok {
 			base = &LiteralExpr{Value: c.value}
+		} else if e, ok := p.enums[tok.val]; ok {
+			expr, err := p.parseEnumAccess(tok, e)
+			if err != nil {
+				return nil, err
+			}
+			base = expr
 		} else {
 			base = &IdentExpr{Name: tok.val}
 		}
@@ -1282,6 +1294,9 @@ func (p *parser) parseConstDecl(private bool) (string, error) {
 	if _, ok := p.fns[name]; ok {
 		return "", p.errorf(nameTok.pos, "constant %q conflicts with a function of the same name", name)
 	}
+	if _, ok := p.enums[name]; ok {
+		return "", p.errorf(nameTok.pos, "constant %q conflicts with an enum of the same name", name)
+	}
 	if _, err := p.expect(tokEquals); err != nil {
 		return "", err
 	}
@@ -1367,6 +1382,107 @@ func (p *parser) parseConstDecl(private bool) (string, error) {
 	}
 
 	p.consts[name] = &constDef{value: val, private: private}
+	return name, nil
+}
+
+// parseEnumDecl parses an enum declaration: enum Name { Member1; Member2 = 5; Member3 }
+func (p *parser) parseEnumDecl(private bool) (string, error) {
+	nameTok, err := p.expect(tokIdent)
+	if err != nil {
+		return "", err
+	}
+	name := nameTok.val
+	if Keywords[name] {
+		return "", p.errorf(nameTok.pos, "%q is a reserved keyword and cannot be used as an enum name", name)
+	}
+	if name == "_" {
+		return "", p.errorf(nameTok.pos, "'_' cannot be used as an enum name")
+	}
+	if _, ok := p.enums[name]; ok {
+		return "", p.errorf(nameTok.pos, "duplicate enum %q", name)
+	}
+	if _, ok := p.fns[name]; ok {
+		return "", p.errorf(nameTok.pos, "enum %q conflicts with a function of the same name", name)
+	}
+	if _, ok := p.consts[name]; ok {
+		return "", p.errorf(nameTok.pos, "enum %q conflicts with a constant of the same name", name)
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return "", err
+	}
+
+	values := map[string]int{}
+	usedValues := map[int]string{} // value → member name (for duplicate value detection)
+	var members []string
+	nextVal := 0
+
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return "", err
+		}
+		if tok.kind == tokRBrace {
+			break
+		}
+		if tok.kind != tokIdent {
+			return "", p.errorf(tok.pos, "expected enum member name, got %s", tok.describe())
+		}
+		memberName := tok.val
+		if Keywords[memberName] {
+			return "", p.errorf(tok.pos, "%q is a reserved keyword and cannot be used as an enum member name", memberName)
+		}
+		if _, exists := values[memberName]; exists {
+			return "", p.errorf(tok.pos, "duplicate enum member %q in %s", memberName, name)
+		}
+
+		// Check for explicit value assignment
+		peek, err := p.next()
+		if err != nil {
+			return "", err
+		}
+		if peek.kind == tokEquals {
+			// Explicit value: Member = N or Member = -N
+			valTok, err := p.next()
+			if err != nil {
+				return "", err
+			}
+			negative := false
+			if valTok.kind == tokMinus {
+				negative = true
+				valTok, err = p.next()
+				if err != nil {
+					return "", err
+				}
+			}
+			if valTok.kind != tokNumber {
+				return "", p.errorf(valTok.pos, "expected number for enum member value, got %s", valTok.describe())
+			}
+			num, _ := strconv.Atoi(valTok.val)
+			if negative {
+				num = -num
+			}
+			nextVal = num
+		} else {
+			p.unget(peek)
+		}
+
+		// Check for duplicate value
+		if prevMember, exists := usedValues[nextVal]; exists {
+			return "", p.errorf(tok.pos, "enum member %q has the same value (%d) as %q in %s", memberName, nextVal, prevMember, name)
+		}
+
+		values[memberName] = nextVal
+		usedValues[nextVal] = memberName
+		members = append(members, memberName)
+		nextVal++
+	}
+
+	if len(members) == 0 {
+		return "", p.errorf(nameTok.pos, "enum %q has no members", name)
+	}
+
+	p.enums[name] = &enumDef{values: values, members: members, private: private}
 	return name, nil
 }
 
@@ -2329,8 +2445,16 @@ func (p *parser) parseFile() (*codec.Object, error) {
 				if err := p.skipToNextDecl(); err != nil {
 					return nil, err
 				}
+			case "enum":
+				// Skip enum name + brace block
+				if _, err := p.expect(tokIdent); err != nil {
+					return nil, err
+				}
+				if err := p.skipBraceBlock(); err != nil {
+					return nil, err
+				}
 			default:
-				return nil, p.errorf(fnTok.pos, "expected 'fn' or 'const' after 'private', got %q", fnTok.val)
+				return nil, p.errorf(fnTok.pos, "expected 'fn', 'const', or 'enum' after 'private', got %q", fnTok.val)
 			}
 		case "fn":
 			if err := p.skipFnDef(); err != nil {
@@ -2341,13 +2465,21 @@ func (p *parser) parseFile() (*codec.Object, error) {
 			if err := p.skipToNextDecl(); err != nil {
 				return nil, err
 			}
+		case "enum":
+			// Skip enum declarations in pass 2 (already processed in pass 1)
+			if _, err := p.expect(tokIdent); err != nil {
+				return nil, err
+			}
+			if err := p.skipBraceBlock(); err != nil {
+				return nil, err
+			}
 		case "import":
 			// Skip import statements in pass 2 (already processed in pass 1)
 			if err := p.skipToNextDecl(); err != nil {
 				return nil, err
 			}
 		default:
-			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', or 'private', got %q", tok.val)
+			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', 'enum', or 'private', got %q", tok.val)
 		}
 	}
 }
@@ -2373,6 +2505,7 @@ func (p *parser) collectUserFns() error {
 func (p *parser) collectDecls(isImport bool) error {
 	var sameFileFns []string
 	var sameFileConsts []string
+	var sameFileEnums []string
 
 	for {
 		tok, err := p.next()
@@ -2420,8 +2553,16 @@ func (p *parser) collectDecls(isImport bool) error {
 				if !isImport {
 					sameFileConsts = append(sameFileConsts, name)
 				}
+			case "enum":
+				name, err := p.parseEnumDecl(true)
+				if err != nil {
+					return err
+				}
+				if !isImport {
+					sameFileEnums = append(sameFileEnums, name)
+				}
 			default:
-				return p.errorf(fnTok.pos, "expected 'fn' or 'const' after 'private', got %q", fnTok.val)
+				return p.errorf(fnTok.pos, "expected 'fn', 'const', or 'enum' after 'private', got %q", fnTok.val)
 			}
 		case "fn":
 			name, err := p.parseUserFn()
@@ -2439,15 +2580,23 @@ func (p *parser) collectDecls(isImport bool) error {
 			if !isImport {
 				sameFileConsts = append(sameFileConsts, name)
 			}
+		case "enum":
+			name, err := p.parseEnumDecl(false)
+			if err != nil {
+				return err
+			}
+			if !isImport {
+				sameFileEnums = append(sameFileEnums, name)
+			}
 		case "import":
 			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
 		default:
-			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', or 'private', got %q", tok.val)
+			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', 'enum', or 'private', got %q", tok.val)
 		}
 	}
 
 	if !isImport {
-		return p.checkImportCollisions(sameFileFns, sameFileConsts)
+		return p.checkImportCollisions(sameFileFns, sameFileConsts, sameFileEnums)
 	}
 	return nil
 }
@@ -2555,6 +2704,9 @@ func (p *parser) parseUserFn() (string, error) {
 	}
 	if _, ok := p.consts[nameTok.val]; ok {
 		return "", p.errorf(nameTok.pos, "function %q conflicts with a constant of the same name", nameTok.val)
+	}
+	if _, ok := p.enums[nameTok.val]; ok {
+		return "", p.errorf(nameTok.pos, "function %q conflicts with an enum of the same name", nameTok.val)
 	}
 
 	params, err := p.parseParamList()

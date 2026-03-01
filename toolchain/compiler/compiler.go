@@ -53,6 +53,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		target:     behaviorID,
 		loopLabels: map[string]bool{},
 		consts:     map[string]*constDef{},
+		enums:      map[string]*enumDef{},
 		sourceFS:   sourceFS,
 		sourcePath: sourcePath,
 		sourceDir:  sourceDir,
@@ -173,6 +174,13 @@ func canPass(paramDir, argDir string) bool {
 type constDef struct {
 	value   any  // the resolved compile-time value
 	private bool // true for private const (not visible as import)
+}
+
+// enumDef holds a compile-time enum definition with named integer values.
+type enumDef struct {
+	values  map[string]int // member name → integer value
+	members []string       // declaration order (for error messages)
+	private bool           // true for private enum (not visible as import)
 }
 
 type fnDef struct {

@@ -1,0 +1,15 @@
+# AI-generated test
+enum State {
+    Idle
+    Running = 10
+    Done
+}
+
+fn get_state() {
+    return State::Running
+}
+
+behavior a {
+    @name "Enum Fn Body"
+    let x = get_state
+}

@@ -3142,6 +3142,133 @@ behavior a { set_reg X }`
 		}
 	})
 
+	// --- Enum error tests ---
+
+	t.Run("enum_duplicate_member", func(t *testing.T) {
+		src := `enum Dir { North; South; North }
+behavior a { let x = Dir::North }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate enum member") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("enum_duplicate_value", func(t *testing.T) {
+		src := `enum Dir { North; South = 0 }
+behavior a { let x = Dir::North }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "same value") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("enum_collides_with_fn", func(t *testing.T) {
+		src := `fn Dir() { notify "hi" }
+enum Dir { North }
+behavior a { let x = Dir::North }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with a function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_collides_with_enum", func(t *testing.T) {
+		src := `enum Dir { North }
+fn Dir() { notify "hi" }
+behavior a { let x = Dir::North }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with an enum") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("enum_collides_with_const", func(t *testing.T) {
+		src := `const Dir = 5
+enum Dir { North }
+behavior a { let x = Dir::North }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with a constant") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("const_collides_with_enum", func(t *testing.T) {
+		src := `enum Dir { North }
+const Dir = 5
+behavior a { let x = Dir::North }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with an enum") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("enum_unknown_member", func(t *testing.T) {
+		src := `enum Dir { North; South }
+behavior a { let x = Dir::West }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no member") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("enum_bare_name", func(t *testing.T) {
+		src := `enum Dir { North; South }
+behavior a { let x = Dir }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "requires '::'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("enum_bare_name_fn_body", func(t *testing.T) {
+		src := `enum Dir { North; South }
+fn use_dir(x) { return Dir }
+behavior a { let x = use_dir 1 }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "requires '::'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("enum_empty", func(t *testing.T) {
+		src := `enum Dir {}
+behavior a { @name "A" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "has no members") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {
@@ -3895,6 +4022,78 @@ behavior main {
 const X = double(5)
 behavior a { set_reg X }`)},
 			"lib.doit": &fstest.MapFile{Data: []byte(`fn double(x) { return x * 2 }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// --- Enum import tests ---
+
+	t.Run("named_import_enum", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import Dir from "./lib"
+behavior a { let x = Dir::North }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`enum Dir { North; South; East; West }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_import_enum", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import * from "./lib"
+behavior a { let x = Dir::South }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`enum Dir { North; South; East; West }
+private enum Secret { A; B }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("glob_no_private_enum", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import * from "./lib"
+behavior a { let x = Secret::A }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`enum Dir { North }
+private enum Secret { A; B }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error — private enum should not be imported by glob")
+		}
+	})
+
+	t.Run("private_enum_import_error", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import Secret from "./lib"
+behavior a { let x = Secret::A }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`private enum Secret { A; B }`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "private") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_enum", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior a { let x = lib.Dir::East }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`enum Dir { North; South; East; West }`)},
 		}
 		src, _ := sourceFS.ReadFile("main.doit")
 		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")

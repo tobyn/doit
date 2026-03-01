@@ -1,0 +1,13 @@
+# AI-generated test
+enum Direction {
+    North
+    South
+    East
+    West
+}
+
+behavior a {
+    @name "Enum Basic"
+    let x = Direction::North
+    let y = Direction::West
+}

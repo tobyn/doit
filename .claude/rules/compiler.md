@@ -34,6 +34,8 @@ output format.
   return `(*codec.Object, []string, error)` where the middle value is
   compiler warnings), shared types
   (`constDef` with `value any` and `private bool` for compile-time constants,
+  `enumDef` with `values map[string]int`, `members []string`, and `private bool`
+  for compile-time enums,
   `fnDef` with `scope` for transitive import dependencies,
   `symbolTable` with block scoping via `pushScope`/`popScope`
   and shadowing warnings via `declareVarWarn`, `unitRegisters`),
@@ -78,8 +80,12 @@ output format.
   for namespace-qualified function lookup,
   `consts map[string]*constDef` for compile-time constants,
   `namespaceConsts map[string]map[string]*constDef`
-  for namespace-qualified constant lookup),
+  for namespace-qualified constant lookup,
+  `enums map[string]*enumDef` for compile-time enums,
+  `namespaceEnums map[string]map[string]*enumDef`
+  for namespace-qualified enum lookup),
   token types (including `tokDot` for `.` (namespace separator),
+  `tokDoubleColon` for `::` (enum member access),
   `tokAmpersand` for `&`,
   `tokDoubleAmpersand` for `&&`, `tokDoublePipe` for `||`,
   `tokNotEquals` for `!=`, `tokPlus`/`tokMinus`/`tokStar`/`tokSlash`
@@ -90,8 +96,8 @@ output format.
   `tokIs` for the internal-only `is` type check operator,
   `tokTruthy` for the internal-only truthy check in boolean chains),
   `Keywords` map (includes `"import"`, `"from"`, `"as"`, `"is"`,
-  `"wait"`, `"true"`, `"false"`, `"const"`, type constructor names,
-  direction keywords, and `locked`/`unlocked`), `isConstructor`
+  `"wait"`, `"true"`, `"false"`, `"const"`, `"enum"`, type constructor
+  names, direction keywords, and `locked`/`unlocked`), `isConstructor`
   helper, `isDirection` helper, `$`-prefix scanning, error formatting,
   `parseLocalePrefix` helper, `resolveLocalizedDocComment` for localized
   `#!` comments
@@ -133,6 +139,7 @@ output format.
   `ifExprArityStatic`/`exprArityStatic`,
   `resolveVarName`, `tryResolveConstructorLiteral`,
   `tryResolveAmpersandLiteral`),
+  enum declaration parsing (`parseEnumDecl`, `parseEnumAccess`),
   compile-time evaluator (`tryEvalExpr`, `tryEvalCall`, `tryEvalStmts`,
   `constEvalStatus` type, `parseConstCallArgs`, `parseConstArgExpr`),
   call expansion with `[]any`/`map[string]any` argument types,

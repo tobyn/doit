@@ -75,6 +75,23 @@ func (p *parser) bhvEmitCtx(b *frameBuilder, syms *symbolTable) *emitContext {
 	}
 }
 
+// parseEnumAccess parses :: member access after an enum name has been identified.
+// Returns a LiteralExpr with the member's integer value.
+func (p *parser) parseEnumAccess(nameTok token, e *enumDef) (Expr, error) {
+	if _, err := p.expect(tokDoubleColon); err != nil {
+		return nil, p.errorf(nameTok.pos, "enum %q requires '::' member access (e.g., %s::Member)", nameTok.val, nameTok.val)
+	}
+	memberTok, err := p.expect(tokIdent)
+	if err != nil {
+		return nil, err
+	}
+	val, ok := e.values[memberTok.val]
+	if !ok {
+		return nil, p.errorf(memberTok.pos, "enum %q has no member %q", nameTok.val, memberTok.val)
+	}
+	return &LiteralExpr{Value: map[string]any{"num": val}}, nil
+}
+
 // parseArithPrimary parses an arithmetic atom: number literal, null,
 // variable, $register, constructor, unary minus, or a parenthesized
 // sub-expression.
@@ -132,6 +149,10 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 		if c, ok := p.consts[tok.val]; ok {
 			return &LiteralExpr{Value: c.value}, nil
 		}
+		// Check enums (direct lookup) — requires :: member access
+		if e, ok := p.enums[tok.val]; ok {
+			return p.parseEnumAccess(tok, e)
+		}
 		if p.callExprParser != nil {
 			name, callee, err := p.resolveFnName(tok)
 			if err != nil {
@@ -140,6 +161,10 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 			// Check if resolved name is a namespace constant (from ns.name dot access)
 			if c, ok := p.consts[name]; ok {
 				return &LiteralExpr{Value: c.value}, nil
+			}
+			// Check if resolved name is a namespace enum (from ns.name dot access)
+			if e, ok := p.enums[name]; ok {
+				return p.parseEnumAccess(token{kind: tokIdent, val: name, pos: tok.pos}, e)
 			}
 			if callee != nil && callee.hasReturn() {
 				return p.callExprParser(callee, token{kind: tokIdent, val: name, pos: tok.pos})
@@ -507,6 +532,9 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		// Check constants before erroring
 		if c, ok := p.consts[tok.val]; ok {
 			return &LiteralExpr{Value: c.value}, nil
+		}
+		if _, ok := p.enums[tok.val]; ok {
+			return nil, p.errorf(tok.pos, "enum %q requires '::' member access (e.g., %s::Member)", tok.val, tok.val)
 		}
 		if tok.val == "Unit" {
 			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
@@ -1185,6 +1213,26 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if c, ok := p.consts[rhsName]; ok {
 			litExpr := Expr(&LiteralExpr{Value: c.value})
 			result, err := p.parseArithExprFromFull(litExpr, resolve)
+			if err != nil {
+				return nil, err
+			}
+			syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
+			final, handled, err := p.maybeBhvExprContinuation(result, syms)
+			if err != nil {
+				return nil, err
+			}
+			if handled {
+				return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
+			}
+			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
+		}
+		// Check if resolveFnName resolved to an enum (e.g., ns.MyEnum)
+		if e, ok := p.enums[rhsName]; ok {
+			enumExpr, err := p.parseEnumAccess(token{kind: tokIdent, val: rhsName, pos: rhsTok.pos}, e)
+			if err != nil {
+				return nil, err
+			}
+			result, err := p.parseArithExprFromFull(enumExpr, resolve)
 			if err != nil {
 				return nil, err
 			}

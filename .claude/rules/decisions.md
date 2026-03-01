@@ -806,3 +806,45 @@ resolution and handle strings, constructors, `&`, and arithmetic.
 closure that uses `parseConstCallArgs`, enabling function call detection
 in `parseArithPrimary`. After parsing, `tryEvalExpr` replaces the
 earlier `evalConstExpr`.
+
+## Enum declarations
+
+`enum` is a top-level compile-time construct that defines named groups of
+integer values. Enums share the top-level namespace with `fn` and `const`.
+
+**Data model**: `enumDef` struct with `values map[string]int`,
+`members []string` (declaration order), and `private bool`. Stored in
+`parser.enums` (flat map) and `parser.namespaceEnums` (for namespace-
+qualified access). `tokDoubleColon` token for `::` operator.
+
+**Member values**: Auto-increment from 0 by default. Explicit values
+(`Member = 5`) set the counter; subsequent members continue from there.
+Negative values supported (`Member = -1`). Duplicate member names and
+duplicate member values are compile errors.
+
+**`::` access operator**: `MyEnum::Member` resolves to
+`LiteralExpr{Value: {"num": N}}`. The `parseEnumAccess` helper expects
+`tokDoubleColon` + `tokIdent`, looks up the member, and returns the
+literal. Resolution points:
+(1) `parseArithPrimary` — direct lookup and post-`resolveFnName` lookup
+    (covers most expression contexts including call args, arithmetic,
+    comparisons),
+(2) `parseBhvVarInit` — post-`resolveFnName` for namespace-qualified
+    enums (e.g., `let x = lib.Dir::East`),
+(3) `parseFnBodyExpr` — direct lookup for fn body argument expressions.
+
+**Bare-name errors**: Using an enum name without `::` produces
+"enum requires '::' member access" in `resolveBhvOperand`,
+`fnBodyResolver`, and `checkFnBodyExprDeclared`.
+
+**Namespace collision checks**: Enums, functions, and constants share a
+namespace. `parseEnumDecl` checks `p.fns` and `p.consts`. `parseUserFn`
+checks `p.enums`. `parseConstDecl` checks `p.enums`.
+
+**Import system**: `importedFile` includes `enums` map.
+`parseImportedFile` initializes `enums` in the imported parser.
+`processImports` handles glob (non-private), named (with private check),
+and namespace imports for enums. `resolveFnName` checks
+`p.namespaceEnums` for namespace detection and stores resolved enums
+in `p.enums[qualName]`. `checkImportCollisions` accepts `enumNames`
+parameter. `skipToNextDecl` includes `"enum"` in stop keywords.

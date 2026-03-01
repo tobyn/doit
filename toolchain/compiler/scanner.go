@@ -46,6 +46,7 @@ const (
 	tokPercentEquals
 	tokBang
 	tokDot
+	tokDoubleColon
 	tokIs     // internal-only: represents the 'is' operator in comparisonTerm.op
 	tokTruthy // internal-only: represents a truthy check in comparisonTerm.op
 )
@@ -63,6 +64,7 @@ var Keywords = map[string]bool{
 	"break":       true,
 	"const":       true,
 	"else":        true,
+	"enum":        true,
 	"false":       true,
 	"fn":          true,
 	"for":         true,
@@ -132,6 +134,8 @@ type parser struct {
 	namespaces     map[string]map[string]*fnDef // namespace → fn name → fnDef
 	consts         map[string]*constDef              // compile-time constants
 	namespaceConsts map[string]map[string]*constDef  // namespace → const name → constDef
+	enums          map[string]*enumDef               // compile-time enums
+	namespaceEnums map[string]map[string]*enumDef    // namespace → enum name → enumDef
 	evalStepLimit  int                               // step limit for compile-time evaluation
 	loopDepth      int                        // >0 when inside a loop body
 	loopLabels  map[string]bool  // labels of enclosing loops
@@ -308,6 +312,9 @@ func (s *scanner) next() (token, error) {
 	case c == '}':
 		s.pos++
 		return token{tokRBrace, "}", start}, nil
+	case c == ':' && s.pos+1 < len(s.src) && s.src[s.pos+1] == ':':
+		s.pos += 2
+		return token{tokDoubleColon, "::", start}, nil
 	case c == ':':
 		s.pos++
 		return token{tokColon, ":", start}, nil
@@ -562,6 +569,8 @@ func (t token) describe() string {
 		return "'!'"
 	case tokDot:
 		return "'.'"
+	case tokDoubleColon:
+		return "'::'"
 	case tokIs:
 		return "'is'"
 	case tokTruthy:

@@ -1,0 +1,17 @@
+# AI-generated test
+enum Color {
+    Red
+    Green = 5
+    Blue = 10
+}
+
+fn use_values(x) {
+    let a = Color::Green + Color::Blue
+    let b = x > Color::Red
+    return a, b
+}
+
+behavior a {
+    @name "Enum Arithmetic"
+    let x, y = use_values 3
+}

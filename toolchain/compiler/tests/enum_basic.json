@@ -1,0 +1,17 @@
+{
+    "0": {
+        "1": {
+            "num": 0
+        },
+        "2": "x",
+        "op": "set_number"
+    },
+    "1": {
+        "1": {
+            "num": 3
+        },
+        "2": "y",
+        "op": "set_number"
+    },
+    "name": "Enum Basic"
+}

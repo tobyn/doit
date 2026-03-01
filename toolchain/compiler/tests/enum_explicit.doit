@@ -1,0 +1,15 @@
+# AI-generated test
+enum Priority {
+    Low
+    Medium = 5
+    High
+    Critical = 100
+}
+
+behavior a {
+    @name "Enum Explicit"
+    let a = Priority::Low
+    let b = Priority::Medium
+    let c = Priority::High
+    let d = Priority::Critical
+}

@@ -1,0 +1,16 @@
+{
+    "0": {
+        "0": {
+            "num": 10
+        },
+        "1": "x",
+        "op": "set_reg"
+    },
+    "1": {
+        "0": false,
+        "1": false,
+        "next": 3,
+        "op": "set_reg"
+    },
+    "name": "Enum Fn Body"
+}
