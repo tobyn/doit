@@ -65,6 +65,8 @@ output format.
   import-related fields: `imports []ImportStmt` for parsed import
   statements, `sourceFS fs.FS` and `sourcePath`/`sourceDir string` for
   file system context, `stdlibFS fs.FS` for `std:` imports,
+  `stdlibFns map[string]*fnDef` for cached parsed stdlib (shared
+  across imports — cloned per imported file instead of re-parsing),
   `importStack []string` for circular import detection,
   `namedImports map[string]bool` and `namespaceNames map[string]bool`
   for collision checking, `namespaces map[string]map[string]*fnDef`

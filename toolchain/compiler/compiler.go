@@ -43,9 +43,15 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 			sourceDir = ""
 		}
 	}
+	// Clone stdlib fns for the parser's working map (user fns will be added to it).
+	// The original is kept as stdlibFns so imported files can clone it cheaply.
+	workingFns := make(map[string]*fnDef, len(fns))
+	for k, v := range fns {
+		workingFns[k] = v
+	}
 	p := &parser{
 		scanner:    scanner{src: src, locale: locale},
-		fns:        fns,
+		fns:        workingFns,
 		target:     behaviorID,
 		loopLabels: map[string]bool{},
 		consts:     map[string]*constDef{},
@@ -53,6 +59,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		sourcePath: sourcePath,
 		sourceDir:  sourceDir,
 		stdlibFS:   stdlib,
+		stdlibFns:  fns,
 	}
 	obj, err := p.parseFile()
 	if err != nil {

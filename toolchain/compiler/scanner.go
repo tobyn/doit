@@ -125,6 +125,7 @@ type parser struct {
 	sourcePath     string                     // path of the source file within sourceFS
 	sourceDir      string                     // directory of the source file (derived from sourcePath)
 	stdlibFS       fs.FS                      // stdlib file system for std: imports
+	stdlibFns      map[string]*fnDef          // parsed stdlib (shared across imports)
 	importStack    []string                   // import path stack for cycle detection
 	namedImports   map[string]bool            // names from named imports (for collision checking)
 	namespaceNames map[string]bool            // namespace names (for collision checking)

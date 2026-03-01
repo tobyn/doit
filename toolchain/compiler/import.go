@@ -338,17 +338,10 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		return nil, p.errorf(pos, "cannot read import %q: %v", filePath, err)
 	}
 
-	// Parse the imported file's stdlib first (same stdlib as parent)
-	stdlibFns, err := parseStdlib(p.stdlibFS)
-	if err != nil {
-		return nil, fmt.Errorf("stdlib: %w", err)
-	}
-
-	// Snapshot stdlib names before parsing user functions (since parseUserFn
-	// adds to the same map, we need the original set of names to filter later).
-	stdlibNames := make(map[string]bool, len(stdlibFns))
-	for name := range stdlibFns {
-		stdlibNames[name] = true
+	// Clone the cached stdlib fns for this imported file's parser.
+	stdlibFns := make(map[string]*fnDef, len(p.stdlibFns))
+	for k, v := range p.stdlibFns {
+		stdlibFns[k] = v
 	}
 
 	sourceDir := path.Dir(filePath)
@@ -370,6 +363,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		sourcePath:  filePath,
 		sourceDir:   sourceDir,
 		stdlibFS:    p.stdlibFS,
+		stdlibFns:   p.stdlibFns,
 		importStack: append(append([]string{}, p.importStack...), filePath),
 	}
 
@@ -393,7 +387,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 	// available during expandCall inlining.
 	scope := map[string]*fnDef{}
 	for name, fn := range ip.fns {
-		if !stdlibNames[name] {
+		if p.stdlibFns[name] == nil {
 			scope[name] = fn
 		}
 	}

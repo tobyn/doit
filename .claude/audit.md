@@ -91,12 +91,6 @@ dimensions in a single pass:
   differs. ~40 lines each, 4 copies. A helper like
   `parseBhvLetVarStmt(mutable, syms)` would replace all four.
 
-- **Stdlib re-parsed for every imported file.** `parseImportedFile`
-  (import.go:345) calls `parseStdlib(p.stdlibFS)` for each imported
-  file. The stdlib is immutable during compilation and only needs to be
-  parsed once. With N imported files, the stdlib is parsed N+1 times.
-  Fix: pass the already-parsed stdlib map as a parameter and clone it.
-
 - **`collectImportedFns` and `collectUserFns` share most of their loop
   body (~55 lines).** Both handle the same top-level keywords
   (`behavior`, `private`, `fn`, `const`, `import`) with nearly identical
