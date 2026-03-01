@@ -111,13 +111,6 @@ dimensions in a single pass:
   slice). Could parameterize with a tail-emission callback, or handle
   single targets as a `[]any{target}` slice.
 
-- **`tryEvalExpr`/`tryEvalStmts` duplicate call-argument evaluation 3
-  times.** The "evaluate positional args, evaluate keyword args, call
-  `tryEvalCall`" pattern is copy-pasted in the `*CallExpr` case of
-  `tryEvalExpr`, the `*MultiReturnStmt`/`*CallExpr` case, and the
-  `*CallStmt` case of `tryEvalStmts`. A `tryEvalCallArgs` helper would
-  centralize this (~45 lines).
-
 ### Low
 
 - **`arithmeticOpName` and `compoundAssignOpName` are identical

@@ -2200,25 +2200,9 @@ func (p *parser) tryEvalExpr(expr Expr, env map[string]any) (any, bool) {
 			return nil, false
 		}
 		// Evaluate positional args
-		posArgs := make([]any, len(e.Args))
-		for i, arg := range e.Args {
-			val, ok := p.tryEvalExpr(arg, env)
-			if !ok {
-				return nil, false
-			}
-			posArgs[i] = val
-		}
-		// Evaluate keyword args
-		var kwArgs map[string]any
-		if len(e.KwArgs) > 0 {
-			kwArgs = make(map[string]any, len(e.KwArgs))
-			for k, v := range e.KwArgs {
-				val, ok := p.tryEvalExpr(v, env)
-				if !ok {
-					return nil, false
-				}
-				kwArgs[k] = val
-			}
+		posArgs, kwArgs, ok := p.tryEvalCallArgs(e.Args, e.KwArgs, env)
+		if !ok {
+			return nil, false
 		}
 		retVals, ok := p.tryEvalCall(fn, posArgs, kwArgs)
 		if !ok {
@@ -2299,6 +2283,31 @@ func (p *parser) tryEvalExpr(expr Expr, env map[string]any) (any, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// tryEvalCallArgs evaluates positional and keyword arguments at compile time.
+// Returns (posArgs, kwArgs, true) on success, (nil, nil, false) if any arg bails.
+func (p *parser) tryEvalCallArgs(args []Expr, kwArgExprs map[string]Expr, env map[string]any) ([]any, map[string]any, bool) {
+	posArgs := make([]any, len(args))
+	for i, arg := range args {
+		val, ok := p.tryEvalExpr(arg, env)
+		if !ok {
+			return nil, nil, false
+		}
+		posArgs[i] = val
+	}
+	var kwArgs map[string]any
+	if len(kwArgExprs) > 0 {
+		kwArgs = make(map[string]any, len(kwArgExprs))
+		for k, v := range kwArgExprs {
+			val, ok := p.tryEvalExpr(v, env)
+			if !ok {
+				return nil, nil, false
+			}
+			kwArgs[k] = val
+		}
+	}
+	return posArgs, kwArgs, true
 }
 
 // tryEvalCall evaluates a function call at compile time.
@@ -2461,24 +2470,9 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 				if fn == nil {
 					return nil, false
 				}
-				posArgs := make([]any, len(rv.Args))
-				for i, arg := range rv.Args {
-					val, ok := p.tryEvalExpr(arg, env)
-					if !ok {
-						return nil, false
-					}
-					posArgs[i] = val
-				}
-				var kwArgs map[string]any
-				if len(rv.KwArgs) > 0 {
-					kwArgs = make(map[string]any, len(rv.KwArgs))
-					for k, v := range rv.KwArgs {
-						val, ok := p.tryEvalExpr(v, env)
-						if !ok {
-							return nil, false
-						}
-						kwArgs[k] = val
-					}
+				posArgs, kwArgs, ok := p.tryEvalCallArgs(rv.Args, rv.KwArgs, env)
+				if !ok {
+					return nil, false
 				}
 				retVals, ok := p.tryEvalCall(fn, posArgs, kwArgs)
 				if !ok {
@@ -2517,26 +2511,11 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 			if fn == nil {
 				return nil, false
 			}
-			posArgs := make([]any, len(s.Args))
-			for i, arg := range s.Args {
-				val, ok := p.tryEvalExpr(arg, env)
-				if !ok {
-					return nil, false
-				}
-				posArgs[i] = val
+			posArgs, kwArgs, ok := p.tryEvalCallArgs(s.Args, s.KwArgs, env)
+			if !ok {
+				return nil, false
 			}
-			var kwArgs map[string]any
-			if len(s.KwArgs) > 0 {
-				kwArgs = make(map[string]any, len(s.KwArgs))
-				for k, v := range s.KwArgs {
-					val, ok := p.tryEvalExpr(v, env)
-					if !ok {
-						return nil, false
-					}
-					kwArgs[k] = val
-				}
-			}
-			_, ok := p.tryEvalCall(fn, posArgs, kwArgs)
+			_, ok = p.tryEvalCall(fn, posArgs, kwArgs)
 			if !ok {
 				return nil, false
 			}
