@@ -25,7 +25,8 @@ output format.
   `parseImportNames`), validation (`validateImportPath`,
   `validateImportAlias`), pass 2 skip (`skipToNextDecl`), file
   resolution (`resolveImportPath`), imported file parsing
-  (`parseImportedFile`, `collectImportedFns`), import processing
+  (`parseImportedFile`, `collectImportedFns` — delegates to
+  `collectDecls`), import processing
   (`processImports`), collision checking (`checkImportCollisions`),
   qualified name resolution (`resolveFnName`)
 - **`compiler/compiler.go`** — Public API (`Compile`, `CompileString` — both

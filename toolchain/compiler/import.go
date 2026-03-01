@@ -405,63 +405,8 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 }
 
 // collectImportedFns collects function and constant definitions from an imported file.
-// Similar to collectUserFns but skips behaviors (they're ignored in imports).
 func (p *parser) collectImportedFns() error {
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return err
-		}
-		if tok.kind == tokEOF {
-			return nil
-		}
-		if tok.kind != tokIdent {
-			return p.errorf(tok.pos, "expected declaration, got %s", tok.describe())
-		}
-		switch tok.val {
-		case "behavior":
-			// Skip behaviors in imported files
-			if _, err := p.parseBehaviorID(); err != nil {
-				return err
-			}
-			if err := p.skipBraceBlock(); err != nil {
-				return err
-			}
-		case "private":
-			fnTok, err := p.expect(tokIdent)
-			if err != nil {
-				return err
-			}
-			switch fnTok.val {
-			case "fn":
-				name, err := p.parseUserFn()
-				if err != nil {
-					return err
-				}
-				p.fns[name].private = true
-			case "const":
-				name, err := p.parseConstDecl(true)
-				if err != nil {
-					return err
-				}
-				_ = name
-			default:
-				return p.errorf(fnTok.pos, "expected 'fn' or 'const' after 'private', got %q", fnTok.val)
-			}
-		case "fn":
-			if _, err := p.parseUserFn(); err != nil {
-				return err
-			}
-		case "const":
-			if _, err := p.parseConstDecl(false); err != nil {
-				return err
-			}
-		case "import":
-			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
-		default:
-			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', or 'private', got %q", tok.val)
-		}
-	}
+	return p.collectDecls(true)
 }
 
 // processImports resolves all parsed import statements and merges imported

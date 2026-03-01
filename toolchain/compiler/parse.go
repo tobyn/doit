@@ -3024,7 +3024,14 @@ func (p *parser) collectUserFns() error {
 		return err
 	}
 
-	// Track same-file names for import collision checking
+	return p.collectDecls(false)
+}
+
+// collectDecls scans top-level declarations (behavior, fn, const, private).
+// When isImport is true, behavior IDs are skipped and no collision checking
+// is performed. When false, behavior IDs are collected and same-file names
+// are checked against imports.
+func (p *parser) collectDecls(isImport bool) error {
 	var sameFileFns []string
 	var sameFileConsts []string
 
@@ -3045,7 +3052,9 @@ func (p *parser) collectUserFns() error {
 			if err != nil {
 				return err
 			}
-			p.behaviorIDs = append(p.behaviorIDs, idTok.val)
+			if !isImport {
+				p.behaviorIDs = append(p.behaviorIDs, idTok.val)
+			}
 			if err := p.skipBraceBlock(); err != nil {
 				return err
 			}
@@ -3061,13 +3070,17 @@ func (p *parser) collectUserFns() error {
 					return err
 				}
 				p.fns[name].private = true
-				sameFileFns = append(sameFileFns, name)
+				if !isImport {
+					sameFileFns = append(sameFileFns, name)
+				}
 			case "const":
 				name, err := p.parseConstDecl(true)
 				if err != nil {
 					return err
 				}
-				sameFileConsts = append(sameFileConsts, name)
+				if !isImport {
+					sameFileConsts = append(sameFileConsts, name)
+				}
 			default:
 				return p.errorf(fnTok.pos, "expected 'fn' or 'const' after 'private', got %q", fnTok.val)
 			}
@@ -3076,13 +3089,17 @@ func (p *parser) collectUserFns() error {
 			if err != nil {
 				return err
 			}
-			sameFileFns = append(sameFileFns, name)
+			if !isImport {
+				sameFileFns = append(sameFileFns, name)
+			}
 		case "const":
 			name, err := p.parseConstDecl(false)
 			if err != nil {
 				return err
 			}
-			sameFileConsts = append(sameFileConsts, name)
+			if !isImport {
+				sameFileConsts = append(sameFileConsts, name)
+			}
 		case "import":
 			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
 		default:
@@ -3090,8 +3107,10 @@ func (p *parser) collectUserFns() error {
 		}
 	}
 
-	// Check for collisions between same-file names and imports
-	return p.checkImportCollisions(sameFileFns, sameFileConsts)
+	if !isImport {
+		return p.checkImportCollisions(sameFileFns, sameFileConsts)
+	}
+	return nil
 }
 
 // fnBodyContext holds the shared state for fn body parsing.

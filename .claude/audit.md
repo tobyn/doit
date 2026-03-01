@@ -91,12 +91,6 @@ dimensions in a single pass:
   differs. ~40 lines each, 4 copies. A helper like
   `parseBhvLetVarStmt(mutable, syms)` would replace all four.
 
-- **`collectImportedFns` and `collectUserFns` share most of their loop
-  body (~55 lines).** Both handle the same top-level keywords
-  (`behavior`, `private`, `fn`, `const`, `import`) with nearly identical
-  dispatch. The differences (behavior ID collection, collision tracking)
-  could be handled by a callback or options struct.
-
 - **`emitBhvIfExpr`/`emitBhvIfExprMulti` duplication (~85 lines), and
   same for fn body counterparts.** The single-target and multi-target
   if-expression emitters share identical branch-collection, condition
