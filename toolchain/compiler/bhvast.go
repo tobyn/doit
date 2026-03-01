@@ -2699,7 +2699,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				isExprTail := false
 				if fn != nil && fn.hasReturn() && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
 					isExprTail = true
-				} else if fn == nil && !isConstructor(tok.val) && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
+				} else if fn == nil && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
 					isExprTail = true
 				}
 

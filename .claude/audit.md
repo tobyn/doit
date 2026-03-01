@@ -15,10 +15,12 @@ dimensions in a single pass:
 
 1. **Start from the open items below.** Fix all open items that don't
    require the developer's input first — work through them in priority
-   order (High, then Medium, then Low), committing each fix separately
-   (code, tests, docs, and the removal of the item from this file all
-   go in the same commit). Skip any item that requires a design
-   decision or developer input.
+   order (High, then Medium, then Low), committing each fix separately.
+   **One item = one commit.** Never batch multiple items into a single
+   commit, even if they are trivial, related, or at the same priority
+   level. Each commit includes the code fix, any tests, docs updates,
+   and the removal of that single item from this file. Skip any item
+   that requires a design decision or developer input.
 2. **Only after all actionable open items are done**, run a new audit
    round. Read end-to-end:
    - All manual pages (`manual/`)
@@ -111,11 +113,6 @@ dimensions in a single pass:
   Every statement case repeats the 4-line `callComment := s.Comment;
   if callComment == "" { callComment = comment }` pattern. A one-line
   helper would save ~42 lines.
-
-- **Redundant `isConstructor` check at bhvast.go:2715.** The
-  `!isConstructor(tok.val)` guard in the `isExprTail` condition is
-  always true at that point — constructors are handled earlier with
-  an early return at line 2673.
 
 ### Deferred
 
