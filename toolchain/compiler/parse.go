@@ -4340,8 +4340,15 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.expect(tokLBrace); err != nil {
+
+	// Block is optional — `instruction "nop"` is valid when no fields are needed.
+	tok, err := p.next()
+	if err != nil {
 		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return map[string]any{"op": opTok.val}, nil
 	}
 
 	frame := map[string]any{"op": opTok.val}

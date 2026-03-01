@@ -113,6 +113,10 @@ The compiler cannot assume all instructions are defined in the stdlib
 for modded instructions. Direction enforcement in fn body `instruction`
 blocks uses the `@N` convention instead of per-instruction metadata.
 
+The `{ }` block after the opcode string is optional. When no fields are
+needed, `instruction "op"` is equivalent to `instruction "op" { }`.
+This also works with `return instruction "op"` in fn bodies.
+
 ## Return/parameter name collision handling
 
 When `return` references a parameter name, `expandCall` detects the

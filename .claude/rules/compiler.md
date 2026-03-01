@@ -433,8 +433,10 @@ During `expandCall`, `returnSlot(N)` values are replaced with `retVals[N-1]`
 position). The `returnSlot` type is defined in compiler.go.
 
 **`instruction` as general expression**: The `instruction` intrinsic works
-everywhere — not just in stdlib function definitions. It can be used as:
-- Bare statement: `instruction "op" { ... }` (behavior level and fn bodies)
+everywhere — not just in stdlib function definitions. The `{ }` block is
+optional — when no fields are needed, `instruction "op"` is valid. It can
+be used as:
+- Bare statement: `instruction "op" { ... }` or `instruction "op"` (behavior level and fn bodies)
 - Single-return: `let x = instruction "op" { 0: @1 }` (behavior level and fn bodies)
 - Multi-return: `let x, y = instruction "op" { 0: @1, 1: @2 }` (behavior level and fn bodies)
 - Assignment: `x = instruction "op" { 0: @1 }` (behavior level)

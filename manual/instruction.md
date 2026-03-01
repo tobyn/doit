@@ -32,6 +32,20 @@ compiled behavior JSON:
 }
 ```
 
+When an instruction has no fields, the block can be omitted entirely:
+
+```doit
+instruction "nop"
+```
+
+compiles to:
+
+```json
+{
+    "op": "nop"
+}
+```
+
 ## Return Values with `@N`
 
 Use `@1`, `@2`, etc. inside the instruction block to mark output slots.

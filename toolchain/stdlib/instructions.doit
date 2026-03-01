@@ -164,8 +164,7 @@ fn checkfreespace(item) {
 # Clear all register links on this unit.
 fn clear_all_links() {
     # frame: {"op": "clear_all_links"}
-    instruction "clear_all_links" {
-    }
+    instruction "clear_all_links"
 }
 
 # Clear a register link.
@@ -260,8 +259,7 @@ fn compare_register(value_1, value_2) {
 # Connects the unit to the logistics network.
 fn connect() {
     # frame: {"op": "connect"}
-    instruction "connect" {
-    }
+    instruction "connect"
 }
 
 # Counts the number of the passed item in the unit's inventory.
@@ -310,15 +308,13 @@ fn deploy(coord) {
 # Disable unit to deliver on transport route.
 fn disable_transport_route() {
     # frame: {"op": "disable_transport_route"}
-    instruction "disable_transport_route" {
-    }
+    instruction "disable_transport_route"
 }
 
 # Disconnects the unit from the logistics network.
 fn disconnect() {
     # frame: {"op": "disconnect"}
-    instruction "disconnect" {
-    }
+    instruction "disconnect"
 }
 
 # Divides a number or coordinate by another number or coordinate.
@@ -388,8 +384,7 @@ fn dopickup(source, item_amount item_amount) {
 # Enable unit to deliver on transport route.
 fn enable_transport_route() {
     # frame: {"op": "enable_transport_route"}
-    instruction "enable_transport_route" {
-    }
+    instruction "enable_transport_route"
 }
 
 # Equips a component if it exists in the unit's inventory.
@@ -1114,8 +1109,7 @@ fn label(label) {
 # Tells a launched satellite to land.
 fn land() {
     # frame: {"op": "land"}
-    instruction "land" {
-    }
+    instruction "land"
 }
 
 # Break out of a loop.
@@ -1127,8 +1121,7 @@ fn last() {
 # Launches a satellite or drop pod.
 fn launch() {
     # frame: {"op": "launch"}
-    instruction "launch" {
-    }
+    instruction "launch"
 }
 
 # Fix all storage slots or a specific item slot.
@@ -1353,8 +1346,7 @@ fn mul(to, num) {
 # Deprecated: placeholder for removed instructions
 fn nop() {
     # frame: {"op": "nop"}
-    instruction "nop" {
-    }
+    instruction "nop"
 }
 
 # Triggers a faction notification.
@@ -1374,8 +1366,7 @@ fn notify(txt, value value, timeout timeout) {
 # Request inventory to be sent to nearest shared storage with corresponding fixed slots.
 fn order_to_shared_storage() {
     # frame: {"op": "order_to_shared_storage"}
-    instruction "order_to_shared_storage" {
-    }
+    instruction "order_to_shared_storage"
 }
 
 # Transfers an item to another unit.
@@ -1562,8 +1553,7 @@ fn scan(filter_1, filter_2, filter_3, result) {
 # Moves in a scouting pattern around the faction's home location.
 fn scout() {
     # frame: {"op": "scout", "c": <mode>}
-    instruction "scout" {
-    }
+    instruction "scout"
 }
 
 # Moves in a random direction a specified amount.
@@ -1723,8 +1713,7 @@ fn set_signpost(txt) {
 # Shuts down the power of the unit.
 fn shutdown() {
     # frame: {"op": "shutdown"}
-    instruction "shutdown" {
-    }
+    instruction "shutdown"
 }
 
 # Attempt to solve an explorable.
@@ -1740,15 +1729,13 @@ fn solve(target, missing) {
 # Sorts storage containers on the unit.
 fn sort_storage() {
     # frame: {"op": "sort_storage"}
-    instruction "sort_storage" {
-    }
+    instruction "sort_storage"
 }
 
 # Stop movement and abort current movement control.
 fn stop() {
     # frame: {"op": "stop"}
-    instruction "stop" {
-    }
+    instruction "stop"
 }
 
 # Subtracts a number or coordinate from another number or coordinate.
@@ -1784,8 +1771,7 @@ fn switch(input, case_1) {
 # Turns on the power of the unit.
 fn turnon() {
     # frame: {"op": "turnon"}
-    instruction "turnon" {
-    }
+    instruction "turnon"
 }
 
 # Unequips a component if it exists.
