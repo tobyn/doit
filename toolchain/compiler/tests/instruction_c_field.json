@@ -1,0 +1,40 @@
+{
+    "0": {
+        "0": 1,
+        "1": 1,
+        "2": "result",
+        "c": 1,
+        "op": "bitwise_op"
+    },
+    "1": {
+        "0": 1,
+        "1": 1,
+        "2": "result2",
+        "op": "bitwise_op"
+    },
+    "2": {
+        "0": 1,
+        "1": 1,
+        "2": "result3",
+        "c": 3,
+        "op": "bitwise_op"
+    },
+    "3": {
+        "0": false,
+        "1": false,
+        "next": 5,
+        "op": "set_reg"
+    },
+    "4": {
+        "0": "$x",
+        "c": 2,
+        "op": "domove"
+    },
+    "name": "Instruction C Field",
+    "parameters": [
+        false
+    ],
+    "pnames": [
+        "X"
+    ]
+}

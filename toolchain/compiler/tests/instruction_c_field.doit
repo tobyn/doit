@@ -1,0 +1,26 @@
+# AI-generated test
+# Instruction "c" mode field: enum mode arg, omitted mode, wrapper forwarding, literal c
+
+fn xor_op(a, b) {
+    return bitwise_op a, b: b, mode: BitwiseMode::Xor
+}
+
+behavior instruction_c_field {
+    @name "Instruction C Field"
+    @param in x "X"
+
+    # Stdlib call with explicit mode enum
+    let result = bitwise_op $x, b: $x, mode: BitwiseMode::And
+
+    # Stdlib call with mode omitted (no c field)
+    let result2 = bitwise_op $x, b: $x
+
+    # User wrapper function forwarding mode
+    let result3 = xor_op $x, $x
+
+    # Direct instruction with literal c
+    instruction "domove" {
+        0: $x
+        c: 2
+    }
+}

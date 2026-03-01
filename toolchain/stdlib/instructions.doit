@@ -1,5 +1,26 @@
 # This file defines all the built-in game instructions defined in Desynced's `instructions.lua`
 
+# Mode enums for instructions with combo selectors.
+# Values are 1-based to match the game's combo indexing.
+
+enum MoveMode { Sync = 1, Async }
+enum AmountMode { Specified = 1, UpTo }
+enum BitwiseMode { And = 1, Or, Xor, Not, ShiftLeft, ShiftRight }
+enum LockSlotMode { OnlyUnfixed = 1, OverrideFixed }
+enum CountSlotType { All = 1, Storage, Gas, Virus, Anomaly, Drone, Garage, Alien, Satellite }
+enum CountItemMode { Remaining = 1, Reserved }
+enum UnitInfoStat { Durability = 1, VisibilityRange, MovementSpeed }
+enum PowerInfoStat { Producing = 1, Requiring, Efficiency, Consuming, Receiving, Transmitting }
+enum ItemInfoStat {
+    MaxStack = 1, AttackRange, MinRange, Damage, DamageType, BlastRadius,
+    MoveAndFire, DPS, PowerStorage, DrainRate, ChargeRate, Bandwidth,
+    DroneRange, Power
+}
+enum SignalFilterMode {
+    Match = 1, Exact, NotExact, LessThan, ExactOrLessThan,
+    MoreThan, ExactOrMoreThan
+}
+
 # Abort an owned construction.
 #   target [in] - target construction
 fn abort_construction(target) {
@@ -35,12 +56,13 @@ fn attack_move(target) {
 #   a [in] - first value (or value for NOT)
 #   b [in, optional] - second value (ignored for NOT)
 #   result [out] - bitwise operation result
-fn bitwise_op(a, b b) {
+fn bitwise_op(a, b b, mode mode) {
     # frame: {"op": "bitwise_op", "0": a [in], "1": b [in], "2": result [out], "c": <mode>}
     return instruction "bitwise_op" {
         0: a
         1: b
         2: @1
+        c: mode
     }
 }
 
@@ -266,24 +288,26 @@ fn connect() {
 #   item [in] - item to count
 #   result [out] - number of this item in inventory
 #   unit [in, optional] - the unit to check (if not self)
-fn count_item(item, unit unit) {
+fn count_item(item, unit unit, mode mode) {
     # frame: {"op": "count_item", "0": item [in], "1": result [out], "2": unit [in],
     #   "c": <mode>}
     return instruction "count_item" {
         0: item
         1: @1
         2: unit
+        c: mode
     }
 }
 
 # Returns the number of slots in this unit of the given type.
 #   result [out] - number of slots
 #   unit [in, optional] - the unit to check (if not self)
-fn count_slots(unit unit) {
+fn count_slots(unit unit, type type) {
     # frame: {"op": "count_slots", "0": result [out], "1": unit [in], "c": <mode>}
     return instruction "count_slots" {
         0: @1
         1: unit
+        c: type
     }
 }
 
@@ -333,20 +357,22 @@ fn div(from, num) {
 # Drop off items at a unit or location.
 #   destination [in] - unit or destination to bring items to
 #   item_amount [in, optional] - item and amount to drop off
-fn dodrop(destination, item_amount item_amount) {
+fn dodrop(destination, item_amount item_amount, mode mode) {
     # frame: {"op": "dodrop", "0": destination [in], "1": item_amount [in], "c": <mode>}
     instruction "dodrop" {
         0: destination
         1: item_amount
+        c: mode
     }
 }
 
 # Moves to another unit or within a range of another unit.
 #   target [in] - unit to move to; the number specifies the range
-fn domove(target) {
+fn domove(target, mode mode) {
     # frame: {"op": "domove", "0": target [in], "c": <mode>}
     instruction "domove" {
         0: target
+        c: mode
     }
 }
 
@@ -373,11 +399,12 @@ fn domove_range(target) {
 # Picks up items from a unit.
 #   source [in] - unit to take items from
 #   item_amount [in, optional] - item and amount to pick up
-fn dopickup(source, item_amount item_amount) {
+fn dopickup(source, item_amount item_amount, mode mode) {
     # frame: {"op": "dopickup", "0": source [in], "1": item_amount [in], "c": <mode>}
     instruction "dopickup" {
         0: source
         1: item_amount
+        c: mode
     }
 }
 
@@ -736,11 +763,12 @@ fn get_inventory_total(unit unit) {
 # Gets information on an item.
 #   item [in] - the item to check
 #   result [out] - item information value
-fn get_item_info(item) {
+fn get_item_info(item, stat stat) {
     # frame: {"op": "get_item_info", "0": item [in], "1": result [out], "c": <mode>}
     return instruction "get_item_info" {
         0: item
         1: @1
+        c: stat
     }
 }
 
@@ -890,22 +918,24 @@ fn get_type(item_unit) {
 # Gets information on a unit.
 #   unit [in] - the unit to check
 #   result [out] - unit info value
-fn get_unit_info(unit) {
+fn get_unit_info(unit, stat stat) {
     # frame: {"op": "get_unit_info", "0": unit [in], "1": result [out], "c": <mode>}
     return instruction "get_unit_info" {
         0: unit
         1: @1
+        c: stat
     }
 }
 
 # Gets power information on a unit.
 #   unit [in] - the unit to check
 #   result [out] - unit power info value
-fn get_unit_power_info(unit) {
+fn get_unit_power_info(unit, stat stat) {
     # frame: {"op": "get_unit_power_info", "0": unit [in], "1": result [out], "c": <mode>}
     return instruction "get_unit_power_info" {
         0: unit
         1: @1
+        c: stat
     }
 }
 
@@ -1127,11 +1157,12 @@ fn launch() {
 # Fix all storage slots or a specific item slot.
 #   item [in] - item type to fix to the slots
 #   slot_index [in, optional] - individual slot to fix
-fn lock_slots(item, slot_index slot_index) {
+fn lock_slots(item, slot_index slot_index, mode mode) {
     # frame: {"op": "lock_slots", "0": item [in], "1": slot_index [in], "c": <mode>}
     instruction "lock_slots" {
         0: item
         1: slot_index
+        c: mode
     }
 }
 
@@ -1323,10 +1354,11 @@ fn move_west(number) {
 
 # Moves out of range of another unit.
 #   target [in] - unit to move away from; the number specifies the range
-fn moveaway_range(target) {
+fn moveaway_range(target, mode mode) {
     # frame: {"op": "moveaway_range", "0": target [in], "c": <mode>}
     instruction "moveaway_range" {
         0: target
+        c: mode
     }
 }
 
@@ -1513,22 +1545,24 @@ fn remap_value(value, input_low, input_high, target_low, target_high) {
 # Requests an item if it doesn't exist in the inventory.
 #   item [in] - item and amount to order
 #   channel [in, optional] - request on a specific logistics channel (1-4)
-fn request_item(item, channel channel) {
+fn request_item(item, channel channel, mode mode) {
     # frame: {"op": "request_item", "0": item [in], "1": channel [in], "c": <mode>}
     instruction "request_item" {
         0: item
         1: channel
+        c: mode
     }
 }
 
 # Requests an item and waits until that amount exists in inventory.
 #   item [in] - item and amount to order
 #   channel [in, optional] - request on a specific logistics channel (1-4)
-fn request_wait(item, channel channel) {
+fn request_wait(item, channel channel, mode mode) {
     # frame: {"op": "request_wait", "0": item [in], "1": channel [in], "c": <mode>}
     instruction "request_wait" {
         0: item
         1: channel
+        c: mode
     }
 }
 
@@ -1551,9 +1585,11 @@ fn scan(filter_1, filter_2, filter_3, result) {
 }
 
 # Moves in a scouting pattern around the faction's home location.
-fn scout() {
+fn scout(mode mode) {
     # frame: {"op": "scout", "c": <mode>}
-    instruction "scout"
+    instruction "scout" {
+        c: mode
+    }
 }
 
 # Moves in a random direction a specified amount.

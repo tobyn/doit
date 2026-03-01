@@ -13,23 +13,24 @@ import (
 
 // --- Stdlib ---
 
-func parseStdlib(stdlib fs.FS) (map[string]*fnDef, error) {
+func parseStdlib(stdlib fs.FS) (map[string]*fnDef, map[string]*enumDef, error) {
 	matches, err := fs.Glob(stdlib, "*.doit")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	fns := map[string]*fnDef{}
+	enums := map[string]*enumDef{}
 	for _, path := range matches {
 		data, err := fs.ReadFile(stdlib, path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if err := parseStdlibFile(string(data), fns); err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
+		if err := parseStdlibFile(string(data), fns, enums); err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", path, err)
 		}
 	}
-	return fns, nil
+	return fns, enums, nil
 }
 
 func isDirection(val string) bool {
@@ -1245,8 +1246,8 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 	return params, nil
 }
 
-func parseStdlibFile(src string, fns map[string]*fnDef) error {
-	p := &parser{scanner: scanner{src: src}, fns: fns}
+func parseStdlibFile(src string, fns map[string]*fnDef, enums map[string]*enumDef) error {
+	p := &parser{scanner: scanner{src: src}, fns: fns, enums: enums}
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -1255,8 +1256,14 @@ func parseStdlibFile(src string, fns map[string]*fnDef) error {
 		if tok.kind == tokEOF {
 			return nil
 		}
+		if tok.kind == tokIdent && tok.val == "enum" {
+			if _, err := p.parseEnumDecl(false); err != nil {
+				return err
+			}
+			continue
+		}
 		if tok.kind != tokIdent || tok.val != "fn" {
-			return p.errorf(tok.pos, "expected 'fn', got %s", tok.describe())
+			return p.errorf(tok.pos, "expected 'fn' or 'enum', got %s", tok.describe())
 		}
 		if _, err := p.parseUserFn(); err != nil {
 			return err
@@ -1504,6 +1511,15 @@ func (p *parser) parseEnumDecl(private bool) (string, error) {
 		usedValues[nextVal] = memberName
 		members = append(members, memberName)
 		nextVal++
+
+		// Optional comma separator between members.
+		sep, err := p.next()
+		if err != nil {
+			return "", err
+		}
+		if sep.kind != tokComma {
+			p.unget(sep)
+		}
 	}
 
 	if len(members) == 0 {
@@ -4374,6 +4390,9 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 		switch valTok.kind {
 		case tokString, tokIdent:
 			frame[key] = valTok.val
+		case tokNumber:
+			n, _ := strconv.Atoi(valTok.val)
+			frame[key] = n
 		case tokAt:
 			numTok, err := p.expect(tokNumber)
 			if err != nil {
@@ -4385,7 +4404,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 			}
 			frame[key] = returnSlot(n)
 		default:
-			return nil, p.errorf(valTok.pos, "expected string, identifier, or @N, got %s", valTok.describe())
+			return nil, p.errorf(valTok.pos, "expected string, identifier, number, or @N, got %s", valTok.describe())
 		}
 	}
 

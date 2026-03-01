@@ -59,8 +59,8 @@ parsers are shared via the `operandResolver` callback.
   `let x = get_self` instead of `get_self x`.
 - **Optional inputs as keyword params**: Avoids forcing callers to pass
   placeholders for unused optional slots.
-- **`"c"` mode fields omitted**: No way to express enum-style mode
-  selection yet.
+- **`"c"` mode fields**: Exposed via keyword parameters and stdlib
+  mode enums (see "Instruction `"c"` mode field" section below).
 - **`"txt"` fields as positional strings**: Natural call-site syntax
   (`notify "Hello"`).
 
@@ -528,5 +528,42 @@ Using an enum name without `::` produces "enum requires '::' member
 access". Resolution in `parseArithPrimary` (most contexts),
 `parseBhvVarInit` (namespace-qualified), and `parseFnBodyExpr`.
 
+**Comma separators**: Enum members can be separated by newlines or
+commas. `enum Color { Red, Green, Blue }` is valid. The parser consumes
+an optional comma after each member's value (including `= N`).
+
 **Import system**: Enums are part of the unified `symbolSet`.
 `resolveFnName` handles namespace detection and caches resolved enums.
+
+## Instruction `"c"` mode field
+
+Many game instructions have a `"c"` field — a 1-based integer selecting
+from a combo dropdown in the game UI (e.g., bitwise operation type,
+sync/async movement). Mode enums are defined in the stdlib
+(`instructions.doit`) with explicit `= 1` on the first member. Affected
+stdlib functions expose mode via keyword parameters with `c: param` in
+the instruction block.
+
+**Number literals in instruction fields**: `parseInstruction` accepts
+`tokNumber` values (in addition to `tokString`, `tokIdent`, `@N`),
+producing plain `int` values in the frame map. Enables direct
+`instruction "domove" { 0: target, c: 2 }`.
+
+**Metadata field unwrapping**: `resolveInstructionFrame` unwraps
+`map[string]any{"num": N}` to plain `int` for non-numeric keys after
+paramMap substitution. When an enum value like `BitwiseMode::Xor`
+flows through `paramMap`, it arrives as `{"num": 3}`. The game expects
+`"c": 3` (plain integer). The unwrap applies to all non-numeric keys
+— safe because register-slot values (numbered keys) correctly use
+`{"num": N}` maps, while metadata fields like `"c"` and `"txt"` never
+want wrapped values.
+
+**Stdlib enums**: Defined in `instructions.doit` alongside functions.
+`parseStdlibFile` accepts `enum` declarations. Stdlib enums are stored
+in `parser.stdlibEnums` and cloned into user/imported file parsers,
+making them available everywhere like stdlib functions.
+
+**Keyword param omission**: When a mode keyword arg is omitted at the
+call site, the `c` field's string value hits the `kwVars` check in
+`resolveInstructionFrame` and is omitted from the output. The game then
+uses its built-in default.

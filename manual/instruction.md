@@ -155,9 +155,33 @@ fn good(out target) {
 `inout` parameters can appear in either position since they allow both
 reading and writing.
 
+## Field Values
+
+Field values can be strings, identifiers (variable/parameter names), `@N`
+return slot markers, or number literals:
+
+```doit
+instruction "notify" {
+    txt: "Hello"        # string literal
+    0: target           # identifier (variable or parameter)
+}
+
+instruction "domove" {
+    0: target
+    c: 2                # number literal (mode selector)
+}
+```
+
+Number literals in fields are useful for metadata fields like `c` (mode
+selector). For register slot values, identifiers are the normal choice.
+
+When a function parameter resolves to an enum value (e.g.,
+`BitwiseMode::Xor` → `3`), the compiler automatically unwraps it to a
+plain integer for metadata fields.
+
 ## Field Reference Format
 
 Field keys in the instruction block use the reference codec's 0-based format
 for numbered parameter slots (`0`, `1`, `2`, ...). The compiler converts
-these to 1-based native format automatically. Named fields like `txt` are
-passed through as-is.
+these to 1-based native format automatically. Named fields like `txt` and
+`c` are passed through as-is.

@@ -41,6 +41,18 @@ Note: `exit` is **not** in the stdlib. It is a language keyword that emits
 `{"op": "exit"}` with no successor. The compiler knows it is terminal and
 detects unreachable code after it.
 
+`instructions.doit` also defines **mode enums** (e.g., `MoveMode`,
+`BitwiseMode`, `AmountMode`) for instructions with `"c"` combo fields.
+These enums use `= 1` on the first member to match the game's 1-based
+combo indexing. Affected functions expose mode via keyword parameters
+(e.g., `mode mode`, `stat stat`, `type type`) with `c: param` in the
+instruction block. When the keyword arg is omitted, the `c` field is
+dropped from the compiled output and the game uses its default.
+
+`parseStdlibFile` handles both `fn` and `enum` declarations. Stdlib
+enums are propagated to user and imported file parsers via
+`parser.stdlibEnums`.
+
 Each function body contains a `# frame:` comment showing the inferred JSON structure of the
 compiled instruction. These were derived from `instructions.lua` by mapping:
 

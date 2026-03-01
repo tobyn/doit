@@ -334,8 +334,9 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		return nil, p.errorf(pos, "cannot read import %q: %v", filePath, err)
 	}
 
-	// Clone the cached stdlib fns for this imported file's parser.
+	// Clone the cached stdlib fns and enums for this imported file's parser.
 	stdlibFns := maps.Clone(p.stdlibFns)
+	stdlibEnums := maps.Clone(p.stdlibEnums)
 
 	sourceDir := path.Dir(filePath)
 	if sourceDir == "." {
@@ -351,13 +352,14 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		},
 		fns:         stdlibFns,
 		consts:      map[string]*constDef{},
-		enums:       map[string]*enumDef{},
+		enums:       stdlibEnums,
 		loopLabels:  map[string]bool{},
 		sourceFS:    p.sourceFS,
 		sourcePath:  filePath,
 		sourceDir:   sourceDir,
 		stdlibFS:    p.stdlibFS,
 		stdlibFns:   p.stdlibFns,
+		stdlibEnums: p.stdlibEnums,
 		importStack: append(append([]string{}, p.importStack...), filePath),
 	}
 

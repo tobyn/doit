@@ -68,6 +68,19 @@ func resolveInstructionFrame(frame map[string]any, retVals []any, paramMap map[s
 		}
 		instr[nativeKey] = v
 	}
+	// Unwrap {"num": N} maps to plain integers for metadata fields.
+	// Numbered keys (register slots) correctly use {"num": N} maps, but
+	// metadata fields like "c" expect plain integers. The "txt" field
+	// passes strings which won't match. The "op" field is always a string.
+	for k, v := range instr {
+		if _, err := strconv.Atoi(k); err != nil {
+			if m, ok := v.(map[string]any); ok {
+				if num, has := m["num"]; has && len(m) == 1 {
+					instr[k] = num
+				}
+			}
+		}
+	}
 	setComment(instr, comment)
 	return instr
 }

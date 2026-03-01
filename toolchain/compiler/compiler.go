@@ -33,7 +33,7 @@ func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.F
 // sourceFS and sourcePath provide file system context for resolving imports.
 // The returned warnings slice contains non-fatal compiler warnings (nil if none).
 func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (*codec.Object, []string, error) {
-	fns, err := parseStdlib(stdlib)
+	fns, stdlibEnums, err := parseStdlib(stdlib)
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdlib: %w", err)
 	}
@@ -44,21 +44,24 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 			sourceDir = ""
 		}
 	}
-	// Clone stdlib fns for the parser's working map (user fns will be added to it).
-	// The original is kept as stdlibFns so imported files can clone it cheaply.
+	// Clone stdlib fns and enums for the parser's working maps (user declarations
+	// will be added to them). The originals are kept so imported files can clone
+	// them cheaply.
 	workingFns := maps.Clone(fns)
+	workingEnums := maps.Clone(stdlibEnums)
 	p := &parser{
 		scanner:    scanner{src: src, locale: locale},
 		fns:        workingFns,
 		target:     behaviorID,
 		loopLabels: map[string]bool{},
 		consts:     map[string]*constDef{},
-		enums:      map[string]*enumDef{},
-		sourceFS:   sourceFS,
-		sourcePath: sourcePath,
-		sourceDir:  sourceDir,
-		stdlibFS:   stdlib,
-		stdlibFns:  fns,
+		enums:      workingEnums,
+		sourceFS:    sourceFS,
+		sourcePath:  sourcePath,
+		sourceDir:   sourceDir,
+		stdlibFS:    stdlib,
+		stdlibFns:   fns,
+		stdlibEnums: stdlibEnums,
 	}
 	obj, err := p.parseFile()
 	if err != nil {
@@ -69,7 +72,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 
 // TestParseStdlibFile is a test helper that parses a stdlib source string.
 func TestParseStdlibFile(src string) error {
-	return parseStdlibFile(src, map[string]*fnDef{})
+	return parseStdlibFile(src, map[string]*fnDef{}, map[string]*enumDef{})
 }
 
 // TestParseLocalePrefix is a test helper that exposes parseLocalePrefix.

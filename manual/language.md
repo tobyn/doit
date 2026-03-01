@@ -353,6 +353,14 @@ Using an enum name without `::` is a compile error:
 let x = Direction   # error: enum "Direction" requires '::' member access
 ```
 
+Members can be separated by newlines or commas, allowing compact
+single-line definitions:
+
+```doit
+enum Color { Red, Green, Blue }
+enum Priority { Low, Medium = 5, High, Critical = 100 }
+```
+
 Duplicate member names or values within an enum are compile errors.
 Negative explicit values are supported (`Member = -1`).
 
@@ -361,7 +369,7 @@ Negative explicit values are supported (`Member = -1`).
 Mark an enum as private to prevent it from being imported:
 
 ```doit
-private enum Internal { A; B; C }
+private enum Internal { A, B, C }
 ```
 
 ### Importing enums

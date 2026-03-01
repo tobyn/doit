@@ -162,6 +162,55 @@ The keyword and variable name can be the same: `timeout timeout`.
 
 All positional parameters must come before keyword parameters.
 
+## Mode Selectors
+
+Many game instructions have a mode selector — a dropdown in the game UI
+that picks a variant of the instruction (e.g., sync vs async movement,
+bitwise operation type, slot counting category). The standard library
+exposes these via keyword arguments and enum types.
+
+### Mode enums
+
+The standard library defines enums for each mode selector. Values are
+1-based to match the game's internal combo indexing:
+
+| Enum | Values | Used by |
+|------|--------|---------|
+| `MoveMode` | `Sync`, `Async` | `domove`, `moveaway_range`, `scout` |
+| `AmountMode` | `Specified`, `UpTo` | `dodrop`, `dopickup`, `request_item`, `request_wait` |
+| `BitwiseMode` | `And`, `Or`, `Xor`, `Not`, `ShiftLeft`, `ShiftRight` | `bitwise_op` |
+| `LockSlotMode` | `OnlyUnfixed`, `OverrideFixed` | `lock_slots` |
+| `CountSlotType` | `All`, `Storage`, `Gas`, `Virus`, `Anomaly`, `Drone`, `Garage`, `Alien`, `Satellite` | `count_slots` |
+| `CountItemMode` | `Remaining`, `Reserved` | `count_item` |
+| `UnitInfoStat` | `Durability`, `VisibilityRange`, `MovementSpeed` | `get_unit_info` |
+| `PowerInfoStat` | `Producing`, `Requiring`, `Efficiency`, `Consuming`, `Receiving`, `Transmitting` | `get_unit_power_info` |
+| `ItemInfoStat` | `MaxStack`, `AttackRange`, `MinRange`, `Damage`, `DamageType`, `BlastRadius`, `MoveAndFire`, `DPS`, `PowerStorage`, `DrainRate`, `ChargeRate`, `Bandwidth`, `DroneRange`, `Power` | `get_item_info` |
+
+### Passing mode selectors
+
+Pass mode selectors as keyword arguments using the enum value:
+
+```doit
+# Bitwise XOR
+let result = bitwise_op a, b: b, mode: BitwiseMode::Xor
+
+# Async movement
+domove target, mode: MoveMode::Async
+
+# Count storage slots
+let n = count_slots type: CountSlotType::Storage
+
+# Get unit durability
+let hp = get_unit_info me, stat: UnitInfoStat::Durability
+```
+
+The mode keyword argument is optional — omitting it lets the game use its
+built-in default (typically the first option in the dropdown).
+
+These enums are standard library definitions, not language builtins. They
+are automatically available to all programs (like all stdlib symbols) and
+can be used in imported files.
+
 ## Return Values
 
 Some functions produce an output value. Call them using assignment syntax:

@@ -327,8 +327,10 @@ then compiles user source. Stdlib functions that contain an `instruction` intrin
 at call sites — the compiler substitutes arguments into the instruction template fields.
 Numeric keys in instruction templates are converted from 0-based (reference
 format) to 1-based (native wire format) during expansion by `resolveInstructionFrame`.
-Stdlib parsing is unified: `parseStdlibFile` delegates to `parseUserFn`, which handles
-`instruction`, `return instruction`, empty bodies, and call-based bodies uniformly.
+Stdlib parsing is unified: `parseStdlibFile` handles both `fn` (via `parseUserFn`)
+and `enum` (via `parseEnumDecl`) declarations. `parseStdlib` returns
+`(map[string]*fnDef, map[string]*enumDef, error)`. Stdlib enums are stored in
+`parser.stdlibEnums` and cloned into user/imported file parsers.
 Pure instruction wrappers (functions whose body is a single `instruction` block with
 only param/ret references) are automatically promoted to `fnDef.frame` for the fast
 direct-frame expansion path.
