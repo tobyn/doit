@@ -645,12 +645,6 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 	})
 }
 
-// isArithmeticOp reports whether the token kind is an arithmetic operator
-// (+, -, *, /).
-func isArithmeticOp(kind tokenKind) bool {
-	return kind == tokPlus || kind == tokMinus || kind == tokStar || kind == tokSlash || kind == tokPercent
-}
-
 // arithOpNames maps both arithmetic (tokPlus, etc.) and compound assignment
 // (tokPlusEquals, etc.) token kinds to their stdlib opcode names.
 var arithOpNames = map[tokenKind]string{

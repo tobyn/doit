@@ -72,10 +72,6 @@ dimensions in a single pass:
 
 ### High
 
-- **`isArithmeticOp` is dead code.** (codegen.go:650-652) Defined but
-  never called. Superseded by `isHighPriorityArithOp` and
-  `isLowPriorityArithOp` for PEMDAS parsing.
-
 ### Medium
 
 - **`parseBehaviorBody` duplicates `parseBhvStmtBlockInner` statement

@@ -215,7 +215,7 @@ output format.
   emitters (`emitComparison`, `emitTypeCheck`, `emitTruthyCheck`,
   `emitBoolCheckFrame`, `comparisonTerm` type with `negated` field),
   arithmetic/comparison
-  op helpers (`isArithmeticOp`, `arithmeticOpName`, `isComparisonOp`,
+  op helpers (`arithmeticOpName`, `isComparisonOp`,
   `isEqualityOp`, `isCompoundAssignOp`, `compoundAssignOpName`,
   `isHighPriorityArithOp`, `isLowPriorityArithOp`), type check helpers
   (`isTypeCheckOp`, `parseIsRHS`), `parseParamAttr`, `checkVarName`,
