@@ -630,6 +630,12 @@ analysis in `parseUserFn`, building `execContArgs` map from collected
 `parseFnBodyArgExpr`, enabling arithmetic, comparisons, constructors,
 and function calls as arguments.
 
+**Block param count validation**: `expandContinuationBlocks` validates
+that each block's Kotlin-style params don't exceed the number of data
+args the continuation provides (from `buildExecBindingMap`). Catches
+both "continuation provides no data" and "provides N but block has M"
+cases. Applies uniformly to instruction-based and pure-logic dispatch.
+
 ## Continuations — expression form
 
 **`ContinuationBlock.Tail`**: Expression-form blocks have a tail
@@ -660,3 +666,66 @@ from `exprTailStmt` wrappers.
 `LetStmt` emission goes through `emitBhvExprTo` → `expandCall`
 (not `emitBhvExprGetValue`). Both paths have blocks support. At fn
 body level, `emitExprTo` handles `CallExpr` with blocks.
+
+## Continuations — design rules
+
+Design decisions from the continuation system that aren't obvious from
+reading the code. Consult when modifying continuation-related code.
+
+**Two connection types (exhaustive)**: Bridging blocks run once and
+merge back to the join point (compiler adds a jump frame). Looping
+blocks run subordinate to an iterator — their last frame gets
+`"next": false` and the VM re-dispatches internally. Every exec slot
+in every known instruction (including modded ones examined) is cleanly
+one or the other. No third category was found.
+
+**`return` as reserved continuation name**: In instruction blocks,
+`return` represents the function's exit point. `exec 0: return(@1)`
+routes a branch to the caller with data. Bare `return` or absent
+binding defaults to all `@N` in order (backward compatible with
+non-branching instructions). `next: return` is the implicit default
+when `"next"` isn't explicitly bound.
+
+**Unbound numbered exec slots default to `return`**: Numbered exec
+slots not explicitly bound in the instruction block bridge to the
+join point, matching the `"next"` default behavior.
+
+**`return` inside blocks is a compile error**: Continuation blocks
+are not functions. `return` of any kind inside a block (bridging or
+looping) is rejected at parse time. Wrapping a branching function
+with forwarded continuations requires the raw `instruction` intrinsic.
+
+**Parser disambiguation for `fn() {`**: After a call's `{`, if the
+next token is an identifier followed by `{`, or `for` followed by
+an identifier, it's the multi-block form. Otherwise it's the collapsed
+unnamed form. `{ var -> body }` (Kotlin binding) is always collapsed
+since `->` cannot follow a continuation name.
+
+**Labeled `break` across block boundaries**: Allowed. The compiler
+emits a direct jump (`"next"` past the target loop). Stale block
+stack entries are harmless — cleared on behavior restart.
+
+**Value arguments in exec binding arg lists**: Besides `@N`
+references, exec binding args support literal values (numbers, null,
+enum values, constructors). Enables patterns like internalizing
+failure (`exec 0: return(null)`), discriminated merging (`exec 0:
+handler(@1, MyEnum::PathA)`, `exec 1: handler(@1, MyEnum::PathB)`),
+and default fill (`exec 0: result(@1, 0)`). Full expressions
+deferred until a real use case demands them.
+
+**Hard-coded boolean/comparison paths coexist**: The `check_number`,
+`compare_register`, and `value_type` instructions have both exec
+signatures (for explicit continuation block usage) AND hard-coded
+compiler paths (for `if`/`while`/`is` expressions). The two calling
+conventions coexist — the continuation system adds a new option
+alongside the existing boolean expression compilation.
+
+**Expression arity across paths**: Expression arity = max across all
+continuation paths. Each path contributes: tail expression value for
+provided blocks, `@N` values for the `return` path, `null` for
+unprovided blocks. Shorter paths are null-filled. Arity depends on
+the call-site blocks, not the function signature alone.
+
+**`for` keyword overload**: Accepted. `for` means counted loop,
+for-in loop, and looping block prefix — all syntactically
+distinguishable. `in` separates loop forms from block prefix.

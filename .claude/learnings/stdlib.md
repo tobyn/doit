@@ -15,18 +15,62 @@ the `*.doit` files in the `toolchain/stdlib/` directory.
 
 `instructions.doit` wraps Desynced's built-in game instructions as doit functions using the
 `instruction` intrinsic. Each function corresponds to an instruction defined in `instructions.lua`.
-Functions fall into three categories:
+Functions fall into two categories:
 
-- **Implemented** — contain an `instruction` or `return instruction` body. Functions
-  with output slots use `return instruction` and mark the primary output with `@1`.
-  Optional inputs and secondary outputs use keyword parameters. All non-control-flow
-  instructions are implemented (~102 functions).
-- **Control-flow stubs** — empty bodies with a `# control flow:` comment. These have
-  `[exec]` branch slots, are loop iterators, terminal instructions, or jump/label
-  pairs. They require compiler-level control flow support to implement (~70 functions).
+- **Implemented** — contain an `instruction` or `return instruction` body. This
+  includes all non-control-flow instructions (~102 functions) and all branching
+  instructions (~69 functions with `exec` signatures and `instruction` bodies).
+  Functions with output slots use `return instruction` and mark the primary output
+  with `@1`. Optional inputs and secondary outputs use keyword parameters.
 - **Not-implementable stubs** — empty bodies with a `# not implementable:` comment.
   These have dynamic parameters (`call`), require UI selection (`produce`), or use
   non-standard field types (`set_logistics_options`).
+
+### Branching instruction categories
+
+The ~69 branching instructions fall into five semantic categories.
+All use the same call-site syntax (continuation blocks).
+
+1. **Pure conditionals** (`check_number`, `compare_register`,
+   `value_type`, `compare_entity`, `compare_item`, `is_a`,
+   `unit_type`, `is_unit_a`, `is_empty`, `is_daynight`,
+   `get_season`, `check_altitude`, `check_blightness`,
+   `check_health`, `check_battery`, `check_grid_effeciency`,
+   `is_logistics`, `is_same_grid`, `is_moving`, `is_passable`,
+   `is_fixed`, `is_unlocked`, `have_item`, `checkfreespace`,
+   `can_produce`, `gettrust`, `match`, `switch`, `check_bit`) —
+   Route execution to one of N paths. No data output. All
+   continuations are bridging.
+
+2. **Iterators** (`for_component`, `for_unit`, `for_inventory_item`,
+   `for_entities_in_range`, `for_number`, `for_producers`,
+   `for_recipe_ingredients`, `for_repair_ingredients`, `for_research`,
+   `for_research_ingredients`, `for_research_unlocks`, `for_signal`,
+   `for_signal_match`, `for_count_resources`, `memory_loop`) —
+   Stateful instructions with a looping body continuation and a
+   bridging "done" continuation. Produce output data each iteration.
+
+3. **Failable getters** (`get_inventory_item`,
+   `get_inventory_item_index`, `get_resource_item`,
+   `get_reg_remotely`, `faction_item_amount`, `scan`, `solve`,
+   `is_docked`, `is_equipped`, `is_working`) — Output on success
+   (fall-through), bridging continuation on failure.
+
+4. **Action outcomes** (`build`, `build_registered`,
+   `produce_registered`, `mine`, `equip_component`,
+   `unequip_component`, `equip_component_remotely`,
+   `unequip_component_remotely`, `set_reg_remotely`, `make_carrier`,
+   `make_miner`, `make_producer`, `make_turret_bots`,
+   `serve_construction`, `wait_component`) — No data output.
+   Bridging continuations for status (success/failure,
+   working/blocked).
+
+5. **Conditional with output** (`select_nearest`) — Bridging
+   continuations AND data output. Output available regardless of
+   which path is taken. Rare (one known case).
+
+Categories 1, 3, 4, 5 use bare (bridging) blocks at call sites.
+Category 2 uses `for`-prefixed (looping) blocks.
 
 Note: `lock` and `unlock` are **not** in the stdlib. They are language
 keywords handled directly by the compiler with compile-time mode tracking.

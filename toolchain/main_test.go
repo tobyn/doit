@@ -3479,6 +3479,70 @@ behavior a { @name "A" }`
 		}
 	})
 
+	t.Run("exec_block_params_exceed_data_none", func(t *testing.T) {
+		src := `fn f(a) exec(yes, no) {
+	if a > 5 { return yes }
+	return no
+}
+behavior t {
+	@name "T"
+	var x = 10
+	f(x) { yes { v -> notify "oops", value: v } }
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "does not provide data") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_block_params_exceed_data_count", func(t *testing.T) {
+		src := `fn f(a) exec(yes, no) {
+	if a > 5 { return yes(a) }
+	return no
+}
+behavior t {
+	@name "T"
+	var x = 10
+	f(x) { yes { v, extra -> notify "oops" } }
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "provides 1 data arg(s), but block has 2 binding(s)") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_block_params_exceed_instruction_data", func(t *testing.T) {
+		src := `fn f(value, target) exec(larger, smaller, equal) {
+	instruction "check_number" {
+		exec 0: larger(@1)
+		exec 1: smaller
+		2: value
+		3: target
+		4: @1
+		next: equal
+	}
+}
+behavior t {
+	@name "T"
+	let a = get_self
+	let b = get_self
+	f(a, b) { smaller { x -> notify "oops" } }
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "does not provide data") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

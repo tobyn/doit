@@ -413,6 +413,20 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 
 	execBindings := buildExecBindingMap(fn)
 
+	// Validate block param counts against continuation data arg counts
+	for _, blk := range blocks {
+		if len(blk.Params) == 0 {
+			continue
+		}
+		eb := execBindings[blk.Name]
+		if len(blk.Params) > len(eb.args) {
+			if len(eb.args) == 0 {
+				return fmt.Errorf("continuation %q does not provide data, but block has %d binding(s)", blk.Name, len(blk.Params))
+			}
+			return fmt.Errorf("continuation %q provides %d data arg(s), but block has %d binding(s)", blk.Name, len(eb.args), len(blk.Params))
+		}
+	}
+
 	// Emit each block's body, recording start positions
 	blockStarts := map[string]int{}
 	bridgeJumps := []int{} // indices of bridge-jump frames to patch
