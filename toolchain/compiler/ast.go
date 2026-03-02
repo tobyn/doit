@@ -102,10 +102,12 @@ type ModeBlockStmt struct {
 
 // ReturnStmt is a return from a function body: `return x, y`
 // When Continuation is non-empty, it's a continuation dispatch: `return big`
+// ContinuationArgs are optional data arguments: `return big(x, y)`
 type ReturnStmt struct {
-	Values       []Expr // nil for bare return or continuation dispatch
-	Continuation string // non-empty = dispatch to this exec continuation
-	Comment      string
+	Values           []Expr // nil for bare return or continuation dispatch
+	Continuation     string // non-empty = dispatch to this exec continuation
+	ContinuationArgs []Expr // data args for continuation dispatch (nil = no data)
+	Comment          string
 }
 
 // IfStmt is an if/else-if/else block.

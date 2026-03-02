@@ -294,14 +294,15 @@ type execBinding struct {
 }
 
 type fnDef struct {
-	params      []paramDef
-	rets        []string       // return names (nil = no return)
-	frame       map[string]any // instruction-based (stdlib)
-	astBody     []Stmt         // call-based (user-defined) — AST IR
-	execNames   []string       // ordered continuation names from exec(...)
-	execLooping map[string]bool // which continuations are looping (derived from instruction block)
-	private     bool           // true for private fn (not visible as import)
-	scope       map[string]*fnDef // functions available when this fn was defined (for imports)
+	params       []paramDef
+	rets         []string        // return names (nil = no return)
+	frame        map[string]any  // instruction-based (stdlib)
+	astBody      []Stmt          // call-based (user-defined) — AST IR
+	execNames    []string        // ordered continuation names from exec(...)
+	execLooping  map[string]bool // which continuations are looping (derived from instruction block)
+	execContArgs map[string]int  // continuation name → arg count (pure-logic data dispatch)
+	private      bool            // true for private fn (not visible as import)
+	scope        map[string]*fnDef // functions available when this fn was defined (for imports)
 }
 
 // positionalCount returns the number of positional params.

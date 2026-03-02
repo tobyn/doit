@@ -1,0 +1,16 @@
+# AI-generated test
+# Tests continuation data args with expression arguments
+fn is_big(a) exec(yes, no) {
+    if a > 5 {
+        return yes(a + 1)
+    }
+    return no(a - 1)
+}
+
+behavior "Exec Cont Data Expr" {
+    var x = 10
+    is_big(x) {
+        yes { v -> notify "big", value: v }
+        no { v -> notify "small", value: v }
+    }
+}

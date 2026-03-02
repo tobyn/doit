@@ -1,0 +1,16 @@
+# AI-generated test
+# Tests mixed arg counts: yes gets 2 args, no gets 1
+fn classify(a) exec(yes, no) {
+    if a > 5 {
+        return yes(a, 1)
+    }
+    return no(a)
+}
+
+behavior "Exec Cont Data Mixed" {
+    var x = 10
+    classify(x) {
+        yes { v, flag -> notify "yes", value: v; set_reg flag }
+        no { v -> notify "no", value: v }
+    }
+}

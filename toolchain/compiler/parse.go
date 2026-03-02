@@ -196,17 +196,15 @@ func (p *parser) tryParseContBlockBindings() ([]string, error) {
 	}
 }
 
-// allocExecOutputRegs builds a mapping from returnSlot(N) indices to register
-// names for a branching function's exec output data. If a slot already has a
-// register assigned via fn.rets + paramMap (from the caller's retVals), that
-// register is reused. Otherwise, a new register is allocated using block param
-// names when available, falling back to "@out". Newly allocated registers are
-// written back to paramMap so resolveInstructionFrame can resolve them.
-func allocExecOutputRegs(fn *fnDef, blocks []*ContinuationBlock, maxSlot int, paramMap map[string]any, usedVars map[string]bool) map[int]string {
-	regs := map[int]string{}
-
-	// Build a map from continuation name → execBinding for arg lookup
+// buildExecBindingMap builds a map from continuation name to execBinding for a
+// function. It collects bindings from two sources:
+//  1. Instruction block exec bindings (instruction-based functions)
+//  2. Synthetic bindings from execContArgs (pure-logic functions with data dispatch)
+//
+// Instruction bindings take priority over synthetic ones.
+func buildExecBindingMap(fn *fnDef) map[string]execBinding {
 	ebMap := map[string]execBinding{}
+	// Source 1: instruction block exec bindings
 	for _, s := range fn.astBody {
 		instrStmt, ok := s.(*InstructionStmt)
 		if !ok {
@@ -218,6 +216,30 @@ func allocExecOutputRegs(fn *fnDef, blocks []*ContinuationBlock, maxSlot int, pa
 			}
 		}
 	}
+	// Source 2: synthetic from pure-logic continuation args
+	for name, count := range fn.execContArgs {
+		if _, exists := ebMap[name]; exists {
+			continue // instruction binding takes priority
+		}
+		args := make([]any, count)
+		for i := 0; i < count; i++ {
+			args[i] = returnSlot(i + 1)
+		}
+		ebMap[name] = execBinding{name: name, args: args}
+	}
+	return ebMap
+}
+
+// allocExecOutputRegs builds a mapping from returnSlot(N) indices to register
+// names for a branching function's exec output data. If a slot already has a
+// register assigned via fn.rets + paramMap (from the caller's retVals), that
+// register is reused. Otherwise, a new register is allocated using block param
+// names when available, falling back to "@out". Newly allocated registers are
+// written back to paramMap so resolveInstructionFrame can resolve them.
+func allocExecOutputRegs(fn *fnDef, blocks []*ContinuationBlock, maxSlot int, paramMap map[string]any, usedVars map[string]bool) map[int]string {
+	regs := map[int]string{}
+
+	ebMap := buildExecBindingMap(fn)
 
 	// First pass: reuse registers already assigned via fn.rets + paramMap
 	for i := 1; i <= maxSlot; i++ {
@@ -389,19 +411,7 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 		}
 	}
 
-	// Build a map from continuation name → execBinding for data lookup
-	execBindings := map[string]execBinding{}
-	for _, s := range fn.astBody {
-		instrStmt, ok := s.(*InstructionStmt)
-		if !ok {
-			continue
-		}
-		for _, v := range instrStmt.Frame {
-			if eb, ok := v.(execBinding); ok {
-				execBindings[eb.name] = eb
-			}
-		}
-	}
+	execBindings := buildExecBindingMap(fn)
 
 	// Emit each block's body, recording start positions
 	blockStarts := map[string]int{}
@@ -1669,6 +1679,13 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			callComment := inheritComment(s.Comment, comment)
 
 			if s.Continuation != "" {
+				// Emit data args to @carg registers before the jump
+				for i, arg := range s.ContinuationArgs {
+					target := resolveVarName("@carg"+strconv.Itoa(i+1), paramMap)
+					if err := p.emitExprTo(arg, target, b, paramMap, usedVars, callComment, pos); err != nil {
+						return err
+					}
+				}
 				// Continuation dispatch: emit @exec_<name> placeholder
 				b.emit(map[string]any{
 					"op":   "set_reg",
@@ -3409,10 +3426,12 @@ func (p *parser) parseUserFn() (string, error) {
 		}
 	}
 
-	// Helper to build fnDef with exec fields
+	// Helper to build fnDef with exec fields (execContArgs set after post-parse analysis)
+	var execContArgs map[string]int
 	makeFnDef := func(fd *fnDef) *fnDef {
 		fd.execNames = execNames
 		fd.execLooping = execLooping
+		fd.execContArgs = execContArgs
 		return fd
 	}
 
@@ -3430,6 +3449,25 @@ func (p *parser) parseUserFn() (string, error) {
 
 	// Post-parse analysis: determine return path from ReturnStmt nodes
 	returns := collectReturnStmts(astBody)
+
+	// Build execContArgs from continuation returns with data args
+	for _, ret := range returns {
+		if ret.Continuation == "" || ret.ContinuationArgs == nil {
+			continue
+		}
+		count := len(ret.ContinuationArgs)
+		if prev, ok := execContArgs[ret.Continuation]; ok {
+			if prev != count {
+				return "", p.errorf(0, "inconsistent arg count for continuation %q: %d vs %d", ret.Continuation, prev, count)
+			}
+		} else {
+			if execContArgs == nil {
+				execContArgs = map[string]int{}
+			}
+			execContArgs[ret.Continuation] = count
+		}
+	}
+
 	var rets []string
 
 	if len(returns) == 0 {
@@ -4042,8 +4080,45 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				}
 				astBody = append(astBody, &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame}}, Comment: comment})
 			} else if retPeek.kind == tokIdent && ctx.isExecName(retPeek.val) {
-				// Continuation dispatch: return <cont_name>
-				astBody = append(astBody, &ReturnStmt{Continuation: retPeek.val, Comment: comment})
+				// Continuation dispatch: return <cont_name> or return <cont_name>(args...)
+				contName := retPeek.val
+				var contArgs []Expr
+				peek, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if peek.kind == tokLParen {
+					// Check for empty arg list: return cont()
+					emptyCheck, err := p.next()
+					if err != nil {
+						return nil, err
+					}
+					if emptyCheck.kind == tokRParen {
+						return nil, p.errorf(peek.pos, "empty continuation arg list; use 'return %s' without parentheses for control-only dispatch", contName)
+					}
+					p.unget(emptyCheck)
+					// Parse data args (full expression language)
+					for {
+						arg, err := p.parseFnBodyReturnItem(ctx)
+						if err != nil {
+							return nil, err
+						}
+						contArgs = append(contArgs, arg)
+						sep, err := p.next()
+						if err != nil {
+							return nil, err
+						}
+						if sep.kind == tokRParen {
+							break
+						}
+						if sep.kind != tokComma {
+							return nil, p.errorf(sep.pos, "expected ',' or ')' in continuation args, got %v", sep.kind)
+						}
+					}
+				} else {
+					p.unget(peek)
+				}
+				astBody = append(astBody, &ReturnStmt{Continuation: contName, ContinuationArgs: contArgs, Comment: comment})
 			} else {
 				p.unget(retPeek)
 				var values []Expr
@@ -5403,8 +5478,22 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 	var execOutputRegs map[int]string // returnSlot(N) → register name
 	if contBlocks != nil && fn.hasExec() {
 		maxSlot := findMaxExecOutputSlot(fn.astBody)
+		// Also consider pure-logic continuation args
+		for _, count := range fn.execContArgs {
+			if count > maxSlot {
+				maxSlot = count
+			}
+		}
 		if maxSlot > 0 {
 			execOutputRegs = allocExecOutputRegs(fn, contBlocks, maxSlot, paramMap, usedVars)
+		}
+		// Add synthetic @carg names to paramMap for pure-logic continuation args
+		if fn.execContArgs != nil && execOutputRegs != nil {
+			for i := 1; i <= maxSlot; i++ {
+				if reg, ok := execOutputRegs[i]; ok {
+					paramMap["@carg"+strconv.Itoa(i)] = reg
+				}
+			}
 		}
 	}
 

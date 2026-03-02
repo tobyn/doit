@@ -148,6 +148,11 @@ frames with `returnSlot` values get synthetic `@retN` names via
 `findMaxReturnSlot`. Pure-logic functions use `return <cont_name>`
 to dispatch to continuations; `emitFnBody` emits `@exec_<name>`
 string placeholders patched by `expandContinuationBlocks`.
+Pure-logic data dispatch (`return cont(args...)`) uses
+`fnDef.execContArgs` to track arg counts per continuation;
+`buildExecBindingMap` generates synthetic `execBinding` values from
+these, and `@cargN` synthetic names in `paramMap` connect emission
+to allocated output registers.
 Expression-form blocks have a `Tail` field on `ContinuationBlock`;
 `emitTail` callback in `expandCallOpts` writes tail values to the
 caller's target register. Both behavior level

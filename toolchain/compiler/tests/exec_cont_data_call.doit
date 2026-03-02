@@ -1,0 +1,16 @@
+# AI-generated test
+# Tests continuation data args with a function call as argument
+fn is_big(a) exec(yes, no) {
+    if a > 5 {
+        return yes(get_self)
+    }
+    return no(get_self)
+}
+
+behavior "Exec Cont Data Call" {
+    var x = 10
+    is_big(x) {
+        yes { v -> notify "big", value: v }
+        no { v -> notify "small", value: v }
+    }
+}

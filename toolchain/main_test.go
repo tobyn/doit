@@ -3449,6 +3449,36 @@ behavior t {
 		}
 	})
 
+	t.Run("exec_cont_data_empty_parens", func(t *testing.T) {
+		src := `fn f(a) exec(yes) {
+	if a > 5 { return yes() }
+	return yes
+}
+behavior a { @name "A" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty continuation arg list") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_cont_data_inconsistent_count", func(t *testing.T) {
+		src := `fn f(a) exec(yes, no) {
+	if a > 5 { return yes(a, 1) }
+	return yes(a)
+}
+behavior a { @name "A" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "inconsistent arg count") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

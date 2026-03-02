@@ -1,0 +1,17 @@
+# AI-generated test
+# Tests expression form with pure-logic continuation data args
+fn is_big(a) exec(yes, no) {
+    if a > 5 {
+        return yes(a)
+    }
+    return no(a)
+}
+
+behavior "Exec Cont Data Val" {
+    var x = 10
+    let r = is_big(x) {
+        yes { v -> v + 1 }
+        no { v -> v - 1 }
+    }
+    notify "result", value: r
+}

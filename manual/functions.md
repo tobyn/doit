@@ -580,6 +580,41 @@ The `return yes` and `return no` statements dispatch to the caller's
 continuation blocks. This works identically to instruction-based branching
 from the caller's perspective.
 
+Pure-logic branching can also pass data to continuation blocks using
+`return <continuation_name>(args...)`:
+
+```doit
+fn classify(a) exec(big, small) {
+    if a > 5 {
+        return big(a, 1)
+    }
+    return small(a, 0)
+}
+
+classify(x) {
+    big { v, flag -> notify "big", value: v }
+    small { v, flag -> notify "small", value: v }
+}
+```
+
+The arguments use the full expression language — variables, arithmetic,
+function calls, constructors, and literals all work. Different
+continuations can pass different numbers of arguments:
+
+```doit
+fn check(a) exec(yes, no) {
+    if a > 5 {
+        return yes(a, 1)   # 2 args
+    }
+    return no(a)            # 1 arg
+}
+```
+
+The same continuation must always pass the same number of arguments
+across all `return` statements — inconsistent counts are a compile
+error. `return yes()` with empty parentheses is also an error; use
+`return yes` for control-only dispatch.
+
 #### Expression form
 
 Branching calls can be used as expressions, following the same rules as

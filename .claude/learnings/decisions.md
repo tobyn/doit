@@ -596,6 +596,40 @@ named `yes`). `execNames` on the context enables `isExecName()` lookup.
 Exec names take priority — if an exec name shadows a variable, `return`
 dispatches to the continuation.
 
+## Continuations — pure-logic data dispatch
+
+**`return <cont_name>(args...)`**: `ReturnStmt.ContinuationArgs` holds
+optional data arguments for continuation dispatch. This closes the gap
+between instruction-based (data via `@N`) and pure-logic (control only)
+branching.
+
+**Positional slot sharing**: All continuations share a single positional
+slot space (slots 1, 2, 3...). Different continuations may have
+different arg counts — only the max determines register allocation.
+This mirrors the instruction-based model where `@1` can appear in
+multiple exec bindings.
+
+**Synthetic exec bindings**: `buildExecBindingMap` generates synthetic
+`execBinding` values from `fnDef.execContArgs`, mapping `return yes(x)`
+to `execBinding{name: "yes", args: [returnSlot(1)]}`. This lets
+`allocExecOutputRegs` and `expandContinuationBlocks` reuse their
+existing infrastructure unchanged.
+
+**`@carg` synthetic names**: Like `@retN` for return values, `@cargN`
+names are added to `paramMap` during call expansion, mapping to the
+allocated output registers. `emitFnBody` resolves these to emit
+continuation arg values before the `@exec_` jump.
+
+**Consistency validation**: All returns for the same continuation must
+pass the same number of args. The validation runs during post-parse
+analysis in `parseUserFn`, building `execContArgs` map from collected
+`ReturnStmt` nodes.
+
+**Expression parsing**: Continuation args use `parseFnBodyReturnItem`
+(full expression language via `parseBoolExpr`) rather than the simpler
+`parseFnBodyArgExpr`, enabling arithmetic, comparisons, constructors,
+and function calls as arguments.
+
 ## Continuations — expression form
 
 **`ContinuationBlock.Tail`**: Expression-form blocks have a tail

@@ -1,0 +1,16 @@
+# AI-generated test
+# Tests pure-logic continuation dispatch with data arguments
+fn is_big(a) exec(yes, no) {
+    if a > 5 {
+        return yes(a)
+    }
+    return no(a)
+}
+
+behavior "Exec Cont Data" {
+    var x = 10
+    is_big(x) {
+        yes { v -> notify "big", value: v }
+        no { v -> notify "small", value: v }
+    }
+}
