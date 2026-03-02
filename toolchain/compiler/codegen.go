@@ -986,7 +986,7 @@ func (p *parser) parseConstructorExpr(nameTok token, parseArg func() (Expr, erro
 
 // checkVarName validates that a variable name doesn't conflict with existing
 // declarations or reserved names.
-func (p *parser) checkVarName(name string, syms *symbolTable, pos int) error {
+func (p *parser) checkVarName(name string, pos int) error {
 	if isConstructor(name) {
 		return p.errorf(pos, "%q is a type constructor and cannot be used as a variable name", name)
 	}
@@ -1956,7 +1956,7 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 	if err != nil {
 		return nil, err
 	}
-	if err := p.checkVarName(iterTok.val, nil, iterTok.pos); err != nil {
+	if err := p.checkVarName(iterTok.val, iterTok.pos); err != nil {
 		return nil, err
 	}
 

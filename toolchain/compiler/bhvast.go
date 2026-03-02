@@ -1429,7 +1429,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 	}
 
 	if tok2.kind == tokPlusPlus || tok2.kind == tokMinusMinus || tok2.kind == tokEquals || isCompoundAssignOp(tok2.kind) {
-		if err := p.checkVarName(tok.val, syms, tok.pos); err != nil {
+		if err := p.checkVarName(tok.val, tok.pos); err != nil {
 			return nil, err
 		}
 	}
@@ -1903,7 +1903,7 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		if bind.Discard {
 			continue
 		}
-		if err := p.checkVarName(bind.Name, syms, firstTok.pos); err != nil {
+		if err := p.checkVarName(bind.Name, firstTok.pos); err != nil {
 			return nil, err
 		}
 	}
@@ -2130,7 +2130,7 @@ func (p *parser) parseBhvLetVarStmt(mutable bool, syms *symbolTable) ([]Stmt, er
 		}
 		return p.parseBhvMultiReturn(nameTok, mutable, true, syms)
 	}
-	if err := p.checkVarName(nameTok.val, syms, nameTok.pos); err != nil {
+	if err := p.checkVarName(nameTok.val, nameTok.pos); err != nil {
 		return nil, err
 	}
 	sep, err := p.next()

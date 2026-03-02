@@ -4215,7 +4215,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				return nil, err
 			}
 			if peek.kind == tokEquals || isCompoundAssignOp(peek.kind) || peek.kind == tokPlusPlus || peek.kind == tokMinusMinus {
-				if err := p.checkVarName(tok.val, nil, tok.pos); err != nil {
+				if err := p.checkVarName(tok.val, tok.pos); err != nil {
 					return nil, err
 				}
 			}
@@ -4409,7 +4409,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 	// Handle _ as first binding in multi-return
 	firstDiscard := varTok.val == "_"
 	if !firstDiscard {
-		if err := p.checkVarName(varTok.val, nil, varTok.pos); err != nil {
+		if err := p.checkVarName(varTok.val, varTok.pos); err != nil {
 			return nil, err
 		}
 	}
@@ -4464,7 +4464,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 				if err != nil {
 					return nil, err
 				}
-				if err := p.checkVarName(nameTok.val, nil, nameTok.pos); err != nil {
+				if err := p.checkVarName(nameTok.val, nameTok.pos); err != nil {
 					return nil, err
 				}
 				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: false, Pos: nameTok.pos})
@@ -4474,12 +4474,12 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 				if err != nil {
 					return nil, err
 				}
-				if err := p.checkVarName(nameTok.val, nil, nameTok.pos); err != nil {
+				if err := p.checkVarName(nameTok.val, nameTok.pos); err != nil {
 					return nil, err
 				}
 				bindings = append(bindings, MultiBinding{Name: nameTok.val, Mutable: true, Pos: nameTok.pos})
 			default:
-				if err := p.checkVarName(bindTok.val, nil, bindTok.pos); err != nil {
+				if err := p.checkVarName(bindTok.val, bindTok.pos); err != nil {
 					return nil, err
 				}
 				bindings = append(bindings, MultiBinding{

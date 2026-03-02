@@ -90,12 +90,6 @@ dimensions in a single pass:
 
 ### Low
 
-- **Dead `syms` parameter in `checkVarName`.** The `syms *symbolTable`
-  parameter (codegen.go:989) is never used — the function only checks
-  `isConstructor` and `Keywords`. Passed as `nil` from fn body context
-  (parse.go:5142) and as a live pointer from behavior context
-  (bhvast.go:2044).
-
 ### Deferred
 
 ### Rejected
