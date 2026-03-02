@@ -24,6 +24,8 @@ topic is relevant to your current task.
 - **Standard library** — `.claude/learnings/stdlib.md`
   Stdlib architecture, function categories, mode enums, and
   `instructions.lua` licensing.
+- **Test case format** — `.claude/learnings/test_format.md`
+  Test pair conventions, JSON numbering, AI-generated test markers.
 
 ## Design
 

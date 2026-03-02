@@ -53,7 +53,7 @@ instruction fires once, picks a path, and that path merges back into
 the main flow. The compiler adds a jump to the return point after the
 block's last frame.
 
-**Detaching continuations** (e.g., for_number's body): The block
+**Looping continuations** (e.g., for_number's body): The block
 runs, then falls off — `"next": false`. The instruction retains
 control internally. It decides whether to dispatch to the body again
 or fire another continuation. The body is subordinate to the
@@ -64,7 +64,7 @@ internally for iterator instructions.
 
 These two types are exhaustive — every exec slot in every known
 instruction (including modded instructions examined) is cleanly
-bridging or detaching. No third category was found.
+bridging or looping. No third category was found.
 
 ### Function signatures
 
@@ -78,7 +78,7 @@ fn for_component(entity) exec(body, done) { ... }
 fn my_branch(a) exec(next_one, next_two) { ... }
 ```
 
-The signature does not distinguish bridging from detaching. The
+The signature does not distinguish bridging from looping. The
 connection type is an implementation detail determined by the
 `instruction` block bindings. For pure-logic functions (no
 `instruction`), continuations are always bridging.
@@ -87,7 +87,7 @@ connection type is an implementation detail determined by the
 
 Inside `instruction { }`, exec slots and `"next"` are wired to
 continuation names. The `exec` keyword distinguishes exec slot keys
-from parameter slot keys. `next` and `detach` both imply `exec`, so
+from parameter slot keys. `next` and `for` both imply `exec`, so
 the `exec` keyword is only required for bare numeric keys:
 
 ```
@@ -95,30 +95,29 @@ fn check_number(value, target) exec(larger, smaller, equal) {
     instruction "check_number" {
         2: value,
         3: target,
-        exec 0: larger,       // exec required (bare numeric key)
+        exec 0: larger,       # exec required (bare numeric key)
         exec 1: smaller,
-        next: equal,           // implies exec
+        next: equal,           # implies exec
     }
 }
 ```
 
-The `detach` modifier marks a detaching continuation. It also
-implies `exec`:
+The `for` modifier marks a looping continuation. It also implies
+`exec`:
 
 ```
 fn for_component(entity) exec(body, done) {
     instruction "for_component" {
         0: @1,
         1: @2,
-        detach next: body(@1, @2),  // detach implies exec
+        for next: body(@1, @2),  # for implies exec
         exec 2: done,
     }
 }
 ```
 
 Redundant `exec` is always accepted for clarity: `exec next:` is
-the same as `next:`, and `detach exec 2:` is the same as
-`detach 2:`.
+the same as `next:`, and `for exec 2:` is the same as `for 2:`.
 
 ### Data flow: `@N` binding to continuations
 
@@ -127,8 +126,8 @@ today). Continuations receive data by listing `@N` references in an
 argument list:
 
 ```
-detach next: body(@1, @2),     // body receives two values
-exec 0: a_closer(@1),          // a_closer receives one value
+for next: body(@1, @2),        # body receives two values
+exec 0: a_closer(@1),          # a_closer receives one value
 ```
 
 Pure conditionals have no `@N` markers — continuations are pure
@@ -157,8 +156,8 @@ enables several patterns:
 - **Default fill**: A continuation passes through some outputs and
   fills the rest: `exec 0: result(@1, 0)`.
 
-At minimum, literals (numbers, null, enum values, constructors) are
-supported. Full expressions are desirable but not required.
+For v1, literals are supported (numbers, null, enum values,
+constructors). Full expressions deferred until needed.
 
 ### Pure-logic functions can branch too
 
@@ -179,14 +178,14 @@ fn my_branch(a) exec(next_one, next_two) {
 
 Continuation blocks trail the function call. Bare blocks are
 **bridging** (run once). Blocks prefixed with `for` are
-**detaching** (iterate). This distinction is always visible at the
+**looping** (iterate). This distinction is always visible at the
 call site — the programmer never has to look up a function
 definition to know whether their code runs once or in a loop.
 
 Unprovided continuations bridge directly to `return`. Order of
 named blocks doesn't matter — matched by name.
 
-**Three syntactic forms:**
+**Two syntactic forms:**
 
 **Multi-block** — grouping braces contain named blocks:
 
@@ -197,7 +196,7 @@ check_number(a, b) {
     equal { do_equal() }
 }
 
-// Mixed bridging and detaching:
+# Mixed bridging and looping:
 do_deep_analysis(input) {
     unit_analysis { unit -> process(unit) }
     for coord_analysis { coord -> analyze_tile(coord) }
@@ -206,27 +205,27 @@ do_deep_analysis(input) {
     sequence_analysis { summarize_sequence() }
     no_match { error() }
 }
-```
 
-**Single named block** — no grouping braces needed:
-
-```
-check_number(a, b) larger { do_something() }
-
-get_inventory_item() no_items { handle_empty() }
-
-for_number_split(0, 10, 1) for even { i -> use_even(i) }
+# Single continuation — just use multi-block with one entry:
+get_inventory_item() {
+    no_items { handle_empty() }
+}
 ```
 
 **Collapsed unnamed block** — name omitted, binds to the
 leftmost continuation in the function's `exec(...)` list.
-Remaining continuations are empty (bridge to return):
+Connection type (bridging/looping) is inherited from the
+function definition — no `for` prefix needed. Remaining
+continuations are empty (bridge to return):
 
 ```
 let item = get_inventory_item() { null }
 
 check_number(a, b) { do_something() }
-// equivalent to: check_number(a, b) larger { do_something() }
+# equivalent to: check_number(a, b) larger { do_something() }
+
+for_component(entity) { comp, idx -> process(comp) }
+# equivalent to: for_component(entity) { for body { comp, idx -> process(comp) } }
 ```
 
 **Parser disambiguation** for `fn() {`: if the token after `{`
@@ -257,7 +256,7 @@ check_number(a, b) {
 
 - **Bridging blocks** are transparent to `break` — like `if`
   bodies, `break` passes through to the enclosing loop.
-- **`for` blocks** (detaching) are break targets. `break`
+- **`for` blocks** (looping) are break targets. `break`
   compiles to the VM's `last` instruction, stopping the iterator.
 - Labeled `break` can target an enclosing loop from inside any
   block type.
@@ -270,9 +269,9 @@ let result = check_number(a, b) {
     larger { 10 }
     smaller { 20 }
 }
-// equal unprovided → null (like if-expr without else)
+# equal unprovided → null (like if-expr without else)
 
-// Collapsed:
+# Collapsed:
 let item = get_inventory_item() { null }
 ```
 
@@ -296,7 +295,7 @@ The ~70 control-flow stubs fall into five categories:
    `for_recipe_ingredients`, `for_repair_ingredients`, `for_research`,
    `for_research_ingredients`, `for_research_unlocks`, `for_signal`,
    `for_signal_match`, `for_count_resources`, `memory_loop`) —
-   Stateful instructions with a detaching body continuation and a
+   Stateful instructions with a looping body continuation and a
    bridging "done" continuation. Produce output data each iteration.
    Will be handled by generalized `for` loops (see separate section).
 
@@ -321,7 +320,7 @@ The ~70 control-flow stubs fall into five categories:
 
 All categories use the same call-site syntax. Categories 1, 3, 4, 5
 use bare (bridging) blocks. Category 2 uses `for`-prefixed
-(detaching) blocks. Mixed instructions (hypothetical or modded) can
+(looping) blocks. Mixed instructions (hypothetical or modded) can
 combine both in a single call.
 
 ### Expression semantics
@@ -336,13 +335,6 @@ if-expressions:
   null-filled.
 - Arity depends on the call-site blocks, not the function signature
   alone.
-
-### Continuation passthrough
-
-Wrappers forward continuations to inner calls via
-`return <continuation_name>` inside a block. The inner call's
-continuation fires, then control transfers to the wrapper's
-named continuation.
 
 ### Relationship to `match` / `when`
 
@@ -364,112 +356,98 @@ features complement each other.
 ### Design status
 
 Semantics and syntax are settled. Connection type taxonomy is
-complete (bridging and detaching only).
+complete (bridging and looping only).
 
 **Settled syntax:**
 
 - **Function signatures**: `exec(...)` after param list, no
   connection type annotation
-- **Instruction blocks**: `exec N:` / `next:` / `detach` modifiers,
-  `detach` and `next` imply `exec`
+- **Instruction blocks**: `exec N:` / `next:` / `for` modifiers,
+  `for` and `next` imply `exec`
 - **`return` continuation**: exit point, `return(...)` controls
   return values, bare/absent defaults to all `@N` in order
 - **`@N` data binding**: argument lists on continuation references,
-  value arguments supported
-- **Call-site blocks**: bare = bridging, `for`-prefixed = detaching,
-  three forms (multi-block with grouping braces, single named,
-  collapsed unnamed with leftmost default)
+  value arguments supported (literals only for v1)
+- **Call-site blocks**: two forms — multi-block (bare = bridging,
+  `for`-prefixed = looping) and collapsed unnamed (binds leftmost,
+  inherits connection type from definition)
 - **Data binding at call site**: Kotlin-style `{ var -> body }`
 - **`break`**: transparent through bridging blocks, targets `for`
-  (detaching) blocks via `last` instruction
-- **Expression form**: tail values, arity follows if-expression rules
-- **Continuation passthrough**: `return <name>` inside blocks
-- **Iterator sugar**: `for vars in iterator() { ... }` for
-  single-body iterators
+  (looping) blocks via `last` instruction
+- **Expression form**: tail values, arity follows if-expression
+  rules; restricted to all-bridging calls
+- **`return` in blocks**: compile error — blocks are not functions
+- **Iterator sugar**: deferred to separate implementation phase
 
-**Remaining work**: implementation, iterator `for` loop
-generalization (see separate section), resolution of open issues
-below.
+**Remaining work**: implementation. Iterator `for` loop
+generalization (see separate section) is deferred to a later phase.
 
-### Open issues
+### Resolved issues
 
-Issues identified during syntax design that need resolution before
-or during implementation.
+Issues identified during syntax design, now resolved.
 
-**1. `for` keyword overload**: `for` now has three meanings:
-compiler-generated counted loops (`for i in Range(5)`), iterator
-sugar (`for comp in for_component()`), and detaching block prefix
-(`for coord_analysis { coord -> ... }`). The first two share
-`for ... in` syntax; the third is `for name { ... }`. Syntactically
-distinguishable but semantically overloaded. May be acceptable
-(many languages overload `for`) but worth monitoring for confusion.
+**1. `for` keyword overload**: Accepted. `for` has multiple
+meanings (counted loops, looping block prefix, future iterator
+sugar) but all are syntactically distinguishable. `in` separates
+loop forms from block prefix. Monitor for confusion.
 
-**2. Two binding mechanisms**: Iterator sugar binds in the header
-(`for comp, idx in ...`), while general call-site syntax uses
-Kotlin-style bindings (`for body { comp, idx -> ... }`). Both bind
-`@N` data to variables but look completely different. The sugar is
-a convenience over the general form — document clearly that they're
-equivalent.
+**2. Two binding mechanisms**: Deferred. Iterator sugar is a
+separate implementation phase. Only Kotlin-style bindings
+(`for body { comp, idx -> ... }`) are in scope now.
 
-**3. Parser ambiguity with `for` after a call**: After `fn()`, the
-parser may see `for`. This could be a detaching continuation clause
-or a new `for` loop statement. Distinguishable via lookahead:
-`for name {` = continuation clause, `for name in` = for loop. The
-collapsed unnamed form `fn() for { ... }` is trickier — `for {`
-could be a detaching clause or a `for` loop with a block
-expression. May need a rule that collapsed `for` requires a name,
-or that `for {` is always parsed as a continuation clause after a
-call to a function with `exec` continuations.
+**3. Parser ambiguity with `for` after a call**: Resolved. After
+`fn()`, only `{` follows (multi-block or collapsed). `for` prefix
+only appears inside multi-block braces, where it's unambiguous.
+Collapsed form inherits connection type from the function
+definition — no `for` prefix needed or allowed.
 
-**4. Expression semantics for `for` blocks**: A detaching block
-runs N times — its "tail value" is ambiguous (last iteration?
-accumulated? undefined?). Proposed resolution: **expression form
-is restricted to all-bridging calls.** If any `for` block is
-present, the call cannot be used as an expression — compile error.
-This is clean and avoids semantic confusion.
+**4. Expression semantics for `for` blocks**: Resolved. Expression
+form restricted to all-bridging calls. Looping blocks don't have
+expression values — compile error if any `for` block is present.
 
-**5. `return` inside `for` blocks and iterator cleanup**: `return`
-from the enclosing function while inside a detaching body leaves
-the iterator on the VM's block stack. The behavior restart likely
-clears `state.blocks` (execution restarts fresh), but this needs
-verification. If not, `return` inside a `for` block may need to
-emit `last` before `@return` to clean up the iterator.
+**5. `return` inside blocks**: Resolved. `return` is a compile
+error inside any continuation block (bridging or looping). Blocks
+are not functions.
 
-**6. Labeled `break` from `for` block to enclosing loop**: This
-requires two operations — `last` (clean up the iterator) AND a
-jump past the loop. The compiler would need to emit `last` followed
-by `@break`. Verify that `last` + `@break` compiles correctly and
-that the block stack is in the right state after `last`. For nested
-iterators, multiple `last` instructions may be needed (one per
-iterator level being crossed).
+**6. Labeled `break` across block boundaries**: Resolved. Allowed.
+The compiler emits a direct jump (`"next"` past the target loop).
+Stale block stack entries are harmless — cleared on behavior
+restart.
 
-**7. Compiler enforcement of `for` correctness**: The compiler
-should validate that call-site `for` blocks match `detach` bindings
-in the function definition. `for` on a bridging continuation →
-compile error. Bare block on a detaching continuation → compile
-error. This ensures the call site always reflects the actual
-semantics.
+**7. Compiler enforcement of `for` correctness**: Resolved. In
+multi-block form: `for` on bridging → error, bare on looping →
+error. Collapsed form inherits from leftmost — no annotation.
 
-**8. Multi-value Kotlin bindings**: Continuation blocks receiving
-multiple `@N` values use comma-separated bindings:
-`for body { item, count, extra -> ... }`. Consistent with
-multi-return prefix matching elsewhere in the language.
+**8. Multi-value Kotlin bindings**: Resolved. Comma-separated
+bindings (`for body { item, count -> ... }`), consistent with
+existing prefix matching.
 
-**9. `match` / `switch` integration**: The `switch` instruction
-(5 cases + default) may benefit from dedicated `match` syntax
-rather than 5+ named continuation blocks. This is complementary
-to the continuation model — `match` could desugar to `switch`
-with continuation blocks internally.
+**9. `match` / `switch` integration**: Deferred. Works fine with
+named continuation blocks. Dedicated syntax is a future ergonomic
+layer.
 
-**10. Continuation passthrough in `for` blocks**: Whether
-`return <continuation_name>` (passthrough) works inside a
-detaching block is unclear. It would need to stop the iteration
-AND forward to the continuation. May be unsupported initially.
+**10. Continuation passthrough in blocks**: Resolved. `return` of
+any kind inside blocks is a compile error (see #5). Wrapping a
+branching function with forwarded continuations requires dropping
+to the raw `instruction` block and wiring exec slots directly.
+
+**11. Unbound numbered exec slots**: Resolved. Numbered exec slots
+not explicitly bound in the instruction block default to `return`,
+matching the `"next"` default behavior.
+
+**12. Value arguments in continuation argument lists**: Resolved.
+Literals only for v1 (numbers, null, enum values, constructors).
+Full expressions deferred until a real use case demands them.
+
+**13. Existing boolean/comparison compilation**: Resolved. The
+hard-coded `check_number`/`compare_register`/`value_type` emission
+paths for `if`/`while`/boolean expressions remain unchanged. The
+continuation system adds a new calling convention alongside.
 
 ## Generalized `for` loops and iterators
 
-Iterator instructions (Category 2 — stateful, looping, with
-detaching body continuations) will be handled by generalizing the
+Iterator instructions (Category 2 — stateful, with looping body
+continuations) will be handled by generalizing the
 `for` loop. This builds on top of the continuation model but is
 deferred to a separate implementation phase.
 

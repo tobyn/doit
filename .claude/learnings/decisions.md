@@ -200,8 +200,9 @@ caller's `frameBuilder`.
 ## Control flow stubs
 
 Control-flow instructions are left as empty-body stubs with a
-`# control flow:` comment. They require compiler-level support that
-`instruction` can't express.
+`# control flow:` comment. They require the continuation system
+(see `future.md` § Continuations and branching instructions) which
+is designed but not yet implemented.
 
 ## Test file conventions
 
