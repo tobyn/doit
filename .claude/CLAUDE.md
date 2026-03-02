@@ -24,8 +24,8 @@ of work, not separate steps the developer must request:
 1. **Code** — the implementation itself
 2. **Manual** — update `manual/` docs so users can discover and use the
    feature (new syntax, new operators, changed behavior, etc.)
-3. **Project memory** — update `.claude/rules/` files so future sessions
-   have accurate context (decisions.md, compiler.md, future.md, etc.)
+3. **Project memory** — update `.claude/` files so future sessions
+   have accurate context (rules/, learnings/, etc.)
 
 All three must be done before considering the task complete. Do not wait
 for the developer to ask for docs or memory updates.
@@ -42,13 +42,21 @@ whether to include it or split it out. Never dismiss failing tests as
 
 ## Project Memory
 
-The `.claude/rules/` files are the source of truth for how the codebase
-works. After implementing a feature or making a design change, update the
-relevant rules files to reflect the new state. This keeps future sessions
+Project memory lives in two places under `.claude/`:
+
+- **`rules/`** — Always-loaded context. Path-scoped rules (via
+  frontmatter) load only when touching relevant files. `signposts.md`
+  provides pointers to on-demand reference material.
+- **`learnings/`** — On-demand reference material. Detailed design
+  decisions, type system docs, game model, future plans, etc. Read
+  via signpost pointers when the topic is relevant.
+
+After implementing a feature or making a design change, update the
+relevant files to reflect the new state. This keeps future sessions
 accurate — they rely on these files rather than re-exploring the codebase.
 
 During long sessions, write important design decisions and intermediate
-conclusions to rules files promptly rather than waiting until the end.
+conclusions to project memory promptly rather than waiting until the end.
 Context from earlier in the conversation may be compressed, so anything
 worth remembering should be persisted to files before it's needed later.
 
