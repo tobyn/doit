@@ -32,5 +32,8 @@ topic is relevant to your current task.
 - **Design decisions** — `.claude/learnings/decisions.md`
   Non-obvious choices and their rationale. Consult when making changes
   to avoid contradicting past decisions.
+- **Continuation system** — `.claude/learnings/continuations.md`
+  Design rules for the branching/continuation system (exec blocks,
+  bridging vs looping, expression form, pure-logic dispatch).
 - **Future ideas** — `.claude/learnings/future.md`
-  Continuations, iterators, subroutines, and other planned features.
+  Iterators, subroutines, and other planned features.
