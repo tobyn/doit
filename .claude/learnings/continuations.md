@@ -114,3 +114,18 @@ the `return` path, `null` for unprovided blocks.
 params don't exceed the data args the continuation provides (from
 `buildExecBindingMap`). Applies uniformly to instruction-based and
 pure-logic dispatch.
+
+## `iter` declarations (Phase 1)
+
+Iterator instructions (Category 2) are now declared with `iter` instead
+of `fn...exec`. The `for ... in` call syntax replaces continuation blocks
+for iterators. The continuation system remains for non-iterator branching
+(Categories 1, 3, 4, 5).
+
+Instruction-backed iters emit the same frames as the old `fn...exec`
+form — the `for_component` instruction with `"next": false` on the body's
+last frame and a done slot. `break` emits `last` (same as before).
+Labeled `break` uses direct jump via `patchBreakPlaceholders`.
+
+Stale block stack entries from labeled break across iterators are
+harmless — same principle as before.

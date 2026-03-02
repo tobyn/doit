@@ -1,0 +1,19 @@
+# AI-generated test
+# Wrapper iterator with yield filtering
+iter active_components() -> comp {
+    for c, idx in for_component() {
+        if c != null {
+            yield c
+        }
+    }
+}
+
+behavior for_iter_yield {
+    @name "For Iter Yield"
+
+    for comp in active_components() {
+        notify "found"
+    }
+
+    notify "done"
+}

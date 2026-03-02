@@ -49,6 +49,8 @@ All use the same call-site syntax (continuation blocks).
    `for_signal_match`, `for_count_resources`, `memory_loop`) —
    Stateful instructions with a looping body continuation and a
    bridging "done" continuation. Produce output data each iteration.
+   Now declared as `iter` with `for ... in` call syntax instead of
+   `fn...exec` with continuation blocks.
 
 3. **Failable getters** (`get_inventory_item`,
    `get_inventory_item_index`, `get_resource_item`,
@@ -93,7 +95,7 @@ combo indexing. Affected functions expose mode via keyword parameters
 instruction block. When the keyword arg is omitted, the `c` field is
 dropped from the compiled output and the game uses its default.
 
-`parseStdlibFile` handles both `fn` and `enum` declarations. Stdlib
+`parseStdlibFile` handles `fn`, `iter`, and `enum` declarations. Stdlib
 enums are propagated to user and imported file parsers via
 `parser.stdlibEnums`.
 

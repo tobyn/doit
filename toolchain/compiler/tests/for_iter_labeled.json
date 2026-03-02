@@ -1,0 +1,52 @@
+{
+  "0": {
+    "0": "comp",
+    "1": "idx",
+    "2": 7,
+    "op": "for_component"
+  },
+  "1": {
+    "0": {
+      "num": 0
+    },
+    "1": "i",
+    "op": "set_reg"
+  },
+  "2": {
+    "0": 7,
+    "2": "i",
+    "3": {
+      "num": 3
+    },
+    "next": 7,
+    "op": "check_number"
+  },
+  "3": {
+    "0": 6,
+    "1": "i",
+    "2": {
+      "num": 1
+    },
+    "op": "compare_register"
+  },
+  "4": {
+    "0": false,
+    "1": false,
+    "next": 7,
+    "op": "set_reg"
+  },
+  "5": {
+    "0": "i",
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "next": false,
+    "op": "add"
+  },
+  "6": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "For Iter Labeled"
+}

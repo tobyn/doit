@@ -15,20 +15,20 @@ see `.claude/learnings/test_format.md`.
 
 ## Architecture
 
-- **`ast.go`** — `Stmt` interface (17 types) and `Expr` interface
+- **`ast.go`** — `Stmt` interface (18 types) and `Expr` interface
   (15 types). `isTerminalStmt`/`terminalKeyword` for unreachable code
   detection.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
   types, `Keywords` map, `skipToCloseBrace`. The `parser` struct
-  extends `scanner` with `fns`, `consts`, `enums`, import state,
+  extends `scanner` with `fns`, `iters`, `consts`, `enums`, import state,
   loop tracking, `callExprParser` callback, and `warnings []string`.
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
-  types (`symbolSet`, `fnDef`, `paramDef`, `symbolTable`, `constDef`,
+  types (`symbolSet`, `fnDef`, `iterDef`, `paramDef`, `symbolTable`, `constDef`,
   `enumDef`), `frameBuilder`/`frameRef` abstraction, `emitContext`
   struct, `execMode` tracking, slot constants for `check_number`,
   `compare_register`, and `value_type`.
-- **`parse.go`** — Stdlib parsing, file-level parsing, function
-  definitions (`parseUserFn`), fn body AST parsing and emission
+- **`parse.go`** — Stdlib parsing, file-level parsing, function and iterator
+  definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing and emission
   (`emitFnBody`), instruction parsing (`parseInstruction`), call
   expansion (`expandCall`), `resolveInstructionFrame`, enum/const
   parsing, compile-time evaluator (`tryEvalExpr`/`tryEvalCall`).
@@ -55,9 +55,9 @@ The compiler is a recursive-descent parser (`parser` struct embeds
 approach: parse into `[]Stmt` with `Expr` nodes, then emit frames.
 
 1. **Stdlib parsing** — `parseStdlibFile` handles `fn` (via
-   `parseUserFn`) and `enum` (via `parseEnumDecl`) declarations.
-   Stdlib enums are propagated to user/imported file parsers via
-   `parser.stdlibEnums`.
+   `parseUserFn`), `iter` (via `parseIterDecl`), and `enum` (via
+   `parseEnumDecl`) declarations. Stdlib iters are propagated via
+   `parser.stdlibIters`.
 2. **Import processing** — `processImports` resolves paths, reads
    imported files, merges symbols into the namespace.
 3. **User source compilation** — Two passes: first collects

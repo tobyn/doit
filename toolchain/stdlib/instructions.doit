@@ -522,27 +522,20 @@ fn faction_item_amount(item) exec(none) {
 # Loops through equipped components.
 #   component [out] - equipped component
 #   index [out, optional] - index of the component
-#   "Done" [branch] - finished loop
-fn for_component() exec(body, done) {
-    # frame: {"op": "for_component", "0": component [out], "1": index [out],
-    #   "2": "Done" [exec]}
+iter for_component() -> comp, idx {
     instruction "for_component" {
-        0: @1
-        1: @2
-        for next: body(@1, @2)
-        exec 2: done
+        0: comp
+        1: idx
+        done: 2
     }
 }
 
 # Scans for nearby resources in power field or visibility range.
 #   resource [out]
-#   "Done" [branch] - finished loop
-fn for_count_resources() exec(body, done) {
-    # frame: {"op": "for_count_resources", "0": resource [out], "1": "Done" [exec]}
+iter for_count_resources() -> resource {
     instruction "for_count_resources" {
-        0: @1
-        for next: body(@1)
-        exec 1: done
+        0: resource
+        done: 1
     }
 }
 
@@ -552,40 +545,32 @@ fn for_count_resources() exec(body, done) {
 #   filter_2 [in, optional] - second filter
 #   filter_3 [in, optional] - third filter
 #   unit [out] - current unit in loop
-#   "Done" [branch] - finished loop
-fn for_entities_in_range(range, filter, filter_2 filter_2, filter_3 filter_3) exec(body, done) {
-    # frame: {"op": "for_entities_in_range", "0": range [in], "1": filter [in],
-    #   "2": filter_2 [in], "3": filter_3 [in], "4": unit [out], "5": "Done" [exec]}
+iter for_entities_in_range(range, filter, filter_2 filter_2, filter_3 filter_3) -> unit {
     instruction "for_entities_in_range" {
         0: range
         1: filter
         2: filter_2
         3: filter_3
-        4: @1
-        for next: body(@1)
-        exec 5: done
+        4: unit
+        done: 5
     }
 }
 
 # Loops through inventory slots.
-#   inventory [out] - item inventory
+#   item [out] - item inventory
 #   "Done" [branch] - finished loop
 #   reserved_stack [out, optional] - items reserved for outgoing order or recipe
 #   unreserved_stack [out, optional] - items available
 #   reserved_space [out, optional] - space reserved for an incoming order
 #   unreserved_space [out, optional] - remaining space
-fn for_inventory_item() exec(body, done) {
-    # frame: {"op": "for_inventory_item", "0": inventory [out], "1": "Done" [exec],
-    #   "2": reserved_stack [out], "3": unreserved_stack [out],
-    #   "4": reserved_space [out], "5": unreserved_space [out]}
+iter for_inventory_item() -> item, reserved_stack, unreserved_stack, reserved_space, unreserved_space {
     instruction "for_inventory_item" {
-        0: @1
-        for next: body(@1, @2, @3, @4, @5)
-        exec 1: done
-        2: @2
-        3: @3
-        4: @4
-        5: @5
+        0: item
+        done: 1
+        2: reserved_stack
+        3: unreserved_stack
+        4: reserved_space
+        5: unreserved_space
     }
 }
 
@@ -595,16 +580,13 @@ fn for_inventory_item() exec(body, done) {
 #   step [in, optional] - increment step, defaults to -1 or 1 based on inputs
 #   value [out] - current number
 #   "Done" [branch] - finished loop
-fn for_number(from, to, step step) exec(body, done) {
-    # frame: {"op": "for_number", "0": from [in], "1": to [in], "2": step [in],
-    #   "3": value [out], "4": "Done" [exec]}
+iter for_number(from, to, step step) -> i {
     instruction "for_number" {
         0: from
         1: to
         2: step
-        3: @1
-        for next: body(@1)
-        exec 4: done
+        3: i
+        done: 4
     }
 }
 
@@ -612,14 +594,11 @@ fn for_number(from, to, step step) exec(body, done) {
 #   production [in] - production
 #   producer [out] - producer
 #   "Done" [branch] - finished loop
-fn for_producers(production) exec(body, done) {
-    # frame: {"op": "for_producers", "0": production [in], "1": producer [out],
-    #   "2": "Done" [exec]}
+iter for_producers(production) -> producer {
     instruction "for_producers" {
         0: production
-        1: @1
-        for next: body(@1)
-        exec 2: done
+        1: producer
+        done: 2
     }
 }
 
@@ -627,14 +606,11 @@ fn for_producers(production) exec(body, done) {
 #   recipe [in]
 #   ingredient [out] - recipe ingredient
 #   "Done" [branch] - finished loop
-fn for_recipe_ingredients(recipe) exec(body, done) {
-    # frame: {"op": "for_recipe_ingredients", "0": recipe [in], "1": ingredient [out],
-    #   "2": "Done" [exec]}
+iter for_recipe_ingredients(recipe) -> ingredient {
     instruction "for_recipe_ingredients" {
         0: recipe
-        1: @1
-        for next: body(@1)
-        exec 2: done
+        1: ingredient
+        done: 2
     }
 }
 
@@ -642,26 +618,21 @@ fn for_recipe_ingredients(recipe) exec(body, done) {
 #   target [in] - unit
 #   ingredient [out] - repair ingredient
 #   "Done" [branch] - finished loop
-fn for_repair_ingredients(target) exec(body, done) {
-    # frame: {"op": "for_repair_ingredients", "0": target [in], "1": ingredient [out],
-    #   "2": "Done" [exec]}
+iter for_repair_ingredients(target) -> ingredient {
     instruction "for_repair_ingredients" {
         0: target
-        1: @1
-        for next: body(@1)
-        exec 2: done
+        1: ingredient
+        done: 2
     }
 }
 
 # Loops through all researchable tech.
 #   tech [out] - researchable tech
 #   "Done" [branch] - finished loop
-fn for_research() exec(body, done) {
-    # frame: {"op": "for_research", "0": tech [out], "1": "Done" [exec]}
+iter for_research() -> tech {
     instruction "for_research" {
-        0: @1
-        for next: body(@1)
-        exec 1: done
+        0: tech
+        done: 1
     }
 }
 
@@ -669,14 +640,11 @@ fn for_research() exec(body, done) {
 #   research [in]
 #   ingredient [out] - research ingredient
 #   "Done" [branch] - finished loop
-fn for_research_ingredients(research) exec(body, done) {
-    # frame: {"op": "for_research_ingredients", "0": research [in],
-    #   "1": ingredient [out], "2": "Done" [exec]}
+iter for_research_ingredients(research) -> ingredient {
     instruction "for_research_ingredients" {
         0: research
-        1: @1
-        for next: body(@1)
-        exec 2: done
+        1: ingredient
+        done: 2
     }
 }
 
@@ -684,14 +652,13 @@ fn for_research_ingredients(research) exec(body, done) {
 #   tech [in] - tech
 #   unlock [out] - unlocks
 #   "Done" [branch] - finished loop
-fn for_research_unlocks(tech) exec(body, done) {
+iter for_research_unlocks(tech) -> unlock {
     # frame: {"op": "for_research_unlocks", "0": tech [in], "1": unlock [out],
     #   "2": "Done" [exec]}
     instruction "for_research_unlocks" {
         0: tech
-        1: @1
-        for next: body(@1)
-        exec 2: done
+        1: unlock
+        done: 2
     }
 }
 
@@ -700,13 +667,12 @@ fn for_research_unlocks(tech) exec(body, done) {
 #   signal [in] - signal
 #   unit [out] - unit with signal
 #   "Done" [branch] - finished loop
-fn for_signal(signal) exec(body, done) {
+iter for_signal(signal) -> unit {
     # frame: {"op": "for_signal", "0": signal [in], "1": unit [out], "2": "Done" [exec]}
     instruction "for_signal" {
         0: signal
-        1: @1
-        for next: body(@1)
-        exec 2: done
+        1: unit
+        done: 2
     }
 }
 
@@ -715,15 +681,14 @@ fn for_signal(signal) exec(body, done) {
 #   unit [out] - found unit with signal
 #   found_signal [out, optional] - found signal
 #   "Done" [branch] - finished loop
-fn for_signal_match(signal, mode mode) exec(body, done) {
+iter for_signal_match(signal, mode mode) -> unit, found_signal {
     # frame: {"op": "for_signal_match", "0": signal [in], "1": unit [out],
     #   "2": found_signal [out], "3": "Done" [exec], "c": <mode>}
     instruction "for_signal_match" {
         0: signal
-        1: @1
-        2: @2
-        for next: body(@1, @2)
-        exec 3: done
+        1: unit
+        2: found_signal
+        done: 3
         c: mode
     }
 }
@@ -1516,15 +1481,14 @@ fn memory_length(index) {
 #   value [out]
 #   index [out, optional]
 #   "Done" [branch] - finished loop
-fn memory_loop(id) exec(body, done) {
+iter memory_loop(id) -> value, index {
     # frame: {"op": "memory_loop", "0": id [in], "1": value [out], "2": "Done" [exec],
     #   "3": index [out]}
     instruction "memory_loop" {
         0: id
-        1: @1
-        for next: body(@1, @2)
-        exec 2: done
-        3: @2
+        1: value
+        done: 2
+        3: index
     }
 }
 

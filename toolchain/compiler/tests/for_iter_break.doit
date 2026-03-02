@@ -1,0 +1,14 @@
+# AI-generated test
+# Break inside iterator body
+behavior for_iter_break {
+    @name "For Iter Break"
+
+    for comp, idx in for_component() {
+        if idx == 3 {
+            break
+        }
+        notify "looping"
+    }
+
+    notify "done"
+}

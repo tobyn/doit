@@ -3559,6 +3559,102 @@ behavior t {
 		}
 	})
 
+	// --- Iterator error cases ---
+
+	t.Run("iter_too_many_vars", func(t *testing.T) {
+		src := `behavior a {
+	@name "A"
+	for a, b, c in for_component() {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "too many variables") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("iter_range_multiple_vars", func(t *testing.T) {
+		src := `behavior a {
+	@name "A"
+	for a, b in Range(5) {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "binds exactly one variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("iter_yield_outside_iter", func(t *testing.T) {
+		src := `fn f() {
+	yield 1
+}
+behavior a {
+	@name "A"
+	f
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "yield") && !strings.Contains(err.Error(), "iter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("iter_for_in_with_fn", func(t *testing.T) {
+		src := `fn f() exec(body, done) {
+	instruction "for_component" {
+		0: @1
+		1: @2
+		for next: body(@1, @2)
+		exec 2: done
+	}
+}
+behavior a {
+	@name "A"
+	for x in f() {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not an iterator") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("iter_yield_count_mismatch", func(t *testing.T) {
+		src := `iter my_iter() -> a, b {
+	for c, idx in for_component() {
+		yield c
+	}
+}
+behavior a {
+	@name "A"
+	for x, y in my_iter() {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "yield produces") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

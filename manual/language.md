@@ -1563,6 +1563,59 @@ outer: for i in Range(5) {
 }
 ```
 
+`for` can also iterate over iterators — functions declared with `iter` (see
+[Functions](functions.md#iterators)):
+
+```doit
+for comp, idx in for_component() {
+    notify "component", value: comp
+}
+```
+
+Iterators can yield multiple values per iteration. Bind as many variables as
+you need — you don't have to bind all of them (prefix matching):
+
+```doit
+# for_component yields (comp, idx); bind only comp
+for comp in for_component() {
+    notify "component", value: comp
+}
+```
+
+Binding more variables than the iterator yields is a compile error.
+
+Iterators accept arguments like regular function calls, including keyword
+arguments:
+
+```doit
+for i in for_number(0, 10, step: 2) {
+    notify "counting"
+}
+
+for unit in for_signal(my_signal) {
+    notify "found", value: unit
+}
+```
+
+`break` and labeled `break` work the same way as in Range loops:
+
+```doit
+for item in for_inventory_item() {
+    if item == null {
+        break
+    }
+    notify "item", value: item
+}
+
+outer: for comp in for_component() {
+    for i in Range(3) {
+        if i == 1 {
+            break outer
+        }
+    }
+}
+```
+
 `for` loops work in both behavior bodies and function bodies.
 
 ### `wait`

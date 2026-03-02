@@ -334,8 +334,9 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		return nil, p.errorf(pos, "cannot read import %q: %v", filePath, err)
 	}
 
-	// Clone the cached stdlib fns and enums for this imported file's parser.
+	// Clone the cached stdlib fns, iters, and enums for this imported file's parser.
 	stdlibFns := maps.Clone(p.stdlibFns)
+	stdlibIters := maps.Clone(p.stdlibIters)
 	stdlibEnums := maps.Clone(p.stdlibEnums)
 
 	sourceDir := path.Dir(filePath)
@@ -351,6 +352,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 			sourceFile: filePath,
 		},
 		fns:         stdlibFns,
+		iters:       stdlibIters,
 		consts:      map[string]*constDef{},
 		enums:       stdlibEnums,
 		loopLabels:  map[string]bool{},
@@ -359,6 +361,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		sourceDir:   sourceDir,
 		stdlibFS:    p.stdlibFS,
 		stdlibFns:   p.stdlibFns,
+		stdlibIters: p.stdlibIters,
 		stdlibEnums: p.stdlibEnums,
 		importStack: append(append([]string{}, p.importStack...), filePath),
 	}
@@ -397,7 +400,15 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		resultFns[name] = fn
 	}
 
-	return &symbolSet{fns: resultFns, consts: ip.consts, enums: ip.enums}, nil
+	// Extract only user-defined iters (exclude stdlib)
+	resultIters := map[string]*iterDef{}
+	for name, it := range ip.iters {
+		if p.stdlibIters[name] == nil {
+			resultIters[name] = it
+		}
+	}
+
+	return &symbolSet{fns: resultFns, iters: resultIters, consts: ip.consts, enums: ip.enums}, nil
 }
 
 // collectImportedFns collects function and constant definitions from an imported file.
@@ -421,7 +432,7 @@ func (p *parser) processImports() error {
 	p.importedNames = map[string]bool{}
 
 	// Wrap the parser's own maps so symbolSet methods can merge into them
-	dst := &symbolSet{fns: p.fns, consts: p.consts, enums: p.enums}
+	dst := &symbolSet{fns: p.fns, iters: p.iters, consts: p.consts, enums: p.enums}
 
 	for _, stmt := range p.imports {
 		filePath, fsys, err := p.resolveImportPath(stmt.Path, stmt.Pos)
@@ -456,6 +467,9 @@ func (p *parser) processImports() error {
 			}
 			if fn, ok := imported.fns[imp.Name]; ok {
 				p.fns[imp.Alias] = fn
+			}
+			if it, ok := imported.iters[imp.Name]; ok {
+				p.iters[imp.Alias] = it
 			}
 			if c, ok := imported.consts[imp.Name]; ok {
 				p.consts[imp.Alias] = c
@@ -531,6 +545,11 @@ func (p *parser) resolveFnName(tok token) (string, *fnDef, error) {
 	if fn, ok := ns.fns[memberTok.val]; ok {
 		p.fns[qualName] = fn
 		return qualName, fn, nil
+	}
+	// Then iterators
+	if it, ok := ns.iters[memberTok.val]; ok {
+		p.iters[qualName] = it
+		return qualName, nil, nil
 	}
 	// Then constants
 	if c, ok := ns.consts[memberTok.val]; ok {

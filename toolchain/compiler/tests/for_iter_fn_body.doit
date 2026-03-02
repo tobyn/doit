@@ -1,0 +1,14 @@
+# AI-generated test
+# Iterator inside a function body
+fn loop_components() {
+    for comp, idx in for_component() {
+        notify "looping"
+    }
+}
+
+behavior for_iter_fn_body {
+    @name "For Iter Fn Body"
+
+    loop_components
+    notify "done"
+}

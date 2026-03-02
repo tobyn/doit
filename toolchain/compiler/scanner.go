@@ -77,6 +77,7 @@ var Keywords = map[string]bool{
 	"in":          true,
 	"inout":       true,
 	"instruction": true,
+	"iter":        true,
 	"let":         true,
 	"locked":      true,
 	"localize":    true,
@@ -91,6 +92,7 @@ var Keywords = map[string]bool{
 	"wait":        true,
 	"is":          true,
 	"while":       true,
+	"yield":       true,
 	// Type constructors
 	"Coordinate": true,
 	"Component":  true,
@@ -151,6 +153,7 @@ func (s *scanner) restore(state scannerState) {
 type parser struct {
 	scanner
 	fns         map[string]*fnDef
+	iters       map[string]*iterDef
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
 	imports     []ImportStmt     // parsed import statements
@@ -160,6 +163,7 @@ type parser struct {
 	stdlibFS       fs.FS                      // stdlib file system for std: imports
 	stdlibFns      map[string]*fnDef          // parsed stdlib fns (shared across imports)
 	stdlibEnums    map[string]*enumDef       // parsed stdlib enums (shared across imports)
+	stdlibIters    map[string]*iterDef       // parsed stdlib iters (shared across imports)
 	importStack    []string                   // import path stack for cycle detection
 	namedImports   map[string]bool            // names from named imports (for collision checking)
 	namespaceNames map[string]bool            // namespace names (for collision checking)

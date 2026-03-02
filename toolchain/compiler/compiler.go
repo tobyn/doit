@@ -33,7 +33,7 @@ func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.F
 // sourceFS and sourcePath provide file system context for resolving imports.
 // The returned warnings slice contains non-fatal compiler warnings (nil if none).
 func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (*codec.Object, []string, error) {
-	fns, stdlibEnums, err := parseStdlib(stdlib)
+	fns, stdlibIters, stdlibEnums, err := parseStdlib(stdlib)
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdlib: %w", err)
 	}
@@ -44,14 +44,16 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 			sourceDir = ""
 		}
 	}
-	// Clone stdlib fns and enums for the parser's working maps (user declarations
-	// will be added to them). The originals are kept so imported files can clone
-	// them cheaply.
+	// Clone stdlib fns, iters, and enums for the parser's working maps (user
+	// declarations will be added to them). The originals are kept so imported
+	// files can clone them cheaply.
 	workingFns := maps.Clone(fns)
+	workingIters := maps.Clone(stdlibIters)
 	workingEnums := maps.Clone(stdlibEnums)
 	p := &parser{
 		scanner:    scanner{src: src, locale: locale},
 		fns:        workingFns,
+		iters:      workingIters,
 		target:     behaviorID,
 		loopLabels: map[string]bool{},
 		consts:     map[string]*constDef{},
@@ -62,6 +64,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		stdlibFS:    stdlib,
 		stdlibFns:   fns,
 		stdlibEnums: stdlibEnums,
+		stdlibIters: stdlibIters,
 	}
 	obj, err := p.parseFile()
 	if err != nil {
@@ -72,7 +75,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 
 // TestParseStdlibFile is a test helper that parses a stdlib source string.
 func TestParseStdlibFile(src string) error {
-	return parseStdlibFile(src, map[string]*fnDef{}, map[string]*enumDef{})
+	return parseStdlibFile(src, map[string]*fnDef{}, map[string]*iterDef{}, map[string]*enumDef{})
 }
 
 // TestParseLocalePrefix is a test helper that exposes parseLocalePrefix.
@@ -186,11 +189,12 @@ type enumDef struct {
 	private bool           // true for private enum (not visible as import)
 }
 
-// symbolSet groups the three top-level declaration maps (functions, constants,
-// enums) that share a namespace. Used by the import system and namespace storage
-// to operate on all three uniformly.
+// symbolSet groups the top-level declaration maps (functions, iterators,
+// constants, enums) that share a namespace. Used by the import system and
+// namespace storage to operate on all uniformly.
 type symbolSet struct {
 	fns    map[string]*fnDef
+	iters  map[string]*iterDef
 	consts map[string]*constDef
 	enums  map[string]*enumDef
 }
@@ -199,14 +203,18 @@ type symbolSet struct {
 func newSymbolSet() *symbolSet {
 	return &symbolSet{
 		fns:    map[string]*fnDef{},
+		iters:  map[string]*iterDef{},
 		consts: map[string]*constDef{},
 		enums:  map[string]*enumDef{},
 	}
 }
 
-// has reports whether name exists in any of the three maps.
+// has reports whether name exists in any of the maps.
 func (s *symbolSet) has(name string) bool {
 	if _, ok := s.fns[name]; ok {
+		return true
+	}
+	if _, ok := s.iters[name]; ok {
 		return true
 	}
 	if _, ok := s.consts[name]; ok {
@@ -223,6 +231,9 @@ func (s *symbolSet) isPrivate(name string) bool {
 	if fn, ok := s.fns[name]; ok {
 		return fn.private
 	}
+	if it, ok := s.iters[name]; ok {
+		return it.private
+	}
 	if c, ok := s.consts[name]; ok {
 		return c.private
 	}
@@ -237,6 +248,11 @@ func (s *symbolSet) mergeNonPrivate(src *symbolSet) {
 	for name, fn := range src.fns {
 		if !fn.private {
 			s.fns[name] = fn
+		}
+	}
+	for name, it := range src.iters {
+		if !it.private {
+			s.iters[name] = it
 		}
 	}
 	for name, c := range src.consts {
@@ -255,14 +271,16 @@ func (s *symbolSet) mergeNonPrivate(src *symbolSet) {
 func (s *symbolSet) clone() *symbolSet {
 	return &symbolSet{
 		fns:    maps.Clone(s.fns),
+		iters:  maps.Clone(s.iters),
 		consts: maps.Clone(s.consts),
 		enums:  maps.Clone(s.enums),
 	}
 }
 
-// deleteAll removes name from all three maps.
+// deleteAll removes name from all maps.
 func (s *symbolSet) deleteAll(name string) {
 	delete(s.fns, name)
+	delete(s.iters, name)
 	delete(s.consts, name)
 	delete(s.enums, name)
 }
@@ -271,6 +289,11 @@ func (s *symbolSet) deleteAll(name string) {
 func (s *symbolSet) addNonPrivateNames(names map[string]bool) {
 	for name, fn := range s.fns {
 		if !fn.private {
+			names[name] = true
+		}
+	}
+	for name, it := range s.iters {
+		if !it.private {
 			names[name] = true
 		}
 	}
@@ -284,6 +307,17 @@ func (s *symbolSet) addNonPrivateNames(names map[string]bool) {
 			names[name] = true
 		}
 	}
+}
+
+// iterDef holds a parsed iter declaration.
+type iterDef struct {
+	params   []paramDef
+	outputs  []string       // yielded output names (from -> ...)
+	astBody  []Stmt         // body (may contain yield/for)
+	frame    map[string]any // promoted instruction frame (stdlib)
+	doneSlot string         // instruction exec slot key for exhaustion (0-based ref key)
+	private  bool           // true for private iter
+	scope    map[string]*fnDef // functions available when this iter was defined
 }
 
 // execBinding marks an instruction block slot as wired to a continuation.

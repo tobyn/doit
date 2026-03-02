@@ -1375,8 +1375,14 @@ func (p *parser) emitModeBlockExpr(e *ModeBlockExpr, retVals []any, ctx *emitCon
 
 // emitForStmt emits a for-in loop.
 func (p *parser) emitForStmt(s *ForStmt, ctx *emitContext, comment string) error {
+	// Iterator form: for vars in iter_name(args) { body }
+	if s.IterName != "" {
+		return p.emitForIterStmt(s, ctx, comment)
+	}
+
+	// Range form
 	ctx.pushScope()
-	iterVar := ctx.declareIterVar(s.IterVar)
+	iterVar := ctx.declareIterVar(s.IterVars[0])
 
 	var err error
 	ctor, isCtor := s.Range.(*ConstructorExpr)
@@ -1387,6 +1393,243 @@ func (p *parser) emitForStmt(s *ForStmt, ctx *emitContext, comment string) error
 	}
 	ctx.popScope()
 	return err
+}
+
+// emitForIterStmt emits a for-in loop with an iterator source.
+func (p *parser) emitForIterStmt(s *ForStmt, ctx *emitContext, comment string) error {
+	it := p.iters[s.IterName]
+	if it == nil {
+		return p.errorf(0, "unknown iterator %q", s.IterName)
+	}
+
+	if it.frame != nil {
+		return p.emitInstructionIter(s, it, ctx, comment)
+	}
+	return p.emitYieldIter(s, it, ctx, comment)
+}
+
+// emitInstructionIter emits a for-in loop backed by an instruction-based iterator.
+func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, comment string) error {
+	ctx.pushScope()
+
+	// Declare iter vars and allocate registers
+	iterVarRegs := make([]string, len(s.IterVars))
+	for i, v := range s.IterVars {
+		iterVarRegs[i] = ctx.declareIterVar(v)
+	}
+
+	// Build paramMap for the instruction frame
+	paramMap := map[string]any{}
+	posIdx := 0
+	for _, pd := range it.params {
+		if pd.keyword == "" {
+			if posIdx < len(s.IterArgs) {
+				val, err := ctx.exprGetValue(s.IterArgs[posIdx], "")
+				if err != nil {
+					ctx.popScope()
+					return err
+				}
+				paramMap[pd.name] = val
+			}
+			posIdx++
+		} else if s.IterKwArgs != nil {
+			if expr, ok := s.IterKwArgs[pd.keyword]; ok {
+				val, err := ctx.exprGetValue(expr, "")
+				if err != nil {
+					ctx.popScope()
+					return err
+				}
+				paramMap[pd.name] = val
+			}
+		}
+	}
+
+	// Map output names to iter var registers (or allocate temp regs for extra outputs)
+	for i, outName := range it.outputs {
+		if i < len(iterVarRegs) {
+			paramMap[outName] = iterVarRegs[i]
+		} else {
+			// Output not bound by caller — allocate a throwaway register
+			paramMap[outName] = allocUniqueVar("@out", ctx.usedVars)
+		}
+	}
+
+	// Resolve the instruction frame with paramMap
+	resolved := resolveInstructionFrame(it.frame, nil, paramMap, nil, comment)
+
+	// Emit the instruction frame
+	instrIdx := ctx.b.emit(resolved)
+
+	// Record where the body starts
+	origLen := len(ctx.b.frames)
+
+	// Emit the loop body
+	if err := ctx.emitBody(s.Body); err != nil {
+		ctx.popScope()
+		return err
+	}
+
+	// Set "next": false on the last body frame (looping — VM re-dispatches)
+	lastIdx := ctx.b.pos() - 1
+	if lastIdx >= origLen {
+		ctx.b.frames[lastIdx]["next"] = false
+	}
+
+	// Patch unlabeled @break in the body to "last" (stops the iterator)
+	for j := origLen; j < ctx.b.pos(); j++ {
+		f := ctx.b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			if label, _ := f["label"].(string); label == "" {
+				ctx.b.frames[j] = map[string]any{"op": "last"}
+			}
+		}
+	}
+
+	afterLoop := frameRef(ctx.b.pos())
+
+	// Set the done slot on the instruction frame to point past the loop
+	doneSlotNative := ""
+	if n, err := strconv.Atoi(it.doneSlot); err == nil {
+		doneSlotNative = strconv.Itoa(n + 1)
+	} else {
+		doneSlotNative = it.doneSlot
+	}
+	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
+
+	// Set the implicit "next" on the instruction frame → body start
+	if origLen > instrIdx+1 {
+		// Body frames follow the instruction frame — next goes to first body frame
+	}
+	// The instruction frame's "next" should point to the first body frame
+	// (it's already the implicit fallthrough since the body follows immediately)
+
+	// Patch labeled break placeholders
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	ctx.popScope()
+	return nil
+}
+
+// emitYieldIter emits a for-in loop backed by a yield-based (user-defined) iterator.
+// The iter body is inlined (like expandCall for fn bodies). At each yield point,
+// the caller's for-loop body is expanded inline with output bindings.
+func (p *parser) emitYieldIter(s *ForStmt, it *iterDef, ctx *emitContext, comment string) error {
+	ctx.pushScope()
+
+	// Declare iter vars
+	iterVarRegs := make([]string, len(s.IterVars))
+	for i, v := range s.IterVars {
+		iterVarRegs[i] = ctx.declareIterVar(v)
+	}
+
+	// Build paramMap for the iter's parameters (like expandCall)
+	paramMap := map[string]any{}
+	posIdx := 0
+	for _, pd := range it.params {
+		if pd.keyword == "" {
+			if posIdx < len(s.IterArgs) {
+				val, err := ctx.exprGetValue(s.IterArgs[posIdx], "")
+				if err != nil {
+					ctx.popScope()
+					return err
+				}
+				paramMap[pd.name] = val
+			}
+			posIdx++
+		} else if s.IterKwArgs != nil {
+			if expr, ok := s.IterKwArgs[pd.keyword]; ok {
+				val, err := ctx.exprGetValue(expr, "")
+				if err != nil {
+					ctx.popScope()
+					return err
+				}
+				paramMap[pd.name] = val
+			}
+		}
+	}
+
+	// Map output names to iter var registers
+	for i, outName := range it.outputs {
+		if i < len(iterVarRegs) {
+			paramMap[outName] = iterVarRegs[i]
+		} else {
+			paramMap[outName] = allocUniqueVar("@out", ctx.usedVars)
+		}
+	}
+
+	// Pre-scan for output variables (like expandCall does)
+	collectASTOutputVars(it.astBody, paramMap, ctx.usedVars)
+
+	origLen := len(ctx.b.frames)
+
+	// Emit the iter body through emitFnBody, but intercept YieldStmt.
+	// We rewrite the AST to replace yield statements with the caller's body.
+	rewritten := p.rewriteYieldToBody(it.astBody, s.Body, it.outputs, iterVarRegs)
+	if err := p.emitFnBody(rewritten, ctx.b, paramMap, ctx.usedVars, comment, 0); err != nil {
+		ctx.popScope()
+		return err
+	}
+
+	afterLoop := frameRef(ctx.b.pos())
+
+	// Patch labeled break placeholders for the entire expansion
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	ctx.popScope()
+	return nil
+}
+
+// rewriteYieldToBody creates a rewritten copy of the iter body where each
+// YieldStmt is replaced with: assignments from yield values to iter var
+// registers, followed by the caller's for-loop body.
+func (p *parser) rewriteYieldToBody(iterBody []Stmt, callerBody []Stmt, outputs []string, iterVarRegs []string) []Stmt {
+	var result []Stmt
+	for _, stmt := range iterBody {
+		switch st := stmt.(type) {
+		case *YieldStmt:
+			// Insert assignments: iter_output = yield_value
+			for i, expr := range st.Values {
+				if i < len(iterVarRegs) {
+					result = append(result, &AssignStmt{
+						Target:   outputs[i],
+						Value:    expr,
+						Internal: true,
+					})
+				}
+			}
+			// Insert the caller's body
+			result = append(result, callerBody...)
+		case *IfStmt:
+			rewritten := *st
+			rewritten.Body = p.rewriteYieldToBody(st.Body, callerBody, outputs, iterVarRegs)
+			for i, elif := range st.ElseIfs {
+				rewritten.ElseIfs[i].Body = p.rewriteYieldToBody(elif.Body, callerBody, outputs, iterVarRegs)
+			}
+			if st.Else != nil {
+				rewritten.Else = p.rewriteYieldToBody(st.Else, callerBody, outputs, iterVarRegs)
+			}
+			result = append(result, &rewritten)
+		case *ForStmt:
+			rewritten := *st
+			rewritten.Body = p.rewriteYieldToBody(st.Body, callerBody, outputs, iterVarRegs)
+			result = append(result, &rewritten)
+		case *WhileStmt:
+			rewritten := *st
+			rewritten.Body = p.rewriteYieldToBody(st.Body, callerBody, outputs, iterVarRegs)
+			result = append(result, &rewritten)
+		case *LoopStmt:
+			rewritten := *st
+			rewritten.Body = p.rewriteYieldToBody(st.Body, callerBody, outputs, iterVarRegs)
+			result = append(result, &rewritten)
+		case *ModeBlockStmt:
+			rewritten := *st
+			rewritten.Body = p.rewriteYieldToBody(st.Body, callerBody, outputs, iterVarRegs)
+			result = append(result, &rewritten)
+		default:
+			result = append(result, stmt)
+		}
+	}
+	return result
 }
 
 // emitForStmtRange emits a for loop when the Range constructor is directly visible.
@@ -1944,20 +2187,45 @@ func (p *parser) parseWaitStmt(ctx *parseContext, comment string) (*WaitStmt, er
 	}, nil
 }
 
-// parseForStmt parses a for i in <range> { ... } loop.
+// parseForStmt parses a for-in loop. Two forms:
+//
+//	Range form:    for i in Range(5) { ... }
+//	Iterator form: for comp, idx in for_component() { ... }
 func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string) (*ForStmt, error) {
 	lbl := ""
 	if len(label) > 0 {
 		lbl = label[0]
 	}
 
-	// Parse iteration variable
+	// Parse iteration variable(s): single var or comma-separated list
+	var iterVars []string
 	iterTok, err := p.expect(tokIdent)
 	if err != nil {
 		return nil, err
 	}
 	if err := p.checkVarName(iterTok.val, iterTok.pos); err != nil {
 		return nil, err
+	}
+	iterVars = append(iterVars, iterTok.val)
+
+	// Check for additional comma-separated variables
+	for {
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind != tokComma {
+			p.unget(peek)
+			break
+		}
+		varTok, err := p.expect(tokIdent)
+		if err != nil {
+			return nil, err
+		}
+		if err := p.checkVarName(varTok.val, varTok.pos); err != nil {
+			return nil, err
+		}
+		iterVars = append(iterVars, varTok.val)
 	}
 
 	// Expect 'in'
@@ -1969,11 +2237,63 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 		return nil, p.errorf(inTok.pos, "expected 'in' after for variable, got %q", inTok.val)
 	}
 
-	// Parse range expression: Range constructor, variable, or $register
+	// Parse the source: Range constructor, iterator call, or variable
 	rangeTok, err := p.next()
 	if err != nil {
 		return nil, err
 	}
+
+	// Check for iterator call
+	if rangeTok.kind == tokIdent {
+		if it := p.iters[rangeTok.val]; it != nil {
+			// Validate iter var count
+			if len(iterVars) > len(it.outputs) {
+				return nil, p.errorf(iterTok.pos, "too many variables: %s yields %d value(s), but %d variable(s) bound",
+					rangeTok.val, len(it.outputs), len(iterVars))
+			}
+
+			// Parse iterator call args
+			iterArgs, iterKwArgs, err := p.parseIterCallArgs(it, rangeTok, ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			if _, err := p.expect(tokLBrace); err != nil {
+				return nil, err
+			}
+
+			ctx.pushScope()
+			for _, v := range iterVars {
+				ctx.declareIterVar(v)
+			}
+
+			p.enterLoop(lbl)
+			body, err := ctx.parseBody(false)
+			p.exitLoop(lbl)
+
+			ctx.popScope()
+
+			if err != nil {
+				return nil, err
+			}
+
+			return &ForStmt{
+				Label:      lbl,
+				IterVars:   iterVars,
+				IterName:   rangeTok.val,
+				IterArgs:   iterArgs,
+				IterKwArgs: iterKwArgs,
+				Body:       body,
+				Comment:    comment,
+			}, nil
+		}
+	}
+
+	// Range form — must be a single variable
+	if len(iterVars) > 1 {
+		return nil, p.errorf(iterTok.pos, "Range for-loop binds exactly one variable, got %d", len(iterVars))
+	}
+
 	var rangeExpr Expr
 	if rangeTok.kind == tokIdent && rangeTok.val == "Range" {
 		rangeExpr, err = ctx.parseConstructor(rangeTok)
@@ -1981,20 +2301,23 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 			return nil, err
 		}
 	} else if rangeTok.kind == tokIdent {
+		// Check if this is a regular fn being used with for...in (error)
+		if fn := p.fns[rangeTok.val]; fn != nil && fn.hasExec() {
+			return nil, p.errorf(rangeTok.pos, "%q is a function with exec blocks, not an iterator; use 'iter' to declare iterators", rangeTok.val)
+		}
 		resolved, err := ctx.resolve(rangeTok)
 		if err != nil {
 			return nil, err
 		}
 		rangeExpr = resolved
 	} else {
-		return nil, p.errorf(rangeTok.pos, "expected Range constructor or variable after 'in', got %s", rangeTok.describe())
+		return nil, p.errorf(rangeTok.pos, "expected Range constructor, iterator, or variable after 'in', got %s", rangeTok.describe())
 	}
 
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
 
-	// Push scope for iter var + body
 	ctx.pushScope()
 	ctx.declareIterVar(iterTok.val)
 
@@ -2008,7 +2331,135 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 		return nil, err
 	}
 
-	return &ForStmt{Label: lbl, IterVar: iterTok.val, Range: rangeExpr, Body: body, Comment: comment}, nil
+	return &ForStmt{Label: lbl, IterVars: []string{iterTok.val}, Range: rangeExpr, Body: body, Comment: comment}, nil
+}
+
+// parseIterCallArgs parses positional and keyword arguments for an iterator
+// call in a for...in statement. Mirrors parseFnBodyCallArgs but uses the
+// parseContext's expression parser.
+func (p *parser) parseIterCallArgs(it *iterDef, calleeTok token, ctx *parseContext) ([]Expr, map[string]Expr, error) {
+	// Detect parenthesized call syntax
+	paren := false
+	peek, err := p.next()
+	if err != nil {
+		return nil, nil, err
+	}
+	if peek.kind == tokLParen {
+		paren = true
+	} else {
+		p.unget(peek)
+	}
+
+	posCount := 0
+	for _, pd := range it.params {
+		if pd.keyword == "" {
+			posCount++
+		}
+	}
+
+	var args []Expr
+	for i := 0; i < posCount; i++ {
+		if i > 0 {
+			if _, err := p.expect(tokComma); err != nil {
+				return nil, nil, err
+			}
+		}
+		tok, err := p.next()
+		if err != nil {
+			return nil, nil, err
+		}
+		// Skip direction annotations
+		if tok.kind == tokIdent && isDirection(tok.val) {
+			tok, err = p.next()
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		p.unget(tok)
+		arg, err := p.parseBhvOrFnExpr(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		args = append(args, arg)
+	}
+
+	// Parse optional keyword args
+	var kwArgs map[string]Expr
+	peek, err = p.next()
+	if err != nil {
+		return nil, nil, err
+	}
+	if peek.kind == tokComma && posCount < len(it.params) {
+		kwArgs = map[string]Expr{}
+		for {
+			kwTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, nil, err
+			}
+			// Skip direction annotations
+			if isDirection(kwTok.val) {
+				kwTok, err = p.expect(tokIdent)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			kw := iterKeywordByName(it, kwTok.val)
+			if kw == nil {
+				return nil, nil, p.errorf(kwTok.pos, "unknown keyword argument %q for iter %q", kwTok.val, calleeTok.val)
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return nil, nil, err
+			}
+			val, err := p.parseBhvOrFnExpr(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			kwArgs[kwTok.val] = val
+
+			next, err := p.next()
+			if err != nil {
+				return nil, nil, err
+			}
+			if next.kind != tokComma {
+				p.unget(next)
+				break
+			}
+		}
+	} else {
+		p.unget(peek)
+	}
+
+	if paren {
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return args, kwArgs, nil
+}
+
+// parseBhvOrFnExpr parses a single expression using the parseContext's resolver.
+// Used for iterator call arguments in for...in statements.
+func (p *parser) parseBhvOrFnExpr(ctx *parseContext) (Expr, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind == tokIdent && isConstructor(tok.val) {
+		return ctx.parseConstructor(tok)
+	}
+	p.unget(tok)
+	return p.parseArithExpr(ctx.resolve)
+}
+
+// iterKeywordByName returns the paramDef for the given keyword, or nil.
+func iterKeywordByName(it *iterDef, keyword string) *paramDef {
+	for i := range it.params {
+		if it.params[i].keyword == keyword {
+			return &it.params[i]
+		}
+	}
+	return nil
 }
 
 // parseModeBlockExpr parses a locked/unlocked block used as an expression.

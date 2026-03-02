@@ -514,6 +514,11 @@ to the block. The block's bindings (`entity, distance ->`) name them.
 
 #### Looping continuations
 
+> **Note:** For iterator-style loops, prefer `iter` declarations and
+> `for ... in` syntax (see [Iterators](#iterators)) over `fn...exec` with
+> continuation blocks. The continuation syntax below is still used for
+> non-iterator branching functions.
+
 Some instructions are iterators — they dispatch a body block
 repeatedly. Mark these blocks with `for` at the call site:
 
@@ -696,6 +701,90 @@ private fn my_notify(txt) {
     notify txt
 }
 ```
+
+## Iterators
+
+Iterators are functions that produce a sequence of values, consumed by
+`for ... in` loops (see [Language](language.md#for-loops)).
+
+### Declaring iterators
+
+Declare an iterator with `iter`. The `-> names` after the parameter list
+declares the output variables yielded each iteration:
+
+```doit
+iter active_components() -> comp {
+    for c, idx in for_component() {
+        if c != null {
+            yield c
+        }
+    }
+}
+```
+
+### `yield`
+
+`yield` produces values for one iteration of the calling `for` loop. The
+number of yield values must exactly match the number of declared outputs:
+
+```doit
+iter pair_components() -> comp, idx {
+    for c, i in for_component() {
+        yield c, i    # must yield exactly 2 values
+    }
+}
+```
+
+`yield` is only valid inside `iter` bodies — using it in a regular `fn`
+body is a compile error.
+
+### Instruction-backed iterators
+
+The standard library defines iterators backed by game instructions. These
+use a simplified `instruction` block with `done: N` syntax:
+
+```doit
+iter for_component() -> comp, idx {
+    instruction "for_component" {
+        0: comp
+        1: idx
+        done: 2
+    }
+}
+```
+
+The `done: N` field specifies which exec slot signals iterator exhaustion.
+Output names from `->` map directly to numbered instruction slots.
+
+### Using iterators
+
+Call iterators with `for ... in`:
+
+```doit
+for comp, idx in for_component() {
+    notify "component", value: comp
+}
+
+for i in for_number(0, 10, step: 2) {
+    notify "counting"
+}
+```
+
+### Private iterators
+
+Like functions, iterators can be declared `private`:
+
+```doit
+private iter my_filter() -> val {
+    for c in for_component() {
+        if c != null {
+            yield c
+        }
+    }
+}
+```
+
+Private iterators are only visible within the file that defines them.
 
 ## The `instruction` Intrinsic
 

@@ -141,12 +141,22 @@ type LoopStmt struct {
 	Comment string
 }
 
-// ForStmt is a for-in loop over a range: `for i in Range(5) { ... }`
+// ForStmt is a for-in loop. Range form: `for i in Range(5) { ... }`.
+// Iterator form: `for comp, idx in for_component() { ... }`.
 type ForStmt struct {
-	Label   string // "" for unlabeled
-	IterVar string // iteration variable name (let-bound)
-	Range   Expr   // range expression
-	Body    []Stmt
+	Label      string            // "" for unlabeled
+	IterVars   []string          // iteration variable names (let-bound)
+	Range      Expr              // range expression (nil for iterator form)
+	IterName   string            // iterator name (empty for Range form)
+	IterArgs   []Expr            // iterator call args (nil for Range form)
+	IterKwArgs map[string]Expr   // iterator keyword args (nil for Range form)
+	Body       []Stmt
+	Comment    string
+}
+
+// YieldStmt produces values for one iteration of an enclosing iter body.
+type YieldStmt struct {
+	Values  []Expr
 	Comment string
 }
 
@@ -301,6 +311,7 @@ func (*IfStmt) stmtNode()             {}
 func (*WhileStmt) stmtNode()          {}
 func (*LoopStmt) stmtNode()           {}
 func (*ForStmt) stmtNode()            {}
+func (*YieldStmt) stmtNode()          {}
 func (*BreakStmt) stmtNode()          {}
 func (*ExitStmt) stmtNode()           {}
 func (*WaitStmt) stmtNode()           {}

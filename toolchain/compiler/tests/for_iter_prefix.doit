@@ -1,0 +1,11 @@
+# AI-generated test
+# Prefix match: bind fewer variables than iterator yields
+behavior for_iter_prefix {
+    @name "For Iter Prefix"
+
+    for comp in for_component() {
+        notify "looping"
+    }
+
+    notify "done"
+}

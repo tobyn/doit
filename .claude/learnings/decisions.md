@@ -256,3 +256,24 @@ want wrapped values.
 
 **Keyword param omission**: When a mode keyword arg is omitted, the
 `c` field is dropped from output and the game uses its default.
+
+## Iterators (`iter` declarations)
+
+Category 2 instructions (stateful iterators) are now declared with `iter`
+instead of `fn...exec`. Key decisions:
+
+- **`iter name() -> outputs { body }`**: Separates iteration from branching.
+  `->` declares output variables (yielded per iteration).
+- **Instruction-backed iters**: Simplified `instruction` block with
+  `done: N` syntax. No `for next:` or `exec N:` needed.
+- **Yield-based wrappers**: `yield` inside an iter body produces values.
+  Compiled via AST rewriting — `rewriteYieldToBody` replaces each
+  `yield` with assignment + caller body inline.
+- **Exact yield count**: `yield` must produce exactly as many values as
+  the iter's `-> outputs` declares. Unlike `for` bindings (prefix match OK),
+  yield is strict.
+- **`skipFnDef` handles `->` syntax**: Pass 2 skips iter declarations by
+  detecting `tokArrow` after the param list and consuming output names
+  before the brace block.
+- **Import system**: `symbolSet` includes `iters map[string]*iterDef`.
+  Iters propagate through imports like fns.

@@ -547,28 +547,317 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 
 // --- Stdlib ---
 
-func parseStdlib(stdlib fs.FS) (map[string]*fnDef, map[string]*enumDef, error) {
+func parseStdlib(stdlib fs.FS) (map[string]*fnDef, map[string]*iterDef, map[string]*enumDef, error) {
 	matches, err := fs.Glob(stdlib, "*.doit")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	fns := map[string]*fnDef{}
+	iters := map[string]*iterDef{}
 	enums := map[string]*enumDef{}
 	for _, path := range matches {
 		data, err := fs.ReadFile(stdlib, path)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		if err := parseStdlibFile(string(data), fns, enums); err != nil {
-			return nil, nil, fmt.Errorf("%s: %w", path, err)
+		if err := parseStdlibFile(string(data), fns, iters, enums); err != nil {
+			return nil, nil, nil, fmt.Errorf("%s: %w", path, err)
 		}
 	}
-	return fns, enums, nil
+	return fns, iters, enums, nil
 }
 
 func isDirection(val string) bool {
 	return val == "in" || val == "out" || val == "inout"
+}
+
+// --- Iterator declarations ---
+
+// parseIterDecl parses an iter declaration:
+//
+//	iter name(params) -> out1, out2 { body }
+//
+// Returns the iterator name.
+func (p *parser) parseIterDecl(private bool) (string, error) {
+	nameTok, err := p.expect(tokIdent)
+	if err != nil {
+		return "", err
+	}
+	if Keywords[nameTok.val] {
+		return "", p.errorf(nameTok.pos, "%q is a reserved keyword and cannot be used as an iterator name", nameTok.val)
+	}
+	// Check collision with fns, consts, enums, and existing iters
+	if err := p.checkDeclName(nameTok.val, "iterator", nameTok.pos); err != nil {
+		return "", err
+	}
+	if _, exists := p.iters[nameTok.val]; exists {
+		return "", p.errorf(nameTok.pos, "duplicate iterator %q", nameTok.val)
+	}
+
+	params, err := p.parseParamList()
+	if err != nil {
+		return "", err
+	}
+
+	// Parse -> output names
+	if _, err := p.expect(tokArrow); err != nil {
+		return "", p.errorf(nameTok.pos, "iter declaration requires '-> output_names' after parameters")
+	}
+
+	var outputs []string
+	for {
+		outTok, err := p.expect(tokIdent)
+		if err != nil {
+			return "", err
+		}
+		if Keywords[outTok.val] {
+			return "", p.errorf(outTok.pos, "%q is a reserved keyword and cannot be used as an output name", outTok.val)
+		}
+		outputs = append(outputs, outTok.val)
+
+		peek, err := p.next()
+		if err != nil {
+			return "", err
+		}
+		if peek.kind == tokComma {
+			continue
+		}
+		p.unget(peek)
+		break
+	}
+	if len(outputs) == 0 {
+		return "", p.errorf(nameTok.pos, "iter declaration requires at least one output name after '->'")
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return "", err
+	}
+
+	// Build direction maps for enforcement in body
+	paramDirs := map[string]string{}
+	for _, pd := range params {
+		paramDirs[pd.name] = pd.effectiveDirection()
+	}
+	ctx := &fnBodyContext{
+		paramDirs: paramDirs,
+		fnVarInfo: map[string]fnVarInfo{},
+		inIter:    true,
+		iterOutputs: outputs,
+	}
+	ctx.resolve = p.fnBodyResolver(ctx)
+
+	// Enable function calls in boolean primary position
+	prevCallExprParser := p.callExprParser
+	p.callExprParser = func(callee *fnDef, calleeTok token) (Expr, error) {
+		args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &CallExpr{Name: calleeTok.val, Args: args, KwArgs: kwArgs}, nil
+	}
+	defer func() { p.callExprParser = prevCallExprParser }()
+
+	astBody, err := p.parseFnBodyStmts(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	// Check if this is a single instruction body (instruction-backed iter)
+	if len(astBody) == 1 {
+		if instrStmt, ok := astBody[0].(*InstructionStmt); ok {
+			return p.buildInstructionIter(nameTok.val, params, outputs, instrStmt.Frame, private)
+		}
+	}
+
+	// User-defined iter (yield-based): validate at least one yield
+	if !bodyHasYield(astBody) {
+		return "", p.errorf(nameTok.pos, "iter %q body must contain at least one 'yield' statement", nameTok.val)
+	}
+
+	p.iters[nameTok.val] = &iterDef{
+		params:  params,
+		outputs: outputs,
+		astBody: astBody,
+		private: private,
+	}
+	return nameTok.val, nil
+}
+
+// buildInstructionIter builds an instruction-backed iterDef from a parsed
+// instruction frame inside an iter body. The frame uses simplified syntax:
+// output names map to numbered slots, `done: N` signals exhaustion.
+func (p *parser) buildInstructionIter(name string, params []paramDef, outputs []string, frame map[string]any, private bool) (string, error) {
+	// Find the done slot and resolve output name → slot mappings.
+	// In the iter instruction block:
+	//   - numbered slots with output name values → output mappings
+	//   - done: N → exhaustion exec slot
+	//   - numbered slots with param name values → input mappings
+	doneSlot := ""
+	promoted := map[string]any{}
+	for k, v := range frame {
+		if k == "op" {
+			promoted[k] = v
+			continue
+		}
+		if k == "c" {
+			// combo/mode field — pass through
+			promoted[k] = v
+			continue
+		}
+		if s, ok := v.(string); ok && s == "done" {
+			// This is a `done: N` entry — but actually in our syntax it's reversed:
+			// `done: 3` means the key is "done" and value is the slot number.
+			// Wait — let me re-read the plan. The plan says:
+			//   done: N specifies which exec slot signals exhaustion
+			// So "done" is a key with a numeric value.
+			// But that would clash with the instruction parser which stores key→value.
+			// Actually looking at the frame map: key="done", value is an int.
+			// We need to handle that case.
+		}
+	}
+
+	// Re-parse: the instruction frame from parseInstruction stores entries as
+	// key → value. For iter instruction blocks, we need:
+	//   - "done" key with int value N → exec slot N-based ref for exhaustion
+	//   - output name keys with int value → output name at that slot
+	//   - param name keys → input parameter at that slot
+
+	// Actually, the instruction was parsed by the standard parseInstruction.
+	// For iter context, the simplified syntax has:
+	//   N: output_name    (output mapping)
+	//   N: param_name     (input mapping - same as fn)
+	//   done: N           (exhaustion slot)
+	//   c: mode           (combo field)
+	//
+	// The standard parseInstruction treats identifiers as string values.
+	// So output names and param names are stored as strings in the frame.
+
+	// Build param name set for disambiguation
+	paramNames := map[string]bool{}
+	for _, pd := range params {
+		paramNames[pd.name] = true
+	}
+	outputNames := map[string]bool{}
+	for _, out := range outputs {
+		outputNames[out] = true
+	}
+
+	// Clear and rebuild
+	promoted = map[string]any{"op": frame["op"]}
+
+	for k, v := range frame {
+		if k == "op" {
+			continue
+		}
+		if k == "done" {
+			// done: N — store the 0-based ref key for exhaustion
+			if n, ok := v.(int); ok {
+				doneSlot = strconv.Itoa(n)
+			} else {
+				return "", p.errorf(0, "iter %q: 'done' value must be a number", name)
+			}
+			continue
+		}
+		if k == "c" {
+			promoted[k] = v
+			continue
+		}
+		// Numbered slot
+		if s, ok := v.(string); ok {
+			if outputNames[s] {
+				// Output mapping: this slot produces this output
+				promoted[k] = s
+				continue
+			}
+			if paramNames[s] {
+				// Input mapping: this slot takes this param
+				promoted[k] = s
+				continue
+			}
+		}
+		// Pass through other values (ints, etc.)
+		promoted[k] = v
+	}
+
+	if doneSlot == "" {
+		return "", p.errorf(0, "iter %q: instruction block requires 'done: N' to specify exhaustion slot", name)
+	}
+
+	p.iters[name] = &iterDef{
+		params:   params,
+		outputs:  outputs,
+		frame:    promoted,
+		doneSlot: doneSlot,
+		private:  private,
+	}
+	return name, nil
+}
+
+// bodyHasYield reports whether a statement list contains at least one YieldStmt.
+func bodyHasYield(stmts []Stmt) bool {
+	for _, s := range stmts {
+		switch st := s.(type) {
+		case *YieldStmt:
+			return true
+		case *IfStmt:
+			if bodyHasYield(st.Body) {
+				return true
+			}
+			for _, elif := range st.ElseIfs {
+				if bodyHasYield(elif.Body) {
+					return true
+				}
+			}
+			if bodyHasYield(st.Else) {
+				return true
+			}
+		case *ForStmt:
+			if bodyHasYield(st.Body) {
+				return true
+			}
+		case *WhileStmt:
+			if bodyHasYield(st.Body) {
+				return true
+			}
+		case *LoopStmt:
+			if bodyHasYield(st.Body) {
+				return true
+			}
+		case *ModeBlockStmt:
+			if bodyHasYield(st.Body) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// parseYieldStmt parses a yield statement: `yield expr, expr, ...`
+func (p *parser) parseYieldStmt(ctx *fnBodyContext, comment string) (*YieldStmt, error) {
+	var values []Expr
+	for {
+		expr, err := p.parseFnBodyArgExpr(ctx)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, expr)
+
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind != tokComma {
+			p.unget(peek)
+			break
+		}
+	}
+
+	if len(values) != len(ctx.iterOutputs) {
+		return nil, p.errorf(0, "yield produces %d value(s), but iter declares %d output(s)", len(values), len(ctx.iterOutputs))
+	}
+
+	return &YieldStmt{Values: values, Comment: comment}, nil
 }
 
 // --- AST-based fn body parsing ---
@@ -1863,8 +2152,8 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 	return params, nil
 }
 
-func parseStdlibFile(src string, fns map[string]*fnDef, enums map[string]*enumDef) error {
-	p := &parser{scanner: scanner{src: src}, fns: fns, enums: enums}
+func parseStdlibFile(src string, fns map[string]*fnDef, iters map[string]*iterDef, enums map[string]*enumDef) error {
+	p := &parser{scanner: scanner{src: src}, fns: fns, iters: iters, enums: enums}
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -1879,8 +2168,14 @@ func parseStdlibFile(src string, fns map[string]*fnDef, enums map[string]*enumDe
 			}
 			continue
 		}
+		if tok.kind == tokIdent && tok.val == "iter" {
+			if _, err := p.parseIterDecl(false); err != nil {
+				return err
+			}
+			continue
+		}
 		if tok.kind != tokIdent || tok.val != "fn" {
-			return p.errorf(tok.pos, "expected 'fn' or 'enum', got %s", tok.describe())
+			return p.errorf(tok.pos, "expected 'fn', 'iter', or 'enum', got %s", tok.describe())
 		}
 		if _, err := p.parseUserFn(); err != nil {
 			return err
@@ -2778,7 +3073,7 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 				if p.evalStepLimit <= 0 {
 					return nil, false
 				}
-				env[s.IterVar] = map[string]any{"num": i}
+				env[s.IterVars[0]] = map[string]any{"num": i}
 				status, ok := p.tryEvalStmts(s.Body, env)
 				if !ok {
 					return nil, false
@@ -3100,7 +3395,7 @@ func (p *parser) parseFile() (*codec.Object, error) {
 				return nil, err
 			}
 			switch fnTok.val {
-			case "fn":
+			case "fn", "iter":
 				if err := p.skipFnDef(); err != nil {
 					return nil, err
 				}
@@ -3117,9 +3412,9 @@ func (p *parser) parseFile() (*codec.Object, error) {
 					return nil, err
 				}
 			default:
-				return nil, p.errorf(fnTok.pos, "expected 'fn', 'const', or 'enum' after 'private', got %q", fnTok.val)
+				return nil, p.errorf(fnTok.pos, "expected 'fn', 'iter', 'const', or 'enum' after 'private', got %q", fnTok.val)
 			}
-		case "fn":
+		case "fn", "iter":
 			if err := p.skipFnDef(); err != nil {
 				return nil, err
 			}
@@ -3142,7 +3437,7 @@ func (p *parser) parseFile() (*codec.Object, error) {
 				return nil, err
 			}
 		default:
-			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', 'enum', or 'private', got %q", tok.val)
+			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', 'iter', 'const', 'enum', or 'private', got %q", tok.val)
 		}
 	}
 }
@@ -3206,6 +3501,14 @@ func (p *parser) collectDecls(isImport bool) error {
 				if !isImport {
 					sameFileNames = append(sameFileNames, name)
 				}
+			case "iter":
+				name, err := p.parseIterDecl(true)
+				if err != nil {
+					return err
+				}
+				if !isImport {
+					sameFileNames = append(sameFileNames, name)
+				}
 			case "const":
 				name, err := p.parseConstDecl(true)
 				if err != nil {
@@ -3223,10 +3526,18 @@ func (p *parser) collectDecls(isImport bool) error {
 					sameFileNames = append(sameFileNames, name)
 				}
 			default:
-				return p.errorf(fnTok.pos, "expected 'fn', 'const', or 'enum' after 'private', got %q", fnTok.val)
+				return p.errorf(fnTok.pos, "expected 'fn', 'iter', 'const', or 'enum' after 'private', got %q", fnTok.val)
 			}
 		case "fn":
 			name, err := p.parseUserFn()
+			if err != nil {
+				return err
+			}
+			if !isImport {
+				sameFileNames = append(sameFileNames, name)
+			}
+		case "iter":
+			name, err := p.parseIterDecl(false)
 			if err != nil {
 				return err
 			}
@@ -3252,7 +3563,7 @@ func (p *parser) collectDecls(isImport bool) error {
 		case "import":
 			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
 		default:
-			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'const', 'enum', or 'private', got %q", tok.val)
+			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'iter', 'const', 'enum', or 'private', got %q", tok.val)
 		}
 	}
 
@@ -3275,6 +3586,8 @@ type fnBodyContext struct {
 	fnScopeDepth int                  // current nesting depth (0 = fn top-level)
 	resolve      operandResolver
 	execNames    []string // continuation names from exec(...) declaration (nil if none)
+	inIter       bool     // true when parsing an iter body
+	iterOutputs  []string // output names from iter -> declaration
 }
 
 // pushFnScope saves the current fnVarInfo map and increments scope depth.
@@ -4121,6 +4434,16 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			}
 			astBody = append(astBody, stmt)
 
+		case "yield":
+			if !ctx.inIter {
+				return nil, p.errorf(tok.pos, "'yield' can only be used inside an iter body")
+			}
+			stmt, err := p.parseYieldStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			astBody = append(astBody, stmt)
+
 		case "wait":
 			stmt, err := p.parseWaitStmt(p.fnParseCtx(ctx), comment)
 			if err != nil {
@@ -4153,7 +4476,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 		case "exit":
 			astBody = append(astBody, &ExitStmt{Comment: comment})
 
-		case "fn", "private":
+		case "fn", "iter", "private":
 			return nil, p.errorf(tok.pos, "function definitions cannot be nested")
 
 		case "behavior":
@@ -4889,7 +5212,9 @@ func (p *parser) skipFnDef() error {
 			break
 		}
 	}
-	// Skip optional exec(...) clause between params and body.
+	// Skip optional clauses between params and body:
+	//   fn: exec(name, name)
+	//   iter: -> name, name
 	tok, err := p.next()
 	if err != nil {
 		return err
@@ -4904,6 +5229,19 @@ func (p *parser) skipFnDef() error {
 				return err
 			}
 			if t.kind == tokRParen {
+				break
+			}
+		}
+	} else if tok.kind == tokArrow {
+		// iter output names: -> name, name, ...
+		// Skip identifiers and commas until we hit '{'
+		for {
+			t, err := p.next()
+			if err != nil {
+				return err
+			}
+			if t.kind == tokLBrace {
+				p.unget(t)
 				break
 			}
 		}

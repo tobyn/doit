@@ -1,0 +1,18 @@
+{
+  "0": {
+    "0": "comp",
+    "1": "@out",
+    "2": 3,
+    "op": "for_component"
+  },
+  "1": {
+    "next": false,
+    "op": "notify",
+    "txt": "looping"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "For Iter Prefix"
+}
