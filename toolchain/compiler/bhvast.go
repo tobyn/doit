@@ -905,18 +905,8 @@ func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) (
 	args := make([]Expr, posCount)
 	for i := 0; i < posCount; i++ {
 		if i > 0 {
-			if paren {
-				if _, err := p.expect(tokComma); err != nil {
-					return nil, nil, err
-				}
-			} else {
-				sep, err := p.next()
-				if err != nil {
-					return nil, nil, err
-				}
-				if sep.kind != tokComma {
-					p.unget(sep)
-				}
+			if _, err := p.expect(tokComma); err != nil {
+				return nil, nil, err
 			}
 		}
 

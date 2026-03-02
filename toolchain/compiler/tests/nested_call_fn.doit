@@ -2,7 +2,7 @@
 # Nested function calls in arguments in fn bodies
 fn my_fn(x) {
     let me = set_reg get_self
-    add x get_resource_num me
+    add x, get_resource_num me
 }
 
 behavior nested_call_fn {

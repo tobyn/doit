@@ -118,8 +118,8 @@ Future work will add newline awareness with three exceptions:
 block-ending statements extending to `}`, parenthesized calls
 extending to `)`, and trailing commas continuing to the next line.
 
-**Positional arg separators**: At behavior level, commas between
-positional args are optional.
+**Positional arg separators**: Commas between positional args are
+required in both parenthesized and unparenthesized call forms.
 
 **Control flow placeholders**: `@break` and `@return` are placeholder
 opcodes in intermediate frames. `@break` is patched to jump past the

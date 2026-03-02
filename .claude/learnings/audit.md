@@ -76,18 +76,6 @@ dimensions in a single pass:
 
 ### Medium
 
-- **Positional arg comma handling inconsistent between behavior and fn
-  body calls.** At behavior level, commas between positional args in
-  unparenthesized calls are optional — `f 1, 2` and `f 1 2` both work
-  (bhvast.go:882-894 consumes optional comma). In fn body unparenthesized
-  calls, commas between positional args cause an error — `f 1, 2` fails
-  with "expected argument value, got ','" because `parseFnBodyCallArgs`
-  (parse.go:828) has no comma handling for non-paren mode. The manual
-  says "multiple arguments are separated by commas" (functions.md:8)
-  without noting this distinction. Either align the behavior (add
-  optional comma consumption to fn body path) or document the
-  difference. **Design decision needed.**
-
 ### Low
 
 ### Deferred

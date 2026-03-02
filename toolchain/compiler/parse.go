@@ -825,7 +825,7 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, ctx *fnBody
 	posCount := callee.positionalCount()
 	args := make([]Expr, posCount)
 	for i := 0; i < posCount; i++ {
-		if paren && i > 0 {
+		if i > 0 {
 			if _, err := p.expect(tokComma); err != nil {
 				return nil, nil, err
 			}
