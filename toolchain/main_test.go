@@ -3307,6 +3307,89 @@ behavior a { @name "A" }`
 		}
 	})
 
+	// --- exec / continuation error cases ---
+
+	t.Run("exec_empty", func(t *testing.T) {
+		src := `fn f(x) exec() { instruction "nop" }
+behavior a { @name "A" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "exec() requires at least one") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_duplicate_name", func(t *testing.T) {
+		src := `fn f(x) exec(a, a) { instruction "nop" }
+behavior a { @name "A" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate continuation name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_collides_with_param", func(t *testing.T) {
+		src := `fn f(x) exec(x) { instruction "nop" }
+behavior a { @name "A" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "conflicts with parameter name") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_unknown_continuation_at_call", func(t *testing.T) {
+		// "c" is not in exec(a, b), so multi-block parsing doesn't recognize
+		// it as a continuation name. It falls to collapsed form where "c" is
+		// treated as a function call and fails with "unknown function".
+		src := `fn f(x) exec(a, b) {
+	instruction "nop" { exec 0: a; next: b }
+}
+behavior t { @name "T"; f(get_self) { c { notify "bad" } } }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown function") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_duplicate_continuation_block", func(t *testing.T) {
+		src := `fn f(x) exec(a, b) {
+	instruction "nop" { exec 0: a; next: b }
+}
+behavior t { @name "T"; f(get_self) { a { notify "1" } a { notify "2" } } }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate continuation block") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_binding_not_in_exec_list", func(t *testing.T) {
+		src := `fn f(x) exec(a) {
+	instruction "nop" { exec 0: z }
+}
+behavior t { @name "T" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not declared") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

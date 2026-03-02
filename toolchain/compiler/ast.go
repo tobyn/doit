@@ -16,6 +16,14 @@ type Expr interface {
 	exprNode()
 }
 
+// --- Continuation blocks ---
+
+// ContinuationBlock is a named block of code attached to a branching call.
+type ContinuationBlock struct {
+	Name   string // continuation name ("" for collapsed unnamed form)
+	Body   []Stmt
+}
+
 // --- Statement nodes ---
 
 // CallStmt is a bare function call statement: `notify "Hello"`
@@ -23,6 +31,7 @@ type CallStmt struct {
 	Name    string
 	Args    []Expr
 	KwArgs  map[string]Expr
+	Blocks  []*ContinuationBlock // nil for non-branching calls
 	Comment string
 }
 
@@ -172,6 +181,7 @@ type CallExpr struct {
 	Name   string
 	Args   []Expr
 	KwArgs map[string]Expr
+	Blocks []*ContinuationBlock // nil for non-branching calls
 }
 
 // InstructionExpr is an inline instruction block used as an expression.

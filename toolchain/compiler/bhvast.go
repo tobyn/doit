@@ -1678,7 +1678,33 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 	if err != nil {
 		return nil, err
 	}
-	return []Stmt{&CallStmt{Name: name, Args: args, KwArgs: kwArgs, Comment: comment}}, nil
+
+	// Check for continuation blocks after call args
+	var blocks []*ContinuationBlock
+	if fn.hasExec() {
+		blocks, err = p.maybeParseBhvContinuationBlocks(fn, syms)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return []Stmt{&CallStmt{Name: name, Args: args, KwArgs: kwArgs, Blocks: blocks, Comment: comment}}, nil
+}
+
+// maybeParseBhvContinuationBlocks peeks for '{' and parses continuation
+// blocks at behavior level. Returns nil if no '{' follows.
+func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) ([]*ContinuationBlock, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return nil, nil
+	}
+	return p.parseContinuationBlocks(fn, func() ([]Stmt, error) {
+		return p.parseBhvStmtBlockInner(syms)
+	})
 }
 
 // parseBhvIfStmt parses an if/else-if/else statement with full boolean
@@ -2559,10 +2585,18 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 			if err != nil {
 				return nil, false, err
 			}
+			var blocks []*ContinuationBlock
+			if fn.hasExec() {
+				blocks, err = p.maybeParseBhvContinuationBlocks(fn, syms)
+				if err != nil {
+					return nil, false, err
+				}
+			}
 			return []Stmt{&CallStmt{
 				Name:    name,
 				Args:    args,
 				KwArgs:  kwArgs,
+				Blocks:  blocks,
 				Comment: comment,
 			}}, true, nil
 		}
@@ -3308,6 +3342,15 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		fn := p.fns[s.Name]
 		if err := p.checkCallDirections(fn, s.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
 			return err
+		}
+		if s.Blocks != nil {
+			return p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, 0, s.Comment, syms.usedVars, expandCallOpts{
+				blocks: s.Blocks,
+				emitBlockBody: func(stmts []Stmt) error {
+					_, err := p.emitBehaviorStmts(stmts, b, syms)
+					return err
+				},
+			})
 		}
 		return p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, 0, s.Comment, syms.usedVars)
 

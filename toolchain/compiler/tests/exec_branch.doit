@@ -1,0 +1,22 @@
+# AI-generated test
+# Tests continuation blocks with a branching function (pure conditional)
+fn my_check(value, target) exec(larger, smaller, equal) {
+    instruction "check_number" {
+        exec 0: larger
+        exec 1: smaller
+        2: value
+        3: target
+        next: equal
+    }
+}
+
+behavior exec_branch {
+    @name "Exec Branch"
+    let a = get_self
+    let b = get_self
+    my_check(a, b) {
+        larger { notify "larger" }
+        smaller { notify "smaller" }
+        equal { notify "equal" }
+    }
+}

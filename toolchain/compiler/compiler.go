@@ -286,13 +286,21 @@ func (s *symbolSet) addNonPrivateNames(names map[string]bool) {
 	}
 }
 
+// execBinding marks an instruction block slot as wired to a continuation.
+type execBinding struct {
+	name    string // continuation name (or "return")
+	looping bool   // true if marked with `for`
+}
+
 type fnDef struct {
-	params  []paramDef
-	rets    []string       // return names (nil = no return)
-	frame   map[string]any // instruction-based (stdlib)
-	astBody []Stmt         // call-based (user-defined) — AST IR
-	private bool           // true for private fn (not visible as import)
-	scope   map[string]*fnDef // functions available when this fn was defined (for imports)
+	params      []paramDef
+	rets        []string       // return names (nil = no return)
+	frame       map[string]any // instruction-based (stdlib)
+	astBody     []Stmt         // call-based (user-defined) — AST IR
+	execNames   []string       // ordered continuation names from exec(...)
+	execLooping map[string]bool // which continuations are looping (derived from instruction block)
+	private     bool           // true for private fn (not visible as import)
+	scope       map[string]*fnDef // functions available when this fn was defined (for imports)
 }
 
 // positionalCount returns the number of positional params.
@@ -365,6 +373,11 @@ func (f *fnDef) returnCount() int {
 // hasReturn reports whether the function produces at least one return value.
 func (f *fnDef) hasReturn() bool {
 	return f.returnCount() > 0
+}
+
+// hasExec reports whether the function declares continuations.
+func (f *fnDef) hasExec() bool {
+	return len(f.execNames) > 0
 }
 
 // unitRegisters maps $name identifiers to their wire-format integers.

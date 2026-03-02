@@ -11,6 +11,225 @@ import (
 	"github.com/tobyn/doit/toolchain/codec"
 )
 
+// --- Continuation block parsing ---
+
+// parseContinuationBlocks parses continuation blocks after a function call.
+// The opening '{' has already been consumed. bodyParser parses a statement
+// block body (receives no args, returns []Stmt).
+//
+// Two forms:
+//   Multi-block:  { name1 { body } name2 { body } }
+//   Collapsed:    { body }   (name="" → leftmost exec name)
+//
+// Disambiguation: if token after '{' is an ident followed by '{' or 'for'
+// followed by an ident, it's multi-block. Otherwise collapsed.
+func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func() ([]Stmt, error)) ([]*ContinuationBlock, error) {
+	// Disambiguate multi-block vs collapsed form.
+	//
+	// Multi-block: { name1 { body } name2 { body } ... }
+	// Collapsed:   { body }
+	//
+	// The scanner only supports one unget, so we only peek tok2 when
+	// tok1 could be a continuation name (ident matching an exec name
+	// or "for"). This avoids needing to push back two tokens.
+	tok1, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	if tok1.kind == tokIdent {
+		couldBeMulti := tok1.val == "for"
+		if !couldBeMulti {
+			for _, en := range fn.execNames {
+				if en == tok1.val {
+					couldBeMulti = true
+					break
+				}
+			}
+		}
+
+		if couldBeMulti {
+			tok2, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+
+			if tok2.kind == tokLBrace || (tok1.val == "for" && tok2.kind == tokIdent) {
+				p.unget(tok2)
+				return p.parseContinuationBlocksMulti(fn, bodyParser, tok1)
+			}
+
+			// Not multi-block despite matching name — put tok2 back
+			// and fall through to collapsed form.
+			p.unget(tok2)
+		}
+	}
+
+	// Collapsed unnamed form: the body starts with tok1
+	p.unget(tok1)
+	body, err := bodyParser()
+	if err != nil {
+		return nil, err
+	}
+	// Closing '}' for outer braces consumed by bodyParser
+	return []*ContinuationBlock{{Name: "", Body: body}}, nil
+}
+
+// parseContinuationBlocksMulti parses the multi-block form:
+//   name1 { body } name2 { body } ...
+// Outer '}' terminates.
+func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func() ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
+	var blocks []*ContinuationBlock
+	seen := map[string]bool{}
+
+	// firstTok is the first token already consumed by the caller's
+	// disambiguation logic. Process it as the first loop iteration.
+	first := true
+	for {
+		var tok token
+		var err error
+		if first {
+			tok = firstTok
+			first = false
+		} else {
+			tok, err = p.next()
+			if err != nil {
+				return nil, err
+			}
+		}
+		if tok.kind == tokRBrace {
+			break // end of multi-block
+		}
+
+		// Optional 'for' prefix (looping — validated but not stored until Phase 4)
+		if tok.kind == tokIdent && tok.val == "for" {
+			tok, err = p.next()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if tok.kind != tokIdent {
+			return nil, p.errorf(tok.pos, "expected continuation name or '}', got %s", tok.describe())
+		}
+		name := tok.val
+		if Keywords[name] && name != "for" {
+			return nil, p.errorf(tok.pos, "expected continuation name, got keyword %q", name)
+		}
+
+		// Validate name against function's exec list
+		found := false
+		for _, en := range fn.execNames {
+			if en == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, p.errorf(tok.pos, "unknown continuation %q (function declares exec(%s))", name, strings.Join(fn.execNames, ", "))
+		}
+		if seen[name] {
+			return nil, p.errorf(tok.pos, "duplicate continuation block %q", name)
+		}
+		seen[name] = true
+
+		if _, err := p.expect(tokLBrace); err != nil {
+			return nil, err
+		}
+		body, err := bodyParser()
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, &ContinuationBlock{Name: name, Body: body})
+	}
+
+	if len(blocks) == 0 {
+		return nil, p.errorf(0, "empty continuation block")
+	}
+	return blocks, nil
+}
+
+// expandContinuationBlocks emits continuation block bodies after the
+// function body and patches exec binding slots in the instruction frame
+// to point to the block starts. Bridging blocks get a jump to the join
+// point after their body. emitBody is called to emit each block's
+// statement list.
+func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock, b *frameBuilder, origPos int, emitBody func([]Stmt) error) error {
+	// Resolve collapsed form: empty name → leftmost exec name
+	for _, blk := range blocks {
+		if blk.Name == "" {
+			blk.Name = fn.execNames[0]
+		}
+	}
+
+	// Emit each block's body, recording start positions
+	blockStarts := map[string]int{}
+	bridgeJumps := []int{} // indices of bridge-jump frames to patch
+
+	for _, blk := range blocks {
+		blockStarts[blk.Name] = b.pos()
+
+		if err := emitBody(blk.Body); err != nil {
+			return err
+		}
+
+		// Add bridge jump (placeholder — will be patched to join point)
+		isLooping := fn.execLooping[blk.Name]
+		if !isLooping {
+			jumpIdx := b.emit(map[string]any{
+				"op": "set_reg",
+				"1":  false,
+				"2":  false,
+				// "next" will be patched to join point
+			})
+			bridgeJumps = append(bridgeJumps, jumpIdx)
+		}
+	}
+
+	// Join point = current position after all blocks
+	joinPoint := b.pos()
+
+	// Patch bridge jumps to point to join point
+	for _, idx := range bridgeJumps {
+		b.frames[idx]["next"] = frameRef(joinPoint)
+	}
+
+	// Patch exec binding slots in instruction frames within the function body
+	bodyEnd := blockStarts[blocks[0].Name]
+	for j := origPos; j < bodyEnd; j++ {
+		f := b.frames[j]
+		for k, v := range f {
+			eb, ok := v.(execBinding)
+			if !ok {
+				continue
+			}
+			if start, hasBlock := blockStarts[eb.name]; hasBlock {
+				f[k] = frameRef(start)
+			} else if eb.name == "return" {
+				f[k] = frameRef(joinPoint)
+			} else {
+				// Unprovided continuation → bridge to join point
+				f[k] = frameRef(joinPoint)
+			}
+		}
+	}
+
+	// Patch @return placeholders in the function body to jump to join point
+	for j := origPos; j < joinPoint; j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@return" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": frameRef(joinPoint),
+			}
+		}
+	}
+
+	return nil
+}
+
 // --- Stdlib ---
 
 func parseStdlib(stdlib fs.FS) (map[string]*fnDef, map[string]*enumDef, error) {
@@ -920,8 +1139,19 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 				return err
 			}
 			callComment := inheritComment(s.Comment, comment)
-			if err := p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, pos, callComment, usedVars); err != nil {
-				return err
+			if s.Blocks != nil {
+				if err := p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, pos, callComment, usedVars, expandCallOpts{
+					blocks: s.Blocks,
+					emitBlockBody: func(stmts []Stmt) error {
+						return p.emitFnBody(stmts, b, paramMap, usedVars, comment, pos)
+					},
+				}); err != nil {
+					return err
+				}
+			} else {
+				if err := p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, pos, callComment, usedVars); err != nil {
+					return err
+				}
 			}
 
 		case *LetStmt:
@@ -2755,8 +2985,58 @@ func (p *parser) parseUserFn() (string, error) {
 		return "", err
 	}
 
-	if _, err := p.expect(tokLBrace); err != nil {
+	// Parse optional exec(...) continuation declaration
+	var execNames []string
+	tok, err := p.next()
+	if err != nil {
 		return "", err
+	}
+	if tok.kind == tokIdent && tok.val == "exec" {
+		if _, err := p.expect(tokLParen); err != nil {
+			return "", err
+		}
+		for {
+			nameTok, err := p.next()
+			if err != nil {
+				return "", err
+			}
+			if nameTok.kind == tokRParen {
+				if len(execNames) == 0 {
+					return "", p.errorf(nameTok.pos, "exec() requires at least one continuation name")
+				}
+				break
+			}
+			if len(execNames) > 0 {
+				if nameTok.kind != tokComma {
+					return "", p.errorf(nameTok.pos, "expected ',' or ')' in exec list, got %s", nameTok.describe())
+				}
+				nameTok, err = p.next()
+				if err != nil {
+					return "", err
+				}
+			}
+			if nameTok.kind != tokIdent || Keywords[nameTok.val] {
+				return "", p.errorf(nameTok.pos, "expected continuation name, got %s", nameTok.describe())
+			}
+			// Check for duplicate exec names
+			for _, existing := range execNames {
+				if existing == nameTok.val {
+					return "", p.errorf(nameTok.pos, "duplicate continuation name %q", nameTok.val)
+				}
+			}
+			// Check for collision with param names
+			for _, pd := range params {
+				if pd.name == nameTok.val {
+					return "", p.errorf(nameTok.pos, "continuation name %q conflicts with parameter name", nameTok.val)
+				}
+			}
+			execNames = append(execNames, nameTok.val)
+		}
+		if _, err := p.expect(tokLBrace); err != nil {
+			return "", err
+		}
+	} else if tok.kind != tokLBrace {
+		return "", p.errorf(tok.pos, "expected '{' or 'exec', got %s", tok.describe())
 	}
 
 	// Build direction maps for enforcement in fn body
@@ -2786,13 +3066,29 @@ func (p *parser) parseUserFn() (string, error) {
 		return "", err
 	}
 
+	// Post-parse: validate exec bindings and derive execLooping
+	var execLooping map[string]bool
+	if len(execNames) > 0 {
+		execLooping = map[string]bool{}
+		if err := validateExecBindings(astBody, execNames, execLooping); err != nil {
+			return "", err
+		}
+	}
+
+	// Helper to build fnDef with exec fields
+	makeFnDef := func(fd *fnDef) *fnDef {
+		fd.execNames = execNames
+		fd.execLooping = execLooping
+		return fd
+	}
+
 	// Pure-instruction promotion (no return): if the function body is a
 	// single instruction frame, promote it to fnDef.frame for the fast
 	// direct-frame expansion path.
 	if len(astBody) == 1 {
 		if instrStmt, ok := astBody[0].(*InstructionStmt); ok {
 			if promoted := tryPromoteInstruction(instrStmt.Frame, params, nil); promoted != nil {
-				p.fns[nameTok.val] = &fnDef{params: params, frame: promoted}
+				p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, frame: promoted})
 				return nameTok.val, nil
 			}
 		}
@@ -2840,12 +3136,12 @@ func (p *parser) parseUserFn() (string, error) {
 					// Pure-instruction promotion
 					if len(astBody) == 1 {
 						if canPromote := tryPromoteInstruction(modifiedFrame, params, rets); canPromote != nil {
-							p.fns[nameTok.val] = &fnDef{params: params, frame: canPromote}
+							p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, frame: canPromote})
 							return nameTok.val, nil
 						}
 					}
 
-					p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
+					p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody})
 					return nameTok.val, nil
 				}
 			}
@@ -2864,7 +3160,7 @@ func (p *parser) parseUserFn() (string, error) {
 				}
 				// Remove the ReturnStmt from the body
 				astBody = astBody[:len(astBody)-1]
-				p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
+				p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody})
 				return nameTok.val, nil
 			}
 		}
@@ -2884,7 +3180,7 @@ func (p *parser) parseUserFn() (string, error) {
 		// Leave ReturnStmt nodes in the body for emitFnBody to handle
 	}
 
-	p.fns[nameTok.val] = &fnDef{params: params, rets: rets, astBody: astBody}
+	p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody})
 	return nameTok.val, nil
 }
 
@@ -2893,6 +3189,11 @@ func (p *parser) parseUserFn() (string, error) {
 func tryPromoteInstruction(frame map[string]any, params []paramDef, rets []string) map[string]any {
 	opVal, _ := frame["op"].(string)
 	for _, v := range frame {
+		// Reject frames containing exec bindings — branching functions
+		// must use the AST path.
+		if _, isExec := v.(execBinding); isExec {
+			return nil
+		}
 		s, ok := v.(string)
 		if !ok {
 			continue
@@ -2934,6 +3235,50 @@ func tryPromoteInstruction(frame map[string]any, params []paramDef, rets []strin
 		}
 	}
 	return promoted
+}
+
+// validateExecBindings scans InstructionStmt frames in the AST for execBinding
+// values, validates that binding names exist in execNames (or are "return"),
+// and populates the execLooping map.
+func validateExecBindings(stmts []Stmt, execNames []string, execLooping map[string]bool) error {
+	execSet := map[string]bool{}
+	for _, name := range execNames {
+		execSet[name] = true
+	}
+	for _, stmt := range stmts {
+		switch s := stmt.(type) {
+		case *InstructionStmt:
+			for _, v := range s.Frame {
+				eb, ok := v.(execBinding)
+				if !ok {
+					continue
+				}
+				if eb.name != "return" && !execSet[eb.name] {
+					return fmt.Errorf("exec binding %q is not declared in the function's exec(...) list", eb.name)
+				}
+				if eb.looping && eb.name != "return" {
+					execLooping[eb.name] = true
+				}
+			}
+		case *ModeBlockStmt:
+			if err := validateExecBindings(s.Body, execNames, execLooping); err != nil {
+				return err
+			}
+		case *IfStmt:
+			if err := validateExecBindings(s.Body, execNames, execLooping); err != nil {
+				return err
+			}
+			for _, elif := range s.ElseIfs {
+				if err := validateExecBindings(elif.Body, execNames, execLooping); err != nil {
+					return err
+				}
+			}
+			if err := validateExecBindings(s.Else, execNames, execLooping); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // collectReturnStmts recursively collects all ReturnStmt nodes from an AST.
@@ -3162,6 +3507,22 @@ func (p *parser) parseFnBodyIfExpr(ctx *fnBodyContext, comment string) (*IfExpr,
 			return expr, nil
 		}
 	}
+}
+
+// maybeParseFnBodyContinuationBlocks peeks for '{' and parses continuation
+// blocks at fn body level. Returns nil if no '{' follows.
+func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContext) ([]*ContinuationBlock, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return nil, nil
+	}
+	return p.parseContinuationBlocks(fn, func() ([]Stmt, error) {
+		return p.parseFnBodyStmts(ctx)
+	})
 }
 
 // parseFnBodyStmts parses fn body statements until '}'. The opening '{'
@@ -3576,10 +3937,21 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				if err != nil {
 					return nil, err
 				}
+
+				// Check for continuation blocks after call args
+				var blocks []*ContinuationBlock
+				if callee.hasExec() {
+					blocks, err = p.maybeParseFnBodyContinuationBlocks(callee, ctx)
+					if err != nil {
+						return nil, err
+					}
+				}
+
 				astBody = append(astBody, &CallStmt{
 					Name:    calleeName,
 					Args:    args,
 					KwArgs:  kwArgs,
+					Blocks:  blocks,
 					Comment: comment,
 				})
 			}
@@ -4348,6 +4720,27 @@ func (p *parser) skipFnDef() error {
 			break
 		}
 	}
+	// Skip optional exec(...) clause between params and body.
+	tok, err := p.next()
+	if err != nil {
+		return err
+	}
+	if tok.kind == tokIdent && tok.val == "exec" {
+		if _, err := p.expect(tokLParen); err != nil {
+			return err
+		}
+		for {
+			t, err := p.next()
+			if err != nil {
+				return err
+			}
+			if t.kind == tokRParen {
+				break
+			}
+		}
+	} else {
+		p.unget(tok)
+	}
 	return p.skipBraceBlock()
 }
 
@@ -4376,6 +4769,35 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 		if tok.kind == tokRBrace {
 			break
 		}
+
+		// Check for exec binding modifiers: for, exec, next
+		looping := false
+		isExec := false
+
+		// 'for' modifier implies exec and looping
+		if tok.kind == tokIdent && tok.val == "for" {
+			looping = true
+			isExec = true
+			tok, err = p.next()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// 'exec' keyword marks an exec binding (redundant after 'for')
+		if tok.kind == tokIdent && tok.val == "exec" {
+			isExec = true
+			tok, err = p.next()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// 'next' as key implies exec
+		if tok.kind == tokIdent && tok.val == "next" && !isExec {
+			isExec = true
+		}
+
 		if tok.kind != tokIdent && tok.kind != tokNumber {
 			return nil, p.errorf(tok.pos, "expected field name or '}', got %s", tok.describe())
 		}
@@ -4383,28 +4805,45 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 		if _, err := p.expect(tokColon); err != nil {
 			return nil, err
 		}
-		valTok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		switch valTok.kind {
-		case tokString, tokIdent:
-			frame[key] = valTok.val
-		case tokNumber:
-			n, _ := strconv.Atoi(valTok.val)
-			frame[key] = n
-		case tokAt:
-			numTok, err := p.expect(tokNumber)
+
+		if isExec {
+			// Parse exec binding value: continuation name
+			valTok, err := p.next()
 			if err != nil {
 				return nil, err
 			}
-			n, _ := strconv.Atoi(numTok.val)
-			if n < 1 {
-				return nil, p.errorf(numTok.pos, "@N return index must be >= 1, got @%d", n)
+			if valTok.kind != tokIdent {
+				return nil, p.errorf(valTok.pos, "expected continuation name, got %s", valTok.describe())
 			}
-			frame[key] = returnSlot(n)
-		default:
-			return nil, p.errorf(valTok.pos, "expected string, identifier, number, or @N, got %s", valTok.describe())
+			// Allow "return" as a special continuation name
+			if valTok.val != "return" && Keywords[valTok.val] {
+				return nil, p.errorf(valTok.pos, "expected continuation name, got keyword %q", valTok.val)
+			}
+			frame[key] = execBinding{name: valTok.val, looping: looping}
+		} else {
+			valTok, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			switch valTok.kind {
+			case tokString, tokIdent:
+				frame[key] = valTok.val
+			case tokNumber:
+				n, _ := strconv.Atoi(valTok.val)
+				frame[key] = n
+			case tokAt:
+				numTok, err := p.expect(tokNumber)
+				if err != nil {
+					return nil, err
+				}
+				n, _ := strconv.Atoi(numTok.val)
+				if n < 1 {
+					return nil, p.errorf(numTok.pos, "@N return index must be >= 1, got @%d", n)
+				}
+				frame[key] = returnSlot(n)
+			default:
+				return nil, p.errorf(valTok.pos, "expected string, identifier, number, or @N, got %s", valTok.describe())
+			}
 		}
 	}
 
@@ -4429,10 +4868,24 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 	return frame, nil
 }
 
-func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool) error {
+// expandCallOpts holds optional parameters for expandCall.
+type expandCallOpts struct {
+	blocks       []*ContinuationBlock
+	emitBlockBody func([]Stmt) error // emitter for block bodies (behavior or fn body level)
+}
+
+func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool, opts ...expandCallOpts) error {
 	fn := p.fns[name]
 	if fn == nil {
 		return p.errorf(pos, "unknown function %q", name)
+	}
+
+	// Extract optional parameters
+	var contBlocks []*ContinuationBlock
+	var emitBlockBody func([]Stmt) error
+	if len(opts) > 0 {
+		contBlocks = opts[0].blocks
+		emitBlockBody = opts[0].emitBlockBody
 	}
 
 	paramMap := map[string]any{}
@@ -4467,7 +4920,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		}
 	}
 
-	if fn.frame != nil {
+	if fn.frame != nil && contBlocks == nil {
 		instr := resolveInstructionFrame(fn.frame, retVals, paramMap, fn.keywordVarNames(), comment)
 		b.emit(instr)
 		return nil
@@ -4502,6 +4955,22 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		setComment(f, comment)
 		b.emit(f)
 	}
+
+	// Handle continuation blocks (branching expansion)
+	if contBlocks != nil && fn.hasExec() {
+		bodyEmitter := emitBlockBody
+		if bodyEmitter == nil {
+			// Default: use emitFnBody with empty paramMap (fn body level)
+			bodyEmitter = func(stmts []Stmt) error {
+				return p.emitFnBody(stmts, b, map[string]any{}, usedVars, comment, pos)
+			}
+		}
+		if err := p.expandContinuationBlocks(fn, contBlocks, b, origPos, bodyEmitter); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	// Patch @return placeholders to jump past the entire function expansion
 	afterAll := b.pos()
 	for j := origPos; j < afterAll; j++ {

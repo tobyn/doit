@@ -65,6 +65,7 @@ var Keywords = map[string]bool{
 	"const":       true,
 	"else":        true,
 	"enum":        true,
+	"exec":        true,
 	"exit":        true,
 	"false":       true,
 	"fn":          true,
