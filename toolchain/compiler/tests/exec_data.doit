@@ -1,0 +1,25 @@
+# AI-generated test
+# Tests continuation blocks with data flow via @N bindings
+
+# Wraps check_number but also provides output data via slot 4 → @1
+fn cmp_with_data(value, target) exec(larger, smaller, equal) {
+    instruction "check_number" {
+        exec 0: larger(@1)
+        exec 1: smaller(@1)
+        2: value
+        3: target
+        4: @1
+        next: equal(@1)
+    }
+}
+
+behavior exec_data {
+    @name "Exec Data"
+    let a = get_self
+    let b = get_self
+    cmp_with_data(a, b) {
+        larger { v -> notify "larger", value: v }
+        smaller { v -> notify "smaller", value: v }
+        equal { v -> notify "equal", value: v }
+    }
+}

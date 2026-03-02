@@ -442,6 +442,86 @@ grouping.
 `for`) for early exit. When there are multiple `return` paths, the compiler
 emits jump instructions to ensure control reaches the end of the function.
 
+### Branching Functions (Continuations)
+
+Some game instructions branch execution — they choose between multiple
+paths based on a condition (e.g., `check_number` picks "larger", "smaller",
+or "equal"). Functions wrapping these instructions declare their
+continuation names with `exec`:
+
+```doit
+fn my_check(value, target) exec(larger, smaller, equal) {
+    instruction "check_number" {
+        exec 0: larger
+        exec 1: smaller
+        2: value
+        3: target
+        next: equal
+    }
+}
+```
+
+#### Calling branching functions
+
+At the call site, provide continuation blocks in braces. Each block runs
+when its named path is chosen:
+
+```doit
+my_check(a, b) {
+    larger { notify "a > b" }
+    smaller { notify "a < b" }
+    equal { notify "a == b" }
+}
+```
+
+Unprovided continuations bridge directly to the code after the call.
+Order of named blocks doesn't matter.
+
+#### Data bindings
+
+When a branching function provides output data on its exec paths,
+declare it with `@N` references in the instruction block:
+
+```doit
+fn scan_thing(target) exec(found, not_found) {
+    instruction "scan" {
+        0: target
+        1: @1
+        2: @2
+        exec 3: found(@1, @2)
+        next: not_found
+    }
+}
+```
+
+At the call site, bind the data with Kotlin-style `->` syntax:
+
+```doit
+scan_thing(enemy) {
+    found { entity, distance ->
+        notify "found", value: entity
+    }
+    not_found {
+        notify "miss"
+    }
+}
+```
+
+The `@N` numbers refer to instruction output slots. The continuation
+argument list (`found(@1, @2)`) declares which outputs are available
+to the block. The block's bindings (`entity, distance ->`) name them.
+
+#### Collapsed form
+
+When a function has a single continuation you care about, you can omit
+the continuation name. The block binds to the leftmost `exec` name:
+
+```doit
+# These are equivalent:
+my_check(a, b) { notify "a > b" }
+my_check(a, b) { larger { notify "a > b" } }
+```
+
 ### Private Functions
 
 A function defined with `private fn` is only visible within the file that

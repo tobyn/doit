@@ -353,34 +353,35 @@ A dedicated `match` expression could still be desirable as sugar
 over `if`/`else if` chains for non-continuation contexts. The two
 features complement each other.
 
-### Design status
+### Implementation status
 
-Semantics and syntax are settled. Connection type taxonomy is
-complete (bridging and looping only).
+Phases 1–3 are implemented. Phases 4–6 remain.
 
-**Settled syntax:**
+**Implemented:**
 
-- **Function signatures**: `exec(...)` after param list, no
-  connection type annotation
-- **Instruction blocks**: `exec N:` / `next:` / `for` modifiers,
-  `for` and `next` imply `exec`
-- **`return` continuation**: exit point, `return(...)` controls
-  return values, bare/absent defaults to all `@N` in order
-- **`@N` data binding**: argument lists on continuation references,
-  value arguments supported (literals only for v1)
-- **Call-site blocks**: two forms — multi-block (bare = bridging,
-  `for`-prefixed = looping) and collapsed unnamed (binds leftmost,
-  inherits connection type from definition)
-- **Data binding at call site**: Kotlin-style `{ var -> body }`
-- **`break`**: transparent through bridging blocks, targets `for`
-  (looping) blocks via `last` instruction
-- **Expression form**: tail values, arity follows if-expression
-  rules; restricted to all-bridging calls
-- **`return` in blocks**: compile error — blocks are not functions
-- **Iterator sugar**: deferred to separate implementation phase
+- **Phase 1: Parse foundations** — `exec` keyword, `fnDef.execNames`,
+  `execBinding` type, exec bindings in instruction blocks, `for`
+  modifier, validation.
+- **Phase 2: Call-site parsing + bridging codegen** — Continuation
+  blocks at call sites (multi-block and collapsed forms),
+  `expandContinuationBlocks`, bridge jumps, exec slot patching,
+  `@return` patching.
+- **Phase 3: Data flow** — `@N` args in exec bindings, `->` arrow
+  token, scanner save/restore, Kotlin-style param bindings at call
+  sites, `allocExecOutputRegs`, `findMaxExecOutputSlot`,
+  `findMaxReturnSlot`, synthetic `@retN` names for exec functions
+  without explicit `return`.
 
-**Remaining work**: implementation. Iterator `for` loop
-generalization (see separate section) is deferred to a later phase.
+**Remaining:**
+
+- **Phase 4: Looping continuations** — `for` blocks with
+  `"next": false`, `break` → `last` instruction, `for`-block break
+  targets.
+- **Phase 5: Pure-logic branching + expression form** — `return
+  <cont_name>`, expression-level branching calls, assignment form
+  (`let x = fn() { ... }`).
+- **Phase 6: Stdlib updates** — Replace ~70 control-flow stubs with
+  real exec implementations, manual + memory updates.
 
 ### Resolved issues
 

@@ -290,6 +290,7 @@ func (s *symbolSet) addNonPrivateNames(names map[string]bool) {
 type execBinding struct {
 	name    string // continuation name (or "return")
 	looping bool   // true if marked with `for`
+	args    []any  // @N references (returnSlot) and literals; nil = no data
 }
 
 type fnDef struct {

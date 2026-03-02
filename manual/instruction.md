@@ -179,6 +179,29 @@ When a function parameter resolves to an enum value (e.g.,
 `BitwiseMode::Xor` → `3`), the compiler automatically unwraps it to a
 plain integer for metadata fields.
 
+## Exec Bindings
+
+Inside function bodies, instruction blocks can declare exec (branch)
+slots using the `exec` keyword. This is used to implement branching
+functions — see [Functions](functions.md#branching-functions-continuations).
+
+```doit
+fn my_check(value, target) exec(larger, smaller, equal) {
+    instruction "check_number" {
+        exec 0: larger
+        exec 1: smaller
+        2: value
+        3: target
+        next: equal
+    }
+}
+```
+
+- `exec N:` marks a numbered slot as an exec branch
+- `next:` implies exec (the fall-through path)
+- `for` prefix marks a looping continuation: `for next: body`
+- `@N` args pass output data to continuations: `exec 0: found(@1, @2)`
+
 ## Field Reference Format
 
 Field keys in the instruction block use the reference codec's 0-based format

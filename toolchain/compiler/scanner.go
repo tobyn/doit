@@ -45,6 +45,7 @@ const (
 	tokPercent
 	tokPercentEquals
 	tokBang
+	tokArrow // ->
 	tokDot
 	tokDoubleColon
 	tokIs     // internal-only: represents the 'is' operator in comparisonTerm.op
@@ -109,6 +110,13 @@ func isConstructor(name string) bool {
 	return false
 }
 
+type scannerState struct {
+	pos          int
+	ungot        *token
+	docComment   string
+	ungotComment string
+}
+
 type scanner struct {
 	src          string
 	pos          int
@@ -117,6 +125,27 @@ type scanner struct {
 	ungotComment string // saved docComment for ungotten token
 	locale       string // BCP 47 locale tag; empty = use first entry
 	sourceFile   string // source file path for error messages (empty = main file)
+}
+
+func (s *scanner) save() scannerState {
+	var ungot *token
+	if s.ungot != nil {
+		t := *s.ungot
+		ungot = &t
+	}
+	return scannerState{
+		pos:          s.pos,
+		ungot:        ungot,
+		docComment:   s.docComment,
+		ungotComment: s.ungotComment,
+	}
+}
+
+func (s *scanner) restore(state scannerState) {
+	s.pos = state.pos
+	s.ungot = state.ungot
+	s.docComment = state.docComment
+	s.ungotComment = state.ungotComment
 }
 
 type parser struct {
@@ -350,6 +379,9 @@ func (s *scanner) next() (token, error) {
 	case c == '-' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '=':
 		s.pos += 2
 		return token{tokMinusEquals, "-=", start}, nil
+	case c == '-' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '>':
+		s.pos += 2
+		return token{tokArrow, "->", start}, nil
 	case c == '-':
 		s.pos++
 		return token{tokMinus, "-", start}, nil
@@ -590,6 +622,8 @@ func (t token) describe() string {
 		return "'%='"
 	case tokBang:
 		return "'!'"
+	case tokArrow:
+		return "'->'"
 	case tokDot:
 		return "'.'"
 	case tokDoubleColon:

@@ -1702,7 +1702,12 @@ func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) (
 		p.unget(tok)
 		return nil, nil
 	}
-	return p.parseContinuationBlocks(fn, func() ([]Stmt, error) {
+	return p.parseContinuationBlocks(fn, func(params []string) ([]Stmt, error) {
+		saved := syms.pushScope()
+		defer syms.popScope(saved)
+		for _, name := range params {
+			syms.declareVar(name, false)
+		}
 		return p.parseBhvStmtBlockInner(syms)
 	})
 }
@@ -3346,7 +3351,12 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		if s.Blocks != nil {
 			return p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, 0, s.Comment, syms.usedVars, expandCallOpts{
 				blocks: s.Blocks,
-				emitBlockBody: func(stmts []Stmt) error {
+				emitBlockBody: func(stmts []Stmt, bindings map[string]any) error {
+					for name := range bindings {
+						// At behavior level, param name = register name
+						// (allocExecOutputRegs uses param names as register names)
+						syms.declareVar(name, false)
+					}
 					_, err := p.emitBehaviorStmts(stmts, b, syms)
 					return err
 				},

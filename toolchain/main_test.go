@@ -3346,9 +3346,6 @@ behavior a { @name "A" }`
 	})
 
 	t.Run("exec_unknown_continuation_at_call", func(t *testing.T) {
-		// "c" is not in exec(a, b), so multi-block parsing doesn't recognize
-		// it as a continuation name. It falls to collapsed form where "c" is
-		// treated as a function call and fails with "unknown function".
 		src := `fn f(x) exec(a, b) {
 	instruction "nop" { exec 0: a; next: b }
 }
@@ -3357,7 +3354,7 @@ behavior t { @name "T"; f(get_self) { c { notify "bad" } } }`
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "unknown function") {
+		if !strings.Contains(err.Error(), "unknown continuation") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -3386,6 +3383,34 @@ behavior t { @name "T" }`
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(err.Error(), "not declared") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_binding_args_empty_parens", func(t *testing.T) {
+		src := `fn f(x) exec(a) {
+	instruction "nop" { exec 0: a() }
+}
+behavior t { @name "T" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty exec binding") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_binding_args_invalid_at_index", func(t *testing.T) {
+		src := `fn f(x) exec(a) {
+	instruction "nop" { exec 0: a(@0) }
+}
+behavior t { @name "T" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "@N index must be >= 1") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

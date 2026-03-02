@@ -1,0 +1,53 @@
+{
+    "0": {
+        "0": "a",
+        "op": "get_self"
+    },
+    "1": {
+        "0": "b",
+        "op": "get_self"
+    },
+    "2": {
+        "0": 4,
+        "1": 6,
+        "2": "a",
+        "3": "b",
+        "4": "v",
+        "next": 8,
+        "op": "check_number"
+    },
+    "3": {
+        "0": "v",
+        "op": "notify",
+        "txt": "larger"
+    },
+    "4": {
+        "0": false,
+        "1": false,
+        "next": 10,
+        "op": "set_reg"
+    },
+    "5": {
+        "0": "v",
+        "op": "notify",
+        "txt": "smaller"
+    },
+    "6": {
+        "0": false,
+        "1": false,
+        "next": 10,
+        "op": "set_reg"
+    },
+    "7": {
+        "0": "v",
+        "op": "notify",
+        "txt": "equal"
+    },
+    "8": {
+        "0": false,
+        "1": false,
+        "next": 10,
+        "op": "set_reg"
+    },
+    "name": "Exec Data"
+}

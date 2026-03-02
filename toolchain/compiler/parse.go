@@ -23,62 +23,53 @@ import (
 //
 // Disambiguation: if token after '{' is an ident followed by '{' or 'for'
 // followed by an ident, it's multi-block. Otherwise collapsed.
-func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func() ([]Stmt, error)) ([]*ContinuationBlock, error) {
+func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []string) ([]Stmt, error)) ([]*ContinuationBlock, error) {
 	// Disambiguate multi-block vs collapsed form.
 	//
 	// Multi-block: { name1 { body } name2 { body } ... }
-	// Collapsed:   { body }
+	// Collapsed:   { body }   or   { var -> body }
 	//
-	// The scanner only supports one unget, so we only peek tok2 when
-	// tok1 could be a continuation name (ident matching an exec name
-	// or "for"). This avoids needing to push back two tokens.
+	// Use save/restore to peek ahead without token loss.
+	saved := p.save()
 	tok1, err := p.next()
 	if err != nil {
 		return nil, err
 	}
 
 	if tok1.kind == tokIdent {
-		couldBeMulti := tok1.val == "for"
-		if !couldBeMulti {
-			for _, en := range fn.execNames {
-				if en == tok1.val {
-					couldBeMulti = true
-					break
-				}
-			}
+		tok2, err := p.next()
+		if err != nil {
+			return nil, err
 		}
 
-		if couldBeMulti {
-			tok2, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-
-			if tok2.kind == tokLBrace || (tok1.val == "for" && tok2.kind == tokIdent) {
-				p.unget(tok2)
-				return p.parseContinuationBlocksMulti(fn, bodyParser, tok1)
-			}
-
-			// Not multi-block despite matching name — put tok2 back
-			// and fall through to collapsed form.
+		// Multi-block: ident followed by '{' means named block,
+		// 'for' followed by ident means looping named block.
+		if tok2.kind == tokLBrace || (tok1.val == "for" && tok2.kind == tokIdent) {
 			p.unget(tok2)
+			return p.parseContinuationBlocksMulti(fn, bodyParser, tok1)
 		}
 	}
 
-	// Collapsed unnamed form: the body starts with tok1
-	p.unget(tok1)
-	body, err := bodyParser()
+	// Not multi-block — collapsed unnamed form.
+	p.restore(saved)
+
+	// Try Kotlin-style bindings
+	params, err := p.tryParseContBlockBindings()
 	if err != nil {
 		return nil, err
 	}
-	// Closing '}' for outer braces consumed by bodyParser
-	return []*ContinuationBlock{{Name: "", Body: body}}, nil
+
+	body, err := bodyParser(params)
+	if err != nil {
+		return nil, err
+	}
+	return []*ContinuationBlock{{Name: "", Params: params, Body: body}}, nil
 }
 
 // parseContinuationBlocksMulti parses the multi-block form:
 //   name1 { body } name2 { body } ...
 // Outer '}' terminates.
-func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func() ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
+func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params []string) ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
 	var blocks []*ContinuationBlock
 	seen := map[string]bool{}
 
@@ -136,11 +127,18 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func() ([]St
 		if _, err := p.expect(tokLBrace); err != nil {
 			return nil, err
 		}
-		body, err := bodyParser()
+
+		// Try Kotlin-style bindings: ident -> or ident, ident, ... ->
+		params, err := p.tryParseContBlockBindings()
 		if err != nil {
 			return nil, err
 		}
-		blocks = append(blocks, &ContinuationBlock{Name: name, Body: body})
+
+		body, err := bodyParser(params)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, &ContinuationBlock{Name: name, Params: params, Body: body})
 	}
 
 	if len(blocks) == 0 {
@@ -149,16 +147,245 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func() ([]St
 	return blocks, nil
 }
 
+// tryParseContBlockBindings tries to parse Kotlin-style variable bindings
+// at the start of a continuation block body: `var ->` or `a, b ->`.
+// If bindings are found, returns the parameter names. If no arrow is found,
+// restores scanner state and returns nil.
+func (p *parser) tryParseContBlockBindings() ([]string, error) {
+	saved := p.save()
+
+	var names []string
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind != tokIdent {
+			p.restore(saved)
+			return nil, nil
+		}
+		if Keywords[tok.val] {
+			p.restore(saved)
+			return nil, nil
+		}
+		names = append(names, tok.val)
+
+		sep, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if sep.kind == tokArrow {
+			return names, nil
+		}
+		if sep.kind != tokComma {
+			p.restore(saved)
+			return nil, nil
+		}
+	}
+}
+
+// allocExecOutputRegs builds a mapping from returnSlot(N) indices to register
+// names for a branching function's exec output data. If a slot already has a
+// register assigned via fn.rets + paramMap (from the caller's retVals), that
+// register is reused. Otherwise, a new register is allocated using block param
+// names when available, falling back to "@out". Newly allocated registers are
+// written back to paramMap so resolveInstructionFrame can resolve them.
+func allocExecOutputRegs(fn *fnDef, blocks []*ContinuationBlock, maxSlot int, paramMap map[string]any, usedVars map[string]bool) map[int]string {
+	regs := map[int]string{}
+
+	// Build a map from continuation name → execBinding for arg lookup
+	ebMap := map[string]execBinding{}
+	for _, s := range fn.astBody {
+		instrStmt, ok := s.(*InstructionStmt)
+		if !ok {
+			continue
+		}
+		for _, v := range instrStmt.Frame {
+			if eb, ok := v.(execBinding); ok {
+				ebMap[eb.name] = eb
+			}
+		}
+	}
+
+	// First pass: reuse registers already assigned via fn.rets + paramMap
+	for i := 1; i <= maxSlot; i++ {
+		retIdx := i - 1
+		if retIdx < len(fn.rets) {
+			if target, ok := paramMap[fn.rets[retIdx]].(string); ok {
+				regs[i] = target
+			}
+		}
+	}
+
+	// Second pass: allocate new registers for unassigned slots, using
+	// block param names when available. Param names are used directly
+	// (not through allocUniqueVar) because at behavior level the param
+	// name IS the register name — it was already declared in scope
+	// during parsing.
+	for _, blk := range blocks {
+		eb := ebMap[blk.Name]
+		for i, paramName := range blk.Params {
+			if i >= len(eb.args) {
+				break
+			}
+			rs, ok := eb.args[i].(returnSlot)
+			if !ok {
+				continue
+			}
+			slot := int(rs)
+			if _, already := regs[slot]; already {
+				continue // slot already assigned
+			}
+			regs[slot] = paramName
+			usedVars[paramName] = true
+		}
+	}
+
+	// Fill remaining slots with generic names
+	for i := 1; i <= maxSlot; i++ {
+		if _, ok := regs[i]; !ok {
+			regs[i] = allocUniqueVar("@out", usedVars)
+		}
+	}
+
+	// Write newly allocated registers back to paramMap so
+	// resolveInstructionFrame can resolve returnSlot values to them
+	for i := 1; i <= maxSlot; i++ {
+		retIdx := i - 1
+		if retIdx < len(fn.rets) {
+			paramMap[fn.rets[retIdx]] = regs[i]
+		}
+	}
+
+	return regs
+}
+
+// findMaxExecOutputSlot scans AST bodies for InstructionStmt frames with
+// execBinding args and returns the highest returnSlot index used. Returns 0
+// if no exec bindings have data args.
+func findMaxExecOutputSlot(stmts []Stmt) int {
+	max := 0
+	for _, s := range stmts {
+		instrStmt, ok := s.(*InstructionStmt)
+		if !ok {
+			continue
+		}
+		for _, v := range instrStmt.Frame {
+			eb, ok := v.(execBinding)
+			if !ok {
+				continue
+			}
+			for _, arg := range eb.args {
+				if rs, ok := arg.(returnSlot); ok {
+					if int(rs) > max {
+						max = int(rs)
+					}
+				}
+			}
+		}
+	}
+	return max
+}
+
+// findMaxReturnSlot scans AST bodies for InstructionStmt frames with
+// direct returnSlot values (not inside exec bindings) and returns the
+// highest index used. Returns 0 if none found.
+func findMaxReturnSlot(stmts []Stmt) int {
+	max := 0
+	for _, s := range stmts {
+		instrStmt, ok := s.(*InstructionStmt)
+		if !ok {
+			continue
+		}
+		for _, v := range instrStmt.Frame {
+			if rs, ok := v.(returnSlot); ok {
+				if int(rs) > max {
+					max = int(rs)
+				}
+			}
+		}
+	}
+	return max
+}
+
+// parseExecBindingArgs parses the argument list after a continuation name
+// in an instruction block: name(@1, @2) or return(@1). The opening '('
+// has already been consumed. Returns the list of args (returnSlot values,
+// integers, false for null).
+func (p *parser) parseExecBindingArgs() ([]any, error) {
+	var args []any
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind == tokRParen {
+			break
+		}
+		if len(args) > 0 {
+			if tok.kind != tokComma {
+				return nil, p.errorf(tok.pos, "expected ',' or ')' in exec binding args, got %s", tok.describe())
+			}
+			tok, err = p.next()
+			if err != nil {
+				return nil, err
+			}
+		}
+		switch tok.kind {
+		case tokAt:
+			numTok, err := p.expect(tokNumber)
+			if err != nil {
+				return nil, err
+			}
+			n, _ := strconv.Atoi(numTok.val)
+			if n < 1 {
+				return nil, p.errorf(numTok.pos, "@N index must be >= 1, got @%d", n)
+			}
+			args = append(args, returnSlot(n))
+		case tokNumber:
+			n, _ := strconv.Atoi(tok.val)
+			args = append(args, n)
+		case tokIdent:
+			if tok.val == "null" || tok.val == "false" {
+				args = append(args, false)
+			} else {
+				return nil, p.errorf(tok.pos, "expected @N, number, or null in exec binding args, got identifier %q", tok.val)
+			}
+		default:
+			return nil, p.errorf(tok.pos, "expected @N, number, or null in exec binding args, got %s", tok.describe())
+		}
+	}
+	if len(args) == 0 {
+		return nil, p.errorf(0, "empty exec binding argument list")
+	}
+	return args, nil
+}
+
 // expandContinuationBlocks emits continuation block bodies after the
 // function body and patches exec binding slots in the instruction frame
 // to point to the block starts. Bridging blocks get a jump to the join
 // point after their body. emitBody is called to emit each block's
-// statement list.
-func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock, b *frameBuilder, origPos int, emitBody func([]Stmt) error) error {
+// statement list with optional param bindings. execOutputRegs maps
+// returnSlot(N) indices to allocated register names (nil if no data).
+func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock, b *frameBuilder, origPos int, emitBody func([]Stmt, map[string]any) error, execOutputRegs map[int]string) error {
 	// Resolve collapsed form: empty name → leftmost exec name
 	for _, blk := range blocks {
 		if blk.Name == "" {
 			blk.Name = fn.execNames[0]
+		}
+	}
+
+	// Build a map from continuation name → execBinding for data lookup
+	execBindings := map[string]execBinding{}
+	for _, s := range fn.astBody {
+		instrStmt, ok := s.(*InstructionStmt)
+		if !ok {
+			continue
+		}
+		for _, v := range instrStmt.Frame {
+			if eb, ok := v.(execBinding); ok {
+				execBindings[eb.name] = eb
+			}
 		}
 	}
 
@@ -169,7 +396,23 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 	for _, blk := range blocks {
 		blockStarts[blk.Name] = b.pos()
 
-		if err := emitBody(blk.Body); err != nil {
+		// Build param bindings: map block param names to register names
+		var bindings map[string]any
+		if len(blk.Params) > 0 && execOutputRegs != nil {
+			eb := execBindings[blk.Name]
+			bindings = map[string]any{}
+			for i, paramName := range blk.Params {
+				if i < len(eb.args) {
+					if rs, ok := eb.args[i].(returnSlot); ok {
+						if reg, ok := execOutputRegs[int(rs)]; ok {
+							bindings[paramName] = reg
+						}
+					}
+				}
+			}
+		}
+
+		if err := emitBody(blk.Body, bindings); err != nil {
 			return err
 		}
 
@@ -1142,8 +1385,12 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			if s.Blocks != nil {
 				if err := p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, pos, callComment, usedVars, expandCallOpts{
 					blocks: s.Blocks,
-					emitBlockBody: func(stmts []Stmt) error {
-						return p.emitFnBody(stmts, b, paramMap, usedVars, comment, pos)
+					emitBlockBody: func(stmts []Stmt, bindings map[string]any) error {
+						pm := maps.Clone(paramMap)
+						for k, v := range bindings {
+							pm[k] = v
+						}
+						return p.emitFnBody(stmts, b, pm, usedVars, comment, pos)
 					},
 				}); err != nil {
 					return err
@@ -3099,7 +3346,31 @@ func (p *parser) parseUserFn() (string, error) {
 	var rets []string
 
 	if len(returns) == 0 {
-		// No return: rets stays nil
+		// No explicit return. For exec functions, check if instruction
+		// frames contain returnSlot values (from @N in data slots or
+		// exec binding args). Convert them to synthetic names so
+		// resolveInstructionFrame can resolve them through paramMap.
+		if len(execNames) > 0 {
+			maxSlot := findMaxReturnSlot(astBody)
+			if maxSlot > 0 {
+				for i := 1; i <= maxSlot; i++ {
+					rets = append(rets, "@ret"+strconv.Itoa(i))
+				}
+				// Replace returnSlot values in instruction frames
+				// with synthetic name references
+				for _, s := range astBody {
+					instrStmt, ok := s.(*InstructionStmt)
+					if !ok {
+						continue
+					}
+					for k, v := range instrStmt.Frame {
+						if rs, ok := v.(returnSlot); ok {
+							instrStmt.Frame[k] = "@ret" + strconv.Itoa(int(rs))
+						}
+					}
+				}
+			}
+		}
 	} else {
 		// Check if single return at end of top-level body
 		lastStmt := astBody[len(astBody)-1]
@@ -3520,7 +3791,12 @@ func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContex
 		p.unget(tok)
 		return nil, nil
 	}
-	return p.parseContinuationBlocks(fn, func() ([]Stmt, error) {
+	return p.parseContinuationBlocks(fn, func(params []string) ([]Stmt, error) {
+		saved, depth := ctx.pushFnScope()
+		defer ctx.popFnScope(saved, depth)
+		for _, name := range params {
+			ctx.declareFnVar(name, false)
+		}
 		return p.parseFnBodyStmts(ctx)
 	})
 }
@@ -4807,7 +5083,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 		}
 
 		if isExec {
-			// Parse exec binding value: continuation name
+			// Parse exec binding value: continuation name + optional args
 			valTok, err := p.next()
 			if err != nil {
 				return nil, err
@@ -4819,7 +5095,23 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 			if valTok.val != "return" && Keywords[valTok.val] {
 				return nil, p.errorf(valTok.pos, "expected continuation name, got keyword %q", valTok.val)
 			}
-			frame[key] = execBinding{name: valTok.val, looping: looping}
+			eb := execBinding{name: valTok.val, looping: looping}
+
+			// Parse optional argument list: name(@1, @2) or return(@1)
+			peek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if peek.kind == tokLParen {
+				eb.args, err = p.parseExecBindingArgs()
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				p.unget(peek)
+			}
+
+			frame[key] = eb
 		} else {
 			valTok, err := p.next()
 			if err != nil {
@@ -4870,8 +5162,8 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 
 // expandCallOpts holds optional parameters for expandCall.
 type expandCallOpts struct {
-	blocks       []*ContinuationBlock
-	emitBlockBody func([]Stmt) error // emitter for block bodies (behavior or fn body level)
+	blocks        []*ContinuationBlock
+	emitBlockBody func(stmts []Stmt, bindings map[string]any) error // emitter for block bodies; bindings map param names to register values
 }
 
 func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool, opts ...expandCallOpts) error {
@@ -4882,7 +5174,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 
 	// Extract optional parameters
 	var contBlocks []*ContinuationBlock
-	var emitBlockBody func([]Stmt) error
+	var emitBlockBody func([]Stmt, map[string]any) error
 	if len(opts) > 0 {
 		contBlocks = opts[0].blocks
 		emitBlockBody = opts[0].emitBlockBody
@@ -4939,6 +5231,18 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		}
 	}
 
+	// For branching functions with continuation data, allocate output
+	// registers for @N slots so resolveInstructionFrame assigns them.
+	// Reuses registers already assigned via fn.rets + retVals when
+	// possible, allocates new ones using block param names otherwise.
+	var execOutputRegs map[int]string // returnSlot(N) → register name
+	if contBlocks != nil && fn.hasExec() {
+		maxSlot := findMaxExecOutputSlot(fn.astBody)
+		if maxSlot > 0 {
+			execOutputRegs = allocExecOutputRegs(fn, contBlocks, maxSlot, paramMap, usedVars)
+		}
+	}
+
 	origPos := b.pos()
 	err := p.emitFnBody(fn.astBody, b, paramMap, usedVars, comment, pos)
 
@@ -4961,11 +5265,15 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		bodyEmitter := emitBlockBody
 		if bodyEmitter == nil {
 			// Default: use emitFnBody with empty paramMap (fn body level)
-			bodyEmitter = func(stmts []Stmt) error {
-				return p.emitFnBody(stmts, b, map[string]any{}, usedVars, comment, pos)
+			bodyEmitter = func(stmts []Stmt, bindings map[string]any) error {
+				pm := maps.Clone(paramMap)
+				for k, v := range bindings {
+					pm[k] = v
+				}
+				return p.emitFnBody(stmts, b, pm, usedVars, comment, pos)
 			}
 		}
-		if err := p.expandContinuationBlocks(fn, contBlocks, b, origPos, bodyEmitter); err != nil {
+		if err := p.expandContinuationBlocks(fn, contBlocks, b, origPos, bodyEmitter, execOutputRegs); err != nil {
 			return err
 		}
 		return nil

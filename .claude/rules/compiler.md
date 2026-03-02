@@ -131,3 +131,18 @@ variable rename collision avoidance.
 **Inline variable renaming**: When inlining via `expandCall`, internal
 variables are pre-scanned by `collectASTOutputVars` and renamed with
 `allocUniqueVar` to avoid collisions with the caller's namespace.
+
+**Continuations and branching**: Functions declare exec branches via
+`exec(name1, name2)` after the param list. Instruction blocks bind
+exec slots with `exec N: name` or `next: name` syntax. `execBinding`
+structs in instruction frames are patched to `frameRef` targets by
+`expandContinuationBlocks`. Exec bindings can carry data via
+`@N` args (e.g., `exec 0: found(@1, @2)`) that map instruction
+output slots to continuation block params. Call sites use Kotlin-style
+bindings (`{ name -> body }`) to receive this data. Scanner supports
+`->` (tokArrow) and save/restore for multi-token lookahead.
+`allocExecOutputRegs` allocates registers for exec data output slots,
+reusing caller-provided registers from `fn.rets`+`retVals` when
+available. Functions without explicit `return` that have instruction
+frames with `returnSlot` values get synthetic `@retN` names via
+`findMaxReturnSlot`.

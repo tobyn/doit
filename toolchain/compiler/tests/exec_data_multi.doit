@@ -1,0 +1,27 @@
+# AI-generated test
+# Tests multiple params in Kotlin-style continuation bindings
+
+# Function with two data outputs available on exec branches
+fn scan_thing(target) exec(found, not_found) {
+    instruction "scan" {
+        0: target
+        1: @1
+        2: @2
+        exec 3: found(@1, @2)
+        next: not_found
+    }
+}
+
+behavior exec_data_multi {
+    @name "Exec Data Multi"
+    let t = get_self
+    scan_thing(t) {
+        found { entity, distance ->
+            notify "found", value: entity
+            notify "dist", value: distance
+        }
+        not_found {
+            notify "miss"
+        }
+    }
+}
