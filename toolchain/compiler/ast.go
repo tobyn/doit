@@ -23,6 +23,7 @@ type ContinuationBlock struct {
 	Name    string   // continuation name ("" for collapsed unnamed form)
 	Params  []string // Kotlin-style bindings (e.g., "comp, idx ->"); nil = no data
 	Body    []Stmt
+	Tail    Expr // non-nil for expression-form blocks (value produced by this path)
 	Looping bool // true if prefixed with `for` at call site
 }
 
@@ -100,9 +101,11 @@ type ModeBlockStmt struct {
 }
 
 // ReturnStmt is a return from a function body: `return x, y`
+// When Continuation is non-empty, it's a continuation dispatch: `return big`
 type ReturnStmt struct {
-	Values  []Expr // nil for bare return (not currently used)
-	Comment string
+	Values       []Expr // nil for bare return or continuation dispatch
+	Continuation string // non-empty = dispatch to this exec continuation
+	Comment      string
 }
 
 // IfStmt is an if/else-if/else block.

@@ -1,0 +1,14 @@
+fn is_big(a) exec(yes, no) {
+    if a > 5 {
+        return yes
+    }
+    return no
+}
+
+behavior "Pure Logic Branch" {
+    var x = 10
+    is_big(x) {
+        yes { notify "big" }
+        no { notify "small" }
+    }
+}

@@ -1,0 +1,21 @@
+# AI-generated test
+fn is_big(a) exec(yes, no) {
+    if a > 5 {
+        return yes
+    }
+    return no
+}
+
+fn classify(a) {
+    let result = is_big(a) {
+        yes { 1 }
+        no { 0 }
+    }
+    return result
+}
+
+behavior "Exec Expr Fn" {
+    var x = 10
+    let val = classify(x)
+    notify "done", value: val
+}

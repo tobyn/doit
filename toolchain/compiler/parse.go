@@ -379,7 +379,9 @@ func (p *parser) parseExecBindingArgs() ([]any, error) {
 // point after their body. emitBody is called to emit each block's
 // statement list with optional param bindings. execOutputRegs maps
 // returnSlot(N) indices to allocated register names (nil if no data).
-func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock, b *frameBuilder, origPos int, emitBody func([]Stmt, map[string]any) error, execOutputRegs map[int]string) error {
+// emitTail, if non-nil, is called after each block's body to emit
+// the block's tail expression to the return target (expression form).
+func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock, b *frameBuilder, origPos int, emitBody func([]Stmt, map[string]any) error, execOutputRegs map[int]string, emitTail func(Expr) error) error {
 	// Resolve collapsed form: empty name → leftmost exec name
 	for _, blk := range blocks {
 		if blk.Name == "" {
@@ -426,6 +428,13 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 
 		if err := emitBody(blk.Body, bindings); err != nil {
 			return err
+		}
+
+		// Emit tail expression for expression-form blocks
+		if blk.Tail != nil && emitTail != nil {
+			if err := emitTail(blk.Tail); err != nil {
+				return err
+			}
 		}
 
 		if blk.Looping {
@@ -486,7 +495,7 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 		}
 	}
 
-	// Patch @return placeholders in the function body to jump to join point
+	// Patch @return and @exec_<name> placeholders in the function body
 	for j := origPos; j < joinPoint; j++ {
 		f := b.frames[j]
 		if op, _ := f["op"].(string); op == "@return" {
@@ -495,6 +504,16 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 				"1":    false,
 				"2":    false,
 				"next": frameRef(joinPoint),
+			}
+		}
+		// Patch @exec_<name> continuation dispatch placeholders
+		if next, ok := f["next"].(string); ok && strings.HasPrefix(next, "@exec_") {
+			contName := next[len("@exec_"):]
+			if start, hasBlock := blockStarts[contName]; hasBlock {
+				f["next"] = frameRef(start)
+			} else {
+				// Unprovided continuation → bridge to join point
+				f["next"] = frameRef(joinPoint)
 			}
 		}
 	}
@@ -1214,6 +1233,22 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 		if err != nil {
 			return err
 		}
+		if e.Blocks != nil {
+			opts := expandCallOpts{
+				blocks: e.Blocks,
+				emitBlockBody: func(stmts []Stmt, bindings map[string]any) error {
+					pm := maps.Clone(paramMap)
+					for k, v := range bindings {
+						pm[k] = v
+					}
+					return p.emitFnBody(stmts, b, pm, usedVars, comment, pos)
+				},
+				emitTail: func(tail Expr) error {
+					return p.emitExprTo(tail, target, b, paramMap, usedVars, comment, pos)
+				},
+			}
+			return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, pos, comment, usedVars, opts)
+		}
 		return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, pos, comment, usedVars)
 	case *InstructionExpr:
 		resolved := resolveInstructionFrame(e.Frame, []any{target}, paramMap, nil, comment)
@@ -1631,62 +1666,73 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			b.emit(f)
 
 		case *ReturnStmt:
-			// Emit values to @retK targets, then emit @return jump placeholder
 			callComment := inheritComment(s.Comment, comment)
-			retOffset := 0
-			for _, val := range s.Values {
-				switch e := val.(type) {
-				case *CallExpr:
-					callee := p.fns[e.Name]
-					rc := callee.returnCount()
-					retVals := make([]any, rc)
-					for j := 0; j < rc; j++ {
-						retVals[j] = resolveVarName("@ret"+strconv.Itoa(retOffset+j+1), paramMap)
+
+			if s.Continuation != "" {
+				// Continuation dispatch: emit @exec_<name> placeholder
+				b.emit(map[string]any{
+					"op":   "set_reg",
+					"1":    false,
+					"2":    false,
+					"next": "@exec_" + s.Continuation,
+				})
+			} else {
+				// Emit values to @retK targets, then emit @return jump placeholder
+				retOffset := 0
+				for _, val := range s.Values {
+					switch e := val.(type) {
+					case *CallExpr:
+						callee := p.fns[e.Name]
+						rc := callee.returnCount()
+						retVals := make([]any, rc)
+						for j := 0; j < rc; j++ {
+							retVals[j] = resolveVarName("@ret"+strconv.Itoa(retOffset+j+1), paramMap)
+						}
+						resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(e.Args, e.KwArgs, b, paramMap, usedVars, pos)
+						if err != nil {
+							return err
+						}
+						if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, callComment, usedVars); err != nil {
+							return err
+						}
+						retOffset += rc
+					case *InstructionExpr:
+						rc := frameReturnCount(e.Frame)
+						retVals := make([]any, rc)
+						for j := 0; j < rc; j++ {
+							retVals[j] = resolveVarName("@ret"+strconv.Itoa(retOffset+j+1), paramMap)
+						}
+						resolved := resolveInstructionFrame(e.Frame, retVals, paramMap, nil, callComment)
+						b.emit(resolved)
+						retOffset += rc
+					default:
+						target := resolveVarName("@ret"+strconv.Itoa(retOffset+1), paramMap)
+						if err := p.emitExprTo(val, target, b, paramMap, usedVars, callComment, pos); err != nil {
+							return err
+						}
+						retOffset++
 					}
-					resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(e.Args, e.KwArgs, b, paramMap, usedVars, pos)
-					if err != nil {
-						return err
-					}
-					if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, callComment, usedVars); err != nil {
-						return err
-					}
-					retOffset += rc
-				case *InstructionExpr:
-					rc := frameReturnCount(e.Frame)
-					retVals := make([]any, rc)
-					for j := 0; j < rc; j++ {
-						retVals[j] = resolveVarName("@ret"+strconv.Itoa(retOffset+j+1), paramMap)
-					}
-					resolved := resolveInstructionFrame(e.Frame, retVals, paramMap, nil, callComment)
-					b.emit(resolved)
-					retOffset += rc
-				default:
-					target := resolveVarName("@ret"+strconv.Itoa(retOffset+1), paramMap)
-					if err := p.emitExprTo(val, target, b, paramMap, usedVars, callComment, pos); err != nil {
-						return err
-					}
-					retOffset++
 				}
-			}
-			// Zero remaining @retK slots
-			totalRets := 0
-			for k := range paramMap {
-				if strings.HasPrefix(k, "@ret") {
-					n, err := strconv.Atoi(k[4:])
-					if err == nil && n > totalRets {
-						totalRets = n
+				// Zero remaining @retK slots
+				totalRets := 0
+				for k := range paramMap {
+					if strings.HasPrefix(k, "@ret") {
+						n, err := strconv.Atoi(k[4:])
+						if err == nil && n > totalRets {
+							totalRets = n
+						}
 					}
 				}
+				for i := retOffset + 1; i <= totalRets; i++ {
+					target := resolveVarName("@ret"+strconv.Itoa(i), paramMap)
+					f := map[string]any{"op": "set_reg", "1": false, "2": target}
+					b.emit(f)
+				}
+				// Emit @return jump placeholder
+				b.emit(map[string]any{
+					"op": "@return",
+				})
 			}
-			for i := retOffset + 1; i <= totalRets; i++ {
-				target := resolveVarName("@ret"+strconv.Itoa(i), paramMap)
-				f := map[string]any{"op": "set_reg", "1": false, "2": target}
-				b.emit(f)
-			}
-			// Emit @return jump placeholder
-			b.emit(map[string]any{
-				"op": "@return",
-			})
 		}
 	}
 	return nil
@@ -3163,6 +3209,7 @@ type fnBodyContext struct {
 	fnVarInfo    map[string]fnVarInfo // name -> var info (mutability, depth, used tracking)
 	fnScopeDepth int                  // current nesting depth (0 = fn top-level)
 	resolve      operandResolver
+	execNames    []string // continuation names from exec(...) declaration (nil if none)
 }
 
 // pushFnScope saves the current fnVarInfo map and increments scope depth.
@@ -3211,6 +3258,16 @@ func (ctx *fnBodyContext) markExprUsed(expr Expr) {
 	if ident, ok := expr.(*IdentExpr); ok {
 		ctx.markFnVarUsed(ident.Name)
 	}
+}
+
+// isExecName reports whether name is a declared continuation in exec(...).
+func (ctx *fnBodyContext) isExecName(name string) bool {
+	for _, en := range ctx.execNames {
+		if en == name {
+			return true
+		}
+	}
+	return false
 }
 
 // canAssign checks whether name can be written to in a fn body context.
@@ -3323,6 +3380,7 @@ func (p *parser) parseUserFn() (string, error) {
 	ctx := &fnBodyContext{
 		paramDirs: paramDirs,
 		fnVarInfo: map[string]fnVarInfo{},
+		execNames: execNames,
 	}
 	ctx.resolve = p.fnBodyResolver(ctx)
 
@@ -3834,6 +3892,54 @@ func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContex
 	})
 }
 
+// maybeParseFnBodyContinuationBlocksExpr peeks for '{' and parses
+// continuation blocks in expression form (each block has a tail
+// expression). Returns nil if no '{' follows. Looping blocks are
+// rejected — expression form requires all bridging.
+func (p *parser) maybeParseFnBodyContinuationBlocksExpr(fn *fnDef, ctx *fnBodyContext) ([]*ContinuationBlock, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return nil, nil
+	}
+	lbracePos := tok.pos
+	blocks, err := p.parseContinuationBlocks(fn, func(params []string, looping bool) ([]Stmt, error) {
+		saved, depth := ctx.pushFnScope()
+		defer ctx.popFnScope(saved, depth)
+		for _, name := range params {
+			ctx.declareFnVar(name, false)
+		}
+		if looping {
+			p.loopDepth++
+			defer func() { p.loopDepth-- }()
+		}
+		return p.parseFnBodyStmtsInner(ctx, true) // exprTail=true
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Extract tails and validate
+	for _, blk := range blocks {
+		if blk.Looping {
+			return nil, p.errorf(lbracePos, "looping continuation cannot be used in expression form")
+		}
+		if len(blk.Body) == 0 {
+			return nil, p.errorf(lbracePos, "empty continuation expression block")
+		}
+		last := blk.Body[len(blk.Body)-1]
+		tail, ok := last.(*exprTailStmt)
+		if !ok {
+			return nil, p.errorf(lbracePos, "last item in continuation expression block must be a value-producing expression")
+		}
+		blk.Tail = tail.Expr
+		blk.Body = blk.Body[:len(blk.Body)-1]
+	}
+	return blocks, nil
+}
+
 // parseFnBodyStmts parses fn body statements until '}'. The opening '{'
 // has been consumed. Returns the parsed statements.
 func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
@@ -3935,6 +4041,9 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 					return nil, err
 				}
 				astBody = append(astBody, &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame}}, Comment: comment})
+			} else if retPeek.kind == tokIdent && ctx.isExecName(retPeek.val) {
+				// Continuation dispatch: return <cont_name>
+				astBody = append(astBody, &ReturnStmt{Continuation: retPeek.val, Comment: comment})
 			} else {
 				p.unget(retPeek)
 				var values []Expr
@@ -4190,12 +4299,22 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						astBody = append(astBody, &exprTailStmt{Expr: &LiteralExpr{Value: map[string]any{"num": 1}}})
 						return astBody, nil
 					}
-					if callee != nil && callee.hasReturn() {
+					if callee != nil && (callee.hasReturn() || callee.hasExec()) {
 						args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
 						if err != nil {
 							return nil, err
 						}
-						result := Expr(&CallExpr{Name: calleeName, Args: args, KwArgs: kwArgs})
+						callExpr := &CallExpr{Name: calleeName, Args: args, KwArgs: kwArgs}
+						if callee.hasExec() {
+							blocks, err := p.maybeParseFnBodyContinuationBlocksExpr(callee, ctx)
+							if err != nil {
+								return nil, err
+							}
+							if blocks != nil {
+								callExpr.Blocks = blocks
+							}
+						}
+						result := Expr(callExpr)
 						result, err = p.parseArithExprFromFull(result, ctx.resolve)
 						if err != nil {
 							return nil, err
@@ -4662,14 +4781,24 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 			return nil, fnErr
 		}
 		if callee != nil {
-			if !callee.hasReturn() {
+			if !callee.hasReturn() && !callee.hasExec() {
 				return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsName)
 			}
 			args, kwArgs, err := p.parseFnBodyCallArgs(callee, token{kind: tokIdent, val: rhsName, pos: rhsTok.pos}, ctx)
 			if err != nil {
 				return nil, err
 			}
-			return &CallExpr{Name: rhsName, Args: args, KwArgs: kwArgs}, nil
+			callExpr := &CallExpr{Name: rhsName, Args: args, KwArgs: kwArgs}
+			if callee.hasExec() {
+				blocks, err := p.maybeParseFnBodyContinuationBlocksExpr(callee, ctx)
+				if err != nil {
+					return nil, err
+				}
+				if blocks != nil {
+					callExpr.Blocks = blocks
+				}
+			}
+			return callExpr, nil
 		}
 	}
 
@@ -5197,6 +5326,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 type expandCallOpts struct {
 	blocks        []*ContinuationBlock
 	emitBlockBody func(stmts []Stmt, bindings map[string]any) error // emitter for block bodies; bindings map param names to register values
+	emitTail      func(Expr) error                                  // emitter for expression-form block tails; nil = no tails
 }
 
 func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool, opts ...expandCallOpts) error {
@@ -5208,9 +5338,11 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 	// Extract optional parameters
 	var contBlocks []*ContinuationBlock
 	var emitBlockBody func([]Stmt, map[string]any) error
+	var emitTailFn func(Expr) error
 	if len(opts) > 0 {
 		contBlocks = opts[0].blocks
 		emitBlockBody = opts[0].emitBlockBody
+		emitTailFn = opts[0].emitTail
 	}
 
 	paramMap := map[string]any{}
@@ -5306,7 +5438,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 				return p.emitFnBody(stmts, b, pm, usedVars, comment, pos)
 			}
 		}
-		if err := p.expandContinuationBlocks(fn, contBlocks, b, origPos, bodyEmitter, execOutputRegs); err != nil {
+		if err := p.expandContinuationBlocks(fn, contBlocks, b, origPos, bodyEmitter, execOutputRegs, emitTailFn); err != nil {
 			return err
 		}
 		return nil

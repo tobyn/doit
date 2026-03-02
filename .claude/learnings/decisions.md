@@ -197,12 +197,24 @@ statically known. No-op elimination when already in target mode.
 Cross-function tracking flows through inlined function bodies via the
 caller's `frameBuilder`.
 
-## Control flow stubs
+## Stdlib branching function conventions
 
-Control-flow instructions are left as empty-body stubs with a
-`# control flow:` comment. They require the continuation system
-(see `future.md` § Continuations and branching instructions) which
-is designed but not yet implemented.
+All ~69 stdlib functions that wrap branching game instructions have
+`exec(...)` signatures and `instruction` blocks with exec bindings.
+The transformation patterns:
+
+- **Output params** that become `@N` slots are removed from the param
+  list; data flows via `@N` → continuation bindings or return values.
+- **Optional inputs** not in the original signature are added as
+  keyword params.
+- **Exec continuation names** are short snake_case identifiers derived
+  from the game's descriptive labels.
+- **`check_number`/`compare_register`/`value_type`** have exec
+  signatures AND are hard-coded in the compiler for `if`/`while`/`is`
+  expressions. Both calling conventions coexist.
+- **`build`/`build_registered`/`produce_registered`** implement the
+  exec part but omit `bp`/`frame` metadata fields (users needing
+  those use the `instruction` intrinsic directly).
 
 ## Test file conventions
 
@@ -568,3 +580,49 @@ making them available everywhere like stdlib functions.
 call site, the `c` field's string value hits the `kwVars` check in
 `resolveInstructionFrame` and is omitted from the output. The game then
 uses its built-in default.
+
+## Continuations — pure-logic branching
+
+**`return <cont_name>`**: `ReturnStmt.Continuation` holds the
+continuation name. In `emitFnBody`, this emits a `set_reg false false`
+frame with `"next": "@exec_<name>"`. The `@exec_` prefix is a string
+placeholder (like `@break` and `@return`) that `expandContinuationBlocks`
+patches to `frameRef(blockStart)` for provided blocks or
+`frameRef(joinPoint)` for unprovided ones.
+
+**`fnBodyContext.execNames`**: The fn body parser needs to distinguish
+`return yes` (continuation dispatch) from `return yes` (return variable
+named `yes`). `execNames` on the context enables `isExecName()` lookup.
+Exec names take priority — if an exec name shadows a variable, `return`
+dispatches to the continuation.
+
+## Continuations — expression form
+
+**`ContinuationBlock.Tail`**: Expression-form blocks have a tail
+expression (the last item in the body) that produces the block's
+value. This mirrors `IfExpr` and `ModeBlockExpr` patterns. The
+`exprTailStmt` wrapper is used during parsing and extracted during
+post-processing.
+
+**`emitTail` callback**: Threaded through `expandCallOpts` →
+`expandCall` → `expandContinuationBlocks`. Each continuation block
+emits its body statements, then calls `emitTail(blk.Tail)` to write
+the tail value to the caller's target. This reuses the existing
+`emitBhvExprTo`/`emitExprTo` infrastructure.
+
+**Expression form restricted to bridging**: Looping blocks don't
+produce values (they iterate). Expression form is rejected at parse
+time if any block has `Looping=true`. This matches the design
+principle that expression form follows if-expression rules.
+
+**Two parsing paths**: Behavior level uses
+`maybeParseBhvContinuationBlocksExpr` (calls `parseBhvStmtBlockInner`
+with `exprTail=true`). Fn body level uses
+`maybeParseFnBodyContinuationBlocksExpr` (calls
+`parseFnBodyStmtsInner` with `exprTail=true`). Both extract tails
+from `exprTailStmt` wrappers.
+
+**Emission path for `let x = fn() { blocks }`**: At behavior level,
+`LetStmt` emission goes through `emitBhvExprTo` → `expandCall`
+(not `emitBhvExprGetValue`). Both paths have blocks support. At fn
+body level, `emitExprTo` handles `CallExpr` with blocks.

@@ -1280,7 +1280,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 
 			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
 		}
-		if !fn.hasReturn() {
+		if !fn.hasReturn() && !fn.hasExec() {
 			return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsName)
 		}
 		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
@@ -1290,6 +1290,18 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		}
 
 		callExpr := &CallExpr{Name: rhsName, Args: args, KwArgs: kwArgs}
+
+		// Check for continuation blocks (expression form) on branching functions
+		if fn.hasExec() {
+			blocks, err := p.maybeParseBhvContinuationBlocksExpr(fn, syms)
+			if err != nil {
+				return nil, err
+			}
+			if blocks != nil {
+				callExpr.Blocks = blocks
+				return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: callExpr, Comment: comment}}, nil
+			}
+		}
 
 		// Check for comparison/boolean continuation after fn call.
 		// Use a temp variable for the fn result so the intermediate value
@@ -1559,7 +1571,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 
 				return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
 			}
-			if !fn.hasReturn() {
+			if !fn.hasReturn() && !fn.hasExec() {
 				return nil, p.errorf(rhsTok.pos, "function %q has no return value", rhsName)
 			}
 			args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: rhsName, pos: rhsTok.pos}, syms)
@@ -1568,6 +1580,18 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			}
 
 			callExpr := &CallExpr{Name: rhsName, Args: args, KwArgs: kwArgs}
+
+			// Check for continuation blocks (expression form) on branching functions
+			if fn.hasExec() {
+				blocks, err := p.maybeParseBhvContinuationBlocksExpr(fn, syms)
+				if err != nil {
+					return nil, err
+				}
+				if blocks != nil {
+					callExpr.Blocks = blocks
+					return []Stmt{&AssignStmt{Target: tok.val, Value: callExpr, Comment: comment, Pos: tok.pos}}, nil
+				}
+			}
 
 			// Check for continuation after fn call.
 			// Use a temp variable for the fn result so the intermediate value
@@ -1714,6 +1738,54 @@ func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) (
 		}
 		return p.parseBhvStmtBlockInner(syms)
 	})
+}
+
+// maybeParseBhvContinuationBlocksExpr peeks for '{' and parses
+// continuation blocks in expression form (each block has a tail
+// expression). Returns nil if no '{' follows. Looping blocks are
+// rejected — expression form requires all bridging.
+func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTable) ([]*ContinuationBlock, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return nil, nil
+	}
+	lbracePos := tok.pos
+	blocks, err := p.parseContinuationBlocks(fn, func(params []string, looping bool) ([]Stmt, error) {
+		saved := syms.pushScope()
+		defer syms.popScope(saved)
+		for _, name := range params {
+			syms.declareVar(name, false)
+		}
+		if looping {
+			p.loopDepth++
+			defer func() { p.loopDepth-- }()
+		}
+		return p.parseBhvStmtBlockInner(syms, true) // exprTail=true
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Extract tails and validate
+	for _, blk := range blocks {
+		if blk.Looping {
+			return nil, p.errorf(lbracePos, "looping continuation cannot be used in expression form")
+		}
+		if len(blk.Body) == 0 {
+			return nil, p.errorf(lbracePos, "empty continuation expression block")
+		}
+		last := blk.Body[len(blk.Body)-1]
+		tail, ok := last.(*exprTailStmt)
+		if !ok {
+			return nil, p.errorf(lbracePos, "last item in continuation expression block must be a value-producing expression")
+		}
+		blk.Tail = tail.Expr
+		blk.Body = blk.Body[:len(blk.Body)-1]
+	}
+	return blocks, nil
 }
 
 // parseBhvIfStmt parses an if/else-if/else statement with full boolean
@@ -2933,8 +3005,31 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 		if err := p.checkCallDirections(p.fns[e.Name], e.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
 			return nil, err
 		}
-		if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{tmp}, b, 0, comment, syms.usedVars); err != nil {
-			return nil, err
+		if e.Blocks != nil {
+			// Expression-form branching call: emit with continuation blocks
+			// and a tail emitter that writes each block's tail to tmp.
+			opts := expandCallOpts{
+				blocks: e.Blocks,
+				emitBlockBody: func(stmts []Stmt, bindings map[string]any) error {
+					_, err := p.emitBehaviorStmts(stmts, b, syms)
+					return err
+				},
+				emitTail: func(tail Expr) error {
+					val, err := p.emitBhvExprGetValue(tail, syms, b, comment)
+					if err != nil {
+						return err
+					}
+					b.emit(map[string]any{"op": "set_reg", "1": val, "2": tmp})
+					return nil
+				},
+			}
+			if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{tmp}, b, 0, comment, syms.usedVars, opts); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{tmp}, b, 0, comment, syms.usedVars); err != nil {
+				return nil, err
+			}
 		}
 		return tmp, nil
 	case *ModeBlockExpr:
@@ -3014,6 +3109,20 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 		}
 		if err := p.checkCallDirections(p.fns[e.Name], e.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
 			return err
+		}
+		if e.Blocks != nil {
+			// Expression-form branching call: emit with continuation blocks
+			opts := expandCallOpts{
+				blocks: e.Blocks,
+				emitBlockBody: func(stmts []Stmt, bindings map[string]any) error {
+					_, err := p.emitBehaviorStmts(stmts, b, syms)
+					return err
+				},
+				emitTail: func(tail Expr) error {
+					return p.emitBhvExprTo(tail, target, syms, b, comment)
+				},
+			}
+			return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, 0, comment, syms.usedVars, opts)
 		}
 		return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, 0, comment, syms.usedVars)
 	case *InstructionExpr:

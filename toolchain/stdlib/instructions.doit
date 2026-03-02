@@ -70,11 +70,15 @@ fn bitwise_op(a, b b, mode mode) {
 #   coordinate [in, optional] - target location, or current location if not specified
 #   rotation [in, optional] - building rotation (0 to 3), default 0
 #   "Construction Failed" [branch] - where to continue if construction fails
-fn build(coordinate, rotation) {
-    # control flow: branches execution
+fn build(coordinate, rotation) exec(failed) {
     # frame: {"op": "build", "0": coordinate [in], "1": rotation [in],
     #   "2": "Construction Failed" [exec], "bp": <blueprint>, "frame": <frame_type>}
     # (low confidence: bp/frame fields inferred from build_produce_ui)
+    instruction "build" {
+        0: coordinate
+        1: rotation
+        exec 2: failed
+    }
 }
 
 # Places a building to be registered.
@@ -83,12 +87,18 @@ fn build(coordinate, rotation) {
 #   id [in] - id to register with
 #   "If Working" [branch] - where to continue if the unit started working
 #   "Construction Failed" [branch] - where to continue if construction fails
-fn build_registered(coordinate, rotation, id) {
-    # control flow: branches execution
+fn build_registered(coordinate, rotation, id) exec(working, failed) {
     # frame: {"op": "build_registered", "0": coordinate [in], "1": rotation [in],
     #   "2": id [in], "3": "If Working" [exec], "4": "Construction Failed" [exec],
     #   "bp": <blueprint>, "frame": <frame_type>}
     # (low confidence: bp/frame fields inferred from build_produce_ui)
+    instruction "build_registered" {
+        0: coordinate
+        1: rotation
+        2: id
+        exec 3: working
+        exec 4: failed
+    }
 }
 
 # Call a subroutine. Parameters are determined by the subroutine.
@@ -103,10 +113,15 @@ fn call() {
 #   component [in, optional] - component to check
 #   "Can Produce" [branch] - where to continue if the item can be produced
 #   "Cannot Produce" [branch] - where to continue if the item cannot be produced
-fn can_produce(item) {
-    # control flow: branches execution
+fn can_produce(item, component component) exec(can, cannot) {
     # frame: {"op": "can_produce", "0": "Can Produce" [exec], "1": item [in],
     #   "2": component [in], "next": "Cannot Produce"}
+    instruction "can_produce" {
+        exec 0: can
+        1: item
+        2: component
+        next: cannot
+    }
 }
 
 # Divert program depending on location of a unit or coordinate.
@@ -114,18 +129,26 @@ fn can_produce(item) {
 #   "Valley" [branch] - where to continue if in a valley
 #   "Plateau" [branch] - where to continue if on a plateau
 #   "No Visibility" [branch, optional] - no visibility on target
-fn check_altitude(target) {
-    # control flow: branches execution
+fn check_altitude(target) exec(valley, plateau, no_visibility) {
     # frame: {"op": "check_altitude", "0": target [in], "1": "Valley" [exec],
     #   "2": "Plateau" [exec], "next": "No Visibility"}
+    instruction "check_altitude" {
+        0: target
+        exec 1: valley
+        exec 2: plateau
+        next: no_visibility
+    }
 }
 
 # Checks the battery level of a unit.
 #   unit [in, optional] - the unit to check (if not self)
 #   "Full" [branch] - where to continue if battery is fully recharged
-fn check_battery(unit) {
-    # control flow: branches execution
+fn check_battery(unit) exec(full) {
     # frame: {"op": "check_battery", "0": "Full" [exec], "1": unit [in]}
+    instruction "check_battery" {
+        exec 0: full
+        1: unit
+    }
 }
 
 # Checks if a specific bit is set in a number.
@@ -133,34 +156,48 @@ fn check_battery(unit) {
 #   bit_index [in] - bit index (1 = least significant)
 #   "Bit Set" [branch] - where to continue if bit is set
 #   "Bit Clear" [branch] - where to continue if bit is clear
-fn check_bit(value, bit_index) {
-    # control flow: branches execution
+fn check_bit(value, bit_index) exec(clear, set) {
     # frame: {"op": "check_bit", "0": "Bit Clear" [exec], "1": value [in],
     #   "2": bit_index [in], "next": "Bit Set"}
+    instruction "check_bit" {
+        exec 0: clear
+        1: value
+        2: bit_index
+        next: set
+    }
 }
 
 # Divert program depending on whether a unit or coordinate is in the blight.
 #   target [in, optional] - the unit or coordinate to check (if not self)
 #   "Blight" [branch] - where to continue if in the blight
-fn check_blightness(target) {
-    # control flow: branches execution
+fn check_blightness(target) exec(blight) {
     # frame: {"op": "check_blightness", "0": target [in], "1": "Blight" [exec]}
+    instruction "check_blightness" {
+        0: target
+        exec 1: blight
+    }
 }
 
 # Checks the efficiency of the logistics network the unit is on.
 #   unit [in, optional] - the unit to check (if not self)
 #   "Full" [branch] - where to continue if at full efficiency
-fn check_grid_effeciency(unit) {
-    # control flow: branches execution
+fn check_grid_effeciency(unit) exec(full) {
     # frame: {"op": "check_grid_effeciency", "0": "Full" [exec], "1": unit [in]}
+    instruction "check_grid_effeciency" {
+        exec 0: full
+        1: unit
+    }
 }
 
 # Check a unit's health.
 #   unit [in, optional] - the unit to check (if not self)
 #   "Full" [branch] - where to continue if at full health
-fn check_health(unit) {
-    # control flow: branches execution
+fn check_health(unit) exec(full) {
     # frame: {"op": "check_health", "0": "Full" [exec], "1": unit [in]}
+    instruction "check_health" {
+        exec 0: full
+        1: unit
+    }
 }
 
 # Divert program depending on comparison of two numbers.
@@ -169,18 +206,27 @@ fn check_health(unit) {
 #   "If Equal" [branch] - where to continue if values are equal
 #   "If Larger" [branch] - where to continue if value is larger than compare
 #   "If Smaller" [branch] - where to continue if value is smaller than compare
-fn check_number(value, compare) {
-    # control flow: implemented as if/while/loop language constructs
+fn check_number(value, compare) exec(larger, smaller, equal) {
     # frame: {"op": "check_number", "0": "If Larger" [exec], "1": "If Smaller" [exec],
     #   "2": value [in], "3": compare [in], "next": "If Equal"}
+    instruction "check_number" {
+        exec 0: larger
+        exec 1: smaller
+        2: value
+        3: compare
+        next: equal
+    }
 }
 
 # Checks if free space is available for an item and amount.
 #   item [in] - item and amount to check
 #   "Can't Fit" [branch] - where to continue if it can't fit
-fn checkfreespace(item) {
-    # control flow: branches execution
+fn checkfreespace(item) exec(cant_fit) {
     # frame: {"op": "checkfreespace", "0": "Can't Fit" [exec], "1": item [in]}
+    instruction "checkfreespace" {
+        exec 0: cant_fit
+        1: item
+    }
 }
 
 # Clear all register links on this unit.
@@ -250,10 +296,15 @@ fn combine_register(num, unit, x x, y y) {
 #   unit_2 [in]
 #   "If Equal" [branch] - where to continue if the units are the same
 #   "If Different" [branch] - where to continue if the units differ
-fn compare_entity(unit_1, unit_2) {
-    # control flow: branches execution
+fn compare_entity(unit_1, unit_2) exec(different, equal) {
     # frame: {"op": "compare_entity", "0": "If Different" [exec], "1": unit_1 [in],
     #   "2": unit_2 [in], "next": "If Equal"}
+    instruction "compare_entity" {
+        exec 0: different
+        1: unit_1
+        2: unit_2
+        next: equal
+    }
 }
 
 # Compares item or unit type.
@@ -261,10 +312,15 @@ fn compare_entity(unit_1, unit_2) {
 #   value_2 [in]
 #   "If Equal" [branch] - where to continue if the types are the same
 #   "If Different" [branch] - where to continue if the types differ
-fn compare_item(value_1, value_2) {
-    # control flow: branches execution
+fn compare_item(value_1, value_2) exec(different, equal) {
     # frame: {"op": "compare_item", "0": "If Different" [exec], "1": value_1 [in],
     #   "2": value_2 [in], "next": "If Equal"}
+    instruction "compare_item" {
+        exec 0: different
+        1: value_1
+        2: value_2
+        next: equal
+    }
 }
 
 # Compares registers for equality.
@@ -272,10 +328,15 @@ fn compare_item(value_1, value_2) {
 #   value_2 [in]
 #   "If Equal" [branch] - where to continue if the registers are the same
 #   "If Different" [branch] - where to continue if the registers differ
-fn compare_register(value_1, value_2) {
-    # control flow: branches execution
+fn compare_register(value_1, value_2) exec(different, equal) {
     # frame: {"op": "compare_register", "0": "If Different" [exec], "1": value_1 [in],
     #   "2": value_2 [in], "next": "If Equal"}
+    instruction "compare_register" {
+        exec 0: different
+        1: value_1
+        2: value_2
+        next: equal
+    }
 }
 
 # Connects the unit to the logistics network.
@@ -418,10 +479,14 @@ fn enable_transport_route() {
 #   component [in] - component to equip
 #   slot_index [in, optional] - individual slot to equip from
 #   "No Component" [branch] - if the unit doesn't hold the requested component
-fn equip_component(component) {
-    # control flow: branches execution
+fn equip_component(component, slot_index slot_index) exec(no_component) {
     # frame: {"op": "equip_component", "0": "No Component" [exec], "1": component [in],
     #   "2": slot_index [in]}
+    instruction "equip_component" {
+        exec 0: no_component
+        1: component
+        2: slot_index
+    }
 }
 
 # Equips a component on an external unit if it exists in that unit's inventory.
@@ -429,38 +494,56 @@ fn equip_component(component) {
 #   component [in] - component to equip
 #   slot_index [in, optional] - individual slot to equip from
 #   "No Component" [branch] - if the unit doesn't hold the requested component
-fn equip_component_remotely(unit, component) {
-    # control flow: branches execution
+fn equip_component_remotely(unit, component, slot_index slot_index) exec(no_component) {
     # frame: {"op": "equip_component_remotely", "0": unit [in],
     #   "1": "No Component" [exec], "2": component [in], "3": slot_index [in]}
+    instruction "equip_component_remotely" {
+        0: unit
+        exec 1: no_component
+        2: component
+        3: slot_index
+    }
 }
 
 # Counts the number of the passed item in the faction's logistics network.
 #   item [in] - item to count
 #   result [out] - number of this item in the faction
 #   "None" [branch] - when none of this item exists
-fn faction_item_amount(item, result) {
-    # control flow: branches execution
+fn faction_item_amount(item) exec(none) {
     # frame: {"op": "faction_item_amount", "0": item [in], "1": result [out],
     #   "2": "None" [exec]}
+    instruction "faction_item_amount" {
+        0: item
+        1: @1
+        exec 2: none
+    }
 }
 
 # Loops through equipped components.
 #   component [out] - equipped component
 #   index [out, optional] - index of the component
 #   "Done" [branch] - finished loop
-fn for_component(component) {
-    # control flow: loop iterator
+fn for_component() exec(body, done) {
     # frame: {"op": "for_component", "0": component [out], "1": index [out],
     #   "2": "Done" [exec]}
+    instruction "for_component" {
+        0: @1
+        1: @2
+        for next: body(@1, @2)
+        exec 2: done
+    }
 }
 
 # Scans for nearby resources in power field or visibility range.
 #   resource [out]
 #   "Done" [branch] - finished loop
-fn for_count_resources(resource) {
-    # control flow: loop iterator
+fn for_count_resources() exec(body, done) {
     # frame: {"op": "for_count_resources", "0": resource [out], "1": "Done" [exec]}
+    instruction "for_count_resources" {
+        0: @1
+        for next: body(@1)
+        exec 1: done
+    }
 }
 
 # Loops through all units in visibility range matching filters.
@@ -470,10 +553,18 @@ fn for_count_resources(resource) {
 #   filter_3 [in, optional] - third filter
 #   unit [out] - current unit in loop
 #   "Done" [branch] - finished loop
-fn for_entities_in_range(range, filter, unit) {
-    # control flow: loop iterator
+fn for_entities_in_range(range, filter, filter_2 filter_2, filter_3 filter_3) exec(body, done) {
     # frame: {"op": "for_entities_in_range", "0": range [in], "1": filter [in],
     #   "2": filter_2 [in], "3": filter_3 [in], "4": unit [out], "5": "Done" [exec]}
+    instruction "for_entities_in_range" {
+        0: range
+        1: filter
+        2: filter_2
+        3: filter_3
+        4: @1
+        for next: body(@1)
+        exec 5: done
+    }
 }
 
 # Loops through inventory slots.
@@ -483,11 +574,19 @@ fn for_entities_in_range(range, filter, unit) {
 #   unreserved_stack [out, optional] - items available
 #   reserved_space [out, optional] - space reserved for an incoming order
 #   unreserved_space [out, optional] - remaining space
-fn for_inventory_item(inventory) {
-    # control flow: loop iterator
+fn for_inventory_item() exec(body, done) {
     # frame: {"op": "for_inventory_item", "0": inventory [out], "1": "Done" [exec],
     #   "2": reserved_stack [out], "3": unreserved_stack [out],
     #   "4": reserved_space [out], "5": unreserved_space [out]}
+    instruction "for_inventory_item" {
+        0: @1
+        for next: body(@1, @2, @3, @4, @5)
+        exec 1: done
+        2: @2
+        3: @3
+        4: @4
+        5: @5
+    }
 }
 
 # Loops through all numbers in a range.
@@ -496,68 +595,104 @@ fn for_inventory_item(inventory) {
 #   step [in, optional] - increment step, defaults to -1 or 1 based on inputs
 #   value [out] - current number
 #   "Done" [branch] - finished loop
-fn for_number(from, to, value) {
-    # control flow: loop iterator
+fn for_number(from, to, step step) exec(body, done) {
     # frame: {"op": "for_number", "0": from [in], "1": to [in], "2": step [in],
     #   "3": value [out], "4": "Done" [exec]}
+    instruction "for_number" {
+        0: from
+        1: to
+        2: step
+        3: @1
+        for next: body(@1)
+        exec 4: done
+    }
 }
 
 # Gets all producers for a production with their production time.
 #   production [in] - production
 #   producer [out] - producer
 #   "Done" [branch] - finished loop
-fn for_producers(production, producer) {
-    # control flow: loop iterator
+fn for_producers(production) exec(body, done) {
     # frame: {"op": "for_producers", "0": production [in], "1": producer [out],
     #   "2": "Done" [exec]}
+    instruction "for_producers" {
+        0: production
+        1: @1
+        for next: body(@1)
+        exec 2: done
+    }
 }
 
 # Loops through recipe ingredients.
 #   recipe [in]
 #   ingredient [out] - recipe ingredient
 #   "Done" [branch] - finished loop
-fn for_recipe_ingredients(recipe, ingredient) {
-    # control flow: loop iterator
+fn for_recipe_ingredients(recipe) exec(body, done) {
     # frame: {"op": "for_recipe_ingredients", "0": recipe [in], "1": ingredient [out],
     #   "2": "Done" [exec]}
+    instruction "for_recipe_ingredients" {
+        0: recipe
+        1: @1
+        for next: body(@1)
+        exec 2: done
+    }
 }
 
 # Loops through each ingredient required to repair a unit.
 #   target [in] - unit
 #   ingredient [out] - repair ingredient
 #   "Done" [branch] - finished loop
-fn for_repair_ingredients(target, ingredient) {
-    # control flow: loop iterator
+fn for_repair_ingredients(target) exec(body, done) {
     # frame: {"op": "for_repair_ingredients", "0": target [in], "1": ingredient [out],
     #   "2": "Done" [exec]}
+    instruction "for_repair_ingredients" {
+        0: target
+        1: @1
+        for next: body(@1)
+        exec 2: done
+    }
 }
 
 # Loops through all researchable tech.
 #   tech [out] - researchable tech
 #   "Done" [branch] - finished loop
-fn for_research(tech) {
-    # control flow: loop iterator
+fn for_research() exec(body, done) {
     # frame: {"op": "for_research", "0": tech [out], "1": "Done" [exec]}
+    instruction "for_research" {
+        0: @1
+        for next: body(@1)
+        exec 1: done
+    }
 }
 
 # Loops through research ingredients.
 #   research [in]
 #   ingredient [out] - research ingredient
 #   "Done" [branch] - finished loop
-fn for_research_ingredients(research, ingredient) {
-    # control flow: loop iterator
+fn for_research_ingredients(research) exec(body, done) {
     # frame: {"op": "for_research_ingredients", "0": research [in],
     #   "1": ingredient [out], "2": "Done" [exec]}
+    instruction "for_research_ingredients" {
+        0: research
+        1: @1
+        for next: body(@1)
+        exec 2: done
+    }
 }
 
 # Loops through all unlocks for a researchable tech.
 #   tech [in] - tech
 #   unlock [out] - unlocks
 #   "Done" [branch] - finished loop
-fn for_research_unlocks(tech, unlock) {
-    # control flow: loop iterator
+fn for_research_unlocks(tech) exec(body, done) {
     # frame: {"op": "for_research_unlocks", "0": tech [in], "1": unlock [out],
     #   "2": "Done" [exec]}
+    instruction "for_research_unlocks" {
+        0: tech
+        1: @1
+        for next: body(@1)
+        exec 2: done
+    }
 }
 
 # Deprecated: use for_signal_match
@@ -565,9 +700,14 @@ fn for_research_unlocks(tech, unlock) {
 #   signal [in] - signal
 #   unit [out] - unit with signal
 #   "Done" [branch] - finished loop
-fn for_signal(signal, unit) {
-    # control flow: loop iterator
+fn for_signal(signal) exec(body, done) {
     # frame: {"op": "for_signal", "0": signal [in], "1": unit [out], "2": "Done" [exec]}
+    instruction "for_signal" {
+        0: signal
+        1: @1
+        for next: body(@1)
+        exec 2: done
+    }
 }
 
 # Loops through all units with a signal of similar type.
@@ -575,10 +715,17 @@ fn for_signal(signal, unit) {
 #   unit [out] - found unit with signal
 #   found_signal [out, optional] - found signal
 #   "Done" [branch] - finished loop
-fn for_signal_match(signal, unit) {
-    # control flow: loop iterator
+fn for_signal_match(signal, mode mode) exec(body, done) {
     # frame: {"op": "for_signal_match", "0": signal [in], "1": unit [out],
     #   "2": found_signal [out], "3": "Done" [exec], "c": <mode>}
+    instruction "for_signal_match" {
+        0: signal
+        1: @1
+        2: @2
+        for next: body(@1, @2)
+        exec 3: done
+        c: mode
+    }
 }
 
 # Collect information for running the auto base controller.
@@ -734,19 +881,26 @@ fn get_ingredients(product) {
 # Reads the first item in the inventory.
 #   item [out]
 #   "No Items" [branch] - no items in inventory
-fn get_inventory_item(item) {
-    # control flow: branches execution
+fn get_inventory_item() exec(no_items) {
     # frame: {"op": "get_inventory_item", "0": item [out], "1": "No Items" [exec]}
+    instruction "get_inventory_item" {
+        0: @1
+        exec 1: no_items
+    }
 }
 
 # Reads the item contained in the specified slot index.
 #   index [in] - slot index
 #   item [out]
 #   "No Item" [branch] - item not found
-fn get_inventory_item_index(index, item) {
-    # control flow: branches execution
+fn get_inventory_item_index(index) exec(no_item) {
     # frame: {"op": "get_inventory_item_index", "0": index [in], "1": item [out],
     #   "2": "No Item" [exec]}
+    instruction "get_inventory_item_index" {
+        0: index
+        1: @1
+        exec 2: no_item
+    }
 }
 
 # Returns the total contained in inventory.
@@ -800,10 +954,16 @@ fn get_max_stack(item) {
 #   value [out] - value of register
 #   component_index [in, optional] - component index if multiple are equipped
 #   "Failed" [branch, optional] - failed to get register
-fn get_reg_remotely(unit, from, value) {
-    # control flow: branches execution
+fn get_reg_remotely(unit, from, component_index component_index) exec(failed) {
     # frame: {"op": "get_reg_remotely", "0": unit [in], "1": from [in],
     #   "2": value [out], "3": component_index [in], "4": "Failed" [exec]}
+    instruction "get_reg_remotely" {
+        0: unit
+        1: from
+        2: @1
+        3: component_index
+        exec 4: failed
+    }
 }
 
 # Get number of registered buildings.
@@ -841,10 +1001,14 @@ fn get_research_requirement(tech) {
 #   resource_deposit [in] - resource deposit
 #   resource [out] - resource type
 #   "Not Resource" [branch] - not a resource deposit
-fn get_resource_item(resource_deposit, resource) {
-    # control flow: branches execution
+fn get_resource_item(resource_deposit) exec(not_resource) {
     # frame: {"op": "get_resource_item", "0": resource_deposit [in],
     #   "1": resource [out], "2": "Not Resource" [exec]}
+    instruction "get_resource_item" {
+        0: resource_deposit
+        1: @1
+        exec 2: not_resource
+    }
 }
 
 # Gets the amount of a resource.
@@ -863,11 +1027,15 @@ fn get_resource_num(resource) {
 #   "Spring" [branch]
 #   "Summer" [branch]
 #   "Fall" [branch]
-fn get_season() {
-    # control flow: branches execution
+fn get_season() exec(winter, spring, summer, fall) {
     # frame: {"op": "get_season", "0": "Winter" [exec], "1": "Spring" [exec],
     #   "2": "Summer" [exec], "3": "Fall" [exec]}
-    # (no fall-through: always branches to a season)
+    instruction "get_season" {
+        exec 0: winter
+        exec 1: spring
+        exec 2: summer
+        exec 3: fall
+    }
 }
 
 # Gets the unit running the behavior.
@@ -978,19 +1146,29 @@ fn gethome() {
 #   "Neutral" [branch] - target considers you neutral
 #   "Enemy" [branch] - target considers you an enemy
 #   "No Unit" [branch] - no unit passed
-fn gettrust(unit) {
-    # control flow: branches execution
+fn gettrust(unit) exec(ally, neutral, enemy, no_unit) {
     # frame: {"op": "gettrust", "0": "Ally" [exec], "1": "Neutral" [exec],
     #   "2": "Enemy" [exec], "3": unit [in], "next": "No Unit"}
+    instruction "gettrust" {
+        exec 0: ally
+        exec 1: neutral
+        exec 2: enemy
+        3: unit
+        next: no_unit
+    }
 }
 
 # Checks if you have at least a specified amount of an item.
 #   item [in] - item to count
 #   unit [in, optional] - the unit to check (if not self)
 #   "Have Item" [branch] - have the specified item
-fn have_item(item) {
-    # control flow: branches execution
+fn have_item(item, unit unit) exec(have) {
     # frame: {"op": "have_item", "0": item [in], "1": "Have Item" [exec], "2": unit [in]}
+    instruction "have_item" {
+        0: item
+        exec 1: have
+        2: unit
+    }
 }
 
 # Compares if an item or unit is of a specific type.
@@ -998,65 +1176,90 @@ fn have_item(item) {
 #   type [in]
 #   "If Equal" [branch] - where to continue if they are the same
 #   "If Different" [branch] - where to continue if they differ
-fn is_a(item, type) {
-    # control flow: branches execution
+fn is_a(item, type) exec(different, equal) {
     # frame: {"op": "is_a", "0": "If Different" [exec], "1": item [in], "2": type [in],
     #   "next": "If Equal"}
+    instruction "is_a" {
+        exec 0: different
+        1: item
+        2: type
+        next: equal
+    }
 }
 
 # Divert program depending on time of day.
 #   "Day" [branch]
 #   "Night" [branch]
-fn is_daynight() {
-    # control flow: branches execution
+fn is_daynight() exec(day, night) {
     # frame: {"op": "is_daynight", "0": "Day" [exec], "1": "Night" [exec]}
-    # (no fall-through: always branches to Day or Night)
+    instruction "is_daynight" {
+        exec 0: day
+        exec 1: night
+    }
 }
 
 # Check if a unit is docked and get its garage.
 #   garage [out] - garage unit
 #   "No Dock" [branch] - unit is not docked
-fn is_docked(garage) {
-    # control flow: branches execution
+fn is_docked() exec(no_dock) {
     # frame: {"op": "is_docked", "0": "No Dock" [exec], "1": garage [out]}
+    instruction "is_docked" {
+        exec 0: no_dock
+        1: @1
+    }
 }
 
 # Checks if a value is empty.
 #   value [in] - value to check
 #   "Empty" [branch] - value is empty
 #   "Has Value" [branch] - value exists
-fn is_empty(value) {
-    # control flow: branches execution
+fn is_empty(value) exec(empty, has_value) {
     # frame: {"op": "is_empty", "0": value [in], "1": "Empty" [exec],
     #   "2": "Has Value" [exec]}
+    instruction "is_empty" {
+        0: value
+        exec 1: empty
+        exec 2: has_value
+    }
 }
 
 # Check if a specific component has been equipped.
 #   component [in] - component to check
 #   result [out, optional] - how many instances are equipped
 #   "Component Equipped" [branch] - component is equipped
-fn is_equipped(component) {
-    # control flow: branches execution
+fn is_equipped(component) exec(equipped) {
     # frame: {"op": "is_equipped", "0": component [in],
     #   "1": "Component Equipped" [exec], "2": result [out]}
+    instruction "is_equipped" {
+        0: component
+        exec 1: equipped(@1)
+        2: @1
+    }
 }
 
 # Check if a specific item slot index is fixed.
 #   slot_index [in] - individual slot to check
 #   "Is Fixed" [branch] - inventory slot is fixed
-fn is_fixed(slot_index) {
-    # control flow: branches execution
+fn is_fixed(slot_index) exec(fixed) {
     # frame: {"op": "is_fixed", "0": slot_index [in], "1": "Is Fixed" [exec]}
+    instruction "is_fixed" {
+        0: slot_index
+        exec 1: fixed
+    }
 }
 
 # Checks if a unit or coordinate is in the logistics network.
 #   unit [in] - unit or coordinate
 #   "Inside" [branch] - inside a logistics network
 #   "Outside" [branch] - not inside a logistics network
-fn is_logistics(unit) {
-    # control flow: branches execution
+fn is_logistics(unit) exec(outside, inside) {
     # frame: {"op": "is_logistics", "0": unit [in], "1": "Outside" [exec],
     #   "next": "Inside"}
+    instruction "is_logistics" {
+        0: unit
+        exec 1: outside
+        next: inside
+    }
 }
 
 # Checks the movement state of a unit.
@@ -1065,20 +1268,30 @@ fn is_logistics(unit) {
 #   "Not Moving" [branch] - unit is not moving
 #   "Path Blocked" [branch] - unit is path blocked
 #   "No Result" [branch] - unit is out of visual range
-fn is_moving(unit) {
-    # control flow: branches execution
+fn is_moving(unit) exec(not_moving, path_blocked, no_result, moving) {
     # frame: {"op": "is_moving", "0": "Not Moving" [exec], "1": "Path Blocked" [exec],
     #   "2": "No Result" [exec], "3": unit [in], "next": "Moving"}
+    instruction "is_moving" {
+        exec 0: not_moving
+        exec 1: path_blocked
+        exec 2: no_result
+        3: unit
+        next: moving
+    }
 }
 
 # Checks whether a location is passable.
 #   coordinate [in] - location to check
 #   "Passable" [branch] - unit can pass through
 #   "Impassable" [branch] - unit cannot pass through
-fn is_passable(coordinate) {
-    # control flow: branches execution
+fn is_passable(coordinate) exec(impassable, passable) {
     # frame: {"op": "is_passable", "0": coordinate [in], "1": "Impassable" [exec],
     #   "2": "Passable" [exec]}
+    instruction "is_passable" {
+        0: coordinate
+        exec 1: impassable
+        exec 2: passable
+    }
 }
 
 # Checks if two units or coordinates are in the same logistics network.
@@ -1086,10 +1299,15 @@ fn is_passable(coordinate) {
 #   unit_b [in] - second unit or coordinate
 #   "Same Grid" [branch] - same logistics network
 #   "Different" [branch] - different logistics networks
-fn is_same_grid(unit_a, unit_b) {
-    # control flow: branches execution
+fn is_same_grid(unit_a, unit_b) exec(different, same) {
     # frame: {"op": "is_same_grid", "0": unit_a [in], "1": unit_b [in],
     #   "2": "Different" [exec], "next": "Same Grid"}
+    instruction "is_same_grid" {
+        0: unit_a
+        1: unit_b
+        exec 2: different
+        next: same
+    }
 }
 
 # Checks if a unit is a specific frame type.
@@ -1097,18 +1315,26 @@ fn is_same_grid(unit_a, unit_b) {
 #   type [in]
 #   "Is" [branch] - unit is the specified type
 #   "Is Not" [branch] - unit is not the specified type
-fn is_unit_a(unit, type) {
-    # control flow: branches execution
+fn is_unit_a(unit, type) exec(different, equal) {
     # frame: {"op": "is_unit_a", "0": unit [in], "1": type [in],
     #   "2": "Is Not" [exec], "next": "Is"}
+    instruction "is_unit_a" {
+        0: unit
+        1: type
+        exec 2: different
+        next: equal
+    }
 }
 
 # Checks whether the faction has an id unlocked.
 #   id [in] - input id
 #   "No Match" [branch] - id is not unlocked
-fn is_unlocked(id) {
-    # control flow: branches execution
+fn is_unlocked(id) exec(no_match) {
     # frame: {"op": "is_unlocked", "0": id [in], "1": "No Match" [exec]}
+    instruction "is_unlocked" {
+        0: id
+        exec 1: no_match
+    }
 }
 
 # Checks whether a particular component is currently working.
@@ -1116,10 +1342,15 @@ fn is_unlocked(id) {
 #   component_index [in, optional] - component index if multiple are equipped
 #   value [out, optional] - the currently working component
 #   "Is Not Working" [branch] - component is not currently working
-fn is_working(component) {
-    # control flow: branches execution
+fn is_working(component, component_index component_index) exec(not_working) {
     # frame: {"op": "is_working", "0": "Is Not Working" [exec], "1": component [in],
     #   "2": component_index [in], "3": value [out]}
+    instruction "is_working" {
+        exec 0: not_working
+        1: component
+        2: component_index
+        3: @1
+    }
 }
 
 # Jumps execution to a label with the same label id.
@@ -1178,19 +1409,26 @@ fn lookat(target) {
 # Construct carrier bots for delivering orders.
 #   carriers [in] - type and count of carriers to make
 #   "If Working" [branch] - where to continue if the unit started working
-fn make_carrier(carriers) {
-    # control flow: branches execution
+fn make_carrier(carriers) exec(working) {
     # frame: {"op": "make_carrier", "0": carriers [in], "1": "If Working" [exec]}
+    instruction "make_carrier" {
+        0: carriers
+        exec 1: working
+    }
 }
 
 # Construct and equip miner components on available carrier bots.
 #   resource_count [in] - resource type and number of miners to maintain
 #   frame [in] - unit to create if none are free
 #   "If Working" [branch] - where to continue if the unit started working
-fn make_miner(resource_count, frame) {
-    # control flow: branches execution
+fn make_miner(resource_count, frame) exec(working) {
     # frame: {"op": "make_miner", "0": resource_count [in], "1": frame [in],
     #   "2": "If Working" [exec]}
+    instruction "make_miner" {
+        0: resource_count
+        1: frame
+        exec 2: working
+    }
 }
 
 # Build and maintain dedicated production buildings.
@@ -1199,18 +1437,27 @@ fn make_miner(resource_count, frame) {
 #   building [in] - building type to use as producer
 #   location [in] - location offset from self
 #   "If Working" [branch] - where to continue if the unit started working
-fn make_producer(item_count, component, building, location) {
-    # control flow: branches execution
+fn make_producer(item_count, component, building, location) exec(working) {
     # frame: {"op": "make_producer", "0": item_count [in], "1": component [in],
     #   "2": building [in], "3": location [in], "4": "If Working" [exec]}
+    instruction "make_producer" {
+        0: item_count
+        1: component
+        2: building
+        3: location
+        exec 4: working
+    }
 }
 
 # Construct and equip turret components on available carrier bots.
 #   number [in] - number of turret bots to maintain
 #   "If Working" [branch] - where to continue if the unit started working
-fn make_turret_bots(number) {
-    # control flow: branches execution
+fn make_turret_bots(number) exec(working) {
     # frame: {"op": "make_turret_bots", "0": number [in], "1": "If Working" [exec]}
+    instruction "make_turret_bots" {
+        0: number
+        exec 1: working
+    }
 }
 
 # Filters the passed unit.
@@ -1219,10 +1466,16 @@ fn make_turret_bots(number) {
 #   filter_2 [in, optional] - second filter
 #   filter_3 [in, optional] - third filter
 #   "Failed" [branch] - did not match filter
-fn match(unit, filter) {
-    # control flow: branches execution
+fn match(unit, filter, filter_2 filter_2, filter_3 filter_3) exec(failed) {
     # frame: {"op": "match", "0": unit [in], "1": filter [in], "2": filter_2 [in],
     #   "3": filter_3 [in], "4": "Failed" [exec]}
+    instruction "match" {
+        0: unit
+        1: filter
+        2: filter_2
+        3: filter_3
+        exec 4: failed
+    }
 }
 
 # Get memory array element.
@@ -1263,10 +1516,16 @@ fn memory_length(index) {
 #   value [out]
 #   index [out, optional]
 #   "Done" [branch] - finished loop
-fn memory_loop(id, value) {
-    # control flow: loop iterator
+fn memory_loop(id) exec(body, done) {
     # frame: {"op": "memory_loop", "0": id [in], "1": value [out], "2": "Done" [exec],
     #   "3": index [out]}
+    instruction "memory_loop" {
+        0: id
+        1: @1
+        for next: body(@1, @2)
+        exec 2: done
+        3: @2
+    }
 }
 
 # Remove value from memory array.
@@ -1297,10 +1556,14 @@ fn memory_set(index, value) {
 #   resource [in] - resource to mine
 #   "Cannot Mine" [branch] - mining could not be performed
 #   "Full" [branch] - can't fit resource into inventory
-fn mine(resource) {
-    # control flow: branches execution
+fn mine(resource) exec(cannot_mine, full) {
     # frame: {"op": "mine", "0": resource [in], "1": "Cannot Mine" [exec],
     #   "2": "Full" [exec]}
+    instruction "mine" {
+        0: resource
+        exec 1: cannot_mine
+        exec 2: full
+    }
 }
 
 # Get the remainder of a division.
@@ -1454,11 +1717,14 @@ fn produce() {
 # Sets a production component to produce a registered blueprint.
 #   id [in] - id to register with
 #   "If Working" [branch] - where to continue if the unit started working
-fn produce_registered(id) {
-    # control flow: branches execution
+fn produce_registered(id) exec(working) {
     # frame: {"op": "produce_registered", "0": id [in], "1": "If Working" [exec],
     #   "bp": <blueprint>, "frame": <frame_type>}
     # (low confidence: bp/frame fields inferred from build_produce_ui)
+    instruction "produce_registered" {
+        0: id
+        exec 1: working
+    }
 }
 
 # Returns a random coordinate within a specified range of a location.
@@ -1578,10 +1844,16 @@ fn restart() {
 #   filter_3 [in] - third filter
 #   result [out]
 #   "No Result" [branch] - no results found
-fn scan(filter_1, filter_2, filter_3, result) {
-    # control flow: branches execution
+fn scan(filter_1, filter_2, filter_3) exec(no_result) {
     # frame: {"op": "scan", "0": filter_1 [in], "1": filter_2 [in],
     #   "2": filter_3 [in], "3": result [out], "4": "No Result" [exec]}
+    instruction "scan" {
+        0: filter_1
+        1: filter_2
+        2: filter_3
+        3: @1
+        exec 4: no_result
+    }
 }
 
 # Moves in a scouting pattern around the faction's home location.
@@ -1609,10 +1881,16 @@ fn scout_rand_range(range, coord) {
 #   closest [out, optional] - closest unit
 #   "A" [branch] - A is nearer (or equal)
 #   "B" [branch] - B is nearer
-fn select_nearest(unit_a, unit_b) {
-    # control flow: branches execution
+fn select_nearest(unit_a, unit_b) exec(a_closer, b_closer) {
     # frame: {"op": "select_nearest", "0": "A" [exec], "1": "B" [exec],
     #   "2": unit_a [in], "3": unit_b [in], "4": closest [out]}
+    instruction "select_nearest" {
+        exec 0: a_closer(@1)
+        exec 1: b_closer(@1)
+        2: unit_a
+        3: unit_b
+        4: @1
+    }
 }
 
 # Split a coordinate into x and y values.
@@ -1651,9 +1929,11 @@ fn separate_register(register) {
 
 # Produce materials needed in construction sites.
 #   "If Working" [branch] - where to continue if the unit started working
-fn serve_construction() {
-    # control flow: branches execution
+fn serve_construction() exec(working) {
     # frame: {"op": "serve_construction", "0": "If Working" [exec]}
+    instruction "serve_construction" {
+        exec 0: working
+    }
 }
 
 # Writes a value into a component register.
@@ -1723,10 +2003,16 @@ fn set_reg(value) {
 #   to [in] - component and register number to set
 #   component_index [in, optional] - component index if multiple are equipped
 #   "Failed" [branch, optional] - failed to set register
-fn set_reg_remotely(unit, value, to) {
-    # control flow: branches execution
+fn set_reg_remotely(unit, value, to, component_index component_index) exec(failed) {
     # frame: {"op": "set_reg_remotely", "0": unit [in], "1": value [in], "2": to [in],
     #   "3": component_index [in], "4": "Failed" [exec]}
+    instruction "set_reg_remotely" {
+        0: unit
+        1: value
+        2: to
+        3: component_index
+        exec 4: failed
+    }
 }
 
 # Add a new research into the active research queue.
@@ -1756,10 +2042,14 @@ fn shutdown() {
 #   target [in] - explorable to solve
 #   missing [out] - missing repair item, scanner component, or unpowered
 #   "Failed" [branch] - missing item, component, or power
-fn solve(target, missing) {
-    # control flow: branches execution
+fn solve(target) exec(failed) {
     # frame: {"op": "solve", "0": target [in], "1": missing [out],
     #   "2": "Failed" [exec]}
+    instruction "solve" {
+        0: target
+        1: @1
+        exec 2: failed(@1)
+    }
 }
 
 # Sorts storage containers on the unit.
@@ -1796,12 +2086,25 @@ fn sub(from, num) {
 #   case_5 [in, optional] - case 5 filter
 #   "Default" [branch] - did not match any filter
 #   "1"-"5" [branch] - matched respective case
-fn switch(input, case_1) {
-    # control flow: branches execution
+fn switch(input, case_1, case_2 case_2, case_3 case_3, case_4 case_4, case_5 case_5) exec(match_1, match_2, match_3, match_4, match_5, default) {
     # frame: {"op": "switch", "0": input [in], "1": case_1 [in], "2": "1" [exec],
     #   "3": case_2 [in], "4": "2" [exec], "5": case_3 [in], "6": "3" [exec],
     #   "7": case_4 [in], "8": "4" [exec], "9": case_5 [in], "10": "5" [exec],
     #   "next": "Default"}
+    instruction "switch" {
+        0: input
+        1: case_1
+        exec 2: match_1
+        3: case_2
+        exec 4: match_2
+        5: case_3
+        exec 6: match_3
+        7: case_4
+        exec 8: match_4
+        9: case_5
+        exec 10: match_5
+        next: default
+    }
 }
 
 # Turns on the power of the unit.
@@ -1814,10 +2117,14 @@ fn turnon() {
 #   component [in] - component to unequip
 #   slot_index [in, optional] - individual slot to unequip from
 #   "No Component" [branch] - component not found or slot was empty
-fn unequip_component(component) {
-    # control flow: branches execution
+fn unequip_component(component, slot_index slot_index) exec(no_component) {
     # frame: {"op": "unequip_component", "0": "No Component" [exec],
     #   "1": component [in], "2": slot_index [in]}
+    instruction "unequip_component" {
+        exec 0: no_component
+        1: component
+        2: slot_index
+    }
 }
 
 # Unequips a component on an external unit.
@@ -1825,10 +2132,15 @@ fn unequip_component(component) {
 #   component [in] - component to unequip
 #   slot_index [in, optional] - individual slot to unequip from
 #   "No Component" [branch] - component not found or slot was empty
-fn unequip_component_remotely(unit, component) {
-    # control flow: branches execution
+fn unequip_component_remotely(unit, component, slot_index slot_index) exec(no_component) {
     # frame: {"op": "unequip_component_remotely", "0": unit [in],
     #   "1": "No Component" [exec], "2": component [in], "3": slot_index [in]}
+    instruction "unequip_component_remotely" {
+        0: unit
+        exec 1: no_component
+        2: component
+        3: slot_index
+    }
 }
 
 # Divert program depending on unit type.
@@ -1837,10 +2149,16 @@ fn unequip_component_remotely(unit, component) {
 #   "Bot" [branch] - unit is a bot
 #   "Construction" [branch, optional] - unit is a construction site
 #   "No Unit" [branch, optional] - no visible unit passed
-fn unit_type(unit) {
-    # control flow: branches execution
+fn unit_type(unit) exec(building, bot, construction, no_unit) {
     # frame: {"op": "unit_type", "0": unit [in], "1": "Building" [exec],
     #   "2": "Bot" [exec], "3": "Construction" [exec], "next": "No Unit"}
+    instruction "unit_type" {
+        0: unit
+        exec 1: building
+        exec 2: bot
+        exec 3: construction
+        next: no_unit
+    }
 }
 
 # Unfix all inventory slots or a specific item slot.
@@ -1870,11 +2188,20 @@ fn unpackage_all(unit unit) {
 #   "Value" [branch, optional]
 #   "Coord" [branch, optional]
 #   "No Match" [branch] - no match
-fn value_type(data) {
-    # control flow: branches execution
+fn value_type(data) exec(item, unit, component, tech, value, coord, no_match) {
     # frame: {"op": "value_type", "0": data [in], "1": "Item" [exec],
     #   "2": "Unit" [exec], "3": "Component" [exec], "4": "Tech" [exec],
     #   "5": "Value" [exec], "6": "Coord" [exec], "next": "No Match"}
+    instruction "value_type" {
+        0: data
+        exec 1: item
+        exec 2: unit
+        exec 3: component
+        exec 4: tech
+        exec 5: value
+        exec 6: coord
+        next: no_match
+    }
 }
 
 # `wait` is a language keyword — see manual/language.md
@@ -1883,8 +2210,12 @@ fn value_type(data) {
 #   component [in] - component to wait for
 #   component_index [in, optional] - component index if multiple are equipped
 #   "Not Working" [branch, optional] - component isn't currently working
-fn wait_component(component) {
-    # control flow: branches execution
+fn wait_component(component, component_index component_index) exec(not_working) {
     # frame: {"op": "wait_component", "0": component [in],
     #   "1": component_index [in], "2": "Not Working" [exec]}
+    instruction "wait_component" {
+        0: component
+        1: component_index
+        exec 2: not_working
+    }
 }

@@ -185,6 +185,7 @@ The standard library defines enums for each mode selector. Values are
 | `UnitInfoStat` | `Durability`, `VisibilityRange`, `MovementSpeed` | `get_unit_info` |
 | `PowerInfoStat` | `Producing`, `Requiring`, `Efficiency`, `Consuming`, `Receiving`, `Transmitting` | `get_unit_power_info` |
 | `ItemInfoStat` | `MaxStack`, `AttackRange`, `MinRange`, `Damage`, `DamageType`, `BlastRadius`, `MoveAndFire`, `DPS`, `PowerStorage`, `DrainRate`, `ChargeRate`, `Bandwidth`, `DroneRange`, `Power` | `get_item_info` |
+| `SignalFilterMode` | `Match`, `Exact`, `NotExact`, `LessThan`, `ExactOrLessThan`, `MoreThan`, `ExactOrMoreThan` | `for_signal_match` |
 
 ### Passing mode selectors
 
@@ -555,6 +556,100 @@ definition:
 my_check(a, b) { notify "a > b" }
 my_check(a, b) { larger { notify "a > b" } }
 ```
+
+#### Pure-logic branching
+
+Functions without `instruction` blocks can also branch using
+`return <continuation_name>`:
+
+```doit
+fn is_big(a) exec(yes, no) {
+    if a > 5 {
+        return yes
+    }
+    return no
+}
+
+is_big(x) {
+    yes { notify "big" }
+    no { notify "small" }
+}
+```
+
+The `return yes` and `return no` statements dispatch to the caller's
+continuation blocks. This works identically to instruction-based branching
+from the caller's perspective.
+
+#### Expression form
+
+Branching calls can be used as expressions, following the same rules as
+if-expressions. Each continuation block has a tail value (the last
+expression in the block):
+
+```doit
+let result = check_number(a, b) {
+    larger { 1 }
+    smaller { -1 }
+    equal { 0 }
+}
+```
+
+Unprovided continuations produce `null`, like an if-expression without
+`else`. Expression form works in both behavior bodies and function bodies:
+
+```doit
+fn classify(a) {
+    let result = is_big(a) {
+        yes { 1 }
+        no { 0 }
+    }
+    return result
+}
+```
+
+Expression form is restricted to all-bridging calls — a compile error is
+reported if any continuation block uses `for` (looping blocks don't produce
+values).
+
+#### Standard library branching functions
+
+Most standard library functions that wrap branching game instructions
+declare `exec` continuations. You can call them directly with
+continuation blocks:
+
+```doit
+# Pure conditional — three-way branch
+check_number(health, 50) {
+    larger { notify "healthy" }
+    smaller { notify "critical" }
+    equal { notify "half" }
+}
+
+# Failable getter — success on fall-through, exec on failure
+let item = get_inventory_item() {
+    no_items { notify "empty" }
+}
+
+# Iterator — looping body, bridging done
+for_component() {
+    for body { comp, idx ->
+        notify "component", value: comp
+    }
+    done { notify "done iterating" }
+}
+
+# Action with outcome
+mine(resource) {
+    cannot_mine { notify "blocked" }
+    full { notify "inventory full" }
+}
+```
+
+The continuation names are documented in the `# frame:` comments in
+the standard library source (`toolchain/stdlib/instructions.doit`).
+Functions like `check_number`, `compare_register`, and `value_type`
+also serve as the compiler's implementation of `if`/`while` conditions
+and `is` expressions — both uses coexist.
 
 ### Private Functions
 

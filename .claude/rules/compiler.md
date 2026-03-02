@@ -145,4 +145,12 @@ bindings (`{ name -> body }`) to receive this data. Scanner supports
 reusing caller-provided registers from `fn.rets`+`retVals` when
 available. Functions without explicit `return` that have instruction
 frames with `returnSlot` values get synthetic `@retN` names via
-`findMaxReturnSlot`.
+`findMaxReturnSlot`. Pure-logic functions use `return <cont_name>`
+to dispatch to continuations; `emitFnBody` emits `@exec_<name>`
+string placeholders patched by `expandContinuationBlocks`.
+Expression-form blocks have a `Tail` field on `ContinuationBlock`;
+`emitTail` callback in `expandCallOpts` writes tail values to the
+caller's target register. Both behavior level
+(`maybeParseBhvContinuationBlocksExpr`) and fn body level
+(`maybeParseFnBodyContinuationBlocksExpr`) parse expression-form
+blocks using `exprTail=true`.

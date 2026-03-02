@@ -23,11 +23,10 @@ chains, negation). Remaining optimization ideas:
 
 ## Continuations and branching instructions
 
-Currently ~70 stdlib instructions are control-flow stubs because they
-have `[exec]` branch slots the compiler can't express. The design
-uses **continuations** as the unifying concept — every path out of a
-branching instruction (exec slots AND `"next"`) is a continuation.
-None is inherently special.
+All ~69 stdlib branching instructions now have real `exec` signatures
+and `instruction` bodies. The design uses **continuations** as the
+unifying concept — every path out of a branching instruction (exec
+slots AND `"next"`) is a continuation. None is inherently special.
 
 ### Core model
 
@@ -355,9 +354,7 @@ features complement each other.
 
 ### Implementation status
 
-Phases 1–3 are implemented. Phases 4–6 remain.
-
-**Implemented:**
+All six phases are implemented.
 
 - **Phase 1: Parse foundations** — `exec` keyword, `fnDef.execNames`,
   `execBinding` type, exec bindings in instruction blocks, `for`
@@ -376,13 +373,14 @@ Phases 1–3 are implemented. Phases 4–6 remain.
   mismatch errors), `"next": false` on last body frame, `break` →
   `{"op": "last"}` in looping blocks, `loopDepth` increment for
   `break` permission.
-
-**Remaining:**
 - **Phase 5: Pure-logic branching + expression form** — `return
-  <cont_name>`, expression-level branching calls, assignment form
-  (`let x = fn() { ... }`).
-- **Phase 6: Stdlib updates** — Replace ~70 control-flow stubs with
-  real exec implementations, manual + memory updates.
+  <cont_name>` dispatches to caller-provided continuations,
+  `@exec_<name>` placeholders patched by `expandContinuationBlocks`,
+  `Tail` field on `ContinuationBlock`, expression-form blocks at
+  both behavior and fn body levels, `emitTail` callback threaded
+  through `expandCallOpts`/`expandCall`/`expandContinuationBlocks`.
+- **Phase 6: Stdlib updates** — All ~69 control-flow stubs replaced
+  with real `exec` signatures and `instruction` bodies.
 
 ### Resolved issues
 
