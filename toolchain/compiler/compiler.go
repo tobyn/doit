@@ -594,3 +594,14 @@ type emitContext struct {
 	popScope       func()
 	declareIterVar func(name string) string
 }
+
+// parseContext abstracts the differences between behavior-level and fn body
+// parsing paths, allowing unified statement parsers.
+type parseContext struct {
+	resolve          operandResolver
+	parseBody        func(exprTail bool) ([]Stmt, error)
+	pushScope        func()
+	popScope         func()
+	declareIterVar   func(name string)
+	parseConstructor func(nameTok token) (Expr, error)
+}

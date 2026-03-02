@@ -88,17 +88,6 @@ dimensions in a single pass:
   optional comma consumption to fn body path) or document the
   difference. **Design decision needed.**
 
-- **Statement parser duplication between behavior and fn body paths.**
-  Nine parser function pairs are near-identical, differing only by
-  context parameter type (`symbolTable` vs `fnBodyContext`) and which
-  body parser to call: `parseIfStmt`, `parseElseIfChain`,
-  `parseWhileStmt`, `parseLoopStmt`, `parseWaitStmt`, `parseForStmt`,
-  `parseModeBlockExpr`, `parseIfExprBranch`, `parseIfExpr` (~380 lines
-  per side). The emission side already unifies via `emitContext`; a
-  similar `parseContext` holding `resolve operandResolver` and
-  `parseBody func() ([]Stmt, error)` callbacks would halve this code.
-  Risk: bugs fixed in one path not propagated to the other.
-
 ### Low
 
 - **Dead `syms` parameter in `checkVarName`.** The `syms *symbolTable`

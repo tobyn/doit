@@ -746,14 +746,14 @@ func (p *parser) parseFnBodyArgExpr(ctx *fnBodyContext) (Expr, error) {
 		return nil, err
 	}
 	if tok.kind == tokIdent && (tok.val == "locked" || tok.val == "unlocked") {
-		mbe, err := p.parseFnBodyModeBlockExpr(tok.val == "unlocked", ctx, "")
+		mbe, err := p.parseModeBlockExpr(tok.val == "unlocked", p.fnParseCtx(ctx), "")
 		if err != nil {
 			return nil, err
 		}
 		return p.parseArithExprFromFull(Expr(mbe), ctx.resolve)
 	}
 	if tok.kind == tokIdent && tok.val == "if" {
-		ifExpr, err := p.parseFnBodyIfExpr(ctx, "")
+		ifExpr, err := p.parseIfExpr(p.fnParseCtx(ctx), "")
 		if err != nil {
 			return nil, err
 		}
@@ -1400,6 +1400,40 @@ func (p *parser) resolveFnBoolTree(expr Expr, b *frameBuilder, paramMap map[stri
 	return p.resolveBoolTree(expr, func(e Expr) (any, error) {
 		return p.emitExprGetValue(e, b, paramMap, usedVars, "", pos)
 	})
+}
+
+// fnParseCtx constructs a parseContext for fn body parsing.
+func (p *parser) fnParseCtx(ctx *fnBodyContext) *parseContext {
+	type fnScopeState struct {
+		info  map[string]fnVarInfo
+		depth int
+	}
+	var scopeStack []fnScopeState
+	return &parseContext{
+		resolve: ctx.resolve,
+		parseBody: func(exprTail bool) ([]Stmt, error) {
+			if exprTail {
+				return p.parseFnBodyStmtsInner(ctx, true)
+			}
+			return p.parseFnBodyStmts(ctx)
+		},
+		pushScope: func() {
+			info, depth := ctx.pushFnScope()
+			scopeStack = append(scopeStack, fnScopeState{info, depth})
+		},
+		popScope: func() {
+			n := len(scopeStack) - 1
+			s := scopeStack[n]
+			ctx.popFnScope(s.info, s.depth)
+			scopeStack = scopeStack[:n]
+		},
+		declareIterVar: func(name string) {
+			ctx.declareFnVarWarn(name, false, p, 0)
+		},
+		parseConstructor: func(nameTok token) (Expr, error) {
+			return p.parseFnBodyConstructorExpr(nameTok)
+		},
+	}
 }
 
 // fnEmitCtx constructs an emitContext for fn body emission.
@@ -3753,12 +3787,12 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 
 	// Mode block expression: return unlocked { get_self }
 	if tok.kind == tokIdent && (tok.val == "locked" || tok.val == "unlocked") {
-		return p.parseFnBodyModeBlockExpr(tok.val == "unlocked", ctx, "")
+		return p.parseModeBlockExpr(tok.val == "unlocked", p.fnParseCtx(ctx), "")
 	}
 
 	// If-expression: return if cond { a } else { b }
 	if tok.kind == tokIdent && tok.val == "if" {
-		return p.parseFnBodyIfExpr(ctx, "")
+		return p.parseIfExpr(p.fnParseCtx(ctx), "")
 	}
 
 	// Full expression: arithmetic, comparison, boolean, negation, type check,
@@ -3799,125 +3833,6 @@ func (p *parser) parseFnBodyReturnItem(ctx *fnBodyContext) (Expr, error) {
 	return expr, nil
 }
 
-// parseFnBodyModeBlockExpr parses a locked/unlocked block used as an
-// expression in a fn body context. The keyword has been consumed.
-func (p *parser) parseFnBodyModeBlockExpr(unlock bool, ctx *fnBodyContext, comment string) (*ModeBlockExpr, error) {
-	lbrace, err := p.expect(tokLBrace)
-	if err != nil {
-		return nil, err
-	}
-	stmts, err := p.parseFnBodyStmtsInner(ctx, true)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) == 0 {
-		return nil, p.errorf(lbrace.pos, "empty mode block expression")
-	}
-	last := stmts[len(stmts)-1]
-	tail, ok := last.(*exprTailStmt)
-	if !ok {
-		return nil, p.errorf(lbrace.pos, "last item in mode block expression must be a value-producing expression")
-	}
-	return &ModeBlockExpr{
-		Unlock:  unlock,
-		Body:    stmts[:len(stmts)-1],
-		Tail:    tail.Expr,
-		Comment: comment,
-	}, nil
-}
-
-// parseFnBodyIfExprBranch parses a brace-delimited expression block
-// (statements + tail expression) for an if-expression branch in a fn body.
-func (p *parser) parseFnBodyIfExprBranch(ctx *fnBodyContext) ([]Stmt, Expr, error) {
-	lbrace, err := p.expect(tokLBrace)
-	if err != nil {
-		return nil, nil, err
-	}
-	stmts, err := p.parseFnBodyStmtsInner(ctx, true)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(stmts) == 0 {
-		return nil, nil, p.errorf(lbrace.pos, "empty if-expression branch")
-	}
-	last := stmts[len(stmts)-1]
-	tail, ok := last.(*exprTailStmt)
-	if !ok {
-		return nil, nil, p.errorf(lbrace.pos, "last item in if-expression branch must be a value-producing expression")
-	}
-	return stmts[:len(stmts)-1], tail.Expr, nil
-}
-
-// parseFnBodyIfExpr parses an if-expression in a fn body context.
-// The 'if' keyword has been consumed.
-func (p *parser) parseFnBodyIfExpr(ctx *fnBodyContext, comment string) (*IfExpr, error) {
-	// Parse condition using full boolean expression parser
-	cond, err := p.parseBoolPrimary(ctx.resolve)
-	if err != nil {
-		return nil, err
-	}
-	cond, err = p.parseBoolChain(cond, ctx.resolve)
-	if err != nil {
-		return nil, err
-	}
-
-	body, tail, err := p.parseFnBodyIfExprBranch(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	expr := &IfExpr{
-		Cond:    cond,
-		Body:    body,
-		Tail:    tail,
-		Comment: comment,
-	}
-
-	// Parse else-if / else chain (else is optional)
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if tok.kind != tokIdent || tok.val != "else" {
-			// No else clause — uncovered branches produce null
-			p.unget(tok)
-			return expr, nil
-		}
-		peek, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek.kind == tokIdent && peek.val == "if" {
-			eiCond, err := p.parseBoolPrimary(ctx.resolve)
-			if err != nil {
-				return nil, err
-			}
-			eiCond, err = p.parseBoolChain(eiCond, ctx.resolve)
-			if err != nil {
-				return nil, err
-			}
-			eiBody, eiTail, err := p.parseFnBodyIfExprBranch(ctx)
-			if err != nil {
-				return nil, err
-			}
-			expr.ElseIfs = append(expr.ElseIfs, ElseIfExprClause{
-				Cond: eiCond,
-				Body: eiBody,
-				Tail: eiTail,
-			})
-		} else {
-			p.unget(peek)
-			elsBody, elsTail, err := p.parseFnBodyIfExprBranch(ctx)
-			if err != nil {
-				return nil, err
-			}
-			expr.ElsBody = elsBody
-			expr.ElsTail = elsTail
-			return expr, nil
-		}
-	}
-}
 
 // maybeParseFnBodyContinuationBlocks peeks for '{' and parses continuation
 // blocks at fn body level. Returns nil if no '{' follows.
@@ -4165,7 +4080,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 		case "if":
 			if exprTail {
 				// Try as if-expression tail
-				ifExpr, err := p.parseFnBodyIfExpr(ctx, comment)
+				ifExpr, err := p.parseIfExpr(p.fnParseCtx(ctx), comment)
 				if err != nil {
 					return nil, err
 				}
@@ -4179,35 +4094,35 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				}
 				return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
 			}
-			stmt, err := p.parseFnBodyIfStmt(ctx, comment)
+			stmt, err := p.parseIfStmt(p.fnParseCtx(ctx), comment)
 			if err != nil {
 				return nil, err
 			}
 			astBody = append(astBody, stmt)
 
 		case "while":
-			stmt, err := p.parseFnBodyWhileStmt(ctx, comment)
+			stmt, err := p.parseWhileStmt(p.fnParseCtx(ctx), comment)
 			if err != nil {
 				return nil, err
 			}
 			astBody = append(astBody, stmt)
 
 		case "loop":
-			stmt, err := p.parseFnBodyLoopStmt(ctx, comment)
+			stmt, err := p.parseLoopStmt(p.fnParseCtx(ctx), comment)
 			if err != nil {
 				return nil, err
 			}
 			astBody = append(astBody, stmt)
 
 		case "for":
-			stmt, err := p.parseFnBodyForStmt(ctx, comment)
+			stmt, err := p.parseForStmt(p.fnParseCtx(ctx), comment)
 			if err != nil {
 				return nil, err
 			}
 			astBody = append(astBody, stmt)
 
 		case "wait":
-			stmt, err := p.parseFnBodyWaitStmt(ctx, comment)
+			stmt, err := p.parseWaitStmt(p.fnParseCtx(ctx), comment)
 			if err != nil {
 				return nil, err
 			}
@@ -4269,19 +4184,19 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						}
 						switch peek2.val {
 						case "loop":
-							loopStmt, err := p.parseFnBodyLoopStmt(ctx, comment, label)
+							loopStmt, err := p.parseLoopStmt(p.fnParseCtx(ctx), comment, label)
 							if err != nil {
 								return nil, err
 							}
 							astBody = append(astBody, loopStmt)
 						case "while":
-							whileStmt, err := p.parseFnBodyWhileStmt(ctx, comment, label)
+							whileStmt, err := p.parseWhileStmt(p.fnParseCtx(ctx), comment, label)
 							if err != nil {
 								return nil, err
 							}
 							astBody = append(astBody, whileStmt)
 						case "for":
-							forStmt, err := p.parseFnBodyForStmt(ctx, comment, label)
+							forStmt, err := p.parseForStmt(p.fnParseCtx(ctx), comment, label)
 							if err != nil {
 								return nil, err
 							}
@@ -4649,7 +4564,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 			}
 
 			if tok.kind == tokIdent && (tok.val == "locked" || tok.val == "unlocked") {
-				mbe, err := p.parseFnBodyModeBlockExpr(tok.val == "unlocked", ctx, comment)
+				mbe, err := p.parseModeBlockExpr(tok.val == "unlocked", p.fnParseCtx(ctx), comment)
 				if err != nil {
 					return nil, err
 				}
@@ -4659,7 +4574,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 			}
 
 			if tok.kind == tokIdent && tok.val == "if" {
-				ifExpr, err := p.parseFnBodyIfExpr(ctx, comment)
+				ifExpr, err := p.parseIfExpr(p.fnParseCtx(ctx), comment)
 				if err != nil {
 					return nil, err
 				}
@@ -4788,7 +4703,7 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 	// Mode block expression RHS
 	// Supports continuation: let x = unlocked { get_number v } + 1
 	if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
-		mbe, err := p.parseFnBodyModeBlockExpr(rhsTok.val == "unlocked", ctx, "")
+		mbe, err := p.parseModeBlockExpr(rhsTok.val == "unlocked", p.fnParseCtx(ctx), "")
 		if err != nil {
 			return nil, err
 		}
@@ -4809,7 +4724,7 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 	// If-expression RHS
 	// Supports continuation: let x = if cond { a } else { b } + 1
 	if rhsTok.kind == tokIdent && rhsTok.val == "if" {
-		ifExpr, err := p.parseFnBodyIfExpr(ctx, "")
+		ifExpr, err := p.parseIfExpr(p.fnParseCtx(ctx), "")
 		if err != nil {
 			return nil, err
 		}
@@ -4917,282 +4832,6 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 		return truthy.Value, nil
 	}
 	return expr, nil
-}
-
-// parseFnBodyIfStmt parses an if/else if/else statement in a fn body.
-func (p *parser) parseFnBodyIfStmt(ctx *fnBodyContext, comment string) (*IfStmt, error) {
-	cond, err := p.parseBoolPrimary(ctx.resolve)
-	if err != nil {
-		return nil, err
-	}
-	// Allow boolean chain continuation
-	cond, err = p.parseBoolChain(cond, ctx.resolve)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-	body, err := p.parseFnBodyStmts(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	stmt := &IfStmt{Cond: cond, Body: body, Comment: comment}
-
-	// Parse optional else / else if
-	tok, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	if tok.kind == tokIdent && tok.val == "else" {
-		peek, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek.kind == tokIdent && peek.val == "if" {
-			if err := p.parseFnBodyElseIfChain(ctx, stmt); err != nil {
-				return nil, err
-			}
-		} else {
-			p.unget(peek)
-			if _, err := p.expect(tokLBrace); err != nil {
-				return nil, err
-			}
-			elseBody, err := p.parseFnBodyStmts(ctx)
-			if err != nil {
-				return nil, err
-			}
-			stmt.Else = elseBody
-		}
-	} else {
-		p.unget(tok)
-	}
-
-	return stmt, nil
-}
-
-// parseFnBodyElseIfChain parses the else if / else chain in a fn body.
-func (p *parser) parseFnBodyElseIfChain(ctx *fnBodyContext, stmt *IfStmt) error {
-	cond, err := p.parseBoolPrimary(ctx.resolve)
-	if err != nil {
-		return err
-	}
-	cond, err = p.parseBoolChain(cond, ctx.resolve)
-	if err != nil {
-		return err
-	}
-	if _, err := p.expect(tokLBrace); err != nil {
-		return err
-	}
-	body, err := p.parseFnBodyStmts(ctx)
-	if err != nil {
-		return err
-	}
-	stmt.ElseIfs = append(stmt.ElseIfs, ElseIfClause{Cond: cond, Body: body})
-
-	tok, err := p.next()
-	if err != nil {
-		return err
-	}
-	if tok.kind == tokIdent && tok.val == "else" {
-		peek, err := p.next()
-		if err != nil {
-			return err
-		}
-		if peek.kind == tokIdent && peek.val == "if" {
-			return p.parseFnBodyElseIfChain(ctx, stmt)
-		}
-		p.unget(peek)
-		if _, err := p.expect(tokLBrace); err != nil {
-			return err
-		}
-		elseBody, err := p.parseFnBodyStmts(ctx)
-		if err != nil {
-			return err
-		}
-		stmt.Else = elseBody
-	} else {
-		p.unget(tok)
-	}
-	return nil
-}
-
-// parseFnBodyWhileStmt parses a while loop in a fn body.
-func (p *parser) parseFnBodyWhileStmt(ctx *fnBodyContext, comment string, label ...string) (*WhileStmt, error) {
-	lbl := ""
-	if len(label) > 0 {
-		lbl = label[0]
-	}
-	cond, err := p.parseBoolPrimary(ctx.resolve)
-	if err != nil {
-		return nil, err
-	}
-	cond, err = p.parseBoolChain(cond, ctx.resolve)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-	p.enterLoop(lbl)
-	body, err := p.parseFnBodyStmts(ctx)
-	p.exitLoop(lbl)
-	if err != nil {
-		return nil, err
-	}
-	return &WhileStmt{Label: lbl, Cond: cond, Body: body, Comment: comment}, nil
-}
-
-// parseFnBodyLoopStmt parses a loop { ... } or loop N { ... } block in a fn body.
-func (p *parser) parseFnBodyLoopStmt(ctx *fnBodyContext, comment string, label ...string) (*LoopStmt, error) {
-	lbl := ""
-	if len(label) > 0 {
-		lbl = label[0]
-	}
-
-	// Peek for count expression
-	peek, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-
-	if peek.kind == tokLBrace {
-		// Infinite loop: loop { ... }
-		p.enterLoop(lbl)
-		body, err := p.parseFnBodyStmts(ctx)
-		p.exitLoop(lbl)
-		if err != nil {
-			return nil, err
-		}
-		return &LoopStmt{Label: lbl, Body: body, Comment: comment}, nil
-	}
-
-	// Counted loop: parse count expression
-	count, err := p.parseSimpleExpr(peek, ctx.resolve, "'{' or count expression after 'loop'")
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-	p.enterLoop(lbl)
-	body, err := p.parseFnBodyStmts(ctx)
-	p.exitLoop(lbl)
-	if err != nil {
-		return nil, err
-	}
-	return &LoopStmt{Label: lbl, Count: count, Body: body, Comment: comment}, nil
-}
-
-// parseFnBodyWaitStmt parses a wait statement in a fn body.
-func (p *parser) parseFnBodyWaitStmt(ctx *fnBodyContext, comment string) (*WaitStmt, error) {
-	// Parse ticks expression (same pattern as parseFnBodyLoopStmt count)
-	peek, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-
-	ticks, err := p.parseSimpleExpr(peek, ctx.resolve, "ticks expression after 'wait'")
-	if err != nil {
-		return nil, err
-	}
-
-	// Check for optional condition block
-	peek2, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	if peek2.kind != tokLBrace {
-		// Simple wait
-		p.unget(peek2)
-		return &WaitStmt{Ticks: ticks, Comment: comment}, nil
-	}
-
-	// Block wait: parse body + tail
-	stmts, err := p.parseFnBodyStmtsInner(ctx, true)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) == 0 {
-		return nil, p.errorf(peek2.pos, "empty wait block")
-	}
-	last := stmts[len(stmts)-1]
-	tail, ok := last.(*exprTailStmt)
-	if !ok {
-		return nil, p.errorf(peek2.pos, "last item in wait block must be a value-producing expression")
-	}
-	return &WaitStmt{
-		Ticks:   ticks,
-		Body:    stmts[:len(stmts)-1],
-		Tail:    tail.Expr,
-		Comment: comment,
-	}, nil
-}
-
-// parseFnBodyForStmt parses a for i in <range> { ... } loop in a fn body.
-func (p *parser) parseFnBodyForStmt(ctx *fnBodyContext, comment string, label ...string) (*ForStmt, error) {
-	lbl := ""
-	if len(label) > 0 {
-		lbl = label[0]
-	}
-
-	iterTok, err := p.expect(tokIdent)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.checkVarName(iterTok.val, nil, iterTok.pos); err != nil {
-		return nil, err
-	}
-
-	inTok, err := p.expect(tokIdent)
-	if err != nil {
-		return nil, err
-	}
-	if inTok.val != "in" {
-		return nil, p.errorf(inTok.pos, "expected 'in' after for variable, got %q", inTok.val)
-	}
-
-	rangeTok, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	var rangeExpr Expr
-	if rangeTok.kind == tokIdent && rangeTok.val == "Range" {
-		rangeExpr, err = p.parseFnBodyConstructorExpr(rangeTok)
-		if err != nil {
-			return nil, err
-		}
-	} else if rangeTok.kind == tokIdent {
-		resolved, err := ctx.resolve(rangeTok)
-		if err != nil {
-			return nil, err
-		}
-		rangeExpr = resolved
-	} else {
-		return nil, p.errorf(rangeTok.pos, "expected Range constructor or variable after 'in', got %s", rangeTok.describe())
-	}
-
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-
-	// Push scope for iter var + body
-	savedInfo, savedDepth := ctx.pushFnScope()
-	ctx.declareFnVarWarn(iterTok.val, false, p, iterTok.pos)
-
-	p.enterLoop(lbl)
-	body, err := p.parseFnBodyStmts(ctx)
-	p.exitLoop(lbl)
-
-	ctx.popFnScope(savedInfo, savedDepth)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &ForStmt{Label: lbl, IterVar: iterTok.val, Range: rangeExpr, Body: body, Comment: comment}, nil
 }
 
 // checkFnBodyInstructionDirections verifies that non-@N slots in an instruction

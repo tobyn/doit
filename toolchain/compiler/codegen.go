@@ -1719,3 +1719,411 @@ func (p *parser) emitIfExpr(e *IfExpr, retVals []any, ctx *emitContext, comment 
 
 	return nil
 }
+
+// ---------------------------------------------------------------------------
+// Unified statement parsers (via parseContext)
+// ---------------------------------------------------------------------------
+
+// parseIfStmt parses an if/else-if/else statement.
+func (p *parser) parseIfStmt(ctx *parseContext, comment string) (*IfStmt, error) {
+	cond, err := p.parseBoolPrimary(ctx.resolve)
+	if err != nil {
+		return nil, err
+	}
+	cond, err = p.parseBoolChain(cond, ctx.resolve)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+	body, err := ctx.parseBody(false)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := &IfStmt{Cond: cond, Body: body, Comment: comment}
+
+	// Parse optional else / else-if chains
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind == tokIdent && tok.val == "else" {
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokIdent && peek.val == "if" {
+			if err := p.parseElseIfChain(ctx, stmt); err != nil {
+				return nil, err
+			}
+		} else {
+			p.unget(peek)
+			if _, err := p.expect(tokLBrace); err != nil {
+				return nil, err
+			}
+			elseBody, err := ctx.parseBody(false)
+			if err != nil {
+				return nil, err
+			}
+			stmt.Else = elseBody
+		}
+	} else {
+		p.unget(tok)
+	}
+
+	return stmt, nil
+}
+
+// parseElseIfChain parses the else-if / else chain and attaches them
+// to the given IfStmt.
+func (p *parser) parseElseIfChain(ctx *parseContext, stmt *IfStmt) error {
+	cond, err := p.parseBoolPrimary(ctx.resolve)
+	if err != nil {
+		return err
+	}
+	cond, err = p.parseBoolChain(cond, ctx.resolve)
+	if err != nil {
+		return err
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return err
+	}
+	body, err := ctx.parseBody(false)
+	if err != nil {
+		return err
+	}
+
+	stmt.ElseIfs = append(stmt.ElseIfs, ElseIfClause{Cond: cond, Body: body})
+
+	// Check for trailing else
+	tok, err := p.next()
+	if err != nil {
+		return err
+	}
+	if tok.kind == tokIdent && tok.val == "else" {
+		peek, err := p.next()
+		if err != nil {
+			return err
+		}
+		if peek.kind == tokIdent && peek.val == "if" {
+			return p.parseElseIfChain(ctx, stmt)
+		}
+		// Plain else
+		p.unget(peek)
+		if _, err := p.expect(tokLBrace); err != nil {
+			return err
+		}
+		elseBody, err := ctx.parseBody(false)
+		if err != nil {
+			return err
+		}
+		stmt.Else = elseBody
+	} else {
+		p.unget(tok)
+	}
+
+	return nil
+}
+
+// parseWhileStmt parses a while loop with full boolean expression support.
+func (p *parser) parseWhileStmt(ctx *parseContext, comment string, label ...string) (*WhileStmt, error) {
+	lbl := ""
+	if len(label) > 0 {
+		lbl = label[0]
+	}
+	cond, err := p.parseBoolPrimary(ctx.resolve)
+	if err != nil {
+		return nil, err
+	}
+	cond, err = p.parseBoolChain(cond, ctx.resolve)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+	p.enterLoop(lbl)
+	body, err := ctx.parseBody(false)
+	p.exitLoop(lbl)
+	if err != nil {
+		return nil, err
+	}
+
+	return &WhileStmt{Label: lbl, Cond: cond, Body: body, Comment: comment}, nil
+}
+
+// parseLoopStmt parses a loop { ... } or loop N { ... } block.
+func (p *parser) parseLoopStmt(ctx *parseContext, comment string, label ...string) (*LoopStmt, error) {
+	lbl := ""
+	if len(label) > 0 {
+		lbl = label[0]
+	}
+
+	// Peek for count expression
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	if peek.kind == tokLBrace {
+		// Infinite loop: loop { ... }
+		p.enterLoop(lbl)
+		body, err := ctx.parseBody(false)
+		p.exitLoop(lbl)
+		if err != nil {
+			return nil, err
+		}
+		return &LoopStmt{Label: lbl, Body: body, Comment: comment}, nil
+	}
+
+	// Counted loop: parse count expression
+	count, err := p.parseSimpleExpr(peek, ctx.resolve, "'{' or count expression after 'loop'")
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+	p.enterLoop(lbl)
+	body, err := ctx.parseBody(false)
+	p.exitLoop(lbl)
+	if err != nil {
+		return nil, err
+	}
+	return &LoopStmt{Label: lbl, Count: count, Body: body, Comment: comment}, nil
+}
+
+// parseWaitStmt parses a wait statement: `wait <ticks>` or `wait <ticks> { body; cond }`.
+func (p *parser) parseWaitStmt(ctx *parseContext, comment string) (*WaitStmt, error) {
+	// Parse ticks expression
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	ticks, err := p.parseSimpleExpr(peek, ctx.resolve, "ticks expression after 'wait'")
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for optional condition block
+	peek2, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek2.kind != tokLBrace {
+		// Simple wait: wait <ticks>
+		p.unget(peek2)
+		return &WaitStmt{Ticks: ticks, Comment: comment}, nil
+	}
+
+	// Block wait: wait <ticks> { body; cond }
+	stmts, err := ctx.parseBody(true)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, p.errorf(peek2.pos, "empty wait block")
+	}
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, p.errorf(peek2.pos, "last item in wait block must be a value-producing expression")
+	}
+	return &WaitStmt{
+		Ticks:   ticks,
+		Body:    stmts[:len(stmts)-1],
+		Tail:    tail.Expr,
+		Comment: comment,
+	}, nil
+}
+
+// parseForStmt parses a for i in <range> { ... } loop.
+func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string) (*ForStmt, error) {
+	lbl := ""
+	if len(label) > 0 {
+		lbl = label[0]
+	}
+
+	// Parse iteration variable
+	iterTok, err := p.expect(tokIdent)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkVarName(iterTok.val, nil, iterTok.pos); err != nil {
+		return nil, err
+	}
+
+	// Expect 'in'
+	inTok, err := p.expect(tokIdent)
+	if err != nil {
+		return nil, err
+	}
+	if inTok.val != "in" {
+		return nil, p.errorf(inTok.pos, "expected 'in' after for variable, got %q", inTok.val)
+	}
+
+	// Parse range expression: Range constructor, variable, or $register
+	rangeTok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	var rangeExpr Expr
+	if rangeTok.kind == tokIdent && rangeTok.val == "Range" {
+		rangeExpr, err = ctx.parseConstructor(rangeTok)
+		if err != nil {
+			return nil, err
+		}
+	} else if rangeTok.kind == tokIdent {
+		resolved, err := ctx.resolve(rangeTok)
+		if err != nil {
+			return nil, err
+		}
+		rangeExpr = resolved
+	} else {
+		return nil, p.errorf(rangeTok.pos, "expected Range constructor or variable after 'in', got %s", rangeTok.describe())
+	}
+
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+
+	// Push scope for iter var + body
+	ctx.pushScope()
+	ctx.declareIterVar(iterTok.val)
+
+	p.enterLoop(lbl)
+	body, err := ctx.parseBody(false)
+	p.exitLoop(lbl)
+
+	ctx.popScope()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ForStmt{Label: lbl, IterVar: iterTok.val, Range: rangeExpr, Body: body, Comment: comment}, nil
+}
+
+// parseModeBlockExpr parses a locked/unlocked block used as an expression.
+func (p *parser) parseModeBlockExpr(unlock bool, ctx *parseContext, comment string) (*ModeBlockExpr, error) {
+	lbrace, err := p.expect(tokLBrace)
+	if err != nil {
+		return nil, err
+	}
+	stmts, err := ctx.parseBody(true)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, p.errorf(lbrace.pos, "empty mode block expression")
+	}
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, p.errorf(lbrace.pos, "last item in mode block expression must be a value-producing expression")
+	}
+	return &ModeBlockExpr{
+		Unlock:  unlock,
+		Body:    stmts[:len(stmts)-1],
+		Tail:    tail.Expr,
+		Comment: comment,
+	}, nil
+}
+
+// parseIfExprBranch parses a brace-delimited expression block (statements +
+// tail expression) for an if-expression branch.
+func (p *parser) parseIfExprBranch(ctx *parseContext) ([]Stmt, Expr, error) {
+	lbrace, err := p.expect(tokLBrace)
+	if err != nil {
+		return nil, nil, err
+	}
+	stmts, err := ctx.parseBody(true)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(stmts) == 0 {
+		return nil, nil, p.errorf(lbrace.pos, "empty if-expression branch")
+	}
+	last := stmts[len(stmts)-1]
+	tail, ok := last.(*exprTailStmt)
+	if !ok {
+		return nil, nil, p.errorf(lbrace.pos, "last item in if-expression branch must be a value-producing expression")
+	}
+	return stmts[:len(stmts)-1], tail.Expr, nil
+}
+
+// parseIfExpr parses an if-expression after the 'if' keyword has been
+// consumed. Uses the full boolean expression parser for conditions.
+func (p *parser) parseIfExpr(ctx *parseContext, comment string) (*IfExpr, error) {
+	cond, err := p.parseBoolPrimary(ctx.resolve)
+	if err != nil {
+		return nil, err
+	}
+	cond, err = p.parseBoolChain(cond, ctx.resolve)
+	if err != nil {
+		return nil, err
+	}
+
+	body, tail, err := p.parseIfExprBranch(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	expr := &IfExpr{
+		Cond:    cond,
+		Body:    body,
+		Tail:    tail,
+		Comment: comment,
+	}
+
+	// Parse else-if / else chain (else is optional)
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind != tokIdent || tok.val != "else" {
+			p.unget(tok)
+			return expr, nil
+		}
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokIdent && peek.val == "if" {
+			eiCond, err := p.parseBoolPrimary(ctx.resolve)
+			if err != nil {
+				return nil, err
+			}
+			eiCond, err = p.parseBoolChain(eiCond, ctx.resolve)
+			if err != nil {
+				return nil, err
+			}
+			eiBody, eiTail, err := p.parseIfExprBranch(ctx)
+			if err != nil {
+				return nil, err
+			}
+			expr.ElseIfs = append(expr.ElseIfs, ElseIfExprClause{
+				Cond: eiCond,
+				Body: eiBody,
+				Tail: eiTail,
+			})
+		} else {
+			p.unget(peek)
+			elsBody, elsTail, err := p.parseIfExprBranch(ctx)
+			if err != nil {
+				return nil, err
+			}
+			expr.ElsBody = elsBody
+			expr.ElsTail = elsTail
+			return expr, nil
+		}
+	}
+}

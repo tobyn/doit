@@ -72,10 +72,15 @@ compiler warnings.
 
 ## Key Patterns
 
-**Two emission contexts**: Behavior-level and fn body emission share
-unified control flow emitters via `emitContext`. Two factory functions
-— `bhvEmitCtx` (bhvast.go) and `fnEmitCtx` (parse.go) — build the
-context with closures capturing resolution state.
+**Two contexts for parsing and emission**: Both parsing and emission
+use context structs with closures to unify behavior-level and fn body
+paths. `parseContext` (compiler.go) drives statement parsers
+(`parseIfStmt`, `parseWhileStmt`, `parseLoopStmt`, `parseForStmt`,
+`parseWaitStmt`, `parseModeBlockExpr`, `parseIfExpr`, etc. in
+codegen.go). `emitContext` (compiler.go) drives control flow emitters.
+Factory functions — `bhvParseCtx`/`bhvEmitCtx` (bhvast.go) and
+`fnParseCtx`/`fnEmitCtx` (parse.go) — build each context with
+closures capturing resolution state.
 
 **Frame building**: `frameBuilder` is an append-based builder.
 `frameRef(int)` values are 0-based internally, converted to 1-based

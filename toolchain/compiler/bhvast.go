@@ -30,6 +30,31 @@ func (p *parser) bhvResolver(syms *symbolTable) operandResolver {
 	}
 }
 
+// bhvParseCtx constructs a parseContext for behavior-level parsing.
+func (p *parser) bhvParseCtx(syms *symbolTable) *parseContext {
+	var scopeStack []map[string]varInfo
+	return &parseContext{
+		resolve: p.bhvResolver(syms),
+		parseBody: func(exprTail bool) ([]Stmt, error) {
+			return p.parseBhvStmtBlockInner(syms, exprTail)
+		},
+		pushScope: func() {
+			scopeStack = append(scopeStack, syms.pushScope())
+		},
+		popScope: func() {
+			n := len(scopeStack) - 1
+			syms.popScope(scopeStack[n])
+			scopeStack = scopeStack[:n]
+		},
+		declareIterVar: func(name string) {
+			syms.declareVarWarn(name, false, p, 0)
+		},
+		parseConstructor: func(nameTok token) (Expr, error) {
+			return p.parseBhvConstructorExpr(nameTok, syms)
+		},
+	}
+}
+
 // bhvEmitCtx constructs an emitContext for behavior-level emission.
 func (p *parser) bhvEmitCtx(b *frameBuilder, syms *symbolTable) *emitContext {
 	var scopeStack []map[string]varInfo
@@ -747,7 +772,7 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 			}
 			base = ctor
 		} else if tok.val == "locked" || tok.val == "unlocked" {
-			mbe, err := p.parseBhvModeBlockExpr(tok.val == "unlocked", syms, "")
+			mbe, err := p.parseModeBlockExpr(tok.val == "unlocked", p.bhvParseCtx(syms), "")
 			if err != nil {
 				return nil, err
 			}
@@ -757,7 +782,7 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 			}
 			base = result
 		} else if tok.val == "if" {
-			ifExpr, err := p.parseBhvIfExpr(syms, "")
+			ifExpr, err := p.parseIfExpr(p.bhvParseCtx(syms), "")
 			if err != nil {
 				return nil, err
 			}
@@ -1066,7 +1091,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 	// Mode block expression RHS: let x = unlocked { ... }
 	// Supports continuation: let x = unlocked { get_number v } + 1
 	if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
-		mbe, err := p.parseBhvModeBlockExpr(rhsTok.val == "unlocked", syms, comment)
+		mbe, err := p.parseModeBlockExpr(rhsTok.val == "unlocked", p.bhvParseCtx(syms), comment)
 		if err != nil {
 			return nil, err
 		}
@@ -1088,7 +1113,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 	// If-expression RHS: let x = if cond { ... } else { ... }
 	// Supports continuation: let x = if cond { a } else { b } + 1
 	if rhsTok.kind == tokIdent && rhsTok.val == "if" {
-		ifExpr, err := p.parseBhvIfExpr(syms, comment)
+		ifExpr, err := p.parseIfExpr(p.bhvParseCtx(syms), comment)
 		if err != nil {
 			return nil, err
 		}
@@ -1425,7 +1450,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		// Mode block expression RHS: x = unlocked { ... }
 		// Supports continuation: x = unlocked { get_number v } + 1
 		if rhsTok.kind == tokIdent && (rhsTok.val == "locked" || rhsTok.val == "unlocked") {
-			mbe, err := p.parseBhvModeBlockExpr(rhsTok.val == "unlocked", syms, comment)
+			mbe, err := p.parseModeBlockExpr(rhsTok.val == "unlocked", p.bhvParseCtx(syms), comment)
 			if err != nil {
 				return nil, err
 			}
@@ -1446,7 +1471,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		// If-expression RHS: x = if cond { ... } else { ... }
 		// Supports continuation: x = if cond { a } else { b } + 1
 		if rhsTok.kind == tokIdent && rhsTok.val == "if" {
-			ifExpr, err := p.parseBhvIfExpr(syms, comment)
+			ifExpr, err := p.parseIfExpr(p.bhvParseCtx(syms), comment)
 			if err != nil {
 				return nil, err
 			}
@@ -1788,313 +1813,6 @@ func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTabl
 	return blocks, nil
 }
 
-// parseBhvIfStmt parses an if/else-if/else statement with full boolean
-// expression support (comparisons, &&/||, is, truthy, function calls).
-func (p *parser) parseBhvIfStmt(syms *symbolTable) (*IfStmt, error) {
-	comment := p.docComment
-	resolve := p.bhvResolver(syms)
-	cond, err := p.parseBoolPrimary(resolve)
-	if err != nil {
-		return nil, err
-	}
-	cond, err = p.parseBoolChain(cond, resolve)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-	body, err := p.parseBhvStmtBlockInner(syms)
-	if err != nil {
-		return nil, err
-	}
-
-	stmt := &IfStmt{
-		Cond:    cond,
-		Body:    body,
-		Comment: comment,
-	}
-
-	// Parse optional else / else-if chains
-	tok, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	if tok.kind == tokIdent && tok.val == "else" {
-		peek, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek.kind == tokIdent && peek.val == "if" {
-			// else if
-			err := p.parseBhvElseIfChain(stmt, syms)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// plain else
-			p.unget(peek)
-			if _, err := p.expect(tokLBrace); err != nil {
-				return nil, err
-			}
-			elseBody, err := p.parseBhvStmtBlockInner(syms)
-			if err != nil {
-				return nil, err
-			}
-			stmt.Else = elseBody
-		}
-	} else {
-		p.unget(tok)
-	}
-
-	return stmt, nil
-}
-
-// parseBhvElseIfChain parses the else-if / else chain and attaches them
-// to the given IfStmt.
-func (p *parser) parseBhvElseIfChain(stmt *IfStmt, syms *symbolTable) error {
-	resolve := p.bhvResolver(syms)
-	cond, err := p.parseBoolPrimary(resolve)
-	if err != nil {
-		return err
-	}
-	cond, err = p.parseBoolChain(cond, resolve)
-	if err != nil {
-		return err
-	}
-
-	if _, err := p.expect(tokLBrace); err != nil {
-		return err
-	}
-	body, err := p.parseBhvStmtBlockInner(syms)
-	if err != nil {
-		return err
-	}
-
-	stmt.ElseIfs = append(stmt.ElseIfs, ElseIfClause{Cond: cond, Body: body})
-
-	// Check for trailing else
-	tok, err := p.next()
-	if err != nil {
-		return err
-	}
-	if tok.kind == tokIdent && tok.val == "else" {
-		peek, err := p.next()
-		if err != nil {
-			return err
-		}
-		if peek.kind == tokIdent && peek.val == "if" {
-			return p.parseBhvElseIfChain(stmt, syms)
-		}
-		// Plain else
-		p.unget(peek)
-		if _, err := p.expect(tokLBrace); err != nil {
-			return err
-		}
-		elseBody, err := p.parseBhvStmtBlockInner(syms)
-		if err != nil {
-			return err
-		}
-		stmt.Else = elseBody
-	} else {
-		p.unget(tok)
-	}
-
-	return nil
-}
-
-// parseBhvWhileStmt parses a while loop with full boolean expression support.
-func (p *parser) parseBhvWhileStmt(syms *symbolTable, label ...string) (*WhileStmt, error) {
-	lbl := ""
-	if len(label) > 0 {
-		lbl = label[0]
-	}
-	comment := p.docComment
-	resolve := p.bhvResolver(syms)
-	cond, err := p.parseBoolPrimary(resolve)
-	if err != nil {
-		return nil, err
-	}
-	cond, err = p.parseBoolChain(cond, resolve)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-	p.enterLoop(lbl)
-	body, err := p.parseBhvStmtBlockInner(syms)
-	p.exitLoop(lbl)
-	if err != nil {
-		return nil, err
-	}
-
-	return &WhileStmt{Label: lbl, Cond: cond, Body: body, Comment: comment}, nil
-}
-
-// parseBhvLoopStmt parses a loop { ... } or loop N { ... } block.
-func (p *parser) parseBhvLoopStmt(syms *symbolTable, label ...string) (*LoopStmt, error) {
-	lbl := ""
-	if len(label) > 0 {
-		lbl = label[0]
-	}
-	comment := p.docComment
-
-	// Peek for count expression
-	peek, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-
-	var count Expr
-	if peek.kind == tokLBrace {
-		// Infinite loop: loop { ... }
-		p.enterLoop(lbl)
-		body, err := p.parseBhvStmtBlockInner(syms)
-		p.exitLoop(lbl)
-		if err != nil {
-			return nil, err
-		}
-		return &LoopStmt{Label: lbl, Body: body, Comment: comment}, nil
-	}
-
-	// Counted loop: parse count expression
-	resolve := p.bhvResolver(syms)
-	count, err = p.parseSimpleExpr(peek, resolve, "'{' or count expression after 'loop'")
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-	p.enterLoop(lbl)
-	body, err := p.parseBhvStmtBlockInner(syms)
-	p.exitLoop(lbl)
-	if err != nil {
-		return nil, err
-	}
-	return &LoopStmt{Label: lbl, Count: count, Body: body, Comment: comment}, nil
-}
-
-// parseBhvWaitStmt parses a wait statement: `wait <ticks>` or `wait <ticks> { body; cond }`.
-func (p *parser) parseBhvWaitStmt(syms *symbolTable) (*WaitStmt, error) {
-	comment := p.docComment
-	resolve := p.bhvResolver(syms)
-
-	// Parse ticks expression (same pattern as parseBhvLoopStmt count)
-	peek, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-
-	var ticks Expr
-	ticks, err = p.parseSimpleExpr(peek, resolve, "ticks expression after 'wait'")
-	if err != nil {
-		return nil, err
-	}
-
-	// Check for optional condition block
-	peek2, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	if peek2.kind != tokLBrace {
-		// Simple wait: wait <ticks>
-		p.unget(peek2)
-		return &WaitStmt{Ticks: ticks, Comment: comment}, nil
-	}
-
-	// Block wait: wait <ticks> { body; cond }
-	stmts, err := p.parseBhvStmtBlockInner(syms, true)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) == 0 {
-		return nil, p.errorf(peek2.pos, "empty wait block")
-	}
-	last := stmts[len(stmts)-1]
-	tail, ok := last.(*exprTailStmt)
-	if !ok {
-		return nil, p.errorf(peek2.pos, "last item in wait block must be a value-producing expression")
-	}
-	return &WaitStmt{
-		Ticks:   ticks,
-		Body:    stmts[:len(stmts)-1],
-		Tail:    tail.Expr,
-		Comment: comment,
-	}, nil
-}
-
-// parseBhvForStmt parses a for i in <range> { ... } loop.
-func (p *parser) parseBhvForStmt(syms *symbolTable, label ...string) (*ForStmt, error) {
-	lbl := ""
-	if len(label) > 0 {
-		lbl = label[0]
-	}
-	comment := p.docComment
-
-	// Parse iteration variable
-	iterTok, err := p.expect(tokIdent)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.checkVarName(iterTok.val, syms, iterTok.pos); err != nil {
-		return nil, err
-	}
-
-	// Expect 'in'
-	inTok, err := p.expect(tokIdent)
-	if err != nil {
-		return nil, err
-	}
-	if inTok.val != "in" {
-		return nil, p.errorf(inTok.pos, "expected 'in' after for variable, got %q", inTok.val)
-	}
-
-	// Parse range expression: Range constructor, variable, or $register
-	rangeTok, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	var rangeExpr Expr
-	if rangeTok.kind == tokIdent && rangeTok.val == "Range" {
-		rangeExpr, err = p.parseBhvConstructorExpr(rangeTok, syms)
-		if err != nil {
-			return nil, err
-		}
-	} else if rangeTok.kind == tokIdent {
-		resolved, err := p.resolveBhvOperand(rangeTok, syms)
-		if err != nil {
-			return nil, err
-		}
-		rangeExpr = resolved
-	} else {
-		return nil, p.errorf(rangeTok.pos, "expected Range constructor or variable after 'in', got %s", rangeTok.describe())
-	}
-
-	if _, err := p.expect(tokLBrace); err != nil {
-		return nil, err
-	}
-
-	// Push scope for iter var + body
-	saved := syms.pushScope()
-	syms.declareVarWarn(iterTok.val, false, p, iterTok.pos)
-
-	p.enterLoop(lbl)
-	body, err := p.parseBhvStmtBlockInner(syms)
-	p.exitLoop(lbl)
-
-	syms.popScope(saved)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &ForStmt{Label: lbl, IterVar: iterTok.val, Range: rangeExpr, Body: body, Comment: comment}, nil
-}
 
 // parseBhvMultiReturn parses a multi-return binding list.
 // The first binding (firstTok) and the comma after it have been consumed.
@@ -2253,7 +1971,7 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		}
 
 		if tok.kind == tokIdent && (tok.val == "locked" || tok.val == "unlocked") {
-			mbe, err := p.parseBhvModeBlockExpr(tok.val == "unlocked", syms, comment)
+			mbe, err := p.parseModeBlockExpr(tok.val == "unlocked", p.bhvParseCtx(syms), comment)
 			if err != nil {
 				return nil, err
 			}
@@ -2263,7 +1981,7 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		}
 
 		if tok.kind == tokIdent && tok.val == "if" {
-			ifExpr, err := p.parseBhvIfExpr(syms, comment)
+			ifExpr, err := p.parseIfExpr(p.bhvParseCtx(syms), comment)
 			if err != nil {
 				return nil, err
 			}
@@ -2385,133 +2103,6 @@ func (p *parser) ifExprArity(e *IfExpr) int {
 	return max
 }
 
-// parseBhvModeBlockExpr parses a locked/unlocked block used as an expression.
-// The keyword has been consumed. Expects '{', body statements, a tail
-// expression, and '}'. Returns a ModeBlockExpr.
-func (p *parser) parseBhvModeBlockExpr(unlock bool, syms *symbolTable, comment string) (*ModeBlockExpr, error) {
-	lbrace, err := p.expect(tokLBrace)
-	if err != nil {
-		return nil, err
-	}
-	stmts, err := p.parseBhvStmtBlockInner(syms, true)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) == 0 {
-		return nil, p.errorf(lbrace.pos, "empty mode block expression")
-	}
-	// The last statement must be an exprTailStmt
-	last := stmts[len(stmts)-1]
-	tail, ok := last.(*exprTailStmt)
-	if !ok {
-		return nil, p.errorf(lbrace.pos, "last item in mode block expression must be a value-producing expression")
-	}
-	return &ModeBlockExpr{
-		Unlock:  unlock,
-		Body:    stmts[:len(stmts)-1],
-		Tail:    tail.Expr,
-		Comment: comment,
-	}, nil
-}
-
-// parseBhvIfExprBranch parses a brace-delimited expression block (statements +
-// tail expression) for an if-expression branch.
-func (p *parser) parseBhvIfExprBranch(syms *symbolTable) ([]Stmt, Expr, error) {
-	lbrace, err := p.expect(tokLBrace)
-	if err != nil {
-		return nil, nil, err
-	}
-	stmts, err := p.parseBhvStmtBlockInner(syms, true)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(stmts) == 0 {
-		return nil, nil, p.errorf(lbrace.pos, "empty if-expression branch")
-	}
-	last := stmts[len(stmts)-1]
-	tail, ok := last.(*exprTailStmt)
-	if !ok {
-		return nil, nil, p.errorf(lbrace.pos, "last item in if-expression branch must be a value-producing expression")
-	}
-	return stmts[:len(stmts)-1], tail.Expr, nil
-}
-
-// parseBhvIfExpr parses an if-expression after the 'if' keyword has been
-// consumed. Uses the full boolean expression parser for conditions.
-func (p *parser) parseBhvIfExpr(syms *symbolTable, comment string) (*IfExpr, error) {
-	resolve := p.bhvResolver(syms)
-
-	// Parse condition
-	cond, err := p.parseBoolPrimary(resolve)
-	if err != nil {
-		return nil, err
-	}
-	cond, err = p.parseBoolChain(cond, resolve)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse if body
-	body, tail, err := p.parseBhvIfExprBranch(syms)
-	if err != nil {
-		return nil, err
-	}
-
-	expr := &IfExpr{
-		Cond:    cond,
-		Body:    body,
-		Tail:    tail,
-		Comment: comment,
-	}
-
-	// Parse else-if / else chain (else is optional)
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if tok.kind != tokIdent || tok.val != "else" {
-			// No else clause — uncovered branches produce null
-			p.unget(tok)
-			return expr, nil
-		}
-		peek, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek.kind == tokIdent && peek.val == "if" {
-			// else if
-			eiCond, err := p.parseBoolPrimary(resolve)
-			if err != nil {
-				return nil, err
-			}
-			eiCond, err = p.parseBoolChain(eiCond, resolve)
-			if err != nil {
-				return nil, err
-			}
-			eiBody, eiTail, err := p.parseBhvIfExprBranch(syms)
-			if err != nil {
-				return nil, err
-			}
-			expr.ElseIfs = append(expr.ElseIfs, ElseIfExprClause{
-				Cond: eiCond,
-				Body: eiBody,
-				Tail: eiTail,
-			})
-		} else {
-			// plain else
-			p.unget(peek)
-			elsBody, elsTail, err := p.parseBhvIfExprBranch(syms)
-			if err != nil {
-				return nil, err
-			}
-			expr.ElsBody = elsBody
-			expr.ElsTail = elsTail
-			return expr, nil
-		}
-	}
-}
-
 // parseBhvStmtBlock parses a brace-delimited block of statements.
 // The opening '{' has been consumed. Reads until '}'.
 func (p *parser) parseBhvStmtBlock(syms *symbolTable) ([]Stmt, error) {
@@ -2576,13 +2167,14 @@ func (p *parser) tryParseLabeledLoop(tok token, syms *symbolTable) (Stmt, error)
 			if p.loopLabels[label] {
 				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
 			}
+			pctx := p.bhvParseCtx(syms)
 			switch peek2.val {
 			case "loop":
-				return p.parseBhvLoopStmt(syms, label)
+				return p.parseLoopStmt(pctx, p.docComment, label)
 			case "while":
-				return p.parseBhvWhileStmt(syms, label)
+				return p.parseWhileStmt(pctx, p.docComment, label)
 			case "for":
-				return p.parseBhvForStmt(syms, label)
+				return p.parseForStmt(pctx, p.docComment, label)
 			}
 		}
 		p.unget(peek2)
@@ -2683,31 +2275,31 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		}
 		return nil, false, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
 	case "loop":
-		loopStmt, err := p.parseBhvLoopStmt(syms)
+		loopStmt, err := p.parseLoopStmt(p.bhvParseCtx(syms), p.docComment)
 		if err != nil {
 			return nil, false, err
 		}
 		return []Stmt{loopStmt}, true, nil
 	case "if":
-		ifStmt, err := p.parseBhvIfStmt(syms)
+		ifStmt, err := p.parseIfStmt(p.bhvParseCtx(syms), p.docComment)
 		if err != nil {
 			return nil, false, err
 		}
 		return []Stmt{ifStmt}, true, nil
 	case "while":
-		whileStmt, err := p.parseBhvWhileStmt(syms)
+		whileStmt, err := p.parseWhileStmt(p.bhvParseCtx(syms), p.docComment)
 		if err != nil {
 			return nil, false, err
 		}
 		return []Stmt{whileStmt}, true, nil
 	case "for":
-		forStmt, err := p.parseBhvForStmt(syms)
+		forStmt, err := p.parseForStmt(p.bhvParseCtx(syms), p.docComment)
 		if err != nil {
 			return nil, false, err
 		}
 		return []Stmt{forStmt}, true, nil
 	case "wait":
-		waitStmt, err := p.parseBhvWaitStmt(syms)
+		waitStmt, err := p.parseWaitStmt(p.bhvParseCtx(syms), p.docComment)
 		if err != nil {
 			return nil, false, err
 		}
@@ -2823,7 +2415,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 
 		// ExprTail: if-expression
 		if allowExprTail && tok.val == "if" {
-			ifExpr, err := p.parseBhvIfExpr(syms, comment)
+			ifExpr, err := p.parseIfExpr(p.bhvParseCtx(syms), comment)
 			if err != nil {
 				return nil, err
 			}
