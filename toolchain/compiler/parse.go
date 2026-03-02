@@ -23,7 +23,7 @@ import (
 //
 // Disambiguation: if token after '{' is an ident followed by '{' or 'for'
 // followed by an ident, it's multi-block. Otherwise collapsed.
-func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []string) ([]Stmt, error)) ([]*ContinuationBlock, error) {
+func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []string, looping bool) ([]Stmt, error)) ([]*ContinuationBlock, error) {
 	// Disambiguate multi-block vs collapsed form.
 	//
 	// Multi-block: { name1 { body } name2 { body } ... }
@@ -59,17 +59,16 @@ func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []str
 		return nil, err
 	}
 
-	body, err := bodyParser(params)
-	if err != nil {
-		return nil, err
-	}
-	return []*ContinuationBlock{{Name: "", Params: params, Body: body}}, nil
+	// Collapsed form inherits looping from the leftmost exec name
+	looping := fn.execLooping[fn.execNames[0]]
+	body, err := bodyParser(params, looping)
+	return []*ContinuationBlock{{Name: "", Params: params, Body: body, Looping: looping}}, nil
 }
 
 // parseContinuationBlocksMulti parses the multi-block form:
 //   name1 { body } name2 { body } ...
 // Outer '}' terminates.
-func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params []string) ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
+func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params []string, looping bool) ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
 	var blocks []*ContinuationBlock
 	seen := map[string]bool{}
 
@@ -92,8 +91,11 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params 
 			break // end of multi-block
 		}
 
-		// Optional 'for' prefix (looping — validated but not stored until Phase 4)
+		// Optional 'for' prefix (looping continuation)
+		forPrefix := false
+		forPos := tok.pos
 		if tok.kind == tokIdent && tok.val == "for" {
+			forPrefix = true
 			tok, err = p.next()
 			if err != nil {
 				return nil, err
@@ -124,6 +126,15 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params 
 		}
 		seen[name] = true
 
+		// Validate connection type: for on bridging → error, bare on looping → error
+		isLoopingCont := fn.execLooping[name]
+		if forPrefix && !isLoopingCont {
+			return nil, p.errorf(forPos, "'for' prefix on bridging continuation %q — remove 'for'", name)
+		}
+		if !forPrefix && isLoopingCont {
+			return nil, p.errorf(tok.pos, "looping continuation %q requires 'for' prefix", name)
+		}
+
 		if _, err := p.expect(tokLBrace); err != nil {
 			return nil, err
 		}
@@ -134,11 +145,12 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params 
 			return nil, err
 		}
 
-		body, err := bodyParser(params)
+		isLooping := forPrefix || isLoopingCont
+		body, err := bodyParser(params, isLooping)
 		if err != nil {
 			return nil, err
 		}
-		blocks = append(blocks, &ContinuationBlock{Name: name, Params: params, Body: body})
+		blocks = append(blocks, &ContinuationBlock{Name: name, Params: params, Body: body, Looping: isLooping})
 	}
 
 	if len(blocks) == 0 {
@@ -416,9 +428,26 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 			return err
 		}
 
-		// Add bridge jump (placeholder — will be patched to join point)
-		isLooping := fn.execLooping[blk.Name]
-		if !isLooping {
+		if blk.Looping {
+			// Looping block: set "next": false on last body frame.
+			// This tells the VM to re-dispatch to the iterator.
+			lastIdx := b.pos() - 1
+			if lastIdx >= blockStarts[blk.Name] {
+				b.frames[lastIdx]["next"] = false
+			}
+			// Patch unlabeled @break in the block body to "last"
+			// (stops the iterator). Labeled breaks pass through to
+			// the enclosing loop's patchBreakPlaceholders.
+			for j := blockStarts[blk.Name]; j < b.pos(); j++ {
+				f := b.frames[j]
+				if op, _ := f["op"].(string); op == "@break" {
+					if label, _ := f["label"].(string); label == "" {
+						b.frames[j] = map[string]any{"op": "last"}
+					}
+				}
+			}
+		} else {
+			// Bridging block: jump to join point after body
 			jumpIdx := b.emit(map[string]any{
 				"op": "set_reg",
 				"1":  false,
@@ -3791,11 +3820,15 @@ func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContex
 		p.unget(tok)
 		return nil, nil
 	}
-	return p.parseContinuationBlocks(fn, func(params []string) ([]Stmt, error) {
+	return p.parseContinuationBlocks(fn, func(params []string, looping bool) ([]Stmt, error) {
 		saved, depth := ctx.pushFnScope()
 		defer ctx.popFnScope(saved, depth)
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
+		}
+		if looping {
+			p.loopDepth++
+			defer func() { p.loopDepth-- }()
 		}
 		return p.parseFnBodyStmts(ctx)
 	})

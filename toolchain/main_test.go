@@ -3415,6 +3415,40 @@ behavior t { @name "T" }`
 		}
 	})
 
+	t.Run("exec_for_on_bridging", func(t *testing.T) {
+		src := `fn f(x) exec(a) {
+	instruction "nop" { exec 0: a }
+}
+behavior t {
+	@name "T"
+	f(get_self) { for a { notify "oops" } }
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "bridging continuation") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exec_bare_on_looping", func(t *testing.T) {
+		src := `fn f(x) exec(a) {
+	instruction "nop" { for next: a }
+}
+behavior t {
+	@name "T"
+	f(get_self) { a { notify "oops" } }
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "requires 'for' prefix") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

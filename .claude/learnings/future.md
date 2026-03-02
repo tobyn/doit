@@ -371,12 +371,13 @@ Phases 1–3 are implemented. Phases 4–6 remain.
   sites, `allocExecOutputRegs`, `findMaxExecOutputSlot`,
   `findMaxReturnSlot`, synthetic `@retN` names for exec functions
   without explicit `return`.
+- **Phase 4: Looping continuations** — `Looping` field on
+  `ContinuationBlock`, `for` prefix validation (bridging/looping
+  mismatch errors), `"next": false` on last body frame, `break` →
+  `{"op": "last"}` in looping blocks, `loopDepth` increment for
+  `break` permission.
 
 **Remaining:**
-
-- **Phase 4: Looping continuations** — `for` blocks with
-  `"next": false`, `break` → `last` instruction, `for`-block break
-  targets.
 - **Phase 5: Pure-logic branching + expression form** — `return
   <cont_name>`, expression-level branching calls, assignment form
   (`let x = fn() { ... }`).

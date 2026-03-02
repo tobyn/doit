@@ -1702,11 +1702,15 @@ func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) (
 		p.unget(tok)
 		return nil, nil
 	}
-	return p.parseContinuationBlocks(fn, func(params []string) ([]Stmt, error) {
+	return p.parseContinuationBlocks(fn, func(params []string, looping bool) ([]Stmt, error) {
 		saved := syms.pushScope()
 		defer syms.popScope(saved)
 		for _, name := range params {
 			syms.declareVar(name, false)
+		}
+		if looping {
+			p.loopDepth++
+			defer func() { p.loopDepth-- }()
 		}
 		return p.parseBhvStmtBlockInner(syms)
 	})

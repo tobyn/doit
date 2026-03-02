@@ -511,10 +511,44 @@ The `@N` numbers refer to instruction output slots. The continuation
 argument list (`found(@1, @2)`) declares which outputs are available
 to the block. The block's bindings (`entity, distance ->`) name them.
 
+#### Looping continuations
+
+Some instructions are iterators — they dispatch a body block
+repeatedly. Mark these blocks with `for` at the call site:
+
+```doit
+my_for_comp(entity) {
+    for body { comp, idx ->
+        notify "comp", value: comp
+    }
+    done { notify "done" }
+}
+```
+
+The `for` prefix is required for looping continuations and forbidden
+for bridging ones. The compiler enforces this.
+
+`break` inside a `for` block stops the iterator (emits the VM's
+`last` instruction):
+
+```doit
+my_for_comp(entity) {
+    for body { comp, idx ->
+        if comp == null {
+            break
+        }
+        notify "comp", value: comp
+    }
+    done { notify "done" }
+}
+```
+
 #### Collapsed form
 
 When a function has a single continuation you care about, you can omit
-the continuation name. The block binds to the leftmost `exec` name:
+the continuation name. The block binds to the leftmost `exec` name.
+Connection type (bridging/looping) is inherited from the function
+definition:
 
 ```doit
 # These are equivalent:

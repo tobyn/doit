@@ -20,9 +20,10 @@ type Expr interface {
 
 // ContinuationBlock is a named block of code attached to a branching call.
 type ContinuationBlock struct {
-	Name   string   // continuation name ("" for collapsed unnamed form)
-	Params []string // Kotlin-style bindings (e.g., "comp, idx ->"); nil = no data
-	Body   []Stmt
+	Name    string   // continuation name ("" for collapsed unnamed form)
+	Params  []string // Kotlin-style bindings (e.g., "comp, idx ->"); nil = no data
+	Body    []Stmt
+	Looping bool // true if prefixed with `for` at call site
 }
 
 // --- Statement nodes ---
