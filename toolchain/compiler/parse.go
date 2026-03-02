@@ -4222,11 +4222,14 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			if err != nil {
 				return nil, err
 			}
-			if peek.kind == tokIdent && !Keywords[peek.val] && p.fns[peek.val] == nil {
-				if !p.loopLabels[peek.val] {
+			if peek.kind == tokIdent && !Keywords[peek.val] {
+				if p.loopLabels[peek.val] {
+					label = peek.val
+				} else if p.fns[peek.val] == nil {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
+				} else {
+					p.unget(peek)
 				}
-				label = peek.val
 			} else {
 				p.unget(peek)
 			}

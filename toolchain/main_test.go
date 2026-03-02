@@ -2312,6 +2312,22 @@ behavior a { f }`
 		}
 	})
 
+	t.Run("break_label_shadows_fn_behavior", func(t *testing.T) {
+		src := `fn f() {} behavior a { f: loop { loop { break f } } }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("break_label_shadows_fn_fn_body", func(t *testing.T) {
+		src := `fn g() {} behavior a { h } fn h() { g: loop { loop { break g } } }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
 	t.Run("if_expr_no_else_compiles", func(t *testing.T) {
 		src := `behavior a { @param in x "X" let r = if $x > 1 { 5 } notify "done", value: r }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")

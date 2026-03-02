@@ -1,0 +1,18 @@
+# AI-generated test
+# Label that shadows a function name in fn body — break targets the labeled outer loop
+fn g() {}
+
+fn h() {
+    g: loop {
+        loop {
+            break g
+        }
+    }
+
+    notify "Done"
+}
+
+behavior fn_body_labeled_break_shadows_fn {
+    @name "Fn Body Labeled Break Shadows Fn"
+    h
+}

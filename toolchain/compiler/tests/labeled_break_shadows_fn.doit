@@ -1,0 +1,15 @@
+# AI-generated test
+# Label that shadows a function name — break targets the labeled outer loop
+fn f() {}
+
+behavior labeled_break_shadows_fn {
+    @name "Labeled Break Shadows Fn"
+
+    f: loop {
+        loop {
+            break f
+        }
+    }
+
+    notify "Done"
+}
