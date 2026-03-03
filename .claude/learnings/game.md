@@ -107,9 +107,11 @@ Variable names are arbitrary strings. The game suggests default
 names (A, B, C, ...) but users can rename them freely.
 
 Parameters are declared via a top-level `"parameters"` array in the
-behavior JSON. Each entry represents a parameter slot (`false` for
-no default value). The game UI can only display 10 parameters, so
-the compiler should warn if a behavior declares more than 10.
+behavior JSON. Each entry is `false` (input) or `true` (output /
+input-output). In standalone behaviors all parameters are `true`;
+the distinction matters for subroutines (see Subroutines section).
+The game UI can only display 10 parameters, so the compiler should
+warn if a behavior declares more than 10.
 
 ## Instructions
 
@@ -127,6 +129,80 @@ The `check_number` instruction ("Compare Number" in the game UI) is a
 two inputs: a value (slot `"2"`) and a comparison target (slot `"3"`).
 The three output paths are: slot `"0"` (if larger), slot `"1"` (if
 smaller), and `"next"` (if equal, fall-through).
+
+## Subroutines (Call Instruction)
+
+The `call` instruction invokes another behavior as a subroutine. The
+called behavior runs synchronously — execution resumes at the next
+instruction after the call returns.
+
+### Dependencies
+
+Called behaviors are stored in a flat `dependencies` array on the
+**root** behavior. All subroutines at any call depth share this same
+array. Each dependency is a complete behavior definition (instructions,
+parameters, pnames, name) but never has its own `dependencies` array.
+
+The `call` instruction references a dependency via the `"sub"` field:
+- **Positive integer** — 1-based index into the `dependencies` array
+  (e.g., `"sub": 1` → `dependencies[0]`)
+- **`-1`** — Self-call (the root behavior calls itself recursively)
+
+### Parameter Mapping
+
+The `call` instruction's numbered slots correspond 1:1 to the callee's
+parameters. Each slot provides an **l-value** (storage location) to the
+callee — the callee can both read from and write to it:
+
+- **Register** (variable, parameter, unit register) — reads and writes
+  go to that register in the caller's scope
+- **Literal** (`{"num": 8}`) — callee can read the value; writes are
+  silently discarded (no storage to modify)
+- **Omitted** — callee reads the parameter as empty/null; writes go
+  nowhere
+
+This is effectively **pass-by-reference** for registers and
+**pass-by-value** for literals.
+
+The callee's `parameters` array indicates direction:
+- `false` — pure input
+- `true` — output or input/output
+
+In standalone (non-subroutine) behaviors, all parameters are `true`
+since they're bidirectional with external registers. The distinction
+only matters in the subroutine context.
+
+### Call Semantics
+
+- **No exec slots** — `call` is a simple instruction with no branching.
+- **Separate variables** — The callee has its own variable namespace,
+  completely independent of the caller. It cannot see the caller's
+  variables or parameters (only what's passed via call slots).
+- **Shared unit registers** — The four unit registers (`$signal`,
+  `$visual`, `$store`, `$goto`) are global to the unit and accessible
+  across call depths.
+- **Lock/unlock is global** — The callee inherits the caller's lock
+  state. If the callee changes it (e.g., calls `lock`), the change
+  persists after the call returns. Lock/unlock is controller-wide
+  state, not scoped to call frames.
+- **Unwritten outputs** — If the callee terminates without writing to
+  an output parameter, the caller's destination register is untouched.
+- **Call depth limit** — Recursion is allowed but the game enforces a
+  maximum call depth. Exceeding it kills the behavior (same as
+  exceeding the instruction budget in unlocked mode).
+
+### Compiled JSON
+
+The `pnames` array (parameter names) should be omitted when empty,
+and included only when there are actual names.
+
+Example call instruction:
+```json
+{"op": "call", "sub": 1, "1": "A", "2": {"num": 8}, "3": 2}
+```
+This calls dependency 1, passing variable A as param 1 (input),
+literal 8 as param 2 (input), and routing param 3 (output) back
+to the caller's parameter 2.
 
 ## Import/Export
 

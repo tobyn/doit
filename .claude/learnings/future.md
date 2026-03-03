@@ -32,7 +32,9 @@ non-continuation contexts. The two features would complement each other.
 
 Functions are currently always inlined — every call site duplicates the
 function body. The behavior VM has a `call` instruction that supports
-subroutines, which could allow true function calls without duplication.
-This would also enable recursion. Needs investigation into how the
-`call` instruction works (it's currently a not-implementable stub in
-the stdlib).
+subroutines (see `game.md` Subroutines section for the full call
+mechanism). This could allow true function calls without duplication
+and would also enable recursion. The `call` instruction is fully
+understood — the remaining work is compiler support: emitting
+subroutine behaviors as dependencies, generating `call` instructions
+instead of inlining, and managing the flat dependency list.

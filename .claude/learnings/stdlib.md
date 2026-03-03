@@ -112,7 +112,9 @@ Comments marked `(low confidence)` have JSON fields inferred from Lua variable n
 code rather than from structured `args` data. These should be verified against actual game output
 before relying on them for code generation. The low-confidence instructions are:
 
-- **`call`** — numbered params are dynamic, determined by the selected subroutine
+- **`call`** — numbered params are dynamic, determined by the selected
+  subroutine. `"sub"` field references a dependency index (1-based) or
+  `-1` for self-call. See `game.md` Subroutines section for full details.
 - **`build`**, **`build_registered`**, **`produce`**, **`produce_registered`** — `"bp"`/`"frame"`
   field names inferred from `build_produce_ui` Lua code
 - **`set_logistics_options`** — `"c"`/`"c2"` are flag tables (not simple integers like other
