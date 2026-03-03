@@ -1165,6 +1165,17 @@ func patchBreakPlaceholders(b *frameBuilder, from int, label string, target fram
 	}
 }
 
+// patchIterDoneSlot sets the "done" slot on an iterator instruction frame
+// to point to target. The doneSlot key is converted from 0-based to 1-based
+// if numeric.
+func patchIterDoneSlot(b *frameBuilder, instrIdx int, doneSlot string, target frameRef) {
+	nativeKey := doneSlot
+	if n, err := strconv.Atoi(doneSlot); err == nil {
+		nativeKey = strconv.Itoa(n + 1)
+	}
+	b.frames[instrIdx][nativeKey] = target
+}
+
 // patchUnlabeledBreakToLast replaces unlabeled @break placeholder frames
 // in b.frames[from:] with a "last" instruction that stops an iterator.
 // Used by iterator-backed for-loop emitters where unlabeled break means
@@ -1613,14 +1624,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 
 	afterLoop := frameRef(ctx.b.pos())
 
-	// Set the done slot on the for_number instruction frame
-	doneSlotNative := ""
-	if n, err := strconv.Atoi(forNumberIter.doneSlot); err == nil {
-		doneSlotNative = strconv.Itoa(n + 1)
-	} else {
-		doneSlotNative = forNumberIter.doneSlot
-	}
-	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
+	patchIterDoneSlot(ctx.b, instrIdx, forNumberIter.doneSlot, afterLoop)
 
 	// Patch @continue in the body — re-dispatch to for_number
 	patchContinuePlaceholders(ctx.b, origLen, false)
@@ -1708,14 +1712,7 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 
 	afterLoop := frameRef(ctx.b.pos())
 
-	// Set the done slot on the instruction frame to point past the loop
-	doneSlotNative := ""
-	if n, err := strconv.Atoi(it.doneSlot); err == nil {
-		doneSlotNative = strconv.Itoa(n + 1)
-	} else {
-		doneSlotNative = it.doneSlot
-	}
-	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
+	patchIterDoneSlot(ctx.b, instrIdx, it.doneSlot, afterLoop)
 
 	// Set the implicit "next" on the instruction frame → body start
 	if origLen > instrIdx+1 {
@@ -1901,14 +1898,7 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 
 	afterLoop := frameRef(ctx.b.pos())
 
-	// Set the done slot on the for_number instruction frame
-	doneSlotNative := ""
-	if n, err := strconv.Atoi(forNumberIter.doneSlot); err == nil {
-		doneSlotNative = strconv.Itoa(n + 1)
-	} else {
-		doneSlotNative = forNumberIter.doneSlot
-	}
-	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
+	patchIterDoneSlot(ctx.b, instrIdx, forNumberIter.doneSlot, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
@@ -1962,14 +1952,7 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 
 	afterLoop := frameRef(ctx.b.pos())
 
-	// Set the done slot on the for_number instruction frame
-	doneSlotNative := ""
-	if n, err := strconv.Atoi(forNumberIter.doneSlot); err == nil {
-		doneSlotNative = strconv.Itoa(n + 1)
-	} else {
-		doneSlotNative = forNumberIter.doneSlot
-	}
-	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
+	patchIterDoneSlot(ctx.b, instrIdx, forNumberIter.doneSlot, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
