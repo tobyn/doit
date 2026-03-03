@@ -534,20 +534,19 @@ my_for_comp(entity) {
 }
 ```
 
-#### `break` in exec blocks
+#### `break` and `last` in exec blocks
 
 `break` inside an exec block means "exit this block invocation":
 
 - **Detached blocks**: `break` exits the current iteration. The
   iterator continues with the next element. To *stop* the iterator,
-  call `last` before `break`:
+  use the `last` keyword — it is terminal, so no `break` is needed:
 
   ```doit
   my_for_comp(entity) {
       body { comp, idx ->
           if comp == null {
-              last      # stop the iterator
-              break     # exit this block
+              last      # stop the iterator (terminal)
           }
           notify "comp", value: comp
       }

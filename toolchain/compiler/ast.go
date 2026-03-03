@@ -171,6 +171,11 @@ type ExitStmt struct {
 	Comment string
 }
 
+// LastStmt stops the current iterator: `last`
+type LastStmt struct {
+	Comment string
+}
+
 // WaitStmt is a wait statement: `wait <ticks>` or `wait <ticks> { body; cond }`.
 type WaitStmt struct {
 	Ticks   Expr   // ticks expression (evaluated once)
@@ -314,6 +319,7 @@ func (*ForStmt) stmtNode()            {}
 func (*YieldStmt) stmtNode()          {}
 func (*BreakStmt) stmtNode()          {}
 func (*ExitStmt) stmtNode()           {}
+func (*LastStmt) stmtNode()           {}
 func (*WaitStmt) stmtNode()           {}
 func (*exprTailStmt) stmtNode()       {}
 
@@ -334,10 +340,10 @@ func (*ModeBlockExpr) exprNode()    {}
 func (*IfExpr) exprNode()           {}
 
 // isTerminalStmt reports whether a statement terminates control flow
-// (exit, break, or return), making any following code unreachable.
+// (exit, last, break, or return), making any following code unreachable.
 func isTerminalStmt(s Stmt) bool {
 	switch s.(type) {
-	case *ExitStmt, *BreakStmt, *ReturnStmt:
+	case *ExitStmt, *LastStmt, *BreakStmt, *ReturnStmt:
 		return true
 	}
 	return false
@@ -348,6 +354,8 @@ func terminalKeyword(s Stmt) string {
 	switch s.(type) {
 	case *ExitStmt:
 		return "exit"
+	case *LastStmt:
+		return "last"
 	case *BreakStmt:
 		return "break"
 	case *ReturnStmt:

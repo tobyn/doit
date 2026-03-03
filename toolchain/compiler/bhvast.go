@@ -2269,6 +2269,8 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		return []Stmt{waitStmt}, true, nil
 	case "exit":
 		return []Stmt{&ExitStmt{Comment: comment}}, true, nil
+	case "last":
+		return []Stmt{&LastStmt{Comment: comment}}, true, nil
 	case "return":
 		return nil, false, p.errorf(tok.pos, "'return' can only be used inside function bodies")
 	case "fn", "private":
@@ -2959,6 +2961,11 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 
 		case *ExitStmt:
 			f := map[string]any{"op": "exit"}
+			setComment(f, s.Comment)
+			b.emit(f)
+
+		case *LastStmt:
+			f := map[string]any{"op": "last"}
 			setComment(f, s.Comment)
 			b.emit(f)
 

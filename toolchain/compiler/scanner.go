@@ -79,6 +79,7 @@ var Keywords = map[string]bool{
 	"inout":       true,
 	"instruction": true,
 	"iter":        true,
+	"last":        true,
 	"let":         true,
 	"locked":      true,
 	"localize":    true,

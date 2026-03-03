@@ -7,34 +7,23 @@
         "0": "e",
         "1": "comp",
         "2": "idx",
-        "3": 6,
+        "3": 4,
         "next": 3,
         "op": "for_component"
     },
     "2": {
-        "0": 5,
-        "1": "comp",
-        "2": false,
-        "op": "compare_register"
-    },
-    "3": {
+        "next": false,
         "op": "last"
     },
-    "4": {
-        "0": "comp",
-        "next": false,
-        "op": "notify",
-        "txt": "comp"
-    },
-    "5": {
+    "3": {
         "op": "notify",
         "txt": "done"
     },
-    "6": {
+    "4": {
         "0": false,
         "1": false,
-        "next": 8,
+        "next": 6,
         "op": "set_reg"
     },
-    "name": "Exec Loop Break"
+    "name": "Exec Detach Last"
 }

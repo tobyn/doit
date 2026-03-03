@@ -1699,10 +1699,34 @@ fn maybe_stop(flag) {
 }
 ```
 
+### `last`
+
+Stops the current iterator. Used inside detached continuation blocks
+(the block body of an iterator) to signal that iteration should end.
+
+```doit
+my_for_comp(entity) {
+    body { comp, idx ->
+        if comp == null {
+            last
+        }
+        notify "comp", value: comp
+    }
+    done { notify "done" }
+}
+```
+
+`last` is terminal — no code after it in the same block will execute
+(the compiler warns about unreachable code after `last`).
+
+> **Note:** In `for ... in` loops, `break` automatically handles
+> iterator termination — you don't need `last` there. `last` is for
+> raw continuation blocks where you manage the iterator directly.
+
 ### Unreachable Code
 
-Code after `exit`, `break`, or `return` can never execute. The compiler
-warns about unreachable code:
+Code after `exit`, `break`, `last`, or `return` can never execute. The
+compiler warns about unreachable code:
 
 ```doit
 behavior a {

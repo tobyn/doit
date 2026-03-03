@@ -36,7 +36,7 @@ After a call's `{`, if the next token is an identifier followed by
 form. `{ var -> body }` (Kotlin binding) is always collapsed since
 `->` cannot follow a continuation name.
 
-## `break` in exec blocks
+## `break` and `last` in exec blocks
 
 Exec blocks are a hard boundary for `break`. `loopDepth` and
 `loopLabels` are saved/reset at exec block entry (`execBlockDepth`
@@ -44,7 +44,8 @@ tracks nesting). `break` inside an exec block means "exit this block":
 
 - **Detached blocks**: `@break` → `set_reg false false` with
   `"next": false` (re-dispatches to the iterator, does NOT stop it).
-  To stop the iterator, call `last` before `break`.
+  To stop the iterator, use the `last` keyword (terminal — no `break`
+  needed after it).
 - **Bridging blocks**: `@break` → `set_reg false false` patched to
   the join point (same as normal block completion).
 

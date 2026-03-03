@@ -26,10 +26,19 @@ before finalization.
 `{"op": "exit"}` — a terminal instruction. The old `exit()` stdlib
 stub was removed.
 
+## `last` keyword
+
+`last` is a language keyword (not a stdlib function). It emits
+`{"op": "last"}` — a terminal instruction that stops the current
+iterator. Mirrors the `exit` pattern exactly: dedicated AST node
+(`LastStmt`), marked terminal (triggers unreachable code warnings),
+no "next" field in output. No location restrictions — allowed
+anywhere, same as `exit`.
+
 ## Unreachable code detection
 
-Code after `exit`, `break`, or `return` is unreachable. The compiler
-warns and skips remaining statements in the block.
+Code after `exit`, `last`, `break`, or `return` is unreachable. The
+compiler warns and skips remaining statements in the block.
 
 **Break label syntax**: Labels use a `'` sigil (`'outer`), making
 them syntactically distinct via `tokLabel`. No disambiguation
@@ -170,10 +179,11 @@ saved/reset at exec block entry; `execBlockDepth` tracks nesting to
 allow `break` without a surrounding loop. In detached blocks, `@break`
 becomes a noop (`set_reg false false` with `"next": false`) that
 re-dispatches to the iterator without stopping it. In bridging blocks,
-`@break` jumps to the join point. Users who need `last` write it
-explicitly (`last; break`). `for...in` loops still emit `last`
-automatically (the compiler controls that path). Labeled `break`
-across an exec block boundary is a parse error (labels are not visible).
+`@break` jumps to the join point. Users who need `last` use the
+`last` keyword (terminal — no `break` needed after it). `for...in`
+loops still emit `last` automatically (the compiler controls that
+path). Labeled `break` across an exec block boundary is a parse error
+(labels are not visible).
 
 ## Range `for` loops — `for_number` emission
 

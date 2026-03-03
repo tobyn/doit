@@ -3932,6 +3932,47 @@ func TestCompileWarnings(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("unreachable_after_last_bhv", func(t *testing.T) {
+		src := `behavior a {
+			last
+			notify "dead"
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'last'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after last, got: %v", warnings)
+		}
+	})
+
+	t.Run("unreachable_after_last_fn", func(t *testing.T) {
+		src := `fn f() {
+			last
+			notify "dead"
+		}
+		behavior a { f }`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'last'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after last in fn body, got: %v", warnings)
+		}
+	})
 }
 
 func TestImports(t *testing.T) {

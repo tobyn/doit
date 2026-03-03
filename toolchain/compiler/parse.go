@@ -2002,6 +2002,12 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			setComment(f, callComment)
 			b.emit(f)
 
+		case *LastStmt:
+			callComment := inheritComment(s.Comment, comment)
+			f := map[string]any{"op": "last"}
+			setComment(f, callComment)
+			b.emit(f)
+
 		case *ReturnStmt:
 			callComment := inheritComment(s.Comment, comment)
 
@@ -3083,6 +3089,8 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 		case *BreakStmt:
 			return &constEvalStatus{broke: true, breakLabel: s.Label}, true
 		case *ExitStmt:
+			return nil, false // bail: runtime-only
+		case *LastStmt:
 			return nil, false // bail: runtime-only
 		case *ModeBlockStmt:
 			// Mode is irrelevant at compile time
@@ -4511,6 +4519,9 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 
 		case "exit":
 			astBody = append(astBody, &ExitStmt{Comment: comment})
+
+		case "last":
+			astBody = append(astBody, &LastStmt{Comment: comment})
 
 		case "fn", "iter", "private":
 			return nil, p.errorf(tok.pos, "function definitions cannot be nested")
