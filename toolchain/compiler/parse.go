@@ -447,14 +447,14 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 			if lastIdx >= blockStarts[blk.Name] {
 				b.frames[lastIdx]["next"] = false
 			}
-			// Patch unlabeled @break in the block body to "last"
-			// (stops the iterator). Labeled breaks pass through to
-			// the enclosing loop's patchBreakPlaceholders.
+			// Patch @break to a noop that re-dispatches to the iterator.
 			for j := blockStarts[blk.Name]; j < b.pos(); j++ {
-				f := b.frames[j]
-				if op, _ := f["op"].(string); op == "@break" {
-					if label, _ := f["label"].(string); label == "" {
-						b.frames[j] = map[string]any{"op": "last"}
+				if op, _ := b.frames[j]["op"].(string); op == "@break" {
+					b.frames[j] = map[string]any{
+						"op":   "set_reg",
+						"1":    false,
+						"2":    false,
+						"next": false,
 					}
 				}
 			}
@@ -467,6 +467,17 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 				// "next" will be patched to join point
 			})
 			bridgeJumps = append(bridgeJumps, jumpIdx)
+			// Patch @break to jump to join point
+			for j := blockStarts[blk.Name]; j < b.pos(); j++ {
+				if op, _ := b.frames[j]["op"].(string); op == "@break" {
+					b.frames[j] = map[string]any{
+						"op": "set_reg",
+						"1":  false,
+						"2":  false,
+					}
+					bridgeJumps = append(bridgeJumps, j)
+				}
+			}
 		}
 	}
 
@@ -4143,10 +4154,16 @@ func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContex
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
 		}
-		if detached {
-			p.loopDepth++
-			defer func() { p.loopDepth-- }()
-		}
+		savedLoopDepth := p.loopDepth
+		savedLoopLabels := p.loopLabels
+		p.loopDepth = 0
+		p.loopLabels = map[string]bool{}
+		p.execBlockDepth++
+		defer func() {
+			p.loopDepth = savedLoopDepth
+			p.loopLabels = savedLoopLabels
+			p.execBlockDepth--
+		}()
 		return p.parseFnBodyStmts(ctx)
 	})
 }
@@ -4171,10 +4188,16 @@ func (p *parser) maybeParseFnBodyContinuationBlocksExpr(fn *fnDef, ctx *fnBodyCo
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
 		}
-		if detached {
-			p.loopDepth++
-			defer func() { p.loopDepth-- }()
-		}
+		savedLoopDepth := p.loopDepth
+		savedLoopLabels := p.loopLabels
+		p.loopDepth = 0
+		p.loopLabels = map[string]bool{}
+		p.execBlockDepth++
+		defer func() {
+			p.loopDepth = savedLoopDepth
+			p.loopLabels = savedLoopLabels
+			p.execBlockDepth--
+		}()
 		return p.parseFnBodyStmtsInner(ctx, true) // exprTail=true
 	})
 	if err != nil {
@@ -4468,8 +4491,8 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			astBody = append(astBody, stmt)
 
 		case "break":
-			if p.loopDepth == 0 {
-				return nil, p.errorf(tok.pos, "'break' outside of loop")
+			if p.loopDepth == 0 && p.execBlockDepth == 0 {
+				return nil, p.errorf(tok.pos, "'break' outside of loop or exec block")
 			}
 			label := ""
 			peek, err := p.next()

@@ -162,6 +162,19 @@ as `tokLabel` tokens. `@break` placeholder includes optional `"label"`
 field. Patching matches unlabeled breaks to innermost loop, labeled
 breaks to the named loop.
 
+## `break` in exec blocks — decoupled from `last`
+
+`break` in an exec block means "exit this block invocation" without
+assuming iterator semantics. `loopDepth` and `loopLabels` are
+saved/reset at exec block entry; `execBlockDepth` tracks nesting to
+allow `break` without a surrounding loop. In detached blocks, `@break`
+becomes a noop (`set_reg false false` with `"next": false`) that
+re-dispatches to the iterator without stopping it. In bridging blocks,
+`@break` jumps to the join point. Users who need `last` write it
+explicitly (`last; break`). `for...in` loops still emit `last`
+automatically (the compiler controls that path). Labeled `break`
+across an exec block boundary is a parse error (labels are not visible).
+
 ## Range `for` loops — `for_number` emission
 
 Both emission paths compile to the VM's `for_number` instruction:

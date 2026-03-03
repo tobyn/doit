@@ -1340,8 +1340,7 @@ fn land() {
 
 # Break out of a loop.
 fn last() {
-    # control flow: terminal instruction
-    # frame: {"op": "last"} (terminal)
+    instruction "last"
 }
 
 # Launches a satellite or drop pod.

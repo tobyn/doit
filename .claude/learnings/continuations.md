@@ -36,11 +36,20 @@ After a call's `{`, if the next token is an identifier followed by
 form. `{ var -> body }` (Kotlin binding) is always collapsed since
 `->` cannot follow a continuation name.
 
-## Labeled `break` across block boundaries
+## `break` in exec blocks
 
-Allowed. The compiler emits a direct jump (`"next"` past the target
-loop). Stale block stack entries are harmless — cleared on behavior
-restart.
+Exec blocks are a hard boundary for `break`. `loopDepth` and
+`loopLabels` are saved/reset at exec block entry (`execBlockDepth`
+tracks nesting). `break` inside an exec block means "exit this block":
+
+- **Detached blocks**: `@break` → `set_reg false false` with
+  `"next": false` (re-dispatches to the iterator, does NOT stop it).
+  To stop the iterator, call `last` before `break`.
+- **Bridging blocks**: `@break` → `set_reg false false` patched to
+  the join point (same as normal block completion).
+
+Labeled `break` from inside an exec block targeting an outer loop is
+a parse error (unknown label — the labels are not visible).
 
 ## Value arguments in exec binding arg lists
 
@@ -125,8 +134,6 @@ for iterators. The continuation system remains for non-iterator branching
 
 Instruction-backed iters emit the same frames as the old `fn...exec`
 form — the `for_component` instruction with `"next": false` on the body's
-last frame and a done slot. `break` emits `last` (same as before).
-Labeled `break` uses direct jump via `patchBreakPlaceholders`.
-
-Stale block stack entries from labeled break across iterators are
-harmless — same principle as before.
+last frame and a done slot. `break` in `for...in` loops emits `last`
+(the compiler controls this, not the user). Labeled `break` uses direct
+jump via `patchBreakPlaceholders`.

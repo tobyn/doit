@@ -7,40 +7,37 @@
         "0": "e",
         "1": "comp",
         "2": "idx",
-        "3": 7,
+        "3": 6,
         "next": 3,
         "op": "for_component"
     },
     "2": {
-        "0": 6,
+        "0": 5,
         "1": "comp",
         "2": false,
         "op": "compare_register"
     },
     "3": {
-        "op": "last"
-    },
-    "4": {
         "0": false,
         "1": false,
         "next": false,
         "op": "set_reg"
     },
-    "5": {
+    "4": {
         "0": "comp",
         "next": false,
         "op": "notify",
         "txt": "comp"
     },
-    "6": {
+    "5": {
         "op": "notify",
         "txt": "done"
     },
-    "7": {
+    "6": {
         "0": false,
         "1": false,
-        "next": 9,
+        "next": 8,
         "op": "set_reg"
     },
-    "name": "Exec Loop Break"
+    "name": "Exec Block Break"
 }

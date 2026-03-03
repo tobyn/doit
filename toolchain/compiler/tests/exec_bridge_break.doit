@@ -1,0 +1,28 @@
+# AI-generated test
+# Tests break in a bridging exec block (jumps to join point)
+
+fn my_check(value, target) exec(larger, smaller, equal) {
+    instruction "check_number" {
+        exec 0: larger
+        exec 1: smaller
+        2: value
+        3: target
+        next: equal
+    }
+}
+
+behavior exec_bridge_break {
+    @name "Exec Bridge Break"
+    let a = get_self
+    let b = get_self
+    my_check(a, b) {
+        larger {
+            if a == null {
+                break
+            }
+            notify "larger"
+        }
+        smaller { notify "smaller" }
+        equal { notify "equal" }
+    }
+}

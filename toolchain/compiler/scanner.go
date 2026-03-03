@@ -173,7 +173,8 @@ type parser struct {
 	consts         map[string]*constDef       // compile-time constants
 	enums          map[string]*enumDef        // compile-time enums
 	evalStepLimit  int                               // step limit for compile-time evaluation
-	loopDepth      int                        // >0 when inside a loop body
+	loopDepth      int              // >0 when inside a loop body
+	execBlockDepth int              // >0 when inside an exec block body
 	loopLabels  map[string]bool  // labels of enclosing loops
 	warnings    []string         // compiler warnings (non-fatal)
 

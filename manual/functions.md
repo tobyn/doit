@@ -534,20 +534,61 @@ my_for_comp(entity) {
 }
 ```
 
-`break` inside a detached block stops the iterator (emits the VM's
-`last` instruction):
+#### `break` in exec blocks
+
+`break` inside an exec block means "exit this block invocation":
+
+- **Detached blocks**: `break` exits the current iteration. The
+  iterator continues with the next element. To *stop* the iterator,
+  call `last` before `break`:
+
+  ```doit
+  my_for_comp(entity) {
+      body { comp, idx ->
+          if comp == null {
+              last      # stop the iterator
+              break     # exit this block
+          }
+          notify "comp", value: comp
+      }
+      done { notify "done" }
+  }
+  ```
+
+  A bare `break` without `last` skips the rest of the block body but
+  lets the iterator dispatch the next element normally.
+
+- **Bridging blocks**: `break` jumps to the join point after all
+  continuation blocks, the same as normal block completion:
+
+  ```doit
+  my_check(a, b) {
+      larger {
+          if a == null {
+              break     # skip to join point
+          }
+          notify "larger"
+      }
+      smaller { notify "smaller" }
+      equal { notify "equal" }
+  }
+  ```
+
+Exec blocks are a **hard boundary** for labeled `break` — labels from
+enclosing loops are not visible inside an exec block. A labeled break
+targeting an outer loop is a compile error:
 
 ```doit
-my_for_comp(entity) {
-    body { comp, idx ->
-        if comp == null {
-            break
-        }
-        notify "comp", value: comp
+# ERROR: unknown loop label "outer"
+'outer: loop {
+    my_iter(e) {
+        body { break 'outer }   # compile error
     }
-    done { notify "done" }
 }
 ```
+
+Loops declared *inside* an exec block can use `break` and labeled
+`break` normally.
 
 #### Collapsed form
 

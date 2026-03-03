@@ -2236,7 +2236,7 @@ behavior a { f }`
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "'break' outside of loop") {
+		if !strings.Contains(err.Error(), "'break' outside of loop or exec block") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2247,7 +2247,32 @@ behavior a { f }`
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "'break' outside of loop") {
+		if !strings.Contains(err.Error(), "'break' outside of loop or exec block") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("labeled_break_across_exec_boundary", func(t *testing.T) {
+		src := `
+fn my_iter(e) exec(body) {
+    instruction "for_component" {
+        0: e
+        detach next: body
+    }
+}
+behavior a {
+    let e = get_self
+    'outer: loop {
+        my_iter(e) {
+            body { break 'outer }
+        }
+    }
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown loop label") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

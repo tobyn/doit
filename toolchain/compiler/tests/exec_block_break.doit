@@ -1,5 +1,5 @@
 # AI-generated test
-# Tests last + break inside a detached continuation block
+# Tests break in a detached exec block (exits block, iterator continues)
 
 fn my_for_comp(entity) exec(body, done) {
     instruction "for_component" {
@@ -11,13 +11,12 @@ fn my_for_comp(entity) exec(body, done) {
     }
 }
 
-behavior exec_loop_break {
-    @name "Exec Loop Break"
+behavior exec_block_break {
+    @name "Exec Block Break"
     let e = get_self
     my_for_comp(e) {
         body { comp, idx ->
             if comp == null {
-                last
                 break
             }
             notify "comp", value: comp

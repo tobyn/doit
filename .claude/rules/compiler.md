@@ -21,7 +21,7 @@ see `.claude/learnings/test_format.md`.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
   types, `Keywords` map, `skipToCloseBrace`. The `parser` struct
   extends `scanner` with `fns`, `iters`, `consts`, `enums`, import state,
-  loop tracking, `callExprParser` callback, and `warnings []string`.
+  loop/exec-block tracking, `callExprParser` callback, and `warnings []string`.
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
   types (`symbolSet`, `fnDef`, `iterDef`, `paramDef`, `symbolTable`, `constDef`,
   `enumDef`), `frameBuilder`/`frameRef` abstraction, `emitContext`
@@ -122,8 +122,11 @@ extending to `)`, and trailing commas continuing to the next line.
 required in both parenthesized and unparenthesized call forms.
 
 **Control flow placeholders**: `@break` and `@return` are placeholder
-opcodes in intermediate frames. `@break` is patched to jump past the
-enclosing loop. `@return` is patched to jump past the function
+opcodes in intermediate frames. In loops, `@break` is patched to jump
+past the enclosing loop. In exec blocks, `@break` is patched to exit
+the block: detached blocks get `set_reg false false` with `"next": false`
+(re-dispatch); bridging blocks get `set_reg false false` patched to
+the join point. `@return` is patched to jump past the function
 expansion. Both are patched to `set_reg false false` with appropriate
 `"next"` targets.
 

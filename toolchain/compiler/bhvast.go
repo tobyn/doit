@@ -1747,10 +1747,16 @@ func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) (
 		for _, name := range params {
 			syms.declareVar(name, false)
 		}
-		if detached {
-			p.loopDepth++
-			defer func() { p.loopDepth-- }()
-		}
+		savedLoopDepth := p.loopDepth
+		savedLoopLabels := p.loopLabels
+		p.loopDepth = 0
+		p.loopLabels = map[string]bool{}
+		p.execBlockDepth++
+		defer func() {
+			p.loopDepth = savedLoopDepth
+			p.loopLabels = savedLoopLabels
+			p.execBlockDepth--
+		}()
 		return p.parseBhvStmtBlockInner(syms)
 	})
 }
@@ -1775,10 +1781,16 @@ func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTabl
 		for _, name := range params {
 			syms.declareVar(name, false)
 		}
-		if detached {
-			p.loopDepth++
-			defer func() { p.loopDepth-- }()
-		}
+		savedLoopDepth := p.loopDepth
+		savedLoopLabels := p.loopLabels
+		p.loopDepth = 0
+		p.loopLabels = map[string]bool{}
+		p.execBlockDepth++
+		defer func() {
+			p.loopDepth = savedLoopDepth
+			p.loopLabels = savedLoopLabels
+			p.execBlockDepth--
+		}()
 		return p.parseBhvStmtBlockInner(syms, true) // exprTail=true
 	})
 	if err != nil {
@@ -2369,8 +2381,8 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 
 		// Block-only: break
 		if tok.val == "break" {
-			if p.loopDepth == 0 {
-				return nil, p.errorf(tok.pos, "'break' outside of loop")
+			if p.loopDepth == 0 && p.execBlockDepth == 0 {
+				return nil, p.errorf(tok.pos, "'break' outside of loop or exec block")
 			}
 			label := ""
 			peek, err := p.next()
