@@ -3,7 +3,7 @@
 behavior for_iter_args {
     @name "For Iter Args"
 
-    for i in for_number(0, 10, step: 2) {
+    for i in each_number(0, 10, step: 2) {
         notify "looping"
     }
 

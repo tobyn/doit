@@ -1573,7 +1573,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 	stateVar := allocUniqueVar("@sm", ctx.usedVars)
 
 	// Look up the for_number iter to get its instruction frame
-	forNumberIter := p.iters["for_number"]
+	eachNumberIter := p.iters["each_number"]
 
 	// Build paramMap for for_number: from=0, to=N, step=1, i=stateVar
 	fnParamMap := map[string]any{
@@ -1584,7 +1584,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 	}
 
 	// Resolve and emit for_number instruction frame
-	resolved := resolveInstructionFrame(forNumberIter.frame, nil, fnParamMap, nil, comment)
+	resolved := resolveInstructionFrame(eachNumberIter.frame, nil, fnParamMap, nil, comment)
 	instrIdx := ctx.b.emit(resolved)
 
 	// Record body start for break patching
@@ -1637,7 +1637,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 
 	afterLoop := frameRef(ctx.b.pos())
 
-	patchIterDoneSlot(ctx.b, instrIdx, forNumberIter.doneSlot, afterLoop)
+	patchIterDoneSlot(ctx.b, instrIdx, eachNumberIter.doneSlot, afterLoop)
 
 	// Patch @continue in the body — re-dispatch to for_number
 	patchContinuePlaceholders(ctx.b, origLen, false)
@@ -1932,7 +1932,7 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 		return err
 	}
 
-	forNumberIter := p.iters["for_number"]
+	eachNumberIter := p.iters["each_number"]
 	paramMap := map[string]any{
 		"from": startVal,
 		"to":   stopVal,
@@ -1940,7 +1940,7 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 		"i":    iterVar,
 	}
 
-	resolved := resolveInstructionFrame(forNumberIter.frame, nil, paramMap, nil, comment)
+	resolved := resolveInstructionFrame(eachNumberIter.frame, nil, paramMap, nil, comment)
 	instrIdx := ctx.b.emit(resolved)
 
 	origLen := len(ctx.b.frames)
@@ -1963,7 +1963,7 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 
 	afterLoop := frameRef(ctx.b.pos())
 
-	patchIterDoneSlot(ctx.b, instrIdx, forNumberIter.doneSlot, afterLoop)
+	patchIterDoneSlot(ctx.b, instrIdx, eachNumberIter.doneSlot, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
@@ -1986,7 +1986,7 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 		return err
 	}
 
-	forNumberIter := p.iters["for_number"]
+	eachNumberIter := p.iters["each_number"]
 	paramMap := map[string]any{
 		"from": startVar,
 		"to":   stopVar,
@@ -1994,7 +1994,7 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 		"i":    iterVar,
 	}
 
-	resolved := resolveInstructionFrame(forNumberIter.frame, nil, paramMap, nil, comment)
+	resolved := resolveInstructionFrame(eachNumberIter.frame, nil, paramMap, nil, comment)
 	instrIdx := ctx.b.emit(resolved)
 
 	origLen := len(ctx.b.frames)
@@ -2017,7 +2017,7 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 
 	afterLoop := frameRef(ctx.b.pos())
 
-	patchIterDoneSlot(ctx.b, instrIdx, forNumberIter.doneSlot, afterLoop)
+	patchIterDoneSlot(ctx.b, instrIdx, eachNumberIter.doneSlot, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 

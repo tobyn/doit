@@ -1894,7 +1894,7 @@ behavior a { f }`
 	})
 
 	t.Run("continue_in_yield_iter", func(t *testing.T) {
-		src := "iter my_iter() -> v {\nfor c, idx in for_component() {\nif c != null { yield c }\n}\n}\nbehavior a { for x in my_iter() { continue } }"
+		src := "iter my_iter() -> v {\nfor c, idx in each_component() {\nif c != null { yield c }\n}\n}\nbehavior a { for x in my_iter() { continue } }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -3563,7 +3563,7 @@ behavior t {
 	t.Run("iter_too_many_vars", func(t *testing.T) {
 		src := `behavior a {
 	@name "A"
-	for a, b, c in for_component() {
+	for a, b, c in each_component() {
 		notify "hi"
 	}
 }`
@@ -3635,7 +3635,7 @@ behavior a {
 
 	t.Run("iter_yield_count_mismatch", func(t *testing.T) {
 		src := `iter my_iter() -> a, b {
-	for c, idx in for_component() {
+	for c, idx in each_component() {
 		yield c
 	}
 }

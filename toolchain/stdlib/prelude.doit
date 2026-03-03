@@ -4,3 +4,4 @@
 # import statements.
 
 import * from "std:instructions"
+import * from "std:iterators"

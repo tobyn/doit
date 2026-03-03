@@ -3,7 +3,7 @@
 behavior for_iter_labeled {
     @name "For Iter Labeled"
 
-    'outer: for comp, idx in for_component() {
+    'outer: for comp, idx in each_component() {
         for i in Range(3) {
             if i == 1 {
                 break 'outer

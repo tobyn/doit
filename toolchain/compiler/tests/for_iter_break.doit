@@ -3,7 +3,7 @@
 behavior for_iter_break {
     @name "For Iter Break"
 
-    for comp, idx in for_component() {
+    for comp, idx in each_component() {
         if idx == 3 {
             break
         }

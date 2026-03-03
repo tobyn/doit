@@ -185,7 +185,7 @@ The standard library defines enums for each mode selector. Values are
 | `UnitInfoStat` | `Durability`, `VisibilityRange`, `MovementSpeed` | `get_unit_info` |
 | `PowerInfoStat` | `Producing`, `Requiring`, `Efficiency`, `Consuming`, `Receiving`, `Transmitting` | `get_unit_power_info` |
 | `ItemInfoStat` | `MaxStack`, `AttackRange`, `MinRange`, `Damage`, `DamageType`, `BlastRadius`, `MoveAndFire`, `DPS`, `PowerStorage`, `DrainRate`, `ChargeRate`, `Bandwidth`, `DroneRange`, `Power` | `get_item_info` |
-| `SignalFilterMode` | `Match`, `Exact`, `NotExact`, `LessThan`, `ExactOrLessThan`, `MoreThan`, `ExactOrMoreThan` | `for_signal_match` |
+| `SignalFilterMode` | `Match`, `Exact`, `NotExact`, `LessThan`, `ExactOrLessThan`, `MoreThan`, `ExactOrMoreThan` | `each_signal_match` |
 
 ### Passing mode selectors
 
@@ -754,7 +754,7 @@ declares the output variables yielded each iteration:
 
 ```doit
 iter active_components() -> comp {
-    for c, idx in for_component() {
+    for c, idx in each_component() {
         if c != null {
             yield c
         }
@@ -769,7 +769,7 @@ number of yield values must exactly match the number of declared outputs:
 
 ```doit
 iter pair_components() -> comp, idx {
-    for c, i in for_component() {
+    for c, i in each_component() {
         yield c, i    # must yield exactly 2 values
     }
 }
@@ -829,7 +829,7 @@ The standard library defines iterators backed by game instructions. These
 use a simplified `instruction` block with `done: N` syntax:
 
 ```doit
-iter for_component() -> comp, idx {
+iter each_component() -> comp, idx {
     instruction "for_component" {
         0: comp
         1: idx
@@ -846,11 +846,11 @@ Output names from `->` map directly to numbered instruction slots.
 Call iterators with `for ... in`:
 
 ```doit
-for comp, idx in for_component() {
+for comp, idx in each_component() {
     notify "component", value: comp
 }
 
-for i in for_number(0, 10, step: 2) {
+for i in each_number(0, 10, step: 2) {
     notify "counting"
 }
 ```
@@ -861,7 +861,7 @@ Like functions, iterators can be declared `private`:
 
 ```doit
 private iter my_filter() -> val {
-    for c in for_component() {
+    for c in each_component() {
         if c != null {
             yield c
         }

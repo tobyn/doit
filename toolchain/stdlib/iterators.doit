@@ -1,0 +1,192 @@
+# This file defines iterator versions of the built-in game loop instructions.
+# Each iterator can be used with `for...in` syntax.
+# The original `for_*` names are available as fn exec-block versions
+# in instructions.doit.
+
+skip prelude
+
+# Loops through equipped components.
+#   component [out] - equipped component
+#   index [out, optional] - index of the component
+# See also: for_component (exec block version)
+iter each_component() -> comp, idx {
+    instruction "for_component" {
+        0: comp
+        1: idx
+        done: 2
+    }
+}
+
+# Scans for nearby resources in power field or visibility range.
+#   resource [out]
+# See also: for_count_resources (exec block version)
+iter each_nearby_resource() -> resource {
+    instruction "for_count_resources" {
+        0: resource
+        done: 1
+    }
+}
+
+# Loops through all units in visibility range matching filters.
+#   range [in] - range (up to visibility range)
+#   filter [in] - filter to check
+#   filter_2 [in, optional] - second filter
+#   filter_3 [in, optional] - third filter
+#   unit [out] - current unit in loop
+# See also: for_entities_in_range (exec block version)
+iter each_entity_in_range(range, filter, filter_2 filter_2, filter_3 filter_3) -> unit {
+    instruction "for_entities_in_range" {
+        0: range
+        1: filter
+        2: filter_2
+        3: filter_3
+        4: unit
+        done: 5
+    }
+}
+
+# Loops through inventory slots.
+#   item [out] - item inventory
+#   reserved_stack [out, optional] - items reserved for outgoing order or recipe
+#   unreserved_stack [out, optional] - items available
+#   reserved_space [out, optional] - space reserved for an incoming order
+#   unreserved_space [out, optional] - remaining space
+# See also: for_inventory_item (exec block version)
+iter each_inventory_item() -> item, reserved_stack, unreserved_stack, reserved_space, unreserved_space {
+    instruction "for_inventory_item" {
+        0: item
+        done: 1
+        2: reserved_stack
+        3: unreserved_stack
+        4: reserved_space
+        5: unreserved_space
+    }
+}
+
+# Loops through all numbers in a range.
+#   from [in] - loop start number
+#   to [in] - loop end number
+#   step [in, optional] - increment step, defaults to -1 or 1 based on inputs
+#   value [out] - current number
+# See also: for_number (exec block version)
+iter each_number(from, to, step step) -> i {
+    instruction "for_number" {
+        0: from
+        1: to
+        2: step
+        3: i
+        done: 4
+    }
+}
+
+# Gets all producers for a production with their production time.
+#   production [in] - production
+#   producer [out] - producer
+# See also: for_producers (exec block version)
+iter each_producer(production) -> producer {
+    instruction "for_producers" {
+        0: production
+        1: producer
+        done: 2
+    }
+}
+
+# Loops through recipe ingredients.
+#   recipe [in]
+#   ingredient [out] - recipe ingredient
+# See also: for_recipe_ingredients (exec block version)
+iter each_recipe_ingredient(recipe) -> ingredient {
+    instruction "for_recipe_ingredients" {
+        0: recipe
+        1: ingredient
+        done: 2
+    }
+}
+
+# Loops through each ingredient required to repair a unit.
+#   target [in] - unit
+#   ingredient [out] - repair ingredient
+# See also: for_repair_ingredients (exec block version)
+iter each_repair_ingredient(target) -> ingredient {
+    instruction "for_repair_ingredients" {
+        0: target
+        1: ingredient
+        done: 2
+    }
+}
+
+# Loops through all researchable tech.
+#   tech [out] - researchable tech
+# See also: for_research (exec block version)
+iter each_tech() -> tech {
+    instruction "for_research" {
+        0: tech
+        done: 1
+    }
+}
+
+# Loops through research ingredients.
+#   research [in]
+#   ingredient [out] - research ingredient
+# See also: for_research_ingredients (exec block version)
+iter each_research_ingredient(research) -> ingredient {
+    instruction "for_research_ingredients" {
+        0: research
+        1: ingredient
+        done: 2
+    }
+}
+
+# Loops through all unlocks for a researchable tech.
+#   tech [in] - tech
+#   unlock [out] - unlocks
+# See also: for_research_unlocks (exec block version)
+iter each_research_unlock(tech) -> unlock {
+    instruction "for_research_unlocks" {
+        0: tech
+        1: unlock
+        done: 2
+    }
+}
+
+# Deprecated: use each_signal_match
+# Loops through all units with a signal.
+#   signal [in] - signal
+#   unit [out] - unit with signal
+# See also: for_signal (exec block version)
+iter each_signal(signal) -> unit {
+    instruction "for_signal" {
+        0: signal
+        1: unit
+        done: 2
+    }
+}
+
+# Loops through all units with a signal of similar type.
+#   signal [in] - signal
+#   unit [out] - found unit with signal
+#   found_signal [out, optional] - found signal
+# See also: for_signal_match (exec block version)
+iter each_signal_match(signal, mode mode) -> unit, found_signal {
+    instruction "for_signal_match" {
+        0: signal
+        1: unit
+        2: found_signal
+        done: 3
+        c: mode
+    }
+}
+
+# Loops through memory array or known array identifiers.
+#   id [in] - array identifier, or empty to loop through known identifiers
+#   value [out]
+#   index [out, optional]
+# See also: memory_loop (exec block version)
+iter each_memory_entry(id) -> value, index {
+    instruction "memory_loop" {
+        0: id
+        1: value
+        done: 2
+        3: index
+    }
+}

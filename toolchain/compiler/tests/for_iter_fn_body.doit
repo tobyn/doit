@@ -1,7 +1,7 @@
 # AI-generated test
 # Iterator inside a function body
 fn loop_components() {
-    for comp, idx in for_component() {
+    for comp, idx in each_component() {
         notify "looping"
     }
 }

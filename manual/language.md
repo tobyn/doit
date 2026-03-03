@@ -72,6 +72,7 @@ Every source file is automatically prepended with the **prelude**
 
 ```doit
 import * from "std:instructions"
+import * from "std:iterators"
 ```
 
 This makes all built-in functions, iterators, and enums available without
@@ -1651,9 +1652,9 @@ for i in r {
 
 `Range` loops compile to the `for_number` instruction, which handles
 counter initialization, bounds checking, step direction, and increment
-internally. This is the same instruction used when calling `for_number`
-directly as an iterator, so `for i in Range(5)` and
-`for i in for_number(0, 5, step: 1)` produce identical output.
+internally. This is the same instruction used by the `each_number`
+iterator, so `for i in Range(5)` and
+`for i in each_number(0, 5, step: 1)` produce identical output.
 
 `for` loops support `break`, labeled `for`, and `break 'label`:
 
@@ -1671,7 +1672,7 @@ directly as an iterator, so `for i in Range(5)` and
 [Functions](functions.md#iterators)):
 
 ```doit
-for comp, idx in for_component() {
+for comp, idx in each_component() {
     notify "component", value: comp
 }
 ```
@@ -1680,8 +1681,8 @@ Iterators can yield multiple values per iteration. Bind as many variables as
 you need — you don't have to bind all of them (prefix matching):
 
 ```doit
-# for_component yields (comp, idx); bind only comp
-for comp in for_component() {
+# each_component yields (comp, idx); bind only comp
+for comp in each_component() {
     notify "component", value: comp
 }
 ```
@@ -1692,11 +1693,11 @@ Iterators accept arguments like regular function calls, including keyword
 arguments:
 
 ```doit
-for i in for_number(0, 10, step: 2) {
+for i in each_number(0, 10, step: 2) {
     notify "counting"
 }
 
-for unit in for_signal(my_signal) {
+for unit in each_signal(my_signal) {
     notify "found", value: unit
 }
 ```
@@ -1704,14 +1705,14 @@ for unit in for_signal(my_signal) {
 `break` and labeled `break` work the same way as in Range loops:
 
 ```doit
-for item in for_inventory_item() {
+for item in each_inventory_item() {
     if item == null {
         break
     }
     notify "item", value: item
 }
 
-'outer: for comp in for_component() {
+'outer: for comp in each_component() {
     for i in Range(3) {
         if i == 1 {
             break 'outer

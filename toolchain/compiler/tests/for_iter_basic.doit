@@ -1,9 +1,9 @@
 # AI-generated test
-# Basic instruction-backed iterator: for comp, idx in for_component()
+# Basic instruction-backed iterator: for comp, idx in each_component()
 behavior for_iter_basic {
     @name "For Iter Basic"
 
-    for comp, idx in for_component() {
+    for comp, idx in each_component() {
         notify "looping"
     }
 

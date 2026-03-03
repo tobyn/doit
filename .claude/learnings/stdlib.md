@@ -8,10 +8,16 @@ the `*.doit` files in the `toolchain/stdlib/` directory.
 ## Architecture
 
 - **`toolchain/stdlib/prelude.doit`** — The prelude, automatically prepended
-  to every source file. Contains `import * from "std:instructions"` to bring
-  all stdlib symbols into scope. Files opt out with `skip prelude` at the top.
+  to every source file. Contains `import * from "std:instructions"` and
+  `import * from "std:iterators"` to bring all stdlib symbols into scope.
+  Files opt out with `skip prelude` at the top.
 - **`toolchain/stdlib/instructions.doit`** — The built-in game instructions.
   Has `skip prelude` to avoid circular dependency with the prelude.
+  Iterators are defined here as `fn` exec-block versions (e.g.,
+  `for_component`) for discoverability and exec-block call syntax.
+- **`toolchain/stdlib/iterators.doit`** — Iterator versions of the game's
+  loop instructions, using `each_*` names (e.g., `each_component`).
+  Has `skip prelude`. These are the primary names for `for...in` usage.
 - **`toolchain/stdlib/instructions.lua`** — The Lua file from the game that
   defines all of Desynced's built-in instructions
 
@@ -46,15 +52,24 @@ All use the same call-site syntax (continuation blocks).
    Route execution to one of N paths. No data output. All
    continuations are bridging.
 
-2. **Iterators** (`for_component`, `for_unit`, `for_inventory_item`,
-   `for_entities_in_range`, `for_number`, `for_producers`,
-   `for_recipe_ingredients`, `for_repair_ingredients`, `for_research`,
-   `for_research_ingredients`, `for_research_unlocks`, `for_signal`,
-   `for_signal_match`, `for_count_resources`, `memory_loop`) —
-   Stateful instructions with a looping body continuation and a
-   bridging "done" continuation. Produce output data each iteration.
-   Now declared as `iter` with `for ... in` call syntax instead of
-   `fn...exec` with continuation blocks.
+2. **Iterators** — Stateful instructions with a looping body
+   continuation and a bridging "done" continuation. Produce output
+   data each iteration. Declared in two forms:
+   - **`each_*` iterators** (in `iterators.doit`): `each_component`,
+     `each_nearby_resource`, `each_entity_in_range`,
+     `each_inventory_item`, `each_number`, `each_producer`,
+     `each_recipe_ingredient`, `each_repair_ingredient`, `each_tech`,
+     `each_research_ingredient`, `each_research_unlock`,
+     `each_signal`, `each_signal_match`, `each_memory_entry` —
+     `iter` declarations for `for ... in` call syntax.
+   - **`for_*` / `memory_loop` fns** (in `instructions.doit`):
+     `for_component`, `for_count_resources`, `for_entities_in_range`,
+     `for_inventory_item`, `for_number`, `for_producers`,
+     `for_recipe_ingredients`, `for_repair_ingredients`,
+     `for_research`, `for_research_ingredients`,
+     `for_research_unlocks`, `for_signal`, `for_signal_match`,
+     `memory_loop` — `fn...exec(body, done)` declarations for
+     exec-block call syntax.
 
 3. **Failable getters** (`get_inventory_item`,
    `get_inventory_item_index`, `get_resource_item`,
@@ -104,7 +119,9 @@ dropped from the compiled output and the game uses its default.
 `parseStdlibFile` can't handle). Stdlib symbols are cached in
 `stdlibFns`/`stdlibIters`/`stdlibEnums` and made available to user
 code through the prelude's glob import rather than by pre-populating
-working maps.
+working maps. Iterator instructions have two stdlib representations:
+`each_*` iters in `iterators.doit` (for `for...in`) and `for_*` fns
+in `instructions.doit` (for exec-block calls).
 
 Each function body contains a `# frame:` comment showing the inferred JSON structure of the
 compiled instruction. These were derived from `instructions.lua` by mapping:
