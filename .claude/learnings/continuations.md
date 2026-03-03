@@ -138,3 +138,29 @@ form — the `for_component` instruction with `"next": false` on the body's
 last frame and a done slot. `break` in `for...in` loops emits `last`
 (the compiler controls this, not the user). Labeled `break` uses direct
 jump via `patchBreakPlaceholders`.
+
+## Instruction-level local blocks (`'` sigil)
+
+The `'` sigil on exec binding names (`exec 0: 'larger`) declares a
+local continuation block — handled inline by blocks attached to the
+instruction itself, not forwarded to the enclosing function's exec.
+This reuses the existing `tokLabel` scanner token (same `'` sigil as
+loop labels).
+
+Key differences from function-level continuations:
+
+- **Scope**: Local blocks are scoped to a single instruction, not a
+  function. `expandInstructionBlocks` patches only the instruction frame
+  at `instrIdx`, leaving non-local bindings untouched for function-level
+  `expandContinuationBlocks`.
+- **Mixing**: Local (`'name`) and non-local (`name`) bindings can coexist
+  in one instruction. Non-local bindings refer to the enclosing
+  function's exec and are resolved by function-level expansion.
+- **Expression form**: When all local blocks are bridging, the instruction
+  can be used as an expression — each block's tail expression is its
+  value. Detached local blocks in expression form are a compile error.
+- **`'return` reserved**: Cannot be used as a local block name.
+- **Data args**: Local blocks receive data from `@N` args on the exec
+  binding, same as function-level continuations.
+- **`break`/`return` rules**: Same as function-level blocks — `return`
+  inside a local block is a parse error; `break` exits the block.

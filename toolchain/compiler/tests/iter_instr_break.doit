@@ -1,0 +1,14 @@
+# AI-generated test
+# iterator_instruction with break
+behavior iter_instr_break {
+    @name "Iter Instr Break"
+
+    for comp in iterator_instruction "for_component" {
+        0: @1
+        done: 1
+    } {
+        break
+    }
+
+    notify "done"
+}

@@ -1,0 +1,15 @@
+# AI-generated test
+# iterator_instruction with input variables
+behavior iter_instr_inputs {
+    @name "Iter Instr Inputs"
+
+    let target = get_self
+
+    for comp in iterator_instruction "for_component" {
+        0: @1
+        2: target
+        done: 1
+    } {
+        notify "component"
+    }
+}

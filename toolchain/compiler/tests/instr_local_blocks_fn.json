@@ -1,0 +1,43 @@
+{
+    "0": {
+        "0": 2,
+        "1": 4,
+        "2": -4,
+        "3": {
+            "num": 5
+        },
+        "next": 6,
+        "op": "check_number"
+    },
+    "1": {
+        "op": "notify",
+        "txt": "large"
+    },
+    "2": {
+        "0": false,
+        "1": false,
+        "next": 8,
+        "op": "set_reg"
+    },
+    "3": {
+        "op": "notify",
+        "txt": "small"
+    },
+    "4": {
+        "0": false,
+        "1": false,
+        "next": 8,
+        "op": "set_reg"
+    },
+    "5": {
+        "op": "notify",
+        "txt": "equal"
+    },
+    "6": {
+        "0": false,
+        "1": false,
+        "next": 8,
+        "op": "set_reg"
+    },
+    "name": "Instr Local Blocks Fn"
+}

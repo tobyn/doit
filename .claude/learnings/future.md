@@ -15,8 +15,6 @@ register types.
 
 ## 1.0 burndown
 
-- **Iterator `instruction` expressions** — allow `instruction` blocks
-  to produce iterators directly, without wrapping in a function.
 - **Prelude** — replace the implicit `instructions.doit` import with a
   `prelude.doit` that explicitly imports stdlib modules. Programs
   compile as if prelude is prepended.

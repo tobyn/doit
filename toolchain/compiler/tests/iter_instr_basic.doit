@@ -1,0 +1,15 @@
+# AI-generated test
+# Basic for...in iterator_instruction
+behavior iter_instr_basic {
+    @name "Iter Instr Basic"
+
+    for comp, idx in iterator_instruction "for_component" {
+        0: @1
+        1: @2
+        done: 2
+    } {
+        notify "found"
+    }
+
+    notify "done"
+}

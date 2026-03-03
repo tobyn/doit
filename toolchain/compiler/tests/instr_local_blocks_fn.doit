@@ -1,0 +1,20 @@
+# AI-generated test
+# instruction with local 'block continuations inside function body
+fn classify(v, t) {
+    instruction "check_number" {
+        exec 0: 'larger
+        exec 1: 'smaller
+        2: v
+        3: t
+        next: 'equal
+    } {
+        larger { notify "large" }
+        smaller { notify "small" }
+        equal { notify "equal" }
+    }
+}
+
+behavior instr_local_blocks_fn {
+    @name "Instr Local Blocks Fn"
+    classify $signal, 5
+}

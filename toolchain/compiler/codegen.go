@@ -1458,6 +1458,11 @@ func (p *parser) emitModeBlockExpr(e *ModeBlockExpr, retVals []any, ctx *emitCon
 
 // emitForStmt emits a for-in loop.
 func (p *parser) emitForStmt(s *ForStmt, ctx *emitContext, comment string) error {
+	// Inline iterator instruction form
+	if s.IterInstrFrame != nil {
+		return p.emitInlineIterInstruction(s, ctx, comment)
+	}
+
 	// Iterator form: for vars in iter_name(args) { body }
 	if s.IterName != "" {
 		return p.emitForIterStmt(s, ctx, comment)
@@ -1691,6 +1696,125 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 	afterLoop := frameRef(ctx.b.pos())
 
 	patchIterDoneSlot(ctx.b, instrIdx, it.doneSlot, afterLoop)
+
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	ctx.popScope()
+	return nil
+}
+
+// parseIteratorInstruction parses `iterator_instruction "op" { fields } { body }`
+// in the for...in position. Uses parseInstruction for the instruction block,
+// then validates and stores on ForStmt for emission.
+func (p *parser) parseIteratorInstruction(iterVars []string, label, comment string, ctx *parseContext, kwTok token) (*ForStmt, error) {
+	frame, err := p.parseInstruction()
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract and remove "done" key
+	doneVal, hasDone := frame["done"]
+	if !hasDone {
+		return nil, p.errorf(kwTok.pos, "iterator_instruction requires a 'done:' slot")
+	}
+	doneSlot, ok := doneVal.(int)
+	if !ok {
+		return nil, p.errorf(kwTok.pos, "iterator_instruction 'done:' value must be a number")
+	}
+	delete(frame, "done")
+	doneKey := strconv.Itoa(doneSlot)
+
+	// Validate: no exec bindings allowed
+	for k, v := range frame {
+		if _, isEB := v.(execBinding); isEB {
+			return nil, p.errorf(kwTok.pos, "iterator_instruction does not support exec bindings (key %q); use instruction with ' blocks for branching", k)
+		}
+	}
+
+	// Count @N return slots and validate against iter var count
+	retCount := frameReturnCount(frame)
+	if retCount > len(iterVars) {
+		return nil, p.errorf(kwTok.pos, "iterator_instruction has @%d but only %d iteration variable(s) bound", retCount, len(iterVars))
+	}
+
+	// Parse loop body
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+
+	ctx.pushScope()
+	for _, v := range iterVars {
+		ctx.declareIterVar(v)
+	}
+
+	p.enterLoop(label)
+	body, err := ctx.parseBody(false)
+	p.exitLoop(label)
+
+	ctx.popScope()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ForStmt{
+		Label:          label,
+		IterVars:       iterVars,
+		IterInstrFrame: frame,
+		IterInstrDone:  doneKey,
+		Body:           body,
+		Comment:        comment,
+	}, nil
+}
+
+// emitInlineIterInstruction emits a for-in loop backed by an inline
+// iterator_instruction. Similar to emitInstructionIter but resolves the
+// frame directly rather than through an iterDef.
+func (p *parser) emitInlineIterInstruction(s *ForStmt, ctx *emitContext, comment string) error {
+	ctx.pushScope()
+
+	// Declare iter vars and allocate registers
+	iterVarRegs := make([]string, len(s.IterVars))
+	for i, v := range s.IterVars {
+		iterVarRegs[i] = ctx.declareIterVar(v)
+	}
+
+	// Build retVals from iter var regs (for @N substitution)
+	retVals := make([]any, len(iterVarRegs))
+	for i, r := range iterVarRegs {
+		retVals[i] = r
+	}
+
+	// Resolve the instruction frame
+	resolved := ctx.resolveInstrFrame(s.IterInstrFrame, retVals, comment)
+
+	// Emit the instruction frame
+	instrIdx := ctx.b.emit(resolved)
+
+	// Record where the body starts
+	origLen := len(ctx.b.frames)
+
+	// Emit the loop body
+	if err := ctx.emitBody(s.Body); err != nil {
+		ctx.popScope()
+		return err
+	}
+
+	// Set "next": false on the last body frame (detached — VM re-dispatches)
+	lastIdx := ctx.b.pos() - 1
+	if lastIdx >= origLen {
+		ctx.b.frames[lastIdx]["next"] = false
+	}
+
+	// Patch @continue in the body — re-dispatch to iterator instruction
+	patchContinuePlaceholders(ctx.b, origLen, false)
+
+	// Patch unlabeled @break → "last"; labeled @break → jump past loop
+	patchUnlabeledBreakToLast(ctx.b, origLen)
+
+	afterLoop := frameRef(ctx.b.pos())
+
+	patchIterDoneSlot(ctx.b, instrIdx, s.IterInstrDone, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
@@ -2345,6 +2469,11 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 	rangeTok, err := p.next()
 	if err != nil {
 		return nil, err
+	}
+
+	// Check for iterator_instruction
+	if rangeTok.kind == tokIdent && rangeTok.val == "iterator_instruction" {
+		return p.parseIteratorInstruction(iterVars, lbl, comment, ctx, rangeTok)
 	}
 
 	// Check for iterator call

@@ -1,0 +1,21 @@
+# AI-generated test
+# instruction with mixed local and non-local exec bindings
+fn wrapper(v, t) exec(pass, fail) {
+    instruction "check_number" {
+        exec 0: 'big
+        exec 1: fail
+        2: v
+        3: t
+        next: pass
+    } {
+        big { notify "big" }
+    }
+}
+
+behavior instr_local_blocks_mixed {
+    @name "Instr Local Blocks Mixed"
+    wrapper $signal, 5 {
+        pass { notify "pass" }
+        fail { notify "fail" }
+    }
+}

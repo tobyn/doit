@@ -140,8 +140,8 @@ after the inlined caller body, and `@continue` is patched to jump to
 it.
 
 **Iterator helpers**: Shared helpers reduce duplication across the
-four iterator emitters (`emitStateMachineIter`, `emitInstructionIter`,
-`emitForStmtRange`, `emitForStmtRuntime`):
+five iterator emitters (`emitStateMachineIter`, `emitInstructionIter`,
+`emitForStmtRange`, `emitForStmtRuntime`, `emitInlineIterInstruction`):
 `buildIterParamMap` (on `emitContext`) resolves positional/keyword
 args and maps output names to iter var registers.
 `patchIterDoneSlot` patches the done-slot on the iterator instruction
@@ -185,3 +185,27 @@ caller's target register. Both behavior level
 (`maybeParseBhvContinuationBlocksExpr`) and fn body level
 (`maybeParseFnBodyContinuationBlocksExpr`) parse expression-form
 blocks using `exprTail=true`.
+
+**Instruction-level local blocks**: `exec 0: 'name` (tick sigil) declares
+a local continuation block on the instruction itself. Parsed via
+`tokLabel` in `parseInstruction`. `hasLocalExecBindings` and
+`extractLocalExecInfo` inspect the frame. `allocLocalExecOutputRegs`
+allocates registers for `@N` data args on local bindings.
+`expandInstructionBlocks` patches only the instruction frame, leaving
+non-local bindings for function-level expansion. Parse helpers
+`maybeParseBhvLocalBlocks`/`maybeParseBhvLocalBlocksExpr` (bhvast.go) and
+`maybeParseFnBodyLocalBlocks`/`maybeParseFnBodyLocalBlocksExpr` (parse.go)
+detect and parse local blocks at each instruction site. Emission helpers
+`emitBhvInstructionWithBlocks`/`emitBhvInstructionExprWithBlocks`
+(bhvast.go) and `emitFnBodyInstructionWithBlocks`/
+`emitFnBodyInstructionExprWithBlocks` (parse.go) emit the instruction
+frame and expand local blocks.
+
+**`iterator_instruction`**: Keyword for inline iteration in `for...in`
+loops without declaring an `iter`. Parsed by `parseIteratorInstruction`
+(codegen.go), which calls `parseInstruction()`, extracts the `done:` key,
+validates no exec bindings, and validates `@N` count. Emitted by
+`emitInlineIterInstruction` (codegen.go), which uses `resolveInstrFrame`
+callback on `emitContext` for frame resolution, then reuses the shared
+iterator helpers. `ForStmt` carries `IterInstrFrame` and `IterInstrDone`
+fields for this form.

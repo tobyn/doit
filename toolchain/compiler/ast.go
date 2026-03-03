@@ -90,6 +90,7 @@ type MultiBinding struct {
 // InstructionStmt is a bare instruction block: `instruction "op" { ... }`
 type InstructionStmt struct {
 	Frame   map[string]any
+	Blocks  []*ContinuationBlock // nil unless instruction has local 'blocks
 	Comment string
 }
 
@@ -144,14 +145,16 @@ type LoopStmt struct {
 // ForStmt is a for-in loop. Range form: `for i in Range(5) { ... }`.
 // Iterator form: `for comp, idx in for_component() { ... }`.
 type ForStmt struct {
-	Label      string            // "" for unlabeled
-	IterVars   []string          // iteration variable names (let-bound)
-	Range      Expr              // range expression (nil for iterator form)
-	IterName   string            // iterator name (empty for Range form)
-	IterArgs   []Expr            // iterator call args (nil for Range form)
-	IterKwArgs map[string]Expr   // iterator keyword args (nil for Range form)
-	Body       []Stmt
-	Comment    string
+	Label          string            // "" for unlabeled
+	IterVars       []string          // iteration variable names (let-bound)
+	Range          Expr              // range expression (nil for iterator form)
+	IterName       string            // iterator name (empty for Range form)
+	IterArgs       []Expr            // iterator call args (nil for Range form)
+	IterKwArgs     map[string]Expr   // iterator keyword args (nil for Range form)
+	IterInstrFrame map[string]any    // raw instruction frame (iterator_instruction form)
+	IterInstrDone  string            // done slot key, 0-based (iterator_instruction form)
+	Body           []Stmt
+	Comment        string
 }
 
 // YieldStmt produces values for one iteration of an enclosing iter body.
@@ -220,7 +223,8 @@ type CallExpr struct {
 
 // InstructionExpr is an inline instruction block used as an expression.
 type InstructionExpr struct {
-	Frame map[string]any // includes returnSlot markers
+	Frame  map[string]any          // includes returnSlot markers
+	Blocks []*ContinuationBlock    // nil unless instruction has local 'blocks
 }
 
 // ArithExpr is a binary arithmetic expression: `a + b`

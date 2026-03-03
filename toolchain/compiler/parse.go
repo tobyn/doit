@@ -23,7 +23,7 @@ import (
 //
 // Disambiguation: if token after '{' is an ident followed by '{' or 'for'
 // followed by an ident, it's multi-block. Otherwise collapsed.
-func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []string, detached bool) ([]Stmt, error)) ([]*ContinuationBlock, error) {
+func (p *parser) parseContinuationBlocks(execNames []string, execDetached map[string]bool, bodyParser func(params []string, detached bool) ([]Stmt, error)) ([]*ContinuationBlock, error) {
 	// Disambiguate multi-block vs collapsed form.
 	//
 	// Multi-block: { name1 { body } name2 { body } ... }
@@ -45,7 +45,7 @@ func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []str
 		// Multi-block: ident followed by '{' means named block.
 		if tok2.kind == tokLBrace {
 			p.unget(tok2)
-			return p.parseContinuationBlocksMulti(fn, bodyParser, tok1)
+			return p.parseContinuationBlocksMulti(execNames, execDetached, bodyParser, tok1)
 		}
 	}
 
@@ -59,7 +59,7 @@ func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []str
 	}
 
 	// Collapsed form inherits detached from the leftmost exec name
-	detached := fn.execDetached[fn.execNames[0]]
+	detached := execDetached[execNames[0]]
 	body, err := bodyParser(params, detached)
 	return []*ContinuationBlock{{Name: "", Params: params, Body: body, Detached: detached}}, nil
 }
@@ -67,7 +67,7 @@ func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []str
 // parseContinuationBlocksMulti parses the multi-block form:
 //   name1 { body } name2 { body } ...
 // Outer '}' terminates.
-func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params []string, detached bool) ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
+func (p *parser) parseContinuationBlocksMulti(execNames []string, execDetached map[string]bool, bodyParser func(params []string, detached bool) ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
 	var blocks []*ContinuationBlock
 	seen := map[string]bool{}
 
@@ -98,16 +98,16 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params 
 			return nil, p.errorf(tok.pos, "expected continuation name, got keyword %q", name)
 		}
 
-		// Validate name against function's exec list
+		// Validate name against exec list
 		found := false
-		for _, en := range fn.execNames {
+		for _, en := range execNames {
 			if en == name {
 				found = true
 				break
 			}
 		}
 		if !found {
-			return nil, p.errorf(tok.pos, "unknown continuation %q (function declares exec(%s))", name, strings.Join(fn.execNames, ", "))
+			return nil, p.errorf(tok.pos, "unknown continuation %q (function declares exec(%s))", name, strings.Join(execNames, ", "))
 		}
 		if seen[name] {
 			return nil, p.errorf(tok.pos, "duplicate continuation block %q", name)
@@ -124,7 +124,7 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params 
 			return nil, err
 		}
 
-		isDetached := fn.execDetached[name]
+		isDetached := execDetached[name]
 		body, err := bodyParser(params, isDetached)
 		if err != nil {
 			return nil, err
@@ -529,6 +529,139 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 				// Unprovided continuation → bridge to join point
 				f["next"] = frameRef(joinPoint)
 			}
+		}
+	}
+
+	return nil
+}
+
+// expandInstructionBlocks wires up local continuation blocks for an
+// instruction with ' exec bindings. Simpler than expandContinuationBlocks
+// because there is a single instruction frame (no function body range to scan)
+// and no @return/@exec_ patching.
+func (p *parser) expandInstructionBlocks(instrIdx int, blocks []*ContinuationBlock, b *frameBuilder, localNames []string, localDetached map[string]bool, emitBody func([]Stmt, map[string]any) error, execOutputRegs map[int]string, emitTail func(Expr) error) error {
+	// Resolve collapsed form: empty name → leftmost local exec name
+	for _, blk := range blocks {
+		if blk.Name == "" {
+			blk.Name = localNames[0]
+		}
+	}
+
+	// Build exec binding map from the instruction frame (local bindings only)
+	ebMap := map[string]execBinding{}
+	for _, v := range b.frames[instrIdx] {
+		if eb, ok := v.(execBinding); ok && eb.local {
+			ebMap[eb.name] = eb
+		}
+	}
+
+	// Validate block param counts
+	for _, blk := range blocks {
+		if len(blk.Params) == 0 {
+			continue
+		}
+		eb := ebMap[blk.Name]
+		if len(blk.Params) > len(eb.args) {
+			if len(eb.args) == 0 {
+				return fmt.Errorf("continuation %q does not provide data, but block has %d binding(s)", blk.Name, len(blk.Params))
+			}
+			return fmt.Errorf("continuation %q provides %d data arg(s), but block has %d binding(s)", blk.Name, len(eb.args), len(blk.Params))
+		}
+	}
+
+	// Emit each block's body, recording start positions
+	blockStarts := map[string]int{}
+	bridgeJumps := []int{}
+
+	for _, blk := range blocks {
+		blockStarts[blk.Name] = b.pos()
+
+		// Build param bindings: map block param names to register names
+		var bindings map[string]any
+		if len(blk.Params) > 0 && execOutputRegs != nil {
+			eb := ebMap[blk.Name]
+			bindings = map[string]any{}
+			for i, paramName := range blk.Params {
+				if i < len(eb.args) {
+					if rs, ok := eb.args[i].(returnSlot); ok {
+						if reg, ok := execOutputRegs[int(rs)]; ok {
+							bindings[paramName] = reg
+						}
+					}
+				}
+			}
+		}
+
+		if err := emitBody(blk.Body, bindings); err != nil {
+			return err
+		}
+
+		// Emit tail expression for expression-form blocks
+		if blk.Tail != nil && emitTail != nil {
+			if err := emitTail(blk.Tail); err != nil {
+				return err
+			}
+		}
+
+		if blk.Detached {
+			// Detached block: set "next": false on last body frame.
+			lastIdx := b.pos() - 1
+			if lastIdx >= blockStarts[blk.Name] {
+				b.frames[lastIdx]["next"] = false
+			}
+			// Patch @break to a noop that re-dispatches.
+			for j := blockStarts[blk.Name]; j < b.pos(); j++ {
+				if op, _ := b.frames[j]["op"].(string); op == "@break" {
+					b.frames[j] = map[string]any{
+						"op":   "set_reg",
+						"1":    false,
+						"2":    false,
+						"next": false,
+					}
+				}
+			}
+		} else {
+			// Bridging block: jump to join point after body
+			jumpIdx := b.emit(map[string]any{
+				"op": "set_reg",
+				"1":  false,
+				"2":  false,
+			})
+			bridgeJumps = append(bridgeJumps, jumpIdx)
+			// Patch @break to jump to join point
+			for j := blockStarts[blk.Name]; j < b.pos(); j++ {
+				if op, _ := b.frames[j]["op"].(string); op == "@break" {
+					b.frames[j] = map[string]any{
+						"op": "set_reg",
+						"1":  false,
+						"2":  false,
+					}
+					bridgeJumps = append(bridgeJumps, j)
+				}
+			}
+		}
+	}
+
+	// Join point
+	joinPoint := b.pos()
+
+	// Patch bridge jumps
+	for _, idx := range bridgeJumps {
+		b.frames[idx]["next"] = frameRef(joinPoint)
+	}
+
+	// Patch LOCAL exec bindings only in the instruction frame at instrIdx
+	f := b.frames[instrIdx]
+	for k, v := range f {
+		eb, ok := v.(execBinding)
+		if !ok || !eb.local {
+			continue
+		}
+		if start, hasBlock := blockStarts[eb.name]; hasBlock {
+			f[k] = frameRef(start)
+		} else {
+			// Unprovided local continuation → bridge to join point
+			f[k] = frameRef(joinPoint)
 		}
 	}
 
@@ -1554,6 +1687,9 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 		}
 		return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, pos, comment, usedVars)
 	case *InstructionExpr:
+		if e.Blocks != nil {
+			return p.emitFnBodyInstructionExprWithBlocks(e, []any{target}, b, paramMap, usedVars, comment, pos)
+		}
 		resolved := resolveInstructionFrame(e.Frame, []any{target}, paramMap, nil, comment)
 		b.emit(resolved)
 		return nil
@@ -1739,6 +1875,9 @@ func (p *parser) fnEmitCtx(b *frameBuilder, paramMap map[string]any, usedVars ma
 			}
 			return p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, pos, cmt, usedVars)
 		},
+		resolveInstrFrame: func(frame map[string]any, retVals []any, cmt string) map[string]any {
+			return resolveInstructionFrame(frame, retVals, paramMap, nil, cmt)
+		},
 		pushScope:      func() {},
 		popScope:       func() {},
 		declareIterVar: func(name string) string {
@@ -1758,6 +1897,81 @@ func inheritComment(stmtComment, callerComment string) string {
 	return callerComment
 }
 
+// emitFnBodyInstructionWithBlocks emits an instruction with local ' blocks
+// inside a fn body expansion.
+func (p *parser) emitFnBodyInstructionWithBlocks(s *InstructionStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	localNames, localDetached := extractLocalExecInfo(s.Frame)
+	execOutputRegs := allocLocalExecOutputRegs(s.Frame, s.Blocks, usedVars)
+
+	maxSlot := 0
+	for slot := range execOutputRegs {
+		if slot > maxSlot {
+			maxSlot = slot
+		}
+	}
+	retVals := make([]any, maxSlot)
+	for slot, reg := range execOutputRegs {
+		retVals[slot-1] = reg
+	}
+
+	resolved := resolveInstructionFrame(s.Frame, retVals, paramMap, nil, comment)
+	instrIdx := b.emit(resolved)
+
+	return p.expandInstructionBlocks(instrIdx, s.Blocks, b, localNames, localDetached,
+		func(stmts []Stmt, bindings map[string]any) error {
+			pm := maps.Clone(paramMap)
+			for k, v := range bindings {
+				pm[k] = v
+			}
+			return p.emitFnBody(stmts, b, pm, usedVars, comment, pos)
+		},
+		execOutputRegs, nil)
+}
+
+// emitFnBodyInstructionExprWithBlocks emits an instruction expression with
+// local ' blocks inside a fn body expansion. Each block has a Tail expression
+// that produces the block's value.
+func (p *parser) emitFnBodyInstructionExprWithBlocks(e *InstructionExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	localNames, localDetached := extractLocalExecInfo(e.Frame)
+	execOutputRegs := allocLocalExecOutputRegs(e.Frame, e.Blocks, usedVars)
+
+	// Merge retVals and execOutputRegs for @N substitution
+	maxSlot := 0
+	for slot := range execOutputRegs {
+		if slot > maxSlot {
+			maxSlot = slot
+		}
+	}
+	instrRetVals := make([]any, maxSlot)
+	for i := 0; i < maxSlot; i++ {
+		if i < len(retVals) {
+			instrRetVals[i] = retVals[i]
+		}
+		if reg, ok := execOutputRegs[i+1]; ok {
+			instrRetVals[i] = reg
+		}
+	}
+
+	resolved := resolveInstructionFrame(e.Frame, instrRetVals, paramMap, nil, comment)
+	instrIdx := b.emit(resolved)
+
+	return p.expandInstructionBlocks(instrIdx, e.Blocks, b, localNames, localDetached,
+		func(stmts []Stmt, bindings map[string]any) error {
+			pm := maps.Clone(paramMap)
+			for k, v := range bindings {
+				pm[k] = v
+			}
+			return p.emitFnBody(stmts, b, pm, usedVars, comment, pos)
+		},
+		execOutputRegs,
+		func(tail Expr) error {
+			if len(retVals) > 0 {
+				return p.emitExprTo(tail, retVals[0], b, paramMap, usedVars, "", pos)
+			}
+			return nil
+		})
+}
+
 // emitFnBody emits frames for an AST body during call expansion.
 func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	collectASTOutputVars(stmts, paramMap, usedVars)
@@ -1766,8 +1980,14 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 		switch s := stmt.(type) {
 		case *InstructionStmt:
 			callComment := inheritComment(s.Comment, comment)
-			resolved := resolveInstructionFrame(s.Frame, nil, paramMap, nil, callComment)
-			b.emit(resolved)
+			if s.Blocks != nil {
+				if err := p.emitFnBodyInstructionWithBlocks(s, b, paramMap, usedVars, callComment, pos); err != nil {
+					return err
+				}
+			} else {
+				resolved := resolveInstructionFrame(s.Frame, nil, paramMap, nil, callComment)
+				b.emit(resolved)
+			}
 
 		case *ModeBlockStmt:
 			callComment := inheritComment(s.Comment, comment)
@@ -1839,8 +2059,14 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 					return err
 				}
 			case *InstructionExpr:
-				resolved := resolveInstructionFrame(v.Frame, retVals, paramMap, nil, callComment)
-				b.emit(resolved)
+				if v.Blocks != nil {
+					if err := p.emitFnBodyInstructionExprWithBlocks(v, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
+						return err
+					}
+				} else {
+					resolved := resolveInstructionFrame(v.Frame, retVals, paramMap, nil, callComment)
+					b.emit(resolved)
+				}
 			case *ExprListExpr:
 				ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
 				bindIdx := 0
@@ -2070,8 +2296,14 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 						for j := 0; j < rc; j++ {
 							retVals[j] = resolveVarName("@ret"+strconv.Itoa(retOffset+j+1), paramMap)
 						}
-						resolved := resolveInstructionFrame(e.Frame, retVals, paramMap, nil, callComment)
-						b.emit(resolved)
+						if e.Blocks != nil {
+							if err := p.emitFnBodyInstructionExprWithBlocks(e, retVals, b, paramMap, usedVars, callComment, pos); err != nil {
+								return err
+							}
+						} else {
+							resolved := resolveInstructionFrame(e.Frame, retVals, paramMap, nil, callComment)
+							b.emit(resolved)
+						}
 						retOffset += rc
 					default:
 						target := resolveVarName("@ret"+strconv.Itoa(retOffset+1), paramMap)
@@ -4022,6 +4254,96 @@ func tryPromoteInstruction(frame map[string]any, params []paramDef, rets []strin
 	return promoted
 }
 
+// hasLocalExecBindings reports whether the frame contains any local exec bindings.
+func hasLocalExecBindings(frame map[string]any) bool {
+	for _, v := range frame {
+		if eb, ok := v.(execBinding); ok && eb.local {
+			return true
+		}
+	}
+	return false
+}
+
+// extractLocalExecInfo collects the names and detached flags of local exec
+// bindings from an instruction frame.
+func extractLocalExecInfo(frame map[string]any) (execNames []string, execDetached map[string]bool) {
+	execDetached = map[string]bool{}
+	seen := map[string]bool{}
+	for _, v := range frame {
+		eb, ok := v.(execBinding)
+		if !ok || !eb.local {
+			continue
+		}
+		if seen[eb.name] {
+			continue
+		}
+		seen[eb.name] = true
+		execNames = append(execNames, eb.name)
+		if eb.detached {
+			execDetached[eb.name] = true
+		}
+	}
+	return execNames, execDetached
+}
+
+// allocLocalExecOutputRegs builds a mapping from returnSlot(N) indices to
+// register names for local exec binding data args. Mirrors allocExecOutputRegs
+// but scans the instruction frame directly instead of going through fnDef.
+func allocLocalExecOutputRegs(frame map[string]any, blocks []*ContinuationBlock, usedVars map[string]bool) map[int]string {
+	// Collect exec bindings from the frame
+	ebMap := map[string]execBinding{}
+	for _, v := range frame {
+		if eb, ok := v.(execBinding); ok && eb.local {
+			ebMap[eb.name] = eb
+		}
+	}
+
+	regs := map[int]string{}
+
+	// Allocate from block param names
+	for _, blk := range blocks {
+		eb := ebMap[blk.Name]
+		for i, paramName := range blk.Params {
+			if i >= len(eb.args) {
+				break
+			}
+			rs, ok := eb.args[i].(returnSlot)
+			if !ok {
+				continue
+			}
+			slot := int(rs)
+			if _, already := regs[slot]; already {
+				continue
+			}
+			regs[slot] = paramName
+			usedVars[paramName] = true
+		}
+	}
+
+	// Find max slot for filling remaining
+	maxSlot := 0
+	for _, v := range frame {
+		if eb, ok := v.(execBinding); ok && eb.local {
+			for _, arg := range eb.args {
+				if rs, ok := arg.(returnSlot); ok {
+					if int(rs) > maxSlot {
+						maxSlot = int(rs)
+					}
+				}
+			}
+		}
+	}
+
+	// Fill remaining slots with generic names
+	for i := 1; i <= maxSlot; i++ {
+		if _, exists := regs[i]; !exists {
+			regs[i] = allocUniqueVar("@out", usedVars)
+		}
+	}
+
+	return regs
+}
+
 // validateExecBindings scans InstructionStmt frames in the AST for execBinding
 // values, validates that binding names exist in execNames (or are "return"),
 // and populates the execDetached map.
@@ -4037,6 +4359,9 @@ func validateExecBindings(stmts []Stmt, execNames []string, execDetached map[str
 				eb, ok := v.(execBinding)
 				if !ok {
 					continue
+				}
+				if eb.local {
+					continue // local bindings are handled by expandInstructionBlocks
 				}
 				if eb.name != "return" && !execSet[eb.name] {
 					return fmt.Errorf("exec binding %q is not declared in the function's exec(...) list", eb.name)
@@ -4186,7 +4511,7 @@ func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContex
 		p.unget(tok)
 		return nil, nil
 	}
-	return p.parseContinuationBlocks(fn, func(params []string, detached bool) ([]Stmt, error) {
+	return p.parseContinuationBlocks(fn.execNames, fn.execDetached, func(params []string, detached bool) ([]Stmt, error) {
 		saved, depth := ctx.pushFnScope()
 		defer ctx.popFnScope(saved, depth)
 		for _, name := range params {
@@ -4220,7 +4545,7 @@ func (p *parser) maybeParseFnBodyContinuationBlocksExpr(fn *fnDef, ctx *fnBodyCo
 		return nil, nil
 	}
 	lbracePos := tok.pos
-	blocks, err := p.parseContinuationBlocks(fn, func(params []string, detached bool) ([]Stmt, error) {
+	blocks, err := p.parseContinuationBlocks(fn.execNames, fn.execDetached, func(params []string, detached bool) ([]Stmt, error) {
 		saved, depth := ctx.pushFnScope()
 		defer ctx.popFnScope(saved, depth)
 		for _, name := range params {
@@ -4242,6 +4567,90 @@ func (p *parser) maybeParseFnBodyContinuationBlocksExpr(fn *fnDef, ctx *fnBodyCo
 		return nil, err
 	}
 	// Extract tails and validate
+	for _, blk := range blocks {
+		if blk.Detached {
+			return nil, p.errorf(lbracePos, "detached continuation cannot be used in expression form")
+		}
+		if len(blk.Body) == 0 {
+			return nil, p.errorf(lbracePos, "empty continuation expression block")
+		}
+		last := blk.Body[len(blk.Body)-1]
+		tail, ok := last.(*exprTailStmt)
+		if !ok {
+			return nil, p.errorf(lbracePos, "last item in continuation expression block must be a value-producing expression")
+		}
+		blk.Tail = tail.Expr
+		blk.Body = blk.Body[:len(blk.Body)-1]
+	}
+	return blocks, nil
+}
+
+// maybeParseFnBodyLocalBlocks peeks for '{' and parses local continuation
+// blocks for an instruction with ' exec bindings at fn body level.
+func (p *parser) maybeParseFnBodyLocalBlocks(frame map[string]any, ctx *fnBodyContext) ([]*ContinuationBlock, error) {
+	localNames, localDetached := extractLocalExecInfo(frame)
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return nil, nil
+	}
+	return p.parseContinuationBlocks(localNames, localDetached, func(params []string, detached bool) ([]Stmt, error) {
+		saved, depth := ctx.pushFnScope()
+		defer ctx.popFnScope(saved, depth)
+		for _, name := range params {
+			ctx.declareFnVar(name, false)
+		}
+		savedLoopDepth := p.loopDepth
+		savedLoopLabels := p.loopLabels
+		p.loopDepth = 0
+		p.loopLabels = map[string]bool{}
+		p.execBlockDepth++
+		defer func() {
+			p.loopDepth = savedLoopDepth
+			p.loopLabels = savedLoopLabels
+			p.execBlockDepth--
+		}()
+		return p.parseFnBodyStmts(ctx)
+	})
+}
+
+// maybeParseFnBodyLocalBlocksExpr peeks for '{' and parses local continuation
+// blocks in expression form at fn body level. Detached blocks are rejected.
+func (p *parser) maybeParseFnBodyLocalBlocksExpr(frame map[string]any, ctx *fnBodyContext) ([]*ContinuationBlock, error) {
+	localNames, localDetached := extractLocalExecInfo(frame)
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return nil, nil
+	}
+	lbracePos := tok.pos
+	blocks, err := p.parseContinuationBlocks(localNames, localDetached, func(params []string, detached bool) ([]Stmt, error) {
+		saved, depth := ctx.pushFnScope()
+		defer ctx.popFnScope(saved, depth)
+		for _, name := range params {
+			ctx.declareFnVar(name, false)
+		}
+		savedLoopDepth := p.loopDepth
+		savedLoopLabels := p.loopLabels
+		p.loopDepth = 0
+		p.loopLabels = map[string]bool{}
+		p.execBlockDepth++
+		defer func() {
+			p.loopDepth = savedLoopDepth
+			p.loopLabels = savedLoopLabels
+			p.execBlockDepth--
+		}()
+		return p.parseFnBodyStmtsInner(ctx, true) // exprTail=true
+	})
+	if err != nil {
+		return nil, err
+	}
 	for _, blk := range blocks {
 		if blk.Detached {
 			return nil, p.errorf(lbracePos, "detached continuation cannot be used in expression form")
@@ -4382,7 +4791,14 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, tok.pos); err != nil {
 				return nil, err
 			}
-			astBody = append(astBody, &InstructionStmt{Frame: frame, Comment: comment})
+			var blocks []*ContinuationBlock
+			if hasLocalExecBindings(frame) {
+				blocks, err = p.maybeParseFnBodyLocalBlocks(frame, ctx)
+				if err != nil {
+					return nil, err
+				}
+			}
+			astBody = append(astBody, &InstructionStmt{Frame: frame, Blocks: blocks, Comment: comment})
 
 		case "return":
 			retPeek, err := p.next()
@@ -4397,7 +4813,14 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, retPeek.pos); err != nil {
 					return nil, err
 				}
-				astBody = append(astBody, &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame}}, Comment: comment})
+				var blocks []*ContinuationBlock
+				if hasLocalExecBindings(frame) {
+					blocks, err = p.maybeParseFnBodyLocalBlocksExpr(frame, ctx)
+					if err != nil {
+						return nil, err
+					}
+				}
+				astBody = append(astBody, &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame, Blocks: blocks}}, Comment: comment})
 			} else if retPeek.kind == tokIdent && ctx.isExecName(retPeek.val) {
 				// Continuation dispatch: return <cont_name> or return <cont_name>(args...)
 				contName := retPeek.val
@@ -4871,15 +5294,24 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 			if err != nil {
 				return nil, err
 			}
-			retCount := frameReturnCount(frame)
-			if retCount == 0 {
-				return nil, p.errorf(firstTok.pos, "instruction has no return slots (@N); cannot assign its result")
-			}
-			if len(bindings) > retCount {
-				return nil, p.errorf(firstTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
-			}
 			if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, firstTok.pos); err != nil {
 				return nil, err
+			}
+			var blocks []*ContinuationBlock
+			if hasLocalExecBindings(frame) {
+				blocks, err = p.maybeParseFnBodyLocalBlocksExpr(frame, ctx)
+				if err != nil {
+					return nil, err
+				}
+			}
+			retCount := frameReturnCount(frame)
+			if blocks == nil {
+				if retCount == 0 {
+					return nil, p.errorf(firstTok.pos, "instruction has no return slots (@N); cannot assign its result")
+				}
+				if len(bindings) > retCount {
+					return nil, p.errorf(firstTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
+				}
 			}
 			for _, bind := range bindings {
 				if !bind.Discard {
@@ -4888,7 +5320,7 @@ func (p *parser) parseFnBodyLetVar(ctx *fnBodyContext, mutable bool, comment str
 			}
 			return []Stmt{&MultiReturnStmt{
 				Bindings: bindings,
-				Value:    &InstructionExpr{Frame: frame},
+				Value:    &InstructionExpr{Frame: frame, Blocks: blocks},
 				Comment:  comment,
 			}}, nil
 		}
@@ -5111,10 +5543,17 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 		if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, rhsTok.pos); err != nil {
 			return nil, err
 		}
-		if !frameHasReturnSlot(frame) {
+		var blocks []*ContinuationBlock
+		if hasLocalExecBindings(frame) {
+			blocks, err = p.maybeParseFnBodyLocalBlocksExpr(frame, ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if blocks == nil && !frameHasReturnSlot(frame) {
 			return nil, p.errorf(rhsTok.pos, "instruction has no return slots (@N); cannot assign its result")
 		}
-		return &InstructionExpr{Frame: frame}, nil
+		return &InstructionExpr{Frame: frame, Blocks: blocks}, nil
 	}
 
 	// Constructor RHS
@@ -5356,14 +5795,22 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 			if err != nil {
 				return nil, err
 			}
-			if valTok.kind != tokIdent {
-				return nil, p.errorf(valTok.pos, "expected continuation name, got %s", valTok.describe())
+			var eb execBinding
+			if valTok.kind == tokLabel {
+				// 'name — local block binding
+				if valTok.val == "return" {
+					return nil, p.errorf(valTok.pos, "'return is reserved and cannot be used as a local block name")
+				}
+				eb = execBinding{name: valTok.val, detached: detached, local: true}
+			} else if valTok.kind == tokIdent {
+				// Allow "return" as a special continuation name
+				if valTok.val != "return" && Keywords[valTok.val] {
+					return nil, p.errorf(valTok.pos, "expected continuation name, got keyword %q", valTok.val)
+				}
+				eb = execBinding{name: valTok.val, detached: detached}
+			} else {
+				return nil, p.errorf(valTok.pos, "expected continuation name or 'label, got %s", valTok.describe())
 			}
-			// Allow "return" as a special continuation name
-			if valTok.val != "return" && Keywords[valTok.val] {
-				return nil, p.errorf(valTok.pos, "expected continuation name, got keyword %q", valTok.val)
-			}
-			eb := execBinding{name: valTok.val, detached: detached}
 
 			// Parse optional argument list: name(@1, @2) or return(@1)
 			peek, err := p.next()

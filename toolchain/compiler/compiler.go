@@ -322,9 +322,10 @@ type iterDef struct {
 
 // execBinding marks an instruction block slot as wired to a continuation.
 type execBinding struct {
-	name    string // continuation name (or "return")
-	detached bool  // true if marked with `detach`
-	args    []any  // @N references (returnSlot) and literals; nil = no data
+	name     string // continuation name (or "return")
+	detached bool   // true if marked with `detach`
+	local    bool   // true if marked with `'` sigil (instruction-level block)
+	args     []any  // @N references (returnSlot) and literals; nil = no data
 }
 
 type fnDef struct {
@@ -617,16 +618,17 @@ func (b *frameBuilder) finalize(value map[string]any) {
 // emitContext abstracts the differences between behavior-level and fn body
 // emission paths, allowing unified control flow emitters.
 type emitContext struct {
-	b              *frameBuilder
-	usedVars       map[string]bool
-	resolveBool    func(expr Expr) (*resolvedBoolExpr, error)
-	emitBody       func(stmts []Stmt) error
-	exprGetValue   func(expr Expr, comment string) (any, error)
-	exprTo         func(expr Expr, target any, comment string) error
-	expandCallExpr func(ce *CallExpr, retVals []any, comment string) error
-	pushScope      func()
-	popScope       func()
-	declareIterVar func(name string) string
+	b                *frameBuilder
+	usedVars         map[string]bool
+	resolveBool      func(expr Expr) (*resolvedBoolExpr, error)
+	emitBody         func(stmts []Stmt) error
+	exprGetValue     func(expr Expr, comment string) (any, error)
+	exprTo           func(expr Expr, target any, comment string) error
+	expandCallExpr   func(ce *CallExpr, retVals []any, comment string) error
+	resolveInstrFrame func(frame map[string]any, retVals []any, comment string) map[string]any
+	pushScope        func()
+	popScope         func()
+	declareIterVar   func(name string) string
 }
 
 // parseContext abstracts the differences between behavior-level and fn body

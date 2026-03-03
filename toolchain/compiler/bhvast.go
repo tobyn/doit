@@ -74,6 +74,9 @@ func (p *parser) bhvEmitCtx(b *frameBuilder, syms *symbolTable) *emitContext {
 		exprTo: func(expr Expr, target any, comment string) error {
 			return p.emitBhvExprTo(expr, target, syms, b, comment)
 		},
+		resolveInstrFrame: func(frame map[string]any, retVals []any, comment string) map[string]any {
+			return resolveInstructionFrame(frame, retVals, nil, nil, comment)
+		},
 		expandCallExpr: func(ce *CallExpr, retVals []any, comment string) error {
 			resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(ce.Args, ce.KwArgs, syms, b)
 			if err != nil {
@@ -1217,7 +1220,14 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		if err != nil {
 			return nil, err
 		}
-		if !frameHasReturnSlot(rawFrame) {
+		var blocks []*ContinuationBlock
+		if hasLocalExecBindings(rawFrame) {
+			blocks, err = p.maybeParseBhvLocalBlocksExpr(rawFrame, syms)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if blocks == nil && !frameHasReturnSlot(rawFrame) {
 			return nil, p.errorf(rhsTok.pos, "instruction has no return slots (@N); cannot assign its result")
 		}
 		if err := p.checkInstructionDirections(rawFrame, syms, rhsTok.pos); err != nil {
@@ -1227,7 +1237,7 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		return []Stmt{&LetStmt{
 			Name:    nameTok.val,
 			Mutable: mutable,
-			Value:   &InstructionExpr{Frame: rawFrame},
+			Value:   &InstructionExpr{Frame: rawFrame, Blocks: blocks},
 			Comment: comment,
 		}}, nil
 	}
@@ -1550,7 +1560,14 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			if err != nil {
 				return nil, err
 			}
-			if !frameHasReturnSlot(rawFrame) {
+			var blocks []*ContinuationBlock
+			if hasLocalExecBindings(rawFrame) {
+				blocks, err = p.maybeParseBhvLocalBlocksExpr(rawFrame, syms)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if blocks == nil && !frameHasReturnSlot(rawFrame) {
 				return nil, p.errorf(rhsTok.pos, "instruction has no return slots (@N); cannot assign its result")
 			}
 			if err := p.checkInstructionDirections(rawFrame, syms, rhsTok.pos); err != nil {
@@ -1558,7 +1575,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 			}
 			return []Stmt{&AssignStmt{
 				Target:  tok.val,
-				Value:   &InstructionExpr{Frame: rawFrame},
+				Value:   &InstructionExpr{Frame: rawFrame, Blocks: blocks},
 				Comment: comment,
 				Pos:     tok.pos,
 			}}, nil
@@ -1780,7 +1797,7 @@ func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) (
 		p.unget(tok)
 		return nil, nil
 	}
-	return p.parseContinuationBlocks(fn, func(params []string, detached bool) ([]Stmt, error) {
+	return p.parseContinuationBlocks(fn.execNames, fn.execDetached, func(params []string, detached bool) ([]Stmt, error) {
 		saved := syms.pushScope()
 		defer syms.popScope(saved)
 		for _, name := range params {
@@ -1814,7 +1831,7 @@ func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTabl
 		return nil, nil
 	}
 	lbracePos := tok.pos
-	blocks, err := p.parseContinuationBlocks(fn, func(params []string, detached bool) ([]Stmt, error) {
+	blocks, err := p.parseContinuationBlocks(fn.execNames, fn.execDetached, func(params []string, detached bool) ([]Stmt, error) {
 		saved := syms.pushScope()
 		defer syms.popScope(saved)
 		for _, name := range params {
@@ -1854,6 +1871,90 @@ func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTabl
 	return blocks, nil
 }
 
+
+// maybeParseBhvLocalBlocks peeks for '{' and parses local continuation blocks
+// for an instruction with ' exec bindings at behavior level.
+func (p *parser) maybeParseBhvLocalBlocks(frame map[string]any, syms *symbolTable) ([]*ContinuationBlock, error) {
+	localNames, localDetached := extractLocalExecInfo(frame)
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return nil, nil
+	}
+	return p.parseContinuationBlocks(localNames, localDetached, func(params []string, detached bool) ([]Stmt, error) {
+		saved := syms.pushScope()
+		defer syms.popScope(saved)
+		for _, name := range params {
+			syms.declareVar(name, false)
+		}
+		savedLoopDepth := p.loopDepth
+		savedLoopLabels := p.loopLabels
+		p.loopDepth = 0
+		p.loopLabels = map[string]bool{}
+		p.execBlockDepth++
+		defer func() {
+			p.loopDepth = savedLoopDepth
+			p.loopLabels = savedLoopLabels
+			p.execBlockDepth--
+		}()
+		return p.parseBhvStmtBlockInner(syms)
+	})
+}
+
+// maybeParseBhvLocalBlocksExpr peeks for '{' and parses local continuation
+// blocks in expression form at behavior level. Detached blocks are rejected.
+func (p *parser) maybeParseBhvLocalBlocksExpr(frame map[string]any, syms *symbolTable) ([]*ContinuationBlock, error) {
+	localNames, localDetached := extractLocalExecInfo(frame)
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if tok.kind != tokLBrace {
+		p.unget(tok)
+		return nil, nil
+	}
+	lbracePos := tok.pos
+	blocks, err := p.parseContinuationBlocks(localNames, localDetached, func(params []string, detached bool) ([]Stmt, error) {
+		saved := syms.pushScope()
+		defer syms.popScope(saved)
+		for _, name := range params {
+			syms.declareVar(name, false)
+		}
+		savedLoopDepth := p.loopDepth
+		savedLoopLabels := p.loopLabels
+		p.loopDepth = 0
+		p.loopLabels = map[string]bool{}
+		p.execBlockDepth++
+		defer func() {
+			p.loopDepth = savedLoopDepth
+			p.loopLabels = savedLoopLabels
+			p.execBlockDepth--
+		}()
+		return p.parseBhvStmtBlockInner(syms, true) // exprTail=true
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, blk := range blocks {
+		if blk.Detached {
+			return nil, p.errorf(lbracePos, "detached continuation cannot be used in expression form")
+		}
+		if len(blk.Body) == 0 {
+			return nil, p.errorf(lbracePos, "empty continuation expression block")
+		}
+		last := blk.Body[len(blk.Body)-1]
+		tail, ok := last.(*exprTailStmt)
+		if !ok {
+			return nil, p.errorf(lbracePos, "last item in continuation expression block must be a value-producing expression")
+		}
+		blk.Tail = tail.Expr
+		blk.Body = blk.Body[:len(blk.Body)-1]
+	}
+	return blocks, nil
+}
 
 // parseBhvMultiReturn parses a multi-return binding list.
 // The first binding (firstTok) and the comma after it have been consumed.
@@ -1958,12 +2059,21 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 		if err := p.checkInstructionDirections(rawFrame, syms, firstTok.pos); err != nil {
 			return nil, err
 		}
-		retCount := frameReturnCount(rawFrame)
-		if retCount == 0 {
-			return nil, p.errorf(firstTok.pos, "instruction has no return slots (@N); cannot assign its result")
+		var blocks []*ContinuationBlock
+		if hasLocalExecBindings(rawFrame) {
+			blocks, err = p.maybeParseBhvLocalBlocksExpr(rawFrame, syms)
+			if err != nil {
+				return nil, err
+			}
 		}
-		if len(bindings) > retCount {
-			return nil, p.errorf(firstTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
+		retCount := frameReturnCount(rawFrame)
+		if blocks == nil {
+			if retCount == 0 {
+				return nil, p.errorf(firstTok.pos, "instruction has no return slots (@N); cannot assign its result")
+			}
+			if len(bindings) > retCount {
+				return nil, p.errorf(firstTok.pos, "too many bindings (%d) for instruction which returns %d values", len(bindings), retCount)
+			}
 		}
 
 		// Register new variables
@@ -1975,7 +2085,7 @@ func (p *parser) parseBhvMultiReturn(firstTok token, firstMutable, firstDiscard 
 
 		return []Stmt{&MultiReturnStmt{
 			Bindings: bindings,
-			Value:    &InstructionExpr{Frame: rawFrame},
+			Value:    &InstructionExpr{Frame: rawFrame, Blocks: blocks},
 			Comment:  comment,
 		}}, nil
 	}
@@ -2202,7 +2312,14 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		if err := p.checkInstructionDirections(rawFrame, syms, tok.pos); err != nil {
 			return nil, false, err
 		}
-		return []Stmt{&InstructionStmt{Frame: rawFrame, Comment: comment}}, true, nil
+		var blocks []*ContinuationBlock
+		if hasLocalExecBindings(rawFrame) {
+			blocks, err = p.maybeParseBhvLocalBlocks(rawFrame, syms)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		return []Stmt{&InstructionStmt{Frame: rawFrame, Blocks: blocks, Comment: comment}}, true, nil
 	case "locked":
 		if _, err := p.expect(tokLBrace); err != nil {
 			return nil, false, err
@@ -2757,6 +2874,9 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 		}
 		return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, 0, comment, syms.usedVars)
 	case *InstructionExpr:
+		if e.Blocks != nil {
+			return p.emitBhvInstructionExprWithBlocks(e, []any{target}, b, syms, comment)
+		}
 		resolved := resolveInstructionFrame(e.Frame, []any{target}, nil, nil, comment)
 		b.emit(resolved)
 		return nil
@@ -3083,10 +3203,91 @@ func (p *parser) emitBhvIfBreak(s *IfStmt, b *frameBuilder, syms *symbolTable) e
 	return nil
 }
 
+// emitBhvInstructionExprWithBlocks emits an instruction expression with local
+// ' blocks at behavior level. Each block has a Tail expression that produces
+// the block's value into the caller's retVals targets.
+func (p *parser) emitBhvInstructionExprWithBlocks(e *InstructionExpr, retVals []any, b *frameBuilder, syms *symbolTable, comment string) error {
+	localNames, localDetached := extractLocalExecInfo(e.Frame)
+	execOutputRegs := allocLocalExecOutputRegs(e.Frame, e.Blocks, syms.usedVars)
+
+	// Build @N retVals merging caller retVals and execOutputRegs
+	maxSlot := 0
+	for slot := range execOutputRegs {
+		if slot > maxSlot {
+			maxSlot = slot
+		}
+	}
+	// retVals from caller are for the return path; execOutputRegs are for block data
+	instrRetVals := make([]any, maxSlot)
+	for i := 0; i < maxSlot; i++ {
+		if i < len(retVals) {
+			instrRetVals[i] = retVals[i]
+		}
+		if reg, ok := execOutputRegs[i+1]; ok {
+			instrRetVals[i] = reg
+		}
+	}
+
+	resolved := resolveInstructionFrame(e.Frame, instrRetVals, nil, nil, comment)
+	instrIdx := b.emit(resolved)
+
+	return p.expandInstructionBlocks(instrIdx, e.Blocks, b, localNames, localDetached,
+		func(stmts []Stmt, bindings map[string]any) error {
+			for name := range bindings {
+				syms.declareVar(name, false)
+			}
+			_, err := p.emitBehaviorStmts(stmts, b, syms)
+			return err
+		},
+		execOutputRegs,
+		func(tail Expr) error {
+			// Write each tail value to the first retVal target
+			if len(retVals) > 0 {
+				return p.emitBhvExprTo(tail, retVals[0], syms, b, "")
+			}
+			return nil
+		})
+}
+
+// emitBhvInstructionWithBlocks emits an instruction with local ' blocks at
+// behavior level.
+func (p *parser) emitBhvInstructionWithBlocks(s *InstructionStmt, b *frameBuilder, syms *symbolTable) error {
+	localNames, localDetached := extractLocalExecInfo(s.Frame)
+	execOutputRegs := allocLocalExecOutputRegs(s.Frame, s.Blocks, syms.usedVars)
+
+	// Build retVals from execOutputRegs for @N substitution
+	maxSlot := 0
+	for slot := range execOutputRegs {
+		if slot > maxSlot {
+			maxSlot = slot
+		}
+	}
+	retVals := make([]any, maxSlot)
+	for slot, reg := range execOutputRegs {
+		retVals[slot-1] = reg
+	}
+
+	resolved := resolveInstructionFrame(s.Frame, retVals, nil, nil, s.Comment)
+	instrIdx := b.emit(resolved)
+
+	return p.expandInstructionBlocks(instrIdx, s.Blocks, b, localNames, localDetached,
+		func(stmts []Stmt, bindings map[string]any) error {
+			for name := range bindings {
+				syms.declareVar(name, false)
+			}
+			_, err := p.emitBehaviorStmts(stmts, b, syms)
+			return err
+		},
+		execOutputRegs, nil)
+}
+
 // emitBhvStmtSimple emits frames for a non-control-flow statement.
 func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable) error {
 	switch s := stmt.(type) {
 	case *InstructionStmt:
+		if s.Blocks != nil {
+			return p.emitBhvInstructionWithBlocks(s, b, syms)
+		}
 		resolved := resolveInstructionFrame(s.Frame, nil, nil, nil, s.Comment)
 		b.emit(resolved)
 		return nil
@@ -3201,6 +3402,9 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 			ctx := p.bhvEmitCtx(b, syms)
 			return p.emitIfExpr(v, retVals, ctx, s.Comment)
 		case *InstructionExpr:
+			if v.Blocks != nil {
+				return p.emitBhvInstructionExprWithBlocks(v, retVals, b, syms, s.Comment)
+			}
 			resolved := resolveInstructionFrame(v.Frame, retVals, nil, nil, s.Comment)
 			b.emit(resolved)
 			return nil

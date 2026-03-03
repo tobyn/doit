@@ -1,0 +1,15 @@
+# AI-generated test
+# iterator_instruction inside a function body
+fn scan_components() {
+    for comp in iterator_instruction "for_component" {
+        0: @1
+        done: 1
+    } {
+        notify "found"
+    }
+}
+
+behavior iter_instr_fn_body {
+    @name "Iter Instr Fn Body"
+    scan_components
+}

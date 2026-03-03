@@ -3654,6 +3654,105 @@ behavior a {
 		}
 	})
 
+	t.Run("iterator_instruction_missing_done", func(t *testing.T) {
+		src := `behavior a {
+	@name "A"
+	for comp in iterator_instruction "for_component" {
+		0: @1
+	} {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "done") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("iterator_instruction_too_few_vars", func(t *testing.T) {
+		src := `behavior a {
+	@name "A"
+	for comp in iterator_instruction "for_component" {
+		0: @1
+		1: @2
+		2: @3
+		done: 3
+	} {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "iteration variable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("iterator_instruction_exec_binding", func(t *testing.T) {
+		src := `behavior a {
+	@name "A"
+	for comp in iterator_instruction "for_component" {
+		0: @1
+		exec 1: found
+		done: 2
+	} {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "exec binding") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("local_block_return_reserved", func(t *testing.T) {
+		src := `behavior a {
+	@name "A"
+	instruction "check_number" {
+		exec 0: 'return
+		2: $signal
+		3: 5
+	} {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'return") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("local_block_detached_in_expr", func(t *testing.T) {
+		src := `behavior a {
+	@name "A"
+	let x = instruction "check_number" {
+		detach exec 0: 'larger
+		2: $signal
+		3: 5
+	} {
+		notify "hi"
+	}
+}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "detached") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

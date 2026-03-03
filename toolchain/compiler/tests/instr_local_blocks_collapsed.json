@@ -1,0 +1,19 @@
+{
+    "0": {
+        "0": 2,
+        "2": "$signal",
+        "3": 5,
+        "op": "check_number"
+    },
+    "1": {
+        "op": "notify",
+        "txt": "was larger"
+    },
+    "2": {
+        "0": false,
+        "1": false,
+        "next": 4,
+        "op": "set_reg"
+    },
+    "name": "Instr Local Blocks Collapsed"
+}

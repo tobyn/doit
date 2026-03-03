@@ -318,3 +318,24 @@ instead of `fn...exec`. Key decisions:
   instead of manual counter + comparison + increment. For N=1, no
   dispatch check is emitted (single yield is the catch-all). For N>1,
   N-1 `check_number` frames route each state to its yield block.
+
+## `'` sigil for instruction-level local blocks
+
+The `'` sigil on exec binding names (`exec 0: 'larger`) declares a
+local continuation block — one handled inline by blocks attached to
+the instruction itself, not forwarded to the enclosing function's exec.
+This reuses the existing `tokLabel` scanner token (same `'` sigil as
+loop labels). Rationale: `instruction` should be the clean boundary
+between the VM and language constructs, able to express everything the
+VM does without the function layer. Local blocks complete this by
+adding branching capability directly to `instruction`.
+
+## `iterator_instruction` keyword
+
+`iterator_instruction` is a keyword (not a stdlib function or iter
+declaration) for inline iteration in `for...in` loops. It uses
+`parseInstruction()` to get the raw frame, requires a `done:` slot,
+and validates that no exec bindings are present (use `instruction`
+with `'` blocks for branching). Rationale: one-off iteration shouldn't
+require declaring a named `iter` — `iterator_instruction` is to `iter`
+what `instruction` is to `fn`.

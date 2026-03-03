@@ -1,0 +1,17 @@
+# AI-generated test
+# instruction with local 'block continuations (statement form)
+behavior instr_local_blocks {
+    @name "Instr Local Blocks"
+
+    instruction "check_number" {
+        exec 0: 'larger
+        exec 1: 'smaller
+        2: $signal
+        3: 5
+        next: 'equal
+    } {
+        larger { notify "large" }
+        smaller { notify "small" }
+        equal { notify "equal" }
+    }
+}

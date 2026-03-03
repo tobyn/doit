@@ -1,0 +1,53 @@
+{
+    "0": {
+        "0": 2,
+        "1": 4,
+        "2": "$signal",
+        "3": 5,
+        "next": 6,
+        "op": "check_number"
+    },
+    "1": {
+        "0": "v",
+        "1": "result",
+        "op": "set_reg"
+    },
+    "2": {
+        "0": false,
+        "1": false,
+        "next": 8,
+        "op": "set_reg"
+    },
+    "3": {
+        "1": {
+            "num": 0
+        },
+        "2": "result",
+        "op": "set_number"
+    },
+    "4": {
+        "0": false,
+        "1": false,
+        "next": 8,
+        "op": "set_reg"
+    },
+    "5": {
+        "1": {
+            "num": 5
+        },
+        "2": "result",
+        "op": "set_number"
+    },
+    "6": {
+        "0": false,
+        "1": false,
+        "next": 8,
+        "op": "set_reg"
+    },
+    "7": {
+        "0": "result",
+        "op": "notify",
+        "txt": "result"
+    },
+    "name": "Instr Local Blocks Expr"
+}

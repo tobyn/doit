@@ -202,6 +202,132 @@ fn my_check(value, target) exec(larger, smaller, equal) {
 - `detach` prefix marks a detached continuation: `detach next: body`
 - `@N` args pass output data to continuations: `exec 0: found(@1, @2)`
 
+## Local Continuation Blocks with `'`
+
+Instructions can declare local continuation blocks using the `'` (tick) sigil
+on exec binding names. This lets you branch within a single instruction without
+wrapping it in a function:
+
+```doit
+instruction "check_number" {
+    exec 0: 'larger
+    exec 1: 'smaller
+    2: $signal
+    3: 5
+    next: 'equal
+} {
+    larger { notify "large" }
+    smaller { notify "small" }
+    equal { notify "equal" }
+}
+```
+
+The `'name` syntax declares a *local* continuation — one handled by blocks
+attached directly to the instruction. Without `'`, the name refers to the
+enclosing function's exec continuation (existing behavior, unchanged).
+
+### Data arguments
+
+Local blocks can receive data from the instruction via `@N` args, just like
+function-level continuations:
+
+```doit
+instruction "check_number" {
+    exec 0: 'larger(@1)
+    exec 1: 'smaller
+    2: value
+    3: threshold
+    next: 'equal
+} {
+    larger { v -> notify "large", value: v }
+    smaller { notify "small" }
+    equal { notify "equal" }
+}
+```
+
+### Expression form
+
+When all local blocks are bridging (not detached), the instruction can be
+used as an expression. Each block's last expression is its value:
+
+```doit
+let result = instruction "check_number" {
+    exec 0: 'larger(@1)
+    exec 1: 'smaller
+    2: $signal
+    3: 5
+    next: 'equal
+} {
+    larger { v -> v }
+    smaller { 0 }
+    equal { 5 }
+}
+```
+
+Detached local blocks in expression form are a compile error.
+
+### Collapsed form
+
+When there is only one local block, the collapsed form works:
+
+```doit
+instruction "check_number" {
+    exec 0: 'larger
+    2: $signal
+    3: 5
+} {
+    notify "was larger"
+}
+```
+
+### Mixing local and non-local bindings
+
+In a function body, local (`'name`) and non-local (`name`) bindings can
+coexist. Non-local bindings refer to the function's exec continuation and
+are resolved by the function-level expansion:
+
+```doit
+fn wrapper(v, t) exec(pass, fail) {
+    instruction "check_number" {
+        exec 0: 'big       // local block
+        exec 1: fail        // forward to fn's exec
+        2: v
+        3: t
+        next: pass          // forward to fn's exec
+    } {
+        big { notify "big" }
+    }
+}
+```
+
+### `'return` is reserved
+
+`'return` cannot be used as a local block name — `return` is reserved for
+the function-level continuation system.
+
+## `iterator_instruction`
+
+The `iterator_instruction` keyword creates an inline iterator from a raw
+VM instruction, usable in `for...in` loops without declaring an `iter`:
+
+```doit
+for comp, idx in iterator_instruction "for_component" {
+    0: @1
+    1: @2
+    done: 2
+} {
+    notify "found", value: comp
+}
+```
+
+- `@N` maps instruction output slots to iteration variables
+- `done:` specifies the exec slot for exhaustion (required)
+- Exec bindings are not allowed (use `instruction` with `'` blocks for
+  branching iterators)
+- `break`, `continue`, and labeled `break` work normally
+
+See [Language](language.md#iterator_instruction) for more details.
+
 ## Field Reference Format
 
 Field keys in the instruction block use the reference codec's 0-based format

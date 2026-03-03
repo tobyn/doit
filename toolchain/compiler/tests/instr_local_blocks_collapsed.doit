@@ -1,0 +1,13 @@
+# AI-generated test
+# instruction with local 'block in collapsed single-block form
+behavior instr_local_blocks_collapsed {
+    @name "Instr Local Blocks Collapsed"
+
+    instruction "check_number" {
+        exec 0: 'larger
+        2: $signal
+        3: 5
+    } {
+        notify "was larger"
+    }
+}

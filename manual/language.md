@@ -1692,6 +1692,29 @@ for item in for_inventory_item() {
 
 `for` loops work in both behavior bodies and function bodies.
 
+#### `iterator_instruction`
+
+For inline iteration over raw VM instructions without defining an `iter`,
+use `iterator_instruction` in the `for...in` position:
+
+```doit
+for comp, idx in iterator_instruction "for_component" {
+    0: @1       // first iter variable ← slot 0
+    1: @2       // second iter variable ← slot 1
+    done: 2     // exhaustion exec slot
+} {
+    notify "found", value: comp
+}
+```
+
+`@N` maps output slots to iteration variables (prefix matching — you can
+bind fewer variables than outputs). `done:` specifies which exec slot the
+VM fires when iteration is exhausted. `break`, `continue`, and labeled
+`break` work like any other `for...in` loop.
+
+This is equivalent to declaring an `iter` and calling it, but avoids the
+extra declaration for one-off iteration.
+
 ### `wait`
 
 Pauses execution for a number of ticks:
