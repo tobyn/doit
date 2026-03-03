@@ -1692,14 +1692,6 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 
 	patchIterDoneSlot(ctx.b, instrIdx, it.doneSlot, afterLoop)
 
-	// Set the implicit "next" on the instruction frame → body start
-	if origLen > instrIdx+1 {
-		// Body frames follow the instruction frame — next goes to first body frame
-	}
-	// The instruction frame's "next" should point to the first body frame
-	// (it's already the implicit fallthrough since the body follows immediately)
-
-	// Patch labeled break placeholders
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
 	ctx.popScope()

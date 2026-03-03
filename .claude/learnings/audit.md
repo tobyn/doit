@@ -79,10 +79,6 @@ dimensions in a single pass:
 
 ### Low
 
-- **Dead code in `emitInstructionIter`.** codegen.go lines 1721-1726:
-  empty `if` block with only comments about implicit "next"
-  fallthrough. Should be removed.
-
 ### Deferred
 
 ### Rejected
