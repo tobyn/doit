@@ -126,15 +126,27 @@ are placeholder opcodes in intermediate frames. In loops, `@break` is
 patched to jump past the enclosing loop. `@continue` is patched to
 jump to the loop's back-edge target: `frameRef(loopStart)` for
 infinite loops and while, `frameRef(incrFrame)` for counted loops,
-and `false` (re-dispatch) for iterator-backed for loops. In exec
-blocks, `@break` is patched to exit the block: detached blocks get
-`set_reg false false` with `"next": false` (re-dispatch); bridging
-blocks get `set_reg false false` patched to the join point. `@return`
-is patched to jump past the function expansion. All three are patched
-to `set_reg false false` with appropriate `"next"` targets.
-`@continue` in yield-based iterators is handled by `YieldBodyStmt`:
-a bridge noop is emitted after the inlined caller body, and
-`@continue` is patched to jump to it.
+and `false` (re-dispatch) for iterator-backed for loops. In
+iterator-backed loops, unlabeled `@break` is patched to `"last"`
+(stops the iterator) by `patchUnlabeledBreakToLast`, while labeled
+breaks still jump past the loop. In exec blocks, `@break` is patched
+to exit the block: detached blocks get `set_reg false false` with
+`"next": false` (re-dispatch); bridging blocks get `set_reg false
+false` patched to the join point. `@return` is patched to jump past
+the function expansion. All three are patched to `set_reg false
+false` with appropriate `"next"` targets. `@continue` in yield-based
+iterators is handled by `YieldBodyStmt`: a bridge noop is emitted
+after the inlined caller body, and `@continue` is patched to jump to
+it.
+
+**Iterator helpers**: Shared helpers reduce duplication across the
+four iterator emitters (`emitStateMachineIter`, `emitInstructionIter`,
+`emitForStmtRange`, `emitForStmtRuntime`):
+`buildIterParamMap` (on `emitContext`) resolves positional/keyword
+args and maps output names to iter var registers.
+`patchIterDoneSlot` patches the done-slot on the iterator instruction
+frame. `patchUnlabeledBreakToLast` converts unlabeled `@break` to
+`"last"` instructions.
 
 **Block scoping**: Variables declared inside blocks are scoped to that
 block. Behavior level uses `symbolTable.pushScope`/`popScope`. Fn
