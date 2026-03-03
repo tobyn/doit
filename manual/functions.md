@@ -512,7 +512,7 @@ The `@N` numbers refer to instruction output slots. The continuation
 argument list (`found(@1, @2)`) declares which outputs are available
 to the block. The block's bindings (`entity, distance ->`) name them.
 
-#### Looping continuations
+#### Detached continuations
 
 > **Note:** For iterator-style loops, prefer `iter` declarations and
 > `for ... in` syntax (see [Iterators](#iterators)) over `fn...exec` with
@@ -520,26 +520,26 @@ to the block. The block's bindings (`entity, distance ->`) name them.
 > non-iterator branching functions.
 
 Some instructions are iterators — they dispatch a body block
-repeatedly. Mark these blocks with `for` at the call site:
+repeatedly. These are called *detached* continuations because the VM
+re-dispatches them internally rather than bridging back to the caller.
+The compiler derives detached status from the function definition — no
+annotation is needed at the call site:
 
 ```doit
 my_for_comp(entity) {
-    for body { comp, idx ->
+    body { comp, idx ->
         notify "comp", value: comp
     }
     done { notify "done" }
 }
 ```
 
-The `for` prefix is required for looping continuations and forbidden
-for bridging ones. The compiler enforces this.
-
-`break` inside a `for` block stops the iterator (emits the VM's
+`break` inside a detached block stops the iterator (emits the VM's
 `last` instruction):
 
 ```doit
 my_for_comp(entity) {
-    for body { comp, idx ->
+    body { comp, idx ->
         if comp == null {
             break
         }
@@ -553,7 +553,7 @@ my_for_comp(entity) {
 
 When a function has a single continuation you care about, you can omit
 the continuation name. The block binds to the leftmost `exec` name.
-Connection type (bridging/looping) is inherited from the function
+Connection type (bridging/detached) is inherited from the function
 definition:
 
 ```doit
@@ -648,7 +648,7 @@ fn classify(a) {
 ```
 
 Expression form is restricted to all-bridging calls — a compile error is
-reported if any continuation block uses `for` (looping blocks don't produce
+reported if any continuation is detached (detached blocks don't produce
 values).
 
 #### Standard library branching functions
@@ -670,9 +670,9 @@ let item = get_inventory_item() {
     no_items { notify "empty" }
 }
 
-# Iterator — looping body, bridging done
+# Iterator — detached body, bridging done
 for_component() {
-    for body { comp, idx ->
+    body { comp, idx ->
         notify "component", value: comp
     }
     done { notify "done iterating" }

@@ -7,7 +7,7 @@ features that interact with exec branches.
 ## Two connection types (exhaustive)
 
 Bridging blocks run once and merge back to the join point (compiler
-adds a jump frame). Looping blocks run subordinate to an iterator —
+adds a jump frame). Detached blocks run subordinate to an iterator —
 their last frame gets `"next": false` and the VM re-dispatches
 internally. Every exec slot in every known instruction (including
 modded ones examined) is cleanly one or the other. No third category
@@ -25,17 +25,16 @@ numbered exec slots also default to `return` (bridge to join point).
 ## `return` inside blocks is a compile error
 
 Continuation blocks are not functions. `return` of any kind inside a
-block (bridging or looping) is rejected at parse time. Wrapping a
+block (bridging or detached) is rejected at parse time. Wrapping a
 branching function with forwarded continuations requires the raw
 `instruction` intrinsic.
 
 ## Parser disambiguation for `fn() {`
 
 After a call's `{`, if the next token is an identifier followed by
-`{`, or `for` followed by an identifier, it's the multi-block form.
-Otherwise it's the collapsed unnamed form. `{ var -> body }` (Kotlin
-binding) is always collapsed since `->` cannot follow a continuation
-name.
+`{`, it's the multi-block form. Otherwise it's the collapsed unnamed
+form. `{ var -> body }` (Kotlin binding) is always collapsed since
+`->` cannot follow a continuation name.
 
 ## Labeled `break` across block boundaries
 
@@ -62,9 +61,11 @@ alongside the existing boolean expression compilation.
 
 ## `for` keyword overload
 
-Accepted. `for` means counted loop, for-in loop, and looping block
-prefix — all syntactically distinguishable. `in` separates loop
-forms from block prefix.
+`for` means counted loop and for-in loop — two forms distinguished
+by the presence of `in`. The old looping block prefix (`for body`)
+was renamed to `detach` in instruction blocks and removed from
+call sites (the compiler derives detached status from the function
+definition).
 
 ## Pure-logic branching (`return <cont_name>`)
 
@@ -102,7 +103,7 @@ block's value. `emitTail` callback threads through `expandCallOpts`
 to the caller's target register.
 
 Expression form is rejected at parse time if any block has
-`Looping=true` — looping blocks iterate, they don't produce values.
+`Detached=true` — detached blocks iterate, they don't produce values.
 
 Expression arity = max across all continuation paths. Each path
 contributes: tail expression for provided blocks, `@N` values for

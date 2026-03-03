@@ -24,7 +24,7 @@ type ContinuationBlock struct {
 	Params  []string // Kotlin-style bindings (e.g., "comp, idx ->"); nil = no data
 	Body    []Stmt
 	Tail    Expr // non-nil for expression-form blocks (value produced by this path)
-	Looping bool // true if prefixed with `for` at call site
+	Detached bool // true if continuation is detached (VM re-dispatches internally)
 }
 
 // --- Statement nodes ---

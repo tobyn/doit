@@ -199,7 +199,7 @@ fn my_check(value, target) exec(larger, smaller, equal) {
 
 - `exec N:` marks a numbered slot as an exec branch
 - `next:` implies exec (the fall-through path)
-- `for` prefix marks a looping continuation: `for next: body`
+- `detach` prefix marks a detached continuation: `detach next: body`
 - `@N` args pass output data to continuations: `exec 0: found(@1, @2)`
 
 ## Field Reference Format

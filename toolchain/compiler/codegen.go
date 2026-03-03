@@ -1529,7 +1529,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 			return err
 		}
 
-		// Set next: false on the last body frame (looping — VM re-dispatches)
+		// Set next: false on the last body frame (detached — VM re-dispatches)
 		lastIdx := ctx.b.pos() - 1
 		ctx.b.frames[lastIdx]["next"] = false
 
@@ -1628,7 +1628,7 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 		return err
 	}
 
-	// Set "next": false on the last body frame (looping — VM re-dispatches)
+	// Set "next": false on the last body frame (detached — VM re-dispatches)
 	lastIdx := ctx.b.pos() - 1
 	if lastIdx >= origLen {
 		ctx.b.frames[lastIdx]["next"] = false
@@ -1824,7 +1824,7 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 		return err
 	}
 
-	// Set "next": false on the last body frame (looping — VM re-dispatches)
+	// Set "next": false on the last body frame (detached — VM re-dispatches)
 	lastIdx := ctx.b.pos() - 1
 	if lastIdx >= origLen {
 		ctx.b.frames[lastIdx]["next"] = false
@@ -1889,7 +1889,7 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 		return err
 	}
 
-	// Set "next": false on the last body frame (looping — VM re-dispatches)
+	// Set "next": false on the last body frame (detached — VM re-dispatches)
 	lastIdx := ctx.b.pos() - 1
 	if lastIdx >= origLen {
 		ctx.b.frames[lastIdx]["next"] = false

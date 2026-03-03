@@ -139,7 +139,7 @@ variables are pre-scanned by `collectASTOutputVars` and renamed with
 
 **Continuations and branching**: Functions declare exec branches via
 `exec(name1, name2)` after the param list. Instruction blocks bind
-exec slots with `exec N: name` or `next: name` syntax. `execBinding`
+exec slots with `exec N: name`, `next: name`, or `detach next: name` syntax. `execBinding`
 structs in instruction frames are patched to `frameRef` targets by
 `expandContinuationBlocks`. Exec bindings can carry data via
 `@N` args (e.g., `exec 0: found(@1, @2)`) that map instruction

@@ -323,7 +323,7 @@ type iterDef struct {
 // execBinding marks an instruction block slot as wired to a continuation.
 type execBinding struct {
 	name    string // continuation name (or "return")
-	looping bool   // true if marked with `for`
+	detached bool  // true if marked with `detach`
 	args    []any  // @N references (returnSlot) and literals; nil = no data
 }
 
@@ -333,7 +333,7 @@ type fnDef struct {
 	frame        map[string]any  // instruction-based (stdlib)
 	astBody      []Stmt          // call-based (user-defined) — AST IR
 	execNames    []string        // ordered continuation names from exec(...)
-	execLooping  map[string]bool // which continuations are looping (derived from instruction block)
+	execDetached map[string]bool // which continuations are detached (derived from instruction block)
 	execContArgs map[string]int  // continuation name → arg count (pure-logic data dispatch)
 	private      bool            // true for private fn (not visible as import)
 	scope        map[string]*fnDef // functions available when this fn was defined (for imports)

@@ -23,7 +23,7 @@ import (
 //
 // Disambiguation: if token after '{' is an ident followed by '{' or 'for'
 // followed by an ident, it's multi-block. Otherwise collapsed.
-func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []string, looping bool) ([]Stmt, error)) ([]*ContinuationBlock, error) {
+func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []string, detached bool) ([]Stmt, error)) ([]*ContinuationBlock, error) {
 	// Disambiguate multi-block vs collapsed form.
 	//
 	// Multi-block: { name1 { body } name2 { body } ... }
@@ -42,9 +42,8 @@ func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []str
 			return nil, err
 		}
 
-		// Multi-block: ident followed by '{' means named block,
-		// 'for' followed by ident means looping named block.
-		if tok2.kind == tokLBrace || (tok1.val == "for" && tok2.kind == tokIdent) {
+		// Multi-block: ident followed by '{' means named block.
+		if tok2.kind == tokLBrace {
 			p.unget(tok2)
 			return p.parseContinuationBlocksMulti(fn, bodyParser, tok1)
 		}
@@ -59,16 +58,16 @@ func (p *parser) parseContinuationBlocks(fn *fnDef, bodyParser func(params []str
 		return nil, err
 	}
 
-	// Collapsed form inherits looping from the leftmost exec name
-	looping := fn.execLooping[fn.execNames[0]]
-	body, err := bodyParser(params, looping)
-	return []*ContinuationBlock{{Name: "", Params: params, Body: body, Looping: looping}}, nil
+	// Collapsed form inherits detached from the leftmost exec name
+	detached := fn.execDetached[fn.execNames[0]]
+	body, err := bodyParser(params, detached)
+	return []*ContinuationBlock{{Name: "", Params: params, Body: body, Detached: detached}}, nil
 }
 
 // parseContinuationBlocksMulti parses the multi-block form:
 //   name1 { body } name2 { body } ...
 // Outer '}' terminates.
-func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params []string, looping bool) ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
+func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params []string, detached bool) ([]Stmt, error), firstTok token) ([]*ContinuationBlock, error) {
 	var blocks []*ContinuationBlock
 	seen := map[string]bool{}
 
@@ -91,22 +90,11 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params 
 			break // end of multi-block
 		}
 
-		// Optional 'for' prefix (looping continuation)
-		forPrefix := false
-		forPos := tok.pos
-		if tok.kind == tokIdent && tok.val == "for" {
-			forPrefix = true
-			tok, err = p.next()
-			if err != nil {
-				return nil, err
-			}
-		}
-
 		if tok.kind != tokIdent {
 			return nil, p.errorf(tok.pos, "expected continuation name or '}', got %s", tok.describe())
 		}
 		name := tok.val
-		if Keywords[name] && name != "for" {
+		if Keywords[name] {
 			return nil, p.errorf(tok.pos, "expected continuation name, got keyword %q", name)
 		}
 
@@ -126,15 +114,6 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params 
 		}
 		seen[name] = true
 
-		// Validate connection type: for on bridging → error, bare on looping → error
-		isLoopingCont := fn.execLooping[name]
-		if forPrefix && !isLoopingCont {
-			return nil, p.errorf(forPos, "'for' prefix on bridging continuation %q — remove 'for'", name)
-		}
-		if !forPrefix && isLoopingCont {
-			return nil, p.errorf(tok.pos, "looping continuation %q requires 'for' prefix", name)
-		}
-
 		if _, err := p.expect(tokLBrace); err != nil {
 			return nil, err
 		}
@@ -145,12 +124,12 @@ func (p *parser) parseContinuationBlocksMulti(fn *fnDef, bodyParser func(params 
 			return nil, err
 		}
 
-		isLooping := forPrefix || isLoopingCont
-		body, err := bodyParser(params, isLooping)
+		isDetached := fn.execDetached[name]
+		body, err := bodyParser(params, isDetached)
 		if err != nil {
 			return nil, err
 		}
-		blocks = append(blocks, &ContinuationBlock{Name: name, Params: params, Body: body, Looping: isLooping})
+		blocks = append(blocks, &ContinuationBlock{Name: name, Params: params, Body: body, Detached: isDetached})
 	}
 
 	if len(blocks) == 0 {
@@ -461,8 +440,8 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 			}
 		}
 
-		if blk.Looping {
-			// Looping block: set "next": false on last body frame.
+		if blk.Detached {
+			// Detached block: set "next": false on last body frame.
 			// This tells the VM to re-dispatch to the iterator.
 			lastIdx := b.pos() - 1
 			if lastIdx >= blockStarts[blk.Name] {
@@ -3778,11 +3757,11 @@ func (p *parser) parseUserFn() (string, error) {
 		return "", err
 	}
 
-	// Post-parse: validate exec bindings and derive execLooping
-	var execLooping map[string]bool
+	// Post-parse: validate exec bindings and derive execDetached
+	var execDetached map[string]bool
 	if len(execNames) > 0 {
-		execLooping = map[string]bool{}
-		if err := validateExecBindings(astBody, execNames, execLooping); err != nil {
+		execDetached = map[string]bool{}
+		if err := validateExecBindings(astBody, execNames, execDetached); err != nil {
 			return "", err
 		}
 	}
@@ -3791,7 +3770,7 @@ func (p *parser) parseUserFn() (string, error) {
 	var execContArgs map[string]int
 	makeFnDef := func(fd *fnDef) *fnDef {
 		fd.execNames = execNames
-		fd.execLooping = execLooping
+		fd.execDetached = execDetached
 		fd.execContArgs = execContArgs
 		return fd
 	}
@@ -3996,8 +3975,8 @@ func tryPromoteInstruction(frame map[string]any, params []paramDef, rets []strin
 
 // validateExecBindings scans InstructionStmt frames in the AST for execBinding
 // values, validates that binding names exist in execNames (or are "return"),
-// and populates the execLooping map.
-func validateExecBindings(stmts []Stmt, execNames []string, execLooping map[string]bool) error {
+// and populates the execDetached map.
+func validateExecBindings(stmts []Stmt, execNames []string, execDetached map[string]bool) error {
 	execSet := map[string]bool{}
 	for _, name := range execNames {
 		execSet[name] = true
@@ -4013,24 +3992,24 @@ func validateExecBindings(stmts []Stmt, execNames []string, execLooping map[stri
 				if eb.name != "return" && !execSet[eb.name] {
 					return fmt.Errorf("exec binding %q is not declared in the function's exec(...) list", eb.name)
 				}
-				if eb.looping && eb.name != "return" {
-					execLooping[eb.name] = true
+				if eb.detached && eb.name != "return" {
+					execDetached[eb.name] = true
 				}
 			}
 		case *ModeBlockStmt:
-			if err := validateExecBindings(s.Body, execNames, execLooping); err != nil {
+			if err := validateExecBindings(s.Body, execNames, execDetached); err != nil {
 				return err
 			}
 		case *IfStmt:
-			if err := validateExecBindings(s.Body, execNames, execLooping); err != nil {
+			if err := validateExecBindings(s.Body, execNames, execDetached); err != nil {
 				return err
 			}
 			for _, elif := range s.ElseIfs {
-				if err := validateExecBindings(elif.Body, execNames, execLooping); err != nil {
+				if err := validateExecBindings(elif.Body, execNames, execDetached); err != nil {
 					return err
 				}
 			}
-			if err := validateExecBindings(s.Else, execNames, execLooping); err != nil {
+			if err := validateExecBindings(s.Else, execNames, execDetached); err != nil {
 				return err
 			}
 		}
@@ -4158,13 +4137,13 @@ func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContex
 		p.unget(tok)
 		return nil, nil
 	}
-	return p.parseContinuationBlocks(fn, func(params []string, looping bool) ([]Stmt, error) {
+	return p.parseContinuationBlocks(fn, func(params []string, detached bool) ([]Stmt, error) {
 		saved, depth := ctx.pushFnScope()
 		defer ctx.popFnScope(saved, depth)
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
 		}
-		if looping {
+		if detached {
 			p.loopDepth++
 			defer func() { p.loopDepth-- }()
 		}
@@ -4174,7 +4153,7 @@ func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContex
 
 // maybeParseFnBodyContinuationBlocksExpr peeks for '{' and parses
 // continuation blocks in expression form (each block has a tail
-// expression). Returns nil if no '{' follows. Looping blocks are
+// expression). Returns nil if no '{' follows. Detached blocks are
 // rejected — expression form requires all bridging.
 func (p *parser) maybeParseFnBodyContinuationBlocksExpr(fn *fnDef, ctx *fnBodyContext) ([]*ContinuationBlock, error) {
 	tok, err := p.next()
@@ -4186,13 +4165,13 @@ func (p *parser) maybeParseFnBodyContinuationBlocksExpr(fn *fnDef, ctx *fnBodyCo
 		return nil, nil
 	}
 	lbracePos := tok.pos
-	blocks, err := p.parseContinuationBlocks(fn, func(params []string, looping bool) ([]Stmt, error) {
+	blocks, err := p.parseContinuationBlocks(fn, func(params []string, detached bool) ([]Stmt, error) {
 		saved, depth := ctx.pushFnScope()
 		defer ctx.popFnScope(saved, depth)
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
 		}
-		if looping {
+		if detached {
 			p.loopDepth++
 			defer func() { p.loopDepth-- }()
 		}
@@ -4203,8 +4182,8 @@ func (p *parser) maybeParseFnBodyContinuationBlocksExpr(fn *fnDef, ctx *fnBodyCo
 	}
 	// Extract tails and validate
 	for _, blk := range blocks {
-		if blk.Looping {
-			return nil, p.errorf(lbracePos, "looping continuation cannot be used in expression form")
+		if blk.Detached {
+			return nil, p.errorf(lbracePos, "detached continuation cannot be used in expression form")
 		}
 		if len(blk.Body) == 0 {
 			return nil, p.errorf(lbracePos, "empty continuation expression block")
@@ -5277,13 +5256,13 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 			break
 		}
 
-		// Check for exec binding modifiers: for, exec, next
-		looping := false
+		// Check for exec binding modifiers: detach, exec, next
+		detached := false
 		isExec := false
 
-		// 'for' modifier implies exec and looping
-		if tok.kind == tokIdent && tok.val == "for" {
-			looping = true
+		// 'detach' modifier implies exec and detached
+		if tok.kind == tokIdent && tok.val == "detach" {
+			detached = true
 			isExec = true
 			tok, err = p.next()
 			if err != nil {
@@ -5291,7 +5270,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 			}
 		}
 
-		// 'exec' keyword marks an exec binding (redundant after 'for')
+		// 'exec' keyword marks an exec binding (redundant after 'detach')
 		if tok.kind == tokIdent && tok.val == "exec" {
 			isExec = true
 			tok, err = p.next()
@@ -5326,7 +5305,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 			if valTok.val != "return" && Keywords[valTok.val] {
 				return nil, p.errorf(valTok.pos, "expected continuation name, got keyword %q", valTok.val)
 			}
-			eb := execBinding{name: valTok.val, looping: looping}
+			eb := execBinding{name: valTok.val, detached: detached}
 
 			// Parse optional argument list: name(@1, @2) or return(@1)
 			peek, err := p.next()

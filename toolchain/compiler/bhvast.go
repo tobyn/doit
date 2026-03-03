@@ -1741,13 +1741,13 @@ func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) (
 		p.unget(tok)
 		return nil, nil
 	}
-	return p.parseContinuationBlocks(fn, func(params []string, looping bool) ([]Stmt, error) {
+	return p.parseContinuationBlocks(fn, func(params []string, detached bool) ([]Stmt, error) {
 		saved := syms.pushScope()
 		defer syms.popScope(saved)
 		for _, name := range params {
 			syms.declareVar(name, false)
 		}
-		if looping {
+		if detached {
 			p.loopDepth++
 			defer func() { p.loopDepth-- }()
 		}
@@ -1757,7 +1757,7 @@ func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) (
 
 // maybeParseBhvContinuationBlocksExpr peeks for '{' and parses
 // continuation blocks in expression form (each block has a tail
-// expression). Returns nil if no '{' follows. Looping blocks are
+// expression). Returns nil if no '{' follows. Detached blocks are
 // rejected — expression form requires all bridging.
 func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTable) ([]*ContinuationBlock, error) {
 	tok, err := p.next()
@@ -1769,13 +1769,13 @@ func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTabl
 		return nil, nil
 	}
 	lbracePos := tok.pos
-	blocks, err := p.parseContinuationBlocks(fn, func(params []string, looping bool) ([]Stmt, error) {
+	blocks, err := p.parseContinuationBlocks(fn, func(params []string, detached bool) ([]Stmt, error) {
 		saved := syms.pushScope()
 		defer syms.popScope(saved)
 		for _, name := range params {
 			syms.declareVar(name, false)
 		}
-		if looping {
+		if detached {
 			p.loopDepth++
 			defer func() { p.loopDepth-- }()
 		}
@@ -1786,8 +1786,8 @@ func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTabl
 	}
 	// Extract tails and validate
 	for _, blk := range blocks {
-		if blk.Looping {
-			return nil, p.errorf(lbracePos, "looping continuation cannot be used in expression form")
+		if blk.Detached {
+			return nil, p.errorf(lbracePos, "detached continuation cannot be used in expression form")
 		}
 		if len(blk.Body) == 0 {
 			return nil, p.errorf(lbracePos, "empty continuation expression block")

@@ -1,13 +1,13 @@
 # AI-generated test
-# Tests looping continuation blocks (for-prefixed)
+# Tests detached continuation blocks
 
-# Wraps for_component: body is looping, done is bridging
+# Wraps for_component: body is detached, done is bridging
 fn my_for_comp(entity) exec(body, done) {
     instruction "for_component" {
         0: entity
         1: @1
         2: @2
-        for next: body(@1, @2)
+        detach next: body(@1, @2)
         exec 3: done
     }
 }
@@ -16,7 +16,7 @@ behavior exec_loop {
     @name "Exec Loop"
     let e = get_self
     my_for_comp(e) {
-        for body { comp, idx ->
+        body { comp, idx ->
             notify "comp", value: comp
         }
         done { notify "done" }
