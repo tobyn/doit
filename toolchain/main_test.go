@@ -1871,24 +1871,35 @@ behavior a { f }`
 		}
 	})
 
-	t.Run("bhv_continue", func(t *testing.T) {
-		src := "behavior a { loop { continue } }"
+	t.Run("bhv_continue_outside_loop", func(t *testing.T) {
+		src := "behavior a { continue }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "'continue' is not supported") {
+		if !strings.Contains(err.Error(), "'continue' outside of loop") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("fn_body_continue", func(t *testing.T) {
-		src := "fn bad() { loop { continue } }\nbehavior a { bad }"
+	t.Run("fn_body_continue_outside_loop", func(t *testing.T) {
+		src := "fn bad() { continue }\nbehavior a { bad }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "'continue' is not supported") {
+		if !strings.Contains(err.Error(), "'continue' outside of loop") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("continue_in_yield_iter", func(t *testing.T) {
+		src := "iter my_iter() -> v {\nfor c, idx in for_component() {\nif c != null { yield c }\n}\n}\nbehavior a { for x in my_iter() { continue } }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'continue' is not supported in yield-based iterators") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

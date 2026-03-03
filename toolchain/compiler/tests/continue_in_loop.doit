@@ -1,0 +1,18 @@
+# AI-generated test
+# Continue in infinite loop skips to next iteration
+behavior continue_in_loop {
+    @name "Continue In Loop"
+
+    var i = 0
+    loop {
+        i += 1
+        if i == 3 {
+            continue
+        }
+        notify "processed"
+
+        if i >= 5 {
+            break
+        }
+    }
+}

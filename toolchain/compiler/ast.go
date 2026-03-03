@@ -166,6 +166,11 @@ type BreakStmt struct {
 	Comment string
 }
 
+// ContinueStmt skips to the next iteration of the innermost loop.
+type ContinueStmt struct {
+	Comment string
+}
+
 // ExitStmt terminates the behavior: `exit`
 type ExitStmt struct {
 	Comment string
@@ -318,6 +323,7 @@ func (*LoopStmt) stmtNode()           {}
 func (*ForStmt) stmtNode()            {}
 func (*YieldStmt) stmtNode()          {}
 func (*BreakStmt) stmtNode()          {}
+func (*ContinueStmt) stmtNode()      {}
 func (*ExitStmt) stmtNode()           {}
 func (*LastStmt) stmtNode()           {}
 func (*WaitStmt) stmtNode()           {}
@@ -343,7 +349,7 @@ func (*IfExpr) exprNode()           {}
 // (exit, last, break, or return), making any following code unreachable.
 func isTerminalStmt(s Stmt) bool {
 	switch s.(type) {
-	case *ExitStmt, *LastStmt, *BreakStmt, *ReturnStmt:
+	case *ExitStmt, *LastStmt, *BreakStmt, *ContinueStmt, *ReturnStmt:
 		return true
 	}
 	return false
@@ -358,6 +364,8 @@ func terminalKeyword(s Stmt) string {
 		return "last"
 	case *BreakStmt:
 		return "break"
+	case *ContinueStmt:
+		return "continue"
 	case *ReturnStmt:
 		return "return"
 	}

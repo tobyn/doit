@@ -1524,6 +1524,59 @@ Exec blocks (continuation blocks at call sites) are a hard boundary for
 labeled `break` — labels from enclosing loops are not visible inside an
 exec block. See [Functions](functions.md#break-in-exec-blocks) for details.
 
+### `continue`
+
+`continue` skips the rest of the current iteration and jumps to the next
+iteration of the innermost enclosing loop:
+
+```doit
+var i = 0
+loop {
+    i += 1
+    if i == 3 {
+        continue   # skip the rest of this iteration
+    }
+    notify "processed"
+
+    if i >= 5 {
+        break
+    }
+}
+```
+
+`continue` works in all loop types:
+
+- **`loop`** (infinite) — jumps back to the top of the loop body.
+- **`loop N`** (counted) — increments the counter, then re-checks the
+  limit.
+- **`while`** — re-evaluates the condition.
+- **`for` / `Range`** — re-dispatches to the iterator for the next
+  value.
+
+```doit
+# Skip even numbers in a counted loop
+loop 10 {
+    if $signal {
+        continue
+    }
+    notify "tick"
+}
+
+# Skip a specific value in a for loop
+for i in Range(10) {
+    if i == 5 {
+        continue
+    }
+    notify "value"
+}
+```
+
+`continue` does not support labels — it always targets the innermost
+loop. Use labeled `break` to exit a specific outer loop instead.
+
+`continue` is not supported in yield-based iterators or exec blocks.
+`continue` outside of any loop is a compile error.
+
 ### `for` loops
 
 `for` iterates over a `Range`:

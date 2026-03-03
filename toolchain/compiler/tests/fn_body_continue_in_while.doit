@@ -1,0 +1,18 @@
+# AI-generated test
+# Continue in while loop inside a function body
+fn process(limit) {
+    var i = 0
+    while i < limit {
+        i += 1
+        if i == 3 {
+            continue
+        }
+        notify "fn step"
+    }
+}
+
+behavior fn_body_continue_in_while {
+    @name "Fn Body Continue In While"
+
+    process 10
+}

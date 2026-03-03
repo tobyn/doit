@@ -1,0 +1,46 @@
+{
+  "0": {
+    "1": {
+      "num": 0
+    },
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 7,
+    "2": "i",
+    "3": {
+      "num": 10
+    },
+    "next": 7,
+    "op": "check_number"
+  },
+  "2": {
+    "0": "i",
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "op": "add"
+  },
+  "3": {
+    "0": 6,
+    "1": "i",
+    "2": {
+      "num": 5
+    },
+    "op": "compare_register"
+  },
+  "4": {
+    "0": false,
+    "1": false,
+    "next": 2,
+    "op": "set_reg"
+  },
+  "5": {
+    "next": 2,
+    "op": "notify",
+    "txt": "step"
+  },
+  "name": "Continue In While"
+}

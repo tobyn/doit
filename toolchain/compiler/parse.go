@@ -1996,6 +1996,9 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			}
 			b.emit(f)
 
+		case *ContinueStmt:
+			b.emit(map[string]any{"op": "@continue"})
+
 		case *ExitStmt:
 			callComment := inheritComment(s.Comment, comment)
 			f := map[string]any{"op": "exit"}
@@ -2451,6 +2454,7 @@ type constEvalStatus struct {
 	retVals    []any
 	broke      bool
 	breakLabel string
+	continued  bool
 }
 
 // tryEvalExpr evaluates an expression at compile time.
@@ -3002,6 +3006,9 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 						}
 						return status, true // propagate labeled break
 					}
+					if status.continued {
+						continue // restart iteration
+					}
 					if status.returned {
 						return status, true
 					}
@@ -3030,6 +3037,9 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 							break
 						}
 						return status, true
+					}
+					if status.continued {
+						continue // restart iteration (re-evaluate condition)
 					}
 					if status.returned {
 						return status, true
@@ -3081,6 +3091,9 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 						}
 						return status, true
 					}
+					if status.continued {
+						continue // restart iteration
+					}
 					if status.returned {
 						return status, true
 					}
@@ -3088,6 +3101,8 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 			}
 		case *BreakStmt:
 			return &constEvalStatus{broke: true, breakLabel: s.Label}, true
+		case *ContinueStmt:
+			return &constEvalStatus{continued: true}, true
 		case *ExitStmt:
 			return nil, false // bail: runtime-only
 		case *LastStmt:
@@ -4533,7 +4548,10 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
 
 		case "continue":
-			return nil, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop (e.g. break 'label)")
+			if p.loopDepth == 0 {
+				return nil, p.errorf(tok.pos, "'continue' outside of loop")
+			}
+			astBody = append(astBody, &ContinueStmt{Comment: comment})
 
 		default:
 			// Check for assignment, compound assignment, ++/--, or bare call

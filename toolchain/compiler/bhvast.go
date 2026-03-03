@@ -2319,7 +2319,10 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 	case "else":
 		return nil, false, p.errorf(tok.pos, "'else' without matching 'if'")
 	case "continue":
-		return nil, false, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop (e.g. break 'label)")
+		if p.loopDepth == 0 {
+			return nil, false, p.errorf(tok.pos, "'continue' outside of loop")
+		}
+		return []Stmt{&ContinueStmt{Comment: comment}}, true, nil
 	default:
 		return nil, false, nil
 	}
@@ -2439,6 +2442,17 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				p.unget(peek)
 			}
 			stmt := &BreakStmt{Label: label, Comment: comment}
+			stmts = append(stmts, stmt)
+			terminal = stmt
+			continue
+		}
+
+		// Block-only: continue
+		if tok.val == "continue" {
+			if p.loopDepth == 0 {
+				return nil, p.errorf(tok.pos, "'continue' outside of loop")
+			}
+			stmt := &ContinueStmt{Comment: comment}
 			stmts = append(stmts, stmt)
 			terminal = stmt
 			continue
@@ -2997,6 +3011,9 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 				f["label"] = s.Label
 			}
 			b.emit(f)
+
+		case *ContinueStmt:
+			b.emit(map[string]any{"op": "@continue"})
 
 		case *ExitStmt:
 			f := map[string]any{"op": "exit"}

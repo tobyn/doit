@@ -1,0 +1,14 @@
+# AI-generated test
+# Continue in while loop re-evaluates condition
+behavior continue_in_while {
+    @name "Continue In While"
+
+    var i = 0
+    while i < 10 {
+        i += 1
+        if i == 5 {
+            continue
+        }
+        notify "step"
+    }
+}

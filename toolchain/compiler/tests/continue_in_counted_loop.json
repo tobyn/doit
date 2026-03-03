@@ -1,0 +1,45 @@
+{
+  "0": {
+    "1": {
+      "num": 0
+    },
+    "2": "@loop",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 7,
+    "2": "@loop",
+    "3": {
+      "num": 5
+    },
+    "next": 7,
+    "op": "check_number"
+  },
+  "2": {
+    "1": -4,
+    "2": false,
+    "next": 5,
+    "op": "compare_register"
+  },
+  "3": {
+    "0": false,
+    "1": false,
+    "next": 6,
+    "op": "set_reg"
+  },
+  "4": {
+    "next": 6,
+    "op": "notify",
+    "txt": "tick"
+  },
+  "5": {
+    "0": "@loop",
+    "1": {
+      "num": 1
+    },
+    "2": "@loop",
+    "next": 2,
+    "op": "add"
+  },
+  "name": "Continue In Counted Loop"
+}

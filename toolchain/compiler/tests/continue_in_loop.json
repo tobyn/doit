@@ -1,0 +1,56 @@
+{
+  "0": {
+    "1": {
+      "num": 0
+    },
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "i",
+    "1": {
+      "num": 1
+    },
+    "2": "i",
+    "op": "add"
+  },
+  "2": {
+    "0": 5,
+    "1": "i",
+    "2": {
+      "num": 3
+    },
+    "op": "compare_register"
+  },
+  "3": {
+    "0": false,
+    "1": false,
+    "next": 2,
+    "op": "set_reg"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "processed"
+  },
+  "5": {
+    "1": 8,
+    "2": "i",
+    "3": {
+      "num": 5
+    },
+    "op": "check_number"
+  },
+  "6": {
+    "0": false,
+    "1": false,
+    "next": 9,
+    "op": "set_reg"
+  },
+  "7": {
+    "0": false,
+    "1": false,
+    "next": 2,
+    "op": "set_reg"
+  },
+  "name": "Continue In Loop"
+}

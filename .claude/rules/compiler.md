@@ -15,7 +15,7 @@ see `.claude/learnings/test_format.md`.
 
 ## Architecture
 
-- **`ast.go`** — `Stmt` interface (19 types) and `Expr` interface
+- **`ast.go`** — `Stmt` interface (20 types) and `Expr` interface
   (15 types). `isTerminalStmt`/`terminalKeyword` for unreachable code
   detection.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
@@ -121,14 +121,19 @@ extending to `)`, and trailing commas continuing to the next line.
 **Positional arg separators**: Commas between positional args are
 required in both parenthesized and unparenthesized call forms.
 
-**Control flow placeholders**: `@break` and `@return` are placeholder
-opcodes in intermediate frames. In loops, `@break` is patched to jump
-past the enclosing loop. In exec blocks, `@break` is patched to exit
-the block: detached blocks get `set_reg false false` with `"next": false`
-(re-dispatch); bridging blocks get `set_reg false false` patched to
-the join point. `@return` is patched to jump past the function
-expansion. Both are patched to `set_reg false false` with appropriate
-`"next"` targets.
+**Control flow placeholders**: `@break`, `@continue`, and `@return`
+are placeholder opcodes in intermediate frames. In loops, `@break` is
+patched to jump past the enclosing loop. `@continue` is patched to
+jump to the loop's back-edge target: `frameRef(loopStart)` for
+infinite loops and while, `frameRef(incrFrame)` for counted loops,
+and `false` (re-dispatch) for iterator-backed for loops. In exec
+blocks, `@break` is patched to exit the block: detached blocks get
+`set_reg false false` with `"next": false` (re-dispatch); bridging
+blocks get `set_reg false false` patched to the join point. `@return`
+is patched to jump past the function expansion. All three are patched
+to `set_reg false false` with appropriate `"next"` targets.
+`@continue` is not supported in yield-based iterators (checked via
+`containsContinueStmt` AST walk before emission).
 
 **Block scoping**: Variables declared inside blocks are scoped to that
 block. Behavior level uses `symbolTable.pushScope`/`popScope`. Fn

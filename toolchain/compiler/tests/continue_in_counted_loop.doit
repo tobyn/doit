@@ -1,0 +1,12 @@
+# AI-generated test
+# Continue in counted loop skips to increment
+behavior continue_in_counted_loop {
+    @name "Continue In Counted Loop"
+
+    loop 5 {
+        if $signal {
+            continue
+        }
+        notify "tick"
+    }
+}

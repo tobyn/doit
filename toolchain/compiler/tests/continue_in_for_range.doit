@@ -1,0 +1,12 @@
+# AI-generated test
+# Continue in for-range loop re-dispatches to iterator
+behavior continue_in_for_range {
+    @name "Continue In For Range"
+
+    for i in Range(5) {
+        if i == 2 {
+            continue
+        }
+        notify "value"
+    }
+}

@@ -1116,6 +1116,54 @@ func patchFalseBranches(b *frameBuilder, start, count int, placeholder, target f
 	}
 }
 
+// containsContinueStmt reports whether any ContinueStmt exists in stmts,
+// recursing into if/else/mode blocks but stopping at loop boundaries
+// (continue inside a nested loop targets that loop, not the outer one).
+func containsContinueStmt(stmts []Stmt) bool {
+	for _, s := range stmts {
+		switch s := s.(type) {
+		case *ContinueStmt:
+			return true
+		case *IfStmt:
+			if containsContinueStmt(s.Body) {
+				return true
+			}
+			for _, elif := range s.ElseIfs {
+				if containsContinueStmt(elif.Body) {
+					return true
+				}
+			}
+			if containsContinueStmt(s.Else) {
+				return true
+			}
+		case *ModeBlockStmt:
+			if containsContinueStmt(s.Body) {
+				return true
+			}
+		// Do NOT recurse into LoopStmt, WhileStmt, ForStmt —
+		// a continue inside those targets the inner loop.
+		}
+	}
+	return false
+}
+
+// patchContinuePlaceholders replaces @continue placeholder frames in
+// b.frames[from:] with a noop jump to nextVal. nextVal is frameRef for
+// loop/while/counted loops, or false for iterator-backed for loops
+// (re-dispatch).
+func patchContinuePlaceholders(b *frameBuilder, from int, nextVal any) {
+	for j := from; j < len(b.frames); j++ {
+		if op, _ := b.frames[j]["op"].(string); op == "@continue" {
+			b.frames[j] = map[string]any{
+				"op":   "set_reg",
+				"1":    false,
+				"2":    false,
+				"next": nextVal,
+			}
+		}
+	}
+}
+
 // patchBreakPlaceholders replaces @break placeholder frames in
 // b.frames[from:] whose label matches (or is empty) with a noop jump
 // to target. Used by all loop emitters (while, loop, counted loop, for)
@@ -1138,16 +1186,17 @@ func patchBreakPlaceholders(b *frameBuilder, from int, label string, target fram
 }
 
 // emitLoopBackEdge emits the back-edge jump for while and infinite loops.
-// If the last body frame is @break, a noop jump is emitted (the @break frame
-// will be patched separately). If the last frame has no "next", it gets one.
-// Otherwise a noop jump is emitted to avoid clobbering inner control flow.
+// If the last body frame is @break or @continue, a noop jump is emitted
+// (the placeholder frame will be patched separately). If the last frame has
+// no "next", it gets one. Otherwise a noop jump is emitted to avoid
+// clobbering inner control flow.
 // The bodyStart parameter guards against empty bodies (no frames emitted).
 func emitLoopBackEdge(b *frameBuilder, bodyStart int, target frameRef) {
 	if b.pos() <= bodyStart {
 		return
 	}
 	lastFrame := b.get(b.pos() - 1)
-	if op, _ := lastFrame["op"].(string); op == "@break" {
+	if op, _ := lastFrame["op"].(string); op == "@break" || op == "@continue" {
 		b.emit(map[string]any{"op": "set_reg", "1": false, "2": false, "next": target})
 	} else if _, hasNext := lastFrame["next"]; !hasNext {
 		lastFrame["next"] = target
@@ -1158,14 +1207,15 @@ func emitLoopBackEdge(b *frameBuilder, bodyStart int, target frameRef) {
 
 // patchLastBodyNext sets "next" on the last body frame to point to nextFrame
 // (typically the INCR frame in counted/for loops). Skips if the body is
-// empty, or if the last frame is @break (will be patched separately) or
-// already has a "next". bodyStart is the frame index where the body began.
+// empty, or if the last frame is @break/@continue (will be patched
+// separately) or already has a "next". bodyStart is the frame index where
+// the body began.
 func patchLastBodyNext(b *frameBuilder, bodyStart int, nextFrame int) {
 	if nextFrame-1 < bodyStart {
 		return
 	}
 	lastBodyFrame := b.get(nextFrame - 1)
-	if op, _ := lastBodyFrame["op"].(string); op != "@break" {
+	if op, _ := lastBodyFrame["op"].(string); op != "@break" && op != "@continue" {
 		if _, hasNext := lastBodyFrame["next"]; !hasNext {
 			lastBodyFrame["next"] = frameRef(nextFrame)
 		}
@@ -1215,6 +1265,7 @@ func (p *parser) emitLoopStmt(s *LoopStmt, ctx *emitContext, comment string) err
 	emitLoopBackEdge(ctx.b, loopStart, frameRef(loopStart))
 
 	afterLoop := frameRef(ctx.b.pos())
+	patchContinuePlaceholders(ctx.b, origLen, frameRef(loopStart))
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
 	return nil
@@ -1269,6 +1320,7 @@ func (p *parser) emitCountedLoop(s *LoopStmt, ctx *emitContext, comment string) 
 	check[checkLarger] = afterLoop
 	check["next"] = afterLoop
 
+	patchContinuePlaceholders(ctx.b, origLen, frameRef(incrFrame))
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
 	return nil
@@ -1309,6 +1361,7 @@ func (p *parser) emitWhileStmt(s *WhileStmt, ctx *emitContext, comment string) e
 	afterLoop := frameRef(ctx.b.pos())
 	patchFalseBranches(ctx.b, checkStart, checkCount, falsePlaceholder, afterLoop)
 
+	patchContinuePlaceholders(ctx.b, origLen, frameRef(loopStart))
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
 	return nil
@@ -1574,6 +1627,9 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 	}
 	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
 
+	// Patch @continue in the body — re-dispatch to for_number
+	patchContinuePlaceholders(ctx.b, origLen, false)
+
 	// Patch unlabeled @break in the body to "last" (stops the iterator)
 	for j := origLen; j < ctx.b.pos(); j++ {
 		f := ctx.b.frames[j]
@@ -1658,6 +1714,9 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 		ctx.b.frames[lastIdx]["next"] = false
 	}
 
+	// Patch @continue in the body — re-dispatch to iterator instruction
+	patchContinuePlaceholders(ctx.b, origLen, false)
+
 	// Patch unlabeled @break in the body to "last" (stops the iterator)
 	for j := origLen; j < ctx.b.pos(); j++ {
 		f := ctx.b.frames[j]
@@ -1697,6 +1756,11 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 // The iter body is inlined (like expandCall for fn bodies). At each yield point,
 // the caller's for-loop body is expanded inline with output bindings.
 func (p *parser) emitYieldIter(s *ForStmt, it *iterDef, ctx *emitContext, comment string) error {
+	// Check for continue in the caller's body — not supported in yield-based iterators
+	if containsContinueStmt(s.Body) {
+		return fmt.Errorf("'continue' is not supported in yield-based iterators")
+	}
+
 	ctx.pushScope()
 
 	// Declare iter vars
@@ -1854,6 +1918,9 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 		ctx.b.frames[lastIdx]["next"] = false
 	}
 
+	// Patch @continue in the body — re-dispatch to for_number
+	patchContinuePlaceholders(ctx.b, origLen, false)
+
 	// Patch unlabeled @break in the body to "last" (stops the iterator)
 	for j := origLen; j < ctx.b.pos(); j++ {
 		f := ctx.b.frames[j]
@@ -1918,6 +1985,9 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 	if lastIdx >= origLen {
 		ctx.b.frames[lastIdx]["next"] = false
 	}
+
+	// Patch @continue in the body — re-dispatch to for_number
+	patchContinuePlaceholders(ctx.b, origLen, false)
 
 	// Patch unlabeled @break in the body to "last" (stops the iterator)
 	for j := origLen; j < ctx.b.pos(); j++ {
