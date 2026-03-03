@@ -1116,32 +1116,12 @@ func patchFalseBranches(b *frameBuilder, start, count int, placeholder, target f
 	}
 }
 
-// containsContinueStmt reports whether any ContinueStmt exists in stmts,
-// recursing into if/else/mode blocks but stopping at loop boundaries
-// (continue inside a nested loop targets that loop, not the outer one).
-func containsContinueStmt(stmts []Stmt) bool {
-	for _, s := range stmts {
-		switch s := s.(type) {
-		case *ContinueStmt:
+// hasContinuePlaceholder reports whether any @continue placeholder exists
+// in b.frames[from:].
+func hasContinuePlaceholder(b *frameBuilder, from int) bool {
+	for j := from; j < len(b.frames); j++ {
+		if op, _ := b.frames[j]["op"].(string); op == "@continue" {
 			return true
-		case *IfStmt:
-			if containsContinueStmt(s.Body) {
-				return true
-			}
-			for _, elif := range s.ElseIfs {
-				if containsContinueStmt(elif.Body) {
-					return true
-				}
-			}
-			if containsContinueStmt(s.Else) {
-				return true
-			}
-		case *ModeBlockStmt:
-			if containsContinueStmt(s.Body) {
-				return true
-			}
-		// Do NOT recurse into LoopStmt, WhileStmt, ForStmt —
-		// a continue inside those targets the inner loop.
 		}
 	}
 	return false
@@ -1756,11 +1736,6 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 // The iter body is inlined (like expandCall for fn bodies). At each yield point,
 // the caller's for-loop body is expanded inline with output bindings.
 func (p *parser) emitYieldIter(s *ForStmt, it *iterDef, ctx *emitContext, comment string) error {
-	// Check for continue in the caller's body — not supported in yield-based iterators
-	if containsContinueStmt(s.Body) {
-		return fmt.Errorf("'continue' is not supported in yield-based iterators")
-	}
-
 	ctx.pushScope()
 
 	// Declare iter vars
@@ -1844,8 +1819,9 @@ func (p *parser) rewriteYieldToBody(iterBody []Stmt, callerBody []Stmt, outputs 
 					})
 				}
 			}
-			// Insert the caller's body
-			result = append(result, callerBody...)
+			// Insert the caller's body wrapped in YieldBodyStmt
+			// so @continue is patched to jump past it
+			result = append(result, &YieldBodyStmt{Body: callerBody})
 		case *IfStmt:
 			rewritten := *st
 			rewritten.Body = p.rewriteYieldToBody(st.Body, callerBody, outputs, iterVarRegs)

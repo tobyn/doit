@@ -1,0 +1,18 @@
+# AI-generated test
+# Continue in static sequence iterator (all-yield body)
+iter three_things() -> v {
+    yield 1
+    yield 2
+    yield 3
+}
+
+behavior continue_in_static_seq_iter {
+    @name "Continue In Static Seq Iter"
+
+    for x in three_things() {
+        if x == 2 {
+            continue
+        }
+        notify "value"
+    }
+}

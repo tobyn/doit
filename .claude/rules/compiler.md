@@ -15,7 +15,7 @@ see `.claude/learnings/test_format.md`.
 
 ## Architecture
 
-- **`ast.go`** — `Stmt` interface (20 types) and `Expr` interface
+- **`ast.go`** — `Stmt` interface (21 types) and `Expr` interface
   (15 types). `isTerminalStmt`/`terminalKeyword` for unreachable code
   detection.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
@@ -132,8 +132,9 @@ blocks, `@break` is patched to exit the block: detached blocks get
 blocks get `set_reg false false` patched to the join point. `@return`
 is patched to jump past the function expansion. All three are patched
 to `set_reg false false` with appropriate `"next"` targets.
-`@continue` is not supported in yield-based iterators (checked via
-`containsContinueStmt` AST walk before emission).
+`@continue` in yield-based iterators is handled by `YieldBodyStmt`:
+a bridge noop is emitted after the inlined caller body, and
+`@continue` is patched to jump to it.
 
 **Block scoping**: Variables declared inside blocks are scoped to that
 block. Behavior level uses `symbolTable.pushScope`/`popScope`. Fn

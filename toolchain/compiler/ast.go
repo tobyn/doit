@@ -160,6 +160,13 @@ type YieldStmt struct {
 	Comment string
 }
 
+// YieldBodyStmt wraps the inlined caller body at a yield site.
+// During emission, @continue placeholders inside the body are patched
+// to jump past it (back to the iterator's control flow).
+type YieldBodyStmt struct {
+	Body []Stmt
+}
+
 // BreakStmt is a break from a loop.
 type BreakStmt struct {
 	Label   string // "" for unlabeled (breaks innermost)
@@ -322,6 +329,7 @@ func (*WhileStmt) stmtNode()          {}
 func (*LoopStmt) stmtNode()           {}
 func (*ForStmt) stmtNode()            {}
 func (*YieldStmt) stmtNode()          {}
+func (*YieldBodyStmt) stmtNode()      {}
 func (*BreakStmt) stmtNode()          {}
 func (*ContinueStmt) stmtNode()      {}
 func (*ExitStmt) stmtNode()           {}

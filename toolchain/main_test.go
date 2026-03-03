@@ -1896,10 +1896,7 @@ behavior a { f }`
 	t.Run("continue_in_yield_iter", func(t *testing.T) {
 		src := "iter my_iter() -> v {\nfor c, idx in for_component() {\nif c != null { yield c }\n}\n}\nbehavior a { for x in my_iter() { continue } }"
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "'continue' is not supported in yield-based iterators") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

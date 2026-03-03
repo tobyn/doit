@@ -297,7 +297,11 @@ instead of `fn...exec`. Key decisions:
   `done: N` syntax. No `detach next:` or `exec N:` needed.
 - **Yield-based wrappers**: `yield` inside an iter body produces values.
   Compiled via AST rewriting — `rewriteYieldToBody` replaces each
-  `yield` with assignment + caller body inline.
+  `yield` with assignment + caller body inline. The caller body is
+  wrapped in `YieldBodyStmt`, which patches `@continue` placeholders
+  to jump to a bridge noop emitted after the body. Inside a loop, the
+  loop emitter sets `next:false` on the bridge (re-dispatch); at top
+  level, the bridge falls through sequentially.
 - **Exact yield count**: `yield` must produce exactly as many values as
   the iter's `-> outputs` declares. Unlike `for` bindings (prefix match OK),
   yield is strict.

@@ -1,0 +1,22 @@
+# AI-generated test
+# Continue in yield-based iterator skips rest of caller body
+iter active_components() -> comp {
+    for c, idx in for_component() {
+        if c != null {
+            yield c
+        }
+    }
+}
+
+behavior continue_in_yield_iter {
+    @name "Continue In Yield Iter"
+
+    for comp in active_components() {
+        if comp == null {
+            continue
+        }
+        notify "found"
+    }
+
+    notify "done"
+}

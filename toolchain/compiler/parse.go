@@ -1996,6 +1996,21 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			}
 			b.emit(f)
 
+		case *YieldBodyStmt:
+			bodyStart := b.pos()
+			if err := p.emitFnBody(s.Body, b, paramMap, usedVars, comment, pos); err != nil {
+				return err
+			}
+			// If the body contains @continue placeholders, emit a bridge noop
+			// and patch them to jump to it. Inside a loop, the loop emitter
+			// will set next:false on the bridge (as the last body frame),
+			// giving correct re-dispatch. At top level, the bridge falls
+			// through sequentially to the next iterator statement.
+			if hasContinuePlaceholder(b, bodyStart) {
+				bridge := b.emit(map[string]any{"op": "set_reg", "1": false, "2": false})
+				patchContinuePlaceholders(b, bodyStart, frameRef(bridge))
+			}
+
 		case *ContinueStmt:
 			b.emit(map[string]any{"op": "@continue"})
 

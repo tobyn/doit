@@ -1552,6 +1552,8 @@ loop {
 - **`while`** — re-evaluates the condition.
 - **`for` / `Range`** — re-dispatches to the iterator for the next
   value.
+- **`for...in`** (iterators) — hands control back to the iterator for
+  the next value.
 
 ```doit
 # Skip even numbers in a counted loop
@@ -1574,7 +1576,7 @@ for i in Range(10) {
 `continue` does not support labels — it always targets the innermost
 loop. Use labeled `break` to exit a specific outer loop instead.
 
-`continue` is not supported in yield-based iterators or exec blocks.
+`continue` is not supported in exec blocks.
 `continue` outside of any loop is a compile error.
 
 ### `for` loops
