@@ -1494,6 +1494,43 @@ func (p *parser) emitForIterStmt(s *ForStmt, ctx *emitContext, comment string) e
 	return p.emitYieldIter(s, it, ctx, comment)
 }
 
+// buildIterParamMap builds the parameter substitution map for an iterator's
+// instruction frame. Resolves positional and keyword arguments from the
+// for-loop call site, and maps output names to the caller's iter var
+// registers (or allocates throwaway registers for extra outputs).
+func (ctx *emitContext) buildIterParamMap(it *iterDef, iterArgs []Expr, iterKwArgs map[string]Expr, iterVarRegs []string) (map[string]any, error) {
+	paramMap := map[string]any{}
+	posIdx := 0
+	for _, pd := range it.params {
+		if pd.keyword == "" {
+			if posIdx < len(iterArgs) {
+				val, err := ctx.exprGetValue(iterArgs[posIdx], "")
+				if err != nil {
+					return nil, err
+				}
+				paramMap[pd.name] = val
+			}
+			posIdx++
+		} else if iterKwArgs != nil {
+			if expr, ok := iterKwArgs[pd.keyword]; ok {
+				val, err := ctx.exprGetValue(expr, "")
+				if err != nil {
+					return nil, err
+				}
+				paramMap[pd.name] = val
+			}
+		}
+	}
+	for i, outName := range it.outputs {
+		if i < len(iterVarRegs) {
+			paramMap[outName] = iterVarRegs[i]
+		} else {
+			paramMap[outName] = allocUniqueVar("@out", ctx.usedVars)
+		}
+	}
+	return paramMap, nil
+}
+
 // isStaticSequence reports whether every statement in stmts is a *YieldStmt.
 func isStaticSequence(stmts []Stmt) bool {
 	if len(stmts) == 0 {
@@ -1519,39 +1556,10 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 		iterVarRegs[i] = ctx.declareIterVar(v)
 	}
 
-	// Build iterParamMap: iter param names → resolved caller arg values
-	iterParamMap := map[string]any{}
-	posIdx := 0
-	for _, pd := range it.params {
-		if pd.keyword == "" {
-			if posIdx < len(s.IterArgs) {
-				val, err := ctx.exprGetValue(s.IterArgs[posIdx], "")
-				if err != nil {
-					ctx.popScope()
-					return err
-				}
-				iterParamMap[pd.name] = val
-			}
-			posIdx++
-		} else if s.IterKwArgs != nil {
-			if expr, ok := s.IterKwArgs[pd.keyword]; ok {
-				val, err := ctx.exprGetValue(expr, "")
-				if err != nil {
-					ctx.popScope()
-					return err
-				}
-				iterParamMap[pd.name] = val
-			}
-		}
-	}
-
-	// Map output names to iter var registers
-	for i, outName := range it.outputs {
-		if i < len(iterVarRegs) {
-			iterParamMap[outName] = iterVarRegs[i]
-		} else {
-			iterParamMap[outName] = allocUniqueVar("@out", ctx.usedVars)
-		}
+	iterParamMap, err := ctx.buildIterParamMap(it, s.IterArgs, s.IterKwArgs, iterVarRegs)
+	if err != nil {
+		ctx.popScope()
+		return err
 	}
 
 	N := len(it.astBody)
@@ -1647,40 +1655,10 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 		iterVarRegs[i] = ctx.declareIterVar(v)
 	}
 
-	// Build paramMap for the instruction frame
-	paramMap := map[string]any{}
-	posIdx := 0
-	for _, pd := range it.params {
-		if pd.keyword == "" {
-			if posIdx < len(s.IterArgs) {
-				val, err := ctx.exprGetValue(s.IterArgs[posIdx], "")
-				if err != nil {
-					ctx.popScope()
-					return err
-				}
-				paramMap[pd.name] = val
-			}
-			posIdx++
-		} else if s.IterKwArgs != nil {
-			if expr, ok := s.IterKwArgs[pd.keyword]; ok {
-				val, err := ctx.exprGetValue(expr, "")
-				if err != nil {
-					ctx.popScope()
-					return err
-				}
-				paramMap[pd.name] = val
-			}
-		}
-	}
-
-	// Map output names to iter var registers (or allocate temp regs for extra outputs)
-	for i, outName := range it.outputs {
-		if i < len(iterVarRegs) {
-			paramMap[outName] = iterVarRegs[i]
-		} else {
-			// Output not bound by caller — allocate a throwaway register
-			paramMap[outName] = allocUniqueVar("@out", ctx.usedVars)
-		}
+	paramMap, err := ctx.buildIterParamMap(it, s.IterArgs, s.IterKwArgs, iterVarRegs)
+	if err != nil {
+		ctx.popScope()
+		return err
 	}
 
 	// Resolve the instruction frame with paramMap
@@ -1740,39 +1718,10 @@ func (p *parser) emitYieldIter(s *ForStmt, it *iterDef, ctx *emitContext, commen
 		iterVarRegs[i] = ctx.declareIterVar(v)
 	}
 
-	// Build paramMap for the iter's parameters (like expandCall)
-	paramMap := map[string]any{}
-	posIdx := 0
-	for _, pd := range it.params {
-		if pd.keyword == "" {
-			if posIdx < len(s.IterArgs) {
-				val, err := ctx.exprGetValue(s.IterArgs[posIdx], "")
-				if err != nil {
-					ctx.popScope()
-					return err
-				}
-				paramMap[pd.name] = val
-			}
-			posIdx++
-		} else if s.IterKwArgs != nil {
-			if expr, ok := s.IterKwArgs[pd.keyword]; ok {
-				val, err := ctx.exprGetValue(expr, "")
-				if err != nil {
-					ctx.popScope()
-					return err
-				}
-				paramMap[pd.name] = val
-			}
-		}
-	}
-
-	// Map output names to iter var registers
-	for i, outName := range it.outputs {
-		if i < len(iterVarRegs) {
-			paramMap[outName] = iterVarRegs[i]
-		} else {
-			paramMap[outName] = allocUniqueVar("@out", ctx.usedVars)
-		}
+	paramMap, err := ctx.buildIterParamMap(it, s.IterArgs, s.IterKwArgs, iterVarRegs)
+	if err != nil {
+		ctx.popScope()
+		return err
 	}
 
 	// Pre-scan for output variables (like expandCall does)

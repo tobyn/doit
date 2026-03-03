@@ -76,11 +76,6 @@ dimensions in a single pass:
 
 ### Medium
 
-- **Iterator `paramMap` building duplicated 3× across iterator
-  emitters.** `emitStateMachineIter` (1497-1529),
-  `emitInstructionIter` (1641-1674), and `emitYieldIter` (1748-1783)
-  contain identical ~30-line blocks building a `paramMap` from
-  `it.params` + `it.outputs`. Extract to a helper.
 
 ### Low
 
