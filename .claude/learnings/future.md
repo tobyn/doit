@@ -3,6 +3,37 @@
 Ideas to revisit later. These are not committed designs — just things
 worth thinking about when the time is right.
 
+## Optional static type checking (post-release priority)
+
+Add optional type annotations that the compiler checks at compile time.
+Granularity at the game-type level: `Item`, `Unit`, `Component`,
+`Technology`, `Value`, `Coordinate`, `Number`, `Boolean`, `String`,
+`Range`. Unannotated code stays unchecked (gradual typing). The
+compiler already tracks string vs register values implicitly — this
+would make that reasoning explicit and extend it to distinguish between
+register types.
+
+## 1.0 burndown
+
+- **Iterator `instruction` expressions** — allow `instruction` blocks
+  to produce iterators directly, without wrapping in a function.
+- **Prelude** — replace the implicit `instructions.doit` import with a
+  `prelude.doit` that explicitly imports stdlib modules. Programs
+  compile as if prelude is prepended.
+- **Finish stdlib stubs** — implement or remove all unimplemented
+  `instructions.doit` stubs.
+- **Definition syntax parity** — revisit `fn`/`iter` declaration
+  syntax. `->` may be wanted elsewhere; `exec` before block names may
+  be unnecessary.
+- **Move tests into packages** — compiler tests in `compiler/`, codec
+  tests in `codec/`. Only integration wiring tests stay in `main`.
+- **Error message quality** — review compiler errors for clarity and
+  source locations. Important for new users at 1.0.
+- **Developer tools** — language server, syntax highlighting for
+  VS Code and JetBrains IDEs.
+- **Website** — static marketing/download page, web-hosted manual,
+  syntax highlighting.
+
 ## Compound doc comments from nested calls
 
 When a function call has a `#!` comment and the expanded instructions also
@@ -20,6 +51,13 @@ chains, negation). Remaining optimization ideas:
 - **Opportunistic partial evaluation**: Extend compile-time evaluation
   beyond `const` declarations to optimize regular expressions when all
   operands happen to be known at compile time.
+
+## Condition optimization
+
+Deduplicate repeated type checks across `if`/`else if` chains (e.g.,
+`a is Unit && ...` followed by `a is Coord || ...` should check
+`value_type(a)` once when possible). Feeds directly into `match`/`when`
+if that's added later.
 
 ## `match` / `when` sugar
 
