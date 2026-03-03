@@ -76,7 +76,21 @@ dimensions in a single pass:
 
 ### Medium
 
+- **Done-slot patching duplicated 4× in iterator emitters.** codegen.go
+  lines 1602-1608, 1713-1719, 1912-1919, 1980-1987 contain identical
+  7-line blocks converting a 0-based slot key to 1-based and patching
+  the iterator frame. Extract to a helper.
+- **Iterator `paramMap` building duplicated 3× across iterator
+  emitters.** `emitStateMachineIter` (1497-1529),
+  `emitInstructionIter` (1641-1674), and `emitYieldIter` (1748-1783)
+  contain identical ~30-line blocks building a `paramMap` from
+  `it.params` + `it.outputs`. Extract to a helper.
+
 ### Low
+
+- **Dead code in `emitInstructionIter`.** codegen.go lines 1721-1726:
+  empty `if` block with only comments about implicit "next"
+  fallthrough. Should be removed.
 
 ### Deferred
 

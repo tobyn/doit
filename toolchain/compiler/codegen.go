@@ -1165,6 +1165,21 @@ func patchBreakPlaceholders(b *frameBuilder, from int, label string, target fram
 	}
 }
 
+// patchUnlabeledBreakToLast replaces unlabeled @break placeholder frames
+// in b.frames[from:] with a "last" instruction that stops an iterator.
+// Used by iterator-backed for-loop emitters where unlabeled break means
+// "stop iterating" rather than "jump past the loop".
+func patchUnlabeledBreakToLast(b *frameBuilder, from int) {
+	for j := from; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			if label, _ := f["label"].(string); label == "" {
+				b.frames[j] = map[string]any{"op": "last"}
+			}
+		}
+	}
+}
+
 // emitLoopBackEdge emits the back-edge jump for while and infinite loops.
 // If the last body frame is @break or @continue, a noop jump is emitted
 // (the placeholder frame will be patched separately). If the last frame has
@@ -1610,17 +1625,8 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 	// Patch @continue in the body — re-dispatch to for_number
 	patchContinuePlaceholders(ctx.b, origLen, false)
 
-	// Patch unlabeled @break in the body to "last" (stops the iterator)
-	for j := origLen; j < ctx.b.pos(); j++ {
-		f := ctx.b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			if label, _ := f["label"].(string); label == "" {
-				ctx.b.frames[j] = map[string]any{"op": "last"}
-			}
-		}
-	}
-
-	// Patch labeled break placeholders
+	// Patch unlabeled @break → "last"; labeled @break → jump past loop
+	patchUnlabeledBreakToLast(ctx.b, origLen)
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
 	ctx.popScope()
@@ -1697,15 +1703,8 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 	// Patch @continue in the body — re-dispatch to iterator instruction
 	patchContinuePlaceholders(ctx.b, origLen, false)
 
-	// Patch unlabeled @break in the body to "last" (stops the iterator)
-	for j := origLen; j < ctx.b.pos(); j++ {
-		f := ctx.b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			if label, _ := f["label"].(string); label == "" {
-				ctx.b.frames[j] = map[string]any{"op": "last"}
-			}
-		}
-	}
+	// Patch unlabeled @break → "last"; labeled @break → jump past loop
+	patchUnlabeledBreakToLast(ctx.b, origLen)
 
 	afterLoop := frameRef(ctx.b.pos())
 
@@ -1897,15 +1896,8 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 	// Patch @continue in the body — re-dispatch to for_number
 	patchContinuePlaceholders(ctx.b, origLen, false)
 
-	// Patch unlabeled @break in the body to "last" (stops the iterator)
-	for j := origLen; j < ctx.b.pos(); j++ {
-		f := ctx.b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			if label, _ := f["label"].(string); label == "" {
-				ctx.b.frames[j] = map[string]any{"op": "last"}
-			}
-		}
-	}
+	// Patch unlabeled @break → "last"; labeled @break → jump past loop
+	patchUnlabeledBreakToLast(ctx.b, origLen)
 
 	afterLoop := frameRef(ctx.b.pos())
 
@@ -1965,15 +1957,8 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 	// Patch @continue in the body — re-dispatch to for_number
 	patchContinuePlaceholders(ctx.b, origLen, false)
 
-	// Patch unlabeled @break in the body to "last" (stops the iterator)
-	for j := origLen; j < ctx.b.pos(); j++ {
-		f := ctx.b.frames[j]
-		if op, _ := f["op"].(string); op == "@break" {
-			if label, _ := f["label"].(string); label == "" {
-				ctx.b.frames[j] = map[string]any{"op": "last"}
-			}
-		}
-	}
+	// Patch unlabeled @break → "last"; labeled @break → jump past loop
+	patchUnlabeledBreakToLast(ctx.b, origLen)
 
 	afterLoop := frameRef(ctx.b.pos())
 
