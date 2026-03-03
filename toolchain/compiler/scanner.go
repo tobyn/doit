@@ -48,6 +48,7 @@ const (
 	tokArrow // ->
 	tokDot
 	tokDoubleColon
+	tokLabel  // 'identifier — loop label sigil
 	tokIs     // internal-only: represents the 'is' operator in comparisonTerm.op
 	tokTruthy // internal-only: represents a truthy check in comparisonTerm.op
 )
@@ -453,6 +454,16 @@ func (s *scanner) next() (token, error) {
 			s.pos++
 		}
 		return token{tokIdent, s.src[start:s.pos], start}, nil
+	case c == '\'':
+		s.pos++
+		if s.pos >= len(s.src) || !isIdentStart(s.src[s.pos]) {
+			return token{}, s.errorf(start, "expected label name after '\\''")
+		}
+		nameStart := s.pos
+		for s.pos < len(s.src) && isIdentCont(s.src[s.pos]) {
+			s.pos++
+		}
+		return token{tokLabel, s.src[nameStart:s.pos], start}, nil
 	case c == '"':
 		return s.scanString()
 	case c >= '0' && c <= '9':
@@ -632,6 +643,8 @@ func (t token) describe() string {
 		return "'.'"
 	case tokDoubleColon:
 		return "'::'"
+	case tokLabel:
+		return fmt.Sprintf("label '%s", t.val)
 	case tokIs:
 		return "'is'"
 	case tokTruthy:

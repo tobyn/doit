@@ -3,10 +3,10 @@
 behavior for_iter_cross_break {
     @name "For Iter Cross Break"
 
-    outer: for comp, idx in for_component() {
+    'outer: for comp, idx in for_component() {
         for item in for_inventory_item() {
             if item == null {
-                break outer
+                break 'outer
             }
         }
     }

@@ -5,9 +5,9 @@ fn f() {}
 behavior labeled_break_shadows_fn {
     @name "Labeled Break Shadows Fn"
 
-    f: loop {
+    'f: loop {
         loop {
-            break f
+            break 'f
         }
     }
 

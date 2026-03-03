@@ -2253,7 +2253,7 @@ behavior a { f }`
 	})
 
 	t.Run("duplicate_loop_label_behavior", func(t *testing.T) {
-		src := `behavior a { x: loop { x: loop { break } } }`
+		src := `behavior a { 'x: loop { 'x: loop { break } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -2264,7 +2264,7 @@ behavior a { f }`
 	})
 
 	t.Run("duplicate_loop_label_fn_body", func(t *testing.T) {
-		src := `behavior a { f } fn f() { x: loop { x: loop { break } } }`
+		src := `behavior a { f } fn f() { 'x: loop { 'x: loop { break } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -2275,7 +2275,7 @@ behavior a { f }`
 	})
 
 	t.Run("labeled_break_compiles", func(t *testing.T) {
-		src := `behavior a { var i = 0 outer: loop { loop { if i >= 5 { break outer } i += 1 } } }`
+		src := `behavior a { var i = 0 'outer: loop { loop { if i >= 5 { break 'outer } i += 1 } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
@@ -2283,7 +2283,7 @@ behavior a { f }`
 	})
 
 	t.Run("labeled_break_fn_body_compiles", func(t *testing.T) {
-		src := `behavior a { f } fn f() { var i = 0 outer: loop { loop { if i >= 5 { break outer } i += 1 } } }`
+		src := `behavior a { f } fn f() { var i = 0 'outer: loop { loop { if i >= 5 { break 'outer } i += 1 } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
@@ -2291,7 +2291,7 @@ behavior a { f }`
 	})
 
 	t.Run("break_unknown_label_behavior", func(t *testing.T) {
-		src := `behavior a { var i = 0 outer: loop { loop { if i >= 5 { break typo } i += 1 } } }`
+		src := `behavior a { var i = 0 'outer: loop { loop { if i >= 5 { break 'typo } i += 1 } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -2302,7 +2302,7 @@ behavior a { f }`
 	})
 
 	t.Run("break_unknown_label_fn_body", func(t *testing.T) {
-		src := `behavior a { f } fn f() { var i = 0 outer: loop { loop { if i >= 5 { break typo } i += 1 } } }`
+		src := `behavior a { f } fn f() { var i = 0 'outer: loop { loop { if i >= 5 { break 'typo } i += 1 } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
@@ -2313,7 +2313,7 @@ behavior a { f }`
 	})
 
 	t.Run("break_label_shadows_fn_behavior", func(t *testing.T) {
-		src := `fn f() {} behavior a { f: loop { loop { break f } } }`
+		src := `fn f() {} behavior a { 'f: loop { loop { break 'f } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
@@ -2321,7 +2321,7 @@ behavior a { f }`
 	})
 
 	t.Run("break_label_shadows_fn_fn_body", func(t *testing.T) {
-		src := `fn g() {} behavior a { h } fn h() { g: loop { loop { break g } } }`
+		src := `fn g() {} behavior a { h } fn h() { 'g: loop { loop { break 'g } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
@@ -2458,7 +2458,7 @@ behavior a { f }`
 	})
 
 	t.Run("for_duplicate_label", func(t *testing.T) {
-		src := `behavior a { x: for i in Range(5) { x: for j in Range(3) { notify "hi" } } }`
+		src := `behavior a { 'x: for i in Range(5) { 'x: for j in Range(3) { notify "hi" } } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")

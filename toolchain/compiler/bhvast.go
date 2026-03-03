@@ -2135,45 +2135,6 @@ func (p *parser) parseBhvLetVarStmt(mutable bool, syms *symbolTable) ([]Stmt, er
 	return nil, p.errorf(sep.pos, "expected ',' or '=' after %s identifier, got %s", keyword, sep.describe())
 }
 
-// tryParseLabeledLoop checks if the current token starts a labeled loop
-// (label: loop/while/for). Returns the parsed statement if a labeled loop is
-// found. Returns nil if not. Restores parser state on non-match.
-func (p *parser) tryParseLabeledLoop(tok token, syms *symbolTable) (Stmt, error) {
-	savedComment := p.docComment
-	if isConstructor(tok.val) || tok.val == "null" || tok.val == "true" || tok.val == "false" {
-		return nil, nil
-	}
-	peek, err := p.next()
-	if err != nil {
-		return nil, err
-	}
-	if peek.kind == tokColon {
-		peek2, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while" || peek2.val == "for") {
-			label := tok.val
-			if p.loopLabels[label] {
-				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
-			}
-			pctx := p.bhvParseCtx(syms)
-			switch peek2.val {
-			case "loop":
-				return p.parseLoopStmt(pctx, p.docComment, label)
-			case "while":
-				return p.parseWhileStmt(pctx, p.docComment, label)
-			case "for":
-				return p.parseForStmt(pctx, p.docComment, label)
-			}
-		}
-		p.unget(peek2)
-	}
-	p.unget(peek)
-	p.docComment = savedComment
-	return nil, nil
-}
-
 // parseBhvOneStmt parses a single behavior-level statement from the given
 // token. Returns (stmts, true, nil) on success, or (nil, false, nil) if the
 // token is not a recognized statement keyword (the "default" case). Both
@@ -2305,7 +2266,7 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 	case "else":
 		return nil, false, p.errorf(tok.pos, "'else' without matching 'if'")
 	case "continue":
-		return nil, false, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop")
+		return nil, false, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop (e.g. break 'label)")
 	default:
 		return nil, false, nil
 	}
@@ -2338,6 +2299,36 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				return nil, err
 			}
 			break
+		}
+		if tok.kind == tokLabel {
+			label := tok.val
+			if p.loopLabels[label] {
+				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return nil, err
+			}
+			kw, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			pctx := p.bhvParseCtx(syms)
+			var stmt Stmt
+			switch kw.val {
+			case "loop":
+				stmt, err = p.parseLoopStmt(pctx, p.docComment, label)
+			case "while":
+				stmt, err = p.parseWhileStmt(pctx, p.docComment, label)
+			case "for":
+				stmt, err = p.parseForStmt(pctx, p.docComment, label)
+			default:
+				return nil, p.errorf(kw.pos, "expected 'loop', 'while', or 'for' after label, got %s", kw.describe())
+			}
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+			continue
 		}
 		if tok.kind != tokIdent {
 			if allowExprTail && tok.kind == tokNumber {
@@ -2386,14 +2377,11 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			if err != nil {
 				return nil, err
 			}
-			if peek.kind == tokIdent && !Keywords[peek.val] {
-				if p.loopLabels[peek.val] {
-					label = peek.val
-				} else if p.fns[peek.val] == nil {
+			if peek.kind == tokLabel {
+				if !p.loopLabels[peek.val] {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
-				} else {
-					p.unget(peek)
 				}
+				label = peek.val
 			} else {
 				p.unget(peek)
 			}
@@ -2433,16 +2421,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			continue
 		}
 
-		// Default case: labeled loops, exprTail, or regular statement
-		labeled, err := p.tryParseLabeledLoop(tok, syms)
-		if err != nil {
-			return nil, err
-		}
-		if labeled != nil {
-			stmts = append(stmts, labeled)
-			continue
-		}
-
+		// Default case: exprTail or regular statement
 		if allowExprTail {
 			name, fn, fnErr := p.resolveFnName(tok)
 			if fnErr != nil {

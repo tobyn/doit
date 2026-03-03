@@ -1462,16 +1462,16 @@ loop n {
 
 ### Labeled loops and `break`
 
-Both `loop` and `while` can be labeled with a `label:` prefix. `break`
+Both `loop` and `while` can be labeled with a `'label:` prefix. `break`
 can target a specific label to exit an outer loop from within a nested
 loop:
 
 ```doit
 var i = 0
-outer: loop {
+'outer: loop {
     loop {
         if i >= 5 {
-            break outer
+            break 'outer
         }
         i += 1
     }
@@ -1481,31 +1481,32 @@ outer: loop {
 Without a label, `break` exits the innermost enclosing loop:
 
 ```doit
-outer: loop {
+'outer: loop {
     var j = 0
-    inner: while j < 10 {
+    'inner: while j < 10 {
         if j >= 5 {
-            break inner   # exits inner while loop
+            break 'inner   # exits inner while loop
         }
         j += 1
     }
-    # execution continues here after break inner
+    # execution continues here after break 'inner
 }
 ```
 
 Labels work with `loop`, counted `loop`, `while`, and `for`:
 
 ```doit
-scan: while has_targets {
+'scan: while has_targets {
     loop 10 {
         if done {
-            break scan   # exits the while loop
+            break 'scan   # exits the while loop
         }
         process_next
     }
 }
 ```
 
+The `'` sigil makes labels syntactically distinct from identifiers.
 Label names follow the same rules as variable names (letters, digits,
 underscores; must start with a letter or underscore). Duplicate labels
 on nested loops are a compile error. `break` with an unknown label is a compile error. `break` outside of
@@ -1557,13 +1558,13 @@ internally. This is the same instruction used when calling `for_number`
 directly as an iterator, so `for i in Range(5)` and
 `for i in for_number(0, 5, step: 1)` produce identical output.
 
-`for` loops support `break`, labeled `for`, and `break label`:
+`for` loops support `break`, labeled `for`, and `break 'label`:
 
 ```doit
-outer: for i in Range(5) {
+'outer: for i in Range(5) {
     for j in Range(3) {
         if j == 1 {
-            break outer
+            break 'outer
         }
     }
 }
@@ -1613,10 +1614,10 @@ for item in for_inventory_item() {
     notify "item", value: item
 }
 
-outer: for comp in for_component() {
+'outer: for comp in for_component() {
     for i in Range(3) {
         if i == 1 {
-            break outer
+            break 'outer
         }
     }
 }

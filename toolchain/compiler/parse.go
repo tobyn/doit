@@ -4228,6 +4228,43 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			}
 			break
 		}
+		if tok.kind == tokLabel {
+			label := tok.val
+			if p.loopLabels[label] {
+				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return nil, err
+			}
+			kw, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			labelComment := p.docComment
+			switch kw.val {
+			case "loop":
+				loopStmt, err := p.parseLoopStmt(p.fnParseCtx(ctx), labelComment, label)
+				if err != nil {
+					return nil, err
+				}
+				astBody = append(astBody, loopStmt)
+			case "while":
+				whileStmt, err := p.parseWhileStmt(p.fnParseCtx(ctx), labelComment, label)
+				if err != nil {
+					return nil, err
+				}
+				astBody = append(astBody, whileStmt)
+			case "for":
+				forStmt, err := p.parseForStmt(p.fnParseCtx(ctx), labelComment, label)
+				if err != nil {
+					return nil, err
+				}
+				astBody = append(astBody, forStmt)
+			default:
+				return nil, p.errorf(kw.pos, "expected 'loop', 'while', or 'for' after label, got %s", kw.describe())
+			}
+			continue
+		}
 		if tok.kind != tokIdent {
 			if exprTail && tok.kind == tokNumber {
 				num, _ := strconv.Atoi(tok.val)
@@ -4439,14 +4476,11 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			if err != nil {
 				return nil, err
 			}
-			if peek.kind == tokIdent && !Keywords[peek.val] {
-				if p.loopLabels[peek.val] {
-					label = peek.val
-				} else if p.fns[peek.val] == nil {
+			if peek.kind == tokLabel {
+				if !p.loopLabels[peek.val] {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
-				} else {
-					p.unget(peek)
 				}
+				label = peek.val
 			} else {
 				p.unget(peek)
 			}
@@ -4465,52 +4499,9 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
 
 		case "continue":
-			return nil, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop")
+			return nil, p.errorf(tok.pos, "'continue' is not supported; use labeled 'break' to exit a specific loop (e.g. break 'label)")
 
 		default:
-			// Check for labeled loop/while/for: `ident: loop { ... }` or `ident: while ...` or `ident: for ...`
-			if !isConstructor(tok.val) && tok.val != "null" && tok.val != "true" && tok.val != "false" {
-				peek, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if peek.kind == tokColon {
-					peek2, err := p.next()
-					if err != nil {
-						return nil, err
-					}
-					if peek2.kind == tokIdent && (peek2.val == "loop" || peek2.val == "while" || peek2.val == "for") {
-						label := tok.val
-						if p.loopLabels[label] {
-							return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
-						}
-						switch peek2.val {
-						case "loop":
-							loopStmt, err := p.parseLoopStmt(p.fnParseCtx(ctx), comment, label)
-							if err != nil {
-								return nil, err
-							}
-							astBody = append(astBody, loopStmt)
-						case "while":
-							whileStmt, err := p.parseWhileStmt(p.fnParseCtx(ctx), comment, label)
-							if err != nil {
-								return nil, err
-							}
-							astBody = append(astBody, whileStmt)
-						case "for":
-							forStmt, err := p.parseForStmt(p.fnParseCtx(ctx), comment, label)
-							if err != nil {
-								return nil, err
-							}
-							astBody = append(astBody, forStmt)
-						}
-						continue
-					}
-					p.unget(peek2)
-				}
-				p.unget(peek)
-			}
-
 			// Check for assignment, compound assignment, ++/--, or bare call
 			peek, err := p.next()
 			if err != nil {

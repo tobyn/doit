@@ -3,9 +3,9 @@
 fn g() {}
 
 fn h() {
-    g: loop {
+    'g: loop {
         loop {
-            break g
+            break 'g
         }
     }
 

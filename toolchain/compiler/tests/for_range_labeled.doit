@@ -3,10 +3,10 @@
 behavior for_range_labeled {
     @name "For Range Labeled"
 
-    outer: for i in Range(5) {
+    'outer: for i in Range(5) {
         for j in Range(3) {
             if j == 1 {
-                break outer
+                break 'outer
             }
             notify "inner"
         }

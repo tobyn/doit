@@ -31,10 +31,9 @@ stub was removed.
 Code after `exit`, `break`, or `return` is unreachable. The compiler
 warns and skips remaining statements in the block.
 
-**Break label disambiguation**: When `break` is followed by an
-identifier, the parser checks if it's a known loop label. Keywords
-and known functions are excluded from label consideration — they
-cause the break to be treated as unlabeled.
+**Break label syntax**: Labels use a `'` sigil (`'outer`), making
+them syntactically distinct via `tokLabel`. No disambiguation
+heuristic needed — `break 'label` is unambiguous.
 
 ## Behaviors as top-level functions
 
@@ -58,8 +57,8 @@ the exact same language constructs — this is a core design principle.
 
 `true` → `{"num": 1}`, `false` → `false` (Go bool, empty register).
 Matches VM truthy convention. `false` and `null` compile identically.
-Label lookahead exclusions prevent `true:` and `false:` from being
-parsed as loop labels.
+The `'` sigil on labels means `true:` and `false:` can never be
+confused with loop labels.
 
 ## Multiple return values
 
@@ -158,9 +157,10 @@ exit after one iteration.
 
 ## Labeled loops and breaks
 
-`@break` placeholder includes optional `"label"` field. Patching
-matches unlabeled breaks to innermost loop, labeled breaks to the
-named loop.
+Labels use the `'` sigil (`'outer: loop { break 'outer }`), scanned
+as `tokLabel` tokens. `@break` placeholder includes optional `"label"`
+field. Patching matches unlabeled breaks to innermost loop, labeled
+breaks to the named loop.
 
 ## Range `for` loops — `for_number` emission
 

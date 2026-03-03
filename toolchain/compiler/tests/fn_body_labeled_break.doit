@@ -1,10 +1,10 @@
 # AI-generated test
 # Labeled break from inner loop in fn body
 fn nested_break(inout a) {
-    outer: loop {
+    'outer: loop {
         loop {
             if a >= 5 {
-                break outer
+                break 'outer
             }
             a += 1
         }

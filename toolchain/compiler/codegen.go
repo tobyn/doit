@@ -264,6 +264,38 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			continue
 		}
 
+		if tok.kind == tokLabel {
+			hasInstruction = true
+			label := tok.val
+			if p.loopLabels[label] {
+				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return nil, err
+			}
+			kw, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			pctx := p.bhvParseCtx(syms)
+			var stmt Stmt
+			switch kw.val {
+			case "loop":
+				stmt, err = p.parseLoopStmt(pctx, p.docComment, label)
+			case "while":
+				stmt, err = p.parseWhileStmt(pctx, p.docComment, label)
+			case "for":
+				stmt, err = p.parseForStmt(pctx, p.docComment, label)
+			default:
+				return nil, p.errorf(kw.pos, "expected 'loop', 'while', or 'for' after label, got %s", kw.describe())
+			}
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+			continue
+		}
+
 		if tok.kind != tokIdent {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
@@ -283,15 +315,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			continue
 		}
 
-		// Default case: labeled loops or regular statement
-		labeled, err := p.tryParseLabeledLoop(tok, syms)
-		if err != nil {
-			return nil, err
-		}
-		if labeled != nil {
-			stmts = append(stmts, labeled)
-			continue
-		}
+		// Default case: regular statement
 		parsed, err = p.parseBhvDefaultStmt(tok, syms)
 		if err != nil {
 			return nil, err
