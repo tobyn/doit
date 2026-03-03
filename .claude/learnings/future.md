@@ -28,20 +28,6 @@ The continuation block syntax already serves as a type switch (e.g.,
 expression could add sugar over `if`/`else if` chains for
 non-continuation contexts. The two features would complement each other.
 
-## Generalized `for` loops and iterators
-
-**Phase 1 implemented.** `iter` declarations, `for ... in` syntax, and
-`yield` inside for-loops (wrapper iterators) are working. All stdlib
-iterators converted from `fn...exec` to `iter...->`.
-
-**Phase 2 implemented.** Static sequence iterators (body consists entirely
-of `yield` statements) compile to a `for_number`-backed state machine with
-`check_number` dispatch. Each yield executes on a separate tick.
-
-Remaining phases:
-- **Phase 3**: Compile `for i in Range(...)` to `for_number` internally,
-  eliminating multi-frame overhead.
-
 ## Subroutine calls instead of inlining
 
 Functions are currently always inlined — every call site duplicates the

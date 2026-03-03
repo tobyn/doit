@@ -162,12 +162,14 @@ exit after one iteration.
 matches unlabeled breaks to innermost loop, labeled breaks to the
 named loop.
 
-## Range `for` loops — three emission paths
+## Range `for` loops — `for_number` emission
 
-Based on step sign knowledge:
-- **A/B** (literal step, sign known): simple comparison loop.
-- **C** (variable range): runtime step sign check, direction-aware
-  comparison.
+Both emission paths compile to the VM's `for_number` instruction:
+- **Literal Range** (`emitForStmtRange`): Evaluates start/stop/step
+  from the constructor args, emits a single `for_number` frame.
+- **Variable Range** (`emitForStmtRuntime`): Decomposes with
+  `separate_register`, then emits `for_number`. No step sign check
+  needed — `for_number` handles direction natively.
 
 ## Enhanced `return` in fn bodies
 

@@ -1792,25 +1792,8 @@ func (p *parser) rewriteYieldToBody(iterBody []Stmt, callerBody []Stmt, outputs 
 }
 
 // emitForStmtRange emits a for loop when the Range constructor is directly visible.
+// Compiles to a single for_number instruction frame.
 func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar string, ctx *emitContext, comment string) error {
-	stepLit, stepIsLit := ctor.Args[2].(*LiteralExpr)
-	var stepSign int
-	if stepIsLit {
-		if m, ok := stepLit.Value.(map[string]any); ok {
-			if n, ok := m["num"].(int); ok {
-				if n > 0 {
-					stepSign = 1
-				} else {
-					stepSign = -1
-				}
-			}
-		}
-	}
-
-	if !stepIsLit || stepSign == 0 {
-		return p.emitForStmtRuntime(s, iterVar, ctx, comment)
-	}
-
 	startVal, err := ctx.exprGetValue(ctor.Args[0], "")
 	if err != nil {
 		return err
@@ -1824,21 +1807,16 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 		return err
 	}
 
-	// INIT
-	ctx.b.emit(map[string]any{
-		"op": "set_reg",
-		"1":  startVal,
-		"2":  iterVar,
-	})
-
-	// CHECK
-	check := map[string]any{
-		"op":        "check_number",
-		checkValue:  iterVar,
-		checkTarget: stopVal,
+	forNumberIter := p.iters["for_number"]
+	paramMap := map[string]any{
+		"from": startVal,
+		"to":   stopVal,
+		"step": stepVal,
+		"i":    iterVar,
 	}
-	setComment(check, comment)
-	checkFrame := ctx.b.emit(check)
+
+	resolved := resolveInstructionFrame(forNumberIter.frame, nil, paramMap, nil, comment)
+	instrIdx := ctx.b.emit(resolved)
 
 	origLen := len(ctx.b.frames)
 
@@ -1846,25 +1824,32 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 		return err
 	}
 
-	// INCR
-	incrFrame := ctx.b.emit(map[string]any{
-		"op":   "add",
-		"1":    iterVar,
-		"2":    stepVal,
-		"3":    iterVar,
-		"next": frameRef(checkFrame),
-	})
+	// Set "next": false on the last body frame (looping — VM re-dispatches)
+	lastIdx := ctx.b.pos() - 1
+	if lastIdx >= origLen {
+		ctx.b.frames[lastIdx]["next"] = false
+	}
 
-	patchLastBodyNext(ctx.b, origLen, incrFrame)
+	// Patch unlabeled @break in the body to "last" (stops the iterator)
+	for j := origLen; j < ctx.b.pos(); j++ {
+		f := ctx.b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			if label, _ := f["label"].(string); label == "" {
+				ctx.b.frames[j] = map[string]any{"op": "last"}
+			}
+		}
+	}
 
 	afterLoop := frameRef(ctx.b.pos())
-	if stepSign > 0 {
-		check[checkLarger] = afterLoop
-		check["next"] = afterLoop
+
+	// Set the done slot on the for_number instruction frame
+	doneSlotNative := ""
+	if n, err := strconv.Atoi(forNumberIter.doneSlot); err == nil {
+		doneSlotNative = strconv.Itoa(n + 1)
 	} else {
-		check[checkSmaller] = afterLoop
-		check["next"] = afterLoop
+		doneSlotNative = forNumberIter.doneSlot
 	}
+	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
@@ -1872,6 +1857,7 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 }
 
 // emitForStmtRuntime emits a for loop where the range is a runtime value (Path C).
+// Decomposes the range with separate_register, then uses for_number.
 func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext, comment string) error {
 	rangeVal, err := ctx.exprGetValue(s.Range, "")
 	if err != nil {
@@ -1886,37 +1872,16 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 		return err
 	}
 
-	// INIT
-	ctx.b.emit(map[string]any{
-		"op": "set_reg",
-		"1":  startVar,
-		"2":  iterVar,
-	})
-
-	// STEP_CHK
-	stepCheck := map[string]any{
-		"op":        "check_number",
-		checkValue:  stepVar,
-		checkTarget: map[string]any{"num": 0},
+	forNumberIter := p.iters["for_number"]
+	paramMap := map[string]any{
+		"from": startVar,
+		"to":   stopVar,
+		"step": stepVar,
+		"i":    iterVar,
 	}
-	setComment(stepCheck, comment)
-	stepCheckFrame := ctx.b.emit(stepCheck)
 
-	// CHECK_POS
-	checkPos := map[string]any{
-		"op":        "check_number",
-		checkValue:  iterVar,
-		checkTarget: stopVar,
-	}
-	checkPosFrame := ctx.b.emit(checkPos)
-
-	// CHECK_NEG
-	checkNeg := map[string]any{
-		"op":        "check_number",
-		checkValue:  iterVar,
-		checkTarget: stopVar,
-	}
-	checkNegFrame := ctx.b.emit(checkNeg)
+	resolved := resolveInstructionFrame(forNumberIter.frame, nil, paramMap, nil, comment)
+	instrIdx := ctx.b.emit(resolved)
 
 	origLen := len(ctx.b.frames)
 
@@ -1924,31 +1889,32 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 		return err
 	}
 
-	// INCR
-	incrFrame := ctx.b.emit(map[string]any{
-		"op":   "add",
-		"1":    iterVar,
-		"2":    stepVar,
-		"3":    iterVar,
-		"next": frameRef(stepCheckFrame),
-	})
+	// Set "next": false on the last body frame (looping — VM re-dispatches)
+	lastIdx := ctx.b.pos() - 1
+	if lastIdx >= origLen {
+		ctx.b.frames[lastIdx]["next"] = false
+	}
 
-	patchLastBodyNext(ctx.b, origLen, incrFrame)
+	// Patch unlabeled @break in the body to "last" (stops the iterator)
+	for j := origLen; j < ctx.b.pos(); j++ {
+		f := ctx.b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			if label, _ := f["label"].(string); label == "" {
+				ctx.b.frames[j] = map[string]any{"op": "last"}
+			}
+		}
+	}
 
 	afterLoop := frameRef(ctx.b.pos())
 
-	stepCheck[checkLarger] = frameRef(checkPosFrame)
-	stepCheck[checkSmaller] = frameRef(checkNegFrame)
-	stepCheck["next"] = afterLoop
-
-	bodyStart := frameRef(origLen)
-	checkPos[checkSmaller] = bodyStart
-	checkPos[checkLarger] = afterLoop
-	checkPos["next"] = afterLoop
-
-	checkNeg[checkLarger] = bodyStart
-	checkNeg[checkSmaller] = afterLoop
-	checkNeg["next"] = afterLoop
+	// Set the done slot on the for_number instruction frame
+	doneSlotNative := ""
+	if n, err := strconv.Atoi(forNumberIter.doneSlot); err == nil {
+		doneSlotNative = strconv.Itoa(n + 1)
+	} else {
+		doneSlotNative = forNumberIter.doneSlot
+	}
+	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 

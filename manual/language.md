@@ -1551,6 +1551,12 @@ for i in r {
 }
 ```
 
+`Range` loops compile to the `for_number` instruction, which handles
+counter initialization, bounds checking, step direction, and increment
+internally. This is the same instruction used when calling `for_number`
+directly as an iterator, so `for i in Range(5)` and
+`for i in for_number(0, 5, step: 1)` produce identical output.
+
 `for` loops support `break`, labeled `for`, and `break label`:
 
 ```doit

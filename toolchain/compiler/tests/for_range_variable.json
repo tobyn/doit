@@ -21,48 +21,18 @@
   },
   "2": {
     "0": "@start",
-    "1": "i",
-    "op": "set_reg"
+    "1": "@stop",
+    "2": "@step",
+    "3": "i",
+    "4": 5,
+    "op": "for_number"
   },
   "3": {
-    "0": 5,
-    "1": 6,
-    "2": "@step",
-    "3": {
-      "num": 0
-    },
-    "next": 9,
-    "op": "check_number"
-  },
-  "4": {
-    "0": 9,
-    "1": 7,
-    "2": "i",
-    "3": "@stop",
-    "next": 9,
-    "op": "check_number"
-  },
-  "5": {
-    "0": 7,
-    "1": 9,
-    "2": "i",
-    "3": "@stop",
-    "next": 9,
-    "op": "check_number"
-  },
-  "6": {
-    "next": 8,
+    "next": false,
     "op": "notify",
     "txt": "hello"
   },
-  "7": {
-    "0": "i",
-    "1": "@step",
-    "2": "i",
-    "next": 4,
-    "op": "add"
-  },
-  "8": {
+  "4": {
     "op": "notify",
     "txt": "done"
   },
