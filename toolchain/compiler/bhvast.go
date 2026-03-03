@@ -615,6 +615,7 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 		return nil, p.errorf(tok.pos, "expected identifier, number, or '(' in boolean expression, got %s", tok.describe())
 	}
 
+	saved := p.save()
 	cmpTok, err := p.next()
 	if err != nil {
 		return nil, err
@@ -625,6 +626,22 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 			return nil, err
 		}
 		return &TypeCheckExpr{Value: lhs, TypeSlot: slot}, nil
+	}
+	if cmpTok.kind == tokBang {
+		isTok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if isTok.kind == tokIdent && isTok.val == "is" {
+			slot, err := p.parseIsRHS()
+			if err != nil {
+				return nil, err
+			}
+			return &NotExpr{Value: &TypeCheckExpr{Value: lhs, TypeSlot: slot}}, nil
+		}
+		// Not `!is` — restore scanner to before `!` and fall through.
+		p.restore(saved)
+		return &TruthyExpr{Value: lhs}, nil
 	}
 	if isComparisonOp(cmpTok.kind) {
 		rhs, err := p.parseArithExpr(resolve)
@@ -1017,6 +1034,7 @@ func (p *parser) parseBhvCallArgs(fn *fnDef, nameTok token, syms *symbolTable) (
 // maybeExprContinuation peeks for comparison/is/&&/|| after a value.
 // Returns (expr, true) if continuation found, (original, false) otherwise.
 func (p *parser) maybeExprContinuation(valueExpr Expr, resolve operandResolver) (Expr, bool, error) {
+	saved := p.save()
 	peek, err := p.next()
 	if err != nil {
 		return nil, false, err
@@ -1044,6 +1062,27 @@ func (p *parser) maybeExprContinuation(valueExpr Expr, resolve operandResolver) 
 			return nil, false, err
 		}
 		return chained, true, nil
+	}
+	if peek.kind == tokBang {
+		isTok, err := p.next()
+		if err != nil {
+			return nil, false, err
+		}
+		if isTok.kind == tokIdent && isTok.val == "is" {
+			slot, err := p.parseIsRHS()
+			if err != nil {
+				return nil, false, err
+			}
+			tc := Expr(&NotExpr{Value: &TypeCheckExpr{Value: valueExpr, TypeSlot: slot}})
+			chained, err := p.parseBoolChain(tc, resolve)
+			if err != nil {
+				return nil, false, err
+			}
+			return chained, true, nil
+		}
+		// Not `!is` — restore scanner to before `!`.
+		p.restore(saved)
+		return valueExpr, false, nil
 	}
 	if peek.kind == tokDoubleAmpersand || peek.kind == tokDoublePipe {
 		p.unget(peek)

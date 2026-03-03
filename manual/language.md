@@ -1202,6 +1202,7 @@ is the arithmetic result of both operands' number components. This means
 - `>` — greater than
 - `>=` — greater than or equal
 - `is` — type check (e.g., `x is Unit`)
+- `!is` — negated type check (e.g., `x !is Unit`)
 
 ### Comparison Expressions
 
@@ -1253,6 +1254,12 @@ producing 1 for true or empty (0) for false:
 let me = get_self
 let is_unit = me is Unit
 let is_item = $input is Item
+```
+
+The negated form `!is` checks that a value is **not** a specific type:
+
+```doit
+let not_unit = me !is Unit    # equivalent to !(me is Unit)
 ```
 
 The left operand must be a variable or register. The right operand is
@@ -1373,11 +1380,12 @@ let not_empty = !x              # true if x is empty
 let not_big = !(a > 100)        # true if a <= 100
 let outside = !(a > 0 && a < 100)  # true if a <= 0 or a >= 100
 let not_unit = !(me is Unit)    # true if me is not a Unit
+let not_unit2 = me !is Unit    # shorthand for the above
 ```
 
 `!` works with any boolean sub-expression: comparisons, type checks,
-truthy checks, and `&&`/`||` chains. Double negation (`!!x`) is
-allowed.
+truthy checks, and `&&`/`||` chains. The `!is` shorthand is available
+for negated type checks. Double negation (`!!x`) is allowed.
 
 For chains, `!` applies De Morgan's law internally — `!(a && b)`
 becomes `!a || !b`, and `!(a || b)` becomes `!a && !b`.

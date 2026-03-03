@@ -1,0 +1,8 @@
+# AI-generated test
+# '!is' negated type check operator
+behavior is_negated {
+    @name "Is Not Unit"
+    let me = get_self
+    let a = me !is Unit
+    notify "done"
+}

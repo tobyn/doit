@@ -109,8 +109,12 @@ the caller's return target.
 use `check_number` (3-way branch). Equality comparisons (`==`, `!=`)
 use `compare_register` (2-way) for full register composite equality.
 
-**Type check (`is`)**: `is Number` is not supported because
-`value_type` cannot distinguish numbers from null.
+**Type check (`is` / `!is`)**: `is Number` is not supported because
+`value_type` cannot distinguish numbers from null. `!is` is a shorthand
+for negated type checks — `x !is Unit` compiles identically to
+`!(x is Unit)`. Parsed via two-token lookahead (`!` + `is`) with
+`save`/`restore` fallback in both `parseBoolPrimary` and
+`maybeExprContinuation`.
 
 **Precedence**: arithmetic > comparisons > function calls > negation
 (`!`) > boolean operators (`&&`/`||`). `&&` binds tighter than `||`.
