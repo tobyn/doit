@@ -1,0 +1,16 @@
+# AI-generated test
+# Static sequence iterator with multi-output yields
+iter pairs() -> x, y {
+    yield 1, 10
+    yield 2, 20
+}
+
+behavior for_iter_static_multi {
+    @name "For Iter Static Multi"
+
+    for a, b in pairs() {
+        notify "got"
+    }
+
+    notify "done"
+}

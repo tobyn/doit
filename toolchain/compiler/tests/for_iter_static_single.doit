@@ -1,0 +1,15 @@
+# AI-generated test
+# Static sequence iterator with single yield (no dispatch needed)
+iter single() -> val {
+    yield 42
+}
+
+behavior for_iter_static_single {
+    @name "For Iter Static Single"
+
+    for v in single() {
+        notify "got"
+    }
+
+    notify "done"
+}

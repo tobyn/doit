@@ -738,6 +738,51 @@ iter pair_components() -> comp, idx {
 `yield` is only valid inside `iter` bodies — using it in a regular `fn`
 body is a compile error.
 
+### Static sequence iterators
+
+When an iter body consists entirely of `yield` statements, each yield
+produces one value per tick using a state machine. This enables iterators
+that emit a fixed sequence of values:
+
+```doit
+iter countdown() -> val {
+    yield 3
+    yield 2
+    yield 1
+}
+
+for v in countdown() {
+    notify "tick", value: v
+}
+```
+
+Yield expressions can reference iter parameters, use literals, arithmetic,
+and constructors:
+
+```doit
+iter pair(a, b) -> val {
+    yield a
+    yield b
+}
+
+for v in pair(10, 20) {
+    notify "got", value: v
+}
+```
+
+Multi-output yields also work:
+
+```doit
+iter pairs() -> x, y {
+    yield 1, 10
+    yield 2, 20
+}
+
+for a, b in pairs() {
+    notify "pair", value: a
+}
+```
+
 ### Instruction-backed iterators
 
 The standard library defines iterators backed by game instructions. These

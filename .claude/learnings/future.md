@@ -34,9 +34,11 @@ non-continuation contexts. The two features would complement each other.
 `yield` inside for-loops (wrapper iterators) are working. All stdlib
 iterators converted from `fn...exec` to `iter...->`.
 
+**Phase 2 implemented.** Static sequence iterators (body consists entirely
+of `yield` statements) compile to a `for_number`-backed state machine with
+`check_number` dispatch. Each yield executes on a separate tick.
+
 Remaining phases:
-- **Phase 2**: Top-level `yield` (state machine compilation backed by
-  `for_number`). Enables static sequences like `yield 1; yield 2; yield 3`.
 - **Phase 3**: Compile `for i in Range(...)` to `for_number` internally,
   eliminating multi-frame overhead.
 

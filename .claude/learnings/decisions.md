@@ -277,3 +277,11 @@ instead of `fn...exec`. Key decisions:
   before the brace block.
 - **Import system**: `symbolSet` includes `iters map[string]*iterDef`.
   Iters propagate through imports like fns.
+- **Static sequence compilation**: When an iter body consists entirely
+  of `yield` statements, `emitStateMachineIter` compiles to a
+  `for_number(0, N, 1)` loop with a `check_number` dispatch chain.
+  `for_number` was chosen because the VM tracks its state across ticks
+  natively — one instruction handles all the per-tick counter management
+  instead of manual counter + comparison + increment. For N=1, no
+  dispatch check is emitted (single yield is the catch-all). For N>1,
+  N-1 `check_number` frames route each state to its yield block.

@@ -1,0 +1,17 @@
+# AI-generated test
+# Static sequence iterator: 3 yields, state machine dispatch
+iter seq() -> val {
+    yield 1
+    yield 2
+    yield 3
+}
+
+behavior for_iter_static_seq {
+    @name "For Iter Static Seq"
+
+    for v in seq() {
+        notify "got"
+    }
+
+    notify "done"
+}

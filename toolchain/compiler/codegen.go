@@ -1405,7 +1405,166 @@ func (p *parser) emitForIterStmt(s *ForStmt, ctx *emitContext, comment string) e
 	if it.frame != nil {
 		return p.emitInstructionIter(s, it, ctx, comment)
 	}
+	if isStaticSequence(it.astBody) {
+		return p.emitStateMachineIter(s, it, ctx, comment)
+	}
 	return p.emitYieldIter(s, it, ctx, comment)
+}
+
+// isStaticSequence reports whether every statement in stmts is a *YieldStmt.
+func isStaticSequence(stmts []Stmt) bool {
+	if len(stmts) == 0 {
+		return false
+	}
+	for _, s := range stmts {
+		if _, ok := s.(*YieldStmt); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// emitStateMachineIter emits a for-in loop for a static sequence iterator
+// (body consists entirely of yield statements). Uses for_number to drive a
+// state machine that dispatches to the correct yield block each tick.
+func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext, comment string) error {
+	ctx.pushScope()
+
+	// Declare iter vars
+	iterVarRegs := make([]string, len(s.IterVars))
+	for i, v := range s.IterVars {
+		iterVarRegs[i] = ctx.declareIterVar(v)
+	}
+
+	// Build iterParamMap: iter param names → resolved caller arg values
+	iterParamMap := map[string]any{}
+	posIdx := 0
+	for _, pd := range it.params {
+		if pd.keyword == "" {
+			if posIdx < len(s.IterArgs) {
+				val, err := ctx.exprGetValue(s.IterArgs[posIdx], "")
+				if err != nil {
+					ctx.popScope()
+					return err
+				}
+				iterParamMap[pd.name] = val
+			}
+			posIdx++
+		} else if s.IterKwArgs != nil {
+			if expr, ok := s.IterKwArgs[pd.keyword]; ok {
+				val, err := ctx.exprGetValue(expr, "")
+				if err != nil {
+					ctx.popScope()
+					return err
+				}
+				iterParamMap[pd.name] = val
+			}
+		}
+	}
+
+	// Map output names to iter var registers
+	for i, outName := range it.outputs {
+		if i < len(iterVarRegs) {
+			iterParamMap[outName] = iterVarRegs[i]
+		} else {
+			iterParamMap[outName] = allocUniqueVar("@out", ctx.usedVars)
+		}
+	}
+
+	N := len(it.astBody)
+
+	// Allocate state variable
+	stateVar := allocUniqueVar("@sm", ctx.usedVars)
+
+	// Look up the for_number iter to get its instruction frame
+	forNumberIter := p.iters["for_number"]
+
+	// Build paramMap for for_number: from=0, to=N, step=1, i=stateVar
+	fnParamMap := map[string]any{
+		"from": map[string]any{"num": 0},
+		"to":   map[string]any{"num": N},
+		"step": map[string]any{"num": 1},
+		"i":    stateVar,
+	}
+
+	// Resolve and emit for_number instruction frame
+	resolved := resolveInstructionFrame(forNumberIter.frame, nil, fnParamMap, nil, comment)
+	instrIdx := ctx.b.emit(resolved)
+
+	// Record body start for break patching
+	origLen := len(ctx.b.frames)
+
+	// Emit dispatch chain and yield blocks
+	for i := 0; i < N; i++ {
+		yield := it.astBody[i].(*YieldStmt)
+		checkIdx := -1
+
+		// Emit check_number for all but the last yield (catch-all)
+		if i < N-1 {
+			check := map[string]any{
+				"op":        "check_number",
+				checkValue:  stateVar,
+				checkTarget: map[string]any{"num": i},
+			}
+			checkIdx = ctx.b.emit(check)
+		}
+
+		// Emit yield value assignments
+		for j, expr := range yield.Values {
+			var outputReg any
+			if j < len(iterVarRegs) {
+				outputReg = iterVarRegs[j]
+			} else {
+				continue
+			}
+			if err := p.emitExprTo(expr, outputReg, ctx.b, iterParamMap, ctx.usedVars, "", 0); err != nil {
+				ctx.popScope()
+				return err
+			}
+		}
+
+		// Emit caller's for-loop body
+		if err := ctx.emitBody(s.Body); err != nil {
+			ctx.popScope()
+			return err
+		}
+
+		// Set next: false on the last body frame (looping — VM re-dispatches)
+		lastIdx := ctx.b.pos() - 1
+		ctx.b.frames[lastIdx]["next"] = false
+
+		// Patch checkLarger to point to the next frame (after this yield block)
+		if checkIdx >= 0 {
+			ctx.b.frames[checkIdx][checkLarger] = frameRef(ctx.b.pos())
+		}
+	}
+
+	afterLoop := frameRef(ctx.b.pos())
+
+	// Set the done slot on the for_number instruction frame
+	doneSlotNative := ""
+	if n, err := strconv.Atoi(forNumberIter.doneSlot); err == nil {
+		doneSlotNative = strconv.Itoa(n + 1)
+	} else {
+		doneSlotNative = forNumberIter.doneSlot
+	}
+	ctx.b.frames[instrIdx][doneSlotNative] = afterLoop
+
+	// Patch unlabeled @break in the body to "last" (stops the iterator)
+	for j := origLen; j < ctx.b.pos(); j++ {
+		f := ctx.b.frames[j]
+		if op, _ := f["op"].(string); op == "@break" {
+			if label, _ := f["label"].(string); label == "" {
+				ctx.b.frames[j] = map[string]any{"op": "last"}
+			}
+		}
+	}
+
+	// Patch labeled break placeholders
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	ctx.popScope()
+	return nil
 }
 
 // emitInstructionIter emits a for-in loop backed by an instruction-based iterator.

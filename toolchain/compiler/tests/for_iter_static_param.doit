@@ -1,0 +1,16 @@
+# AI-generated test
+# Static sequence iterator with parameters
+iter pair(a, b) -> val {
+    yield a
+    yield b
+}
+
+behavior for_iter_static_param {
+    @name "For Iter Static Param"
+
+    for v in pair(10, 20) {
+        notify "got"
+    }
+
+    notify "done"
+}
