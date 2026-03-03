@@ -19,9 +19,13 @@ see `.claude/learnings/test_format.md`.
   (15 types). `isTerminalStmt`/`terminalKeyword` for unreachable code
   detection.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
-  types, `Keywords` map, `skipToCloseBrace`. The `parser` struct
-  extends `scanner` with `fns`, `iters`, `consts`, `enums`, import state,
-  loop/exec-block tracking, `callExprParser` callback, and `warnings []string`.
+  types, `Keywords` map, `skipToCloseBrace`. The `scanner` has a
+  `sourceOffset` field (byte offset of user source after prepended
+  prelude; `posToLineCol` starts counting from this offset). The
+  `parser` struct extends `scanner` with `fns`, `iters`, `consts`,
+  `enums`, import state, `prelude` string (propagated to sub-parsers),
+  `fileDecls` (names declared in this file), loop/exec-block tracking,
+  `callExprParser` callback, and `warnings []string`.
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
   types (`symbolSet`, `fnDef`, `iterDef`, `paramDef`, `symbolTable`, `constDef`,
   `enumDef`), `frameBuilder`/`frameRef` abstraction, `emitContext`
@@ -54,13 +58,19 @@ The compiler is a recursive-descent parser (`parser` struct embeds
 `scanner`). Both function bodies and behavior bodies use an AST
 approach: parse into `[]Stmt` with `Expr` nodes, then emit frames.
 
-1. **Stdlib parsing** — `parseStdlibFile` handles `fn` (via
-   `parseUserFn`), `iter` (via `parseIterDecl`), and `enum` (via
-   `parseEnumDecl`) declarations. Stdlib iters are propagated via
-   `parser.stdlibIters`.
-2. **Import processing** — `processImports` resolves paths, reads
-   imported files, merges symbols into the namespace.
-3. **User source compilation** — Two passes: first collects
+1. **Stdlib parsing** — `parseStdlib` parses `*.doit` files from the
+   stdlib FS (skipping `prelude.doit`). `parseStdlibFile` handles
+   `fn`, `iter`, `enum`, and `skip` declarations. Results are cached
+   in `stdlibFns`/`stdlibIters`/`stdlibEnums`.
+2. **Prelude prepend** — `CompileString` reads `prelude.doit` and
+   prepends it to the source unless `hasSkipPrelude(src)` is true.
+   The parser is created with **empty** working maps (not cloned from
+   stdlib). The prelude's `import * from "std:instructions"` brings
+   stdlib symbols in through the normal import path.
+3. **Import processing** — `processImports` resolves paths, reads
+   imported files, merges symbols into the namespace. Imported files
+   also get the prelude prepended (unless they have `skip prelude`).
+4. **User source compilation** — Two passes: first collects
    declarations (`collectDecls`), then compiles the selected behavior
    via `parseBehaviorBody`.
 

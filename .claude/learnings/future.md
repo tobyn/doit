@@ -15,9 +15,6 @@ register types.
 
 ## 1.0 burndown
 
-- **Prelude** — replace the implicit `instructions.doit` import with a
-  `prelude.doit` that explicitly imports stdlib modules. Programs
-  compile as if prelude is prepended.
 - **Finish stdlib stubs** — implement or remove all unimplemented
   `instructions.doit` stubs.
 - **Definition syntax parity** — revisit `fn`/`iter` declaration

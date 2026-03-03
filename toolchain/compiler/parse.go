@@ -679,13 +679,16 @@ func parseStdlib(stdlib fs.FS) (map[string]*fnDef, map[string]*iterDef, map[stri
 	fns := map[string]*fnDef{}
 	iters := map[string]*iterDef{}
 	enums := map[string]*enumDef{}
-	for _, path := range matches {
-		data, err := fs.ReadFile(stdlib, path)
+	for _, p := range matches {
+		if p == "prelude.doit" {
+			continue
+		}
+		data, err := fs.ReadFile(stdlib, p)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		if err := parseStdlibFile(string(data), fns, iters, enums); err != nil {
-			return nil, nil, nil, fmt.Errorf("%s: %w", path, err)
+			return nil, nil, nil, fmt.Errorf("%s: %w", p, err)
 		}
 	}
 	return fns, iters, enums, nil
@@ -2408,6 +2411,17 @@ func parseStdlibFile(src string, fns map[string]*fnDef, iters map[string]*iterDe
 		if tok.kind == tokEOF {
 			return nil
 		}
+		if tok.kind == tokIdent && tok.val == "skip" {
+			// Consume "skip prelude" directive
+			next, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			if next.val != "prelude" {
+				return p.errorf(next.pos, "expected 'prelude' after 'skip', got %s", next.describe())
+			}
+			continue
+		}
 		if tok.kind == tokIdent && tok.val == "enum" {
 			if _, err := p.parseEnumDecl(false); err != nil {
 				return err
@@ -2421,7 +2435,7 @@ func parseStdlibFile(src string, fns map[string]*fnDef, iters map[string]*iterDe
 			continue
 		}
 		if tok.kind != tokIdent || tok.val != "fn" {
-			return p.errorf(tok.pos, "expected 'fn', 'iter', or 'enum', got %s", tok.describe())
+			return p.errorf(tok.pos, "expected 'fn', 'iter', 'enum', or 'skip', got %s", tok.describe())
 		}
 		if _, err := p.parseUserFn(); err != nil {
 			return err
@@ -3696,8 +3710,13 @@ func (p *parser) parseFile() (*codec.Object, error) {
 			if err := p.skipToNextDecl(); err != nil {
 				return nil, err
 			}
+		case "skip":
+			// Skip "skip prelude" directive in pass 2
+			if err := p.skipToNextDecl(); err != nil {
+				return nil, err
+			}
 		default:
-			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', 'iter', 'const', 'enum', or 'private', got %q", tok.val)
+			return nil, p.errorf(tok.pos, "expected 'behavior', 'fn', 'iter', 'const', 'enum', 'skip', or 'private', got %q", tok.val)
 		}
 	}
 }
@@ -3721,8 +3740,6 @@ func (p *parser) collectUserFns() error {
 // is performed. When false, behavior IDs are collected and same-file names
 // are checked against imports.
 func (p *parser) collectDecls(isImport bool) error {
-	var sameFileNames []string
-
 	for {
 		tok, err := p.next()
 		if err != nil {
@@ -3758,33 +3775,25 @@ func (p *parser) collectDecls(isImport bool) error {
 					return err
 				}
 				p.fns[name].private = true
-				if !isImport {
-					sameFileNames = append(sameFileNames, name)
-				}
+				p.fileDecls = append(p.fileDecls, name)
 			case "iter":
 				name, err := p.parseIterDecl(true)
 				if err != nil {
 					return err
 				}
-				if !isImport {
-					sameFileNames = append(sameFileNames, name)
-				}
+				p.fileDecls = append(p.fileDecls, name)
 			case "const":
 				name, err := p.parseConstDecl(true)
 				if err != nil {
 					return err
 				}
-				if !isImport {
-					sameFileNames = append(sameFileNames, name)
-				}
+				p.fileDecls = append(p.fileDecls, name)
 			case "enum":
 				name, err := p.parseEnumDecl(true)
 				if err != nil {
 					return err
 				}
-				if !isImport {
-					sameFileNames = append(sameFileNames, name)
-				}
+				p.fileDecls = append(p.fileDecls, name)
 			default:
 				return p.errorf(fnTok.pos, "expected 'fn', 'iter', 'const', or 'enum' after 'private', got %q", fnTok.val)
 			}
@@ -3793,42 +3802,43 @@ func (p *parser) collectDecls(isImport bool) error {
 			if err != nil {
 				return err
 			}
-			if !isImport {
-				sameFileNames = append(sameFileNames, name)
-			}
+			p.fileDecls = append(p.fileDecls, name)
 		case "iter":
 			name, err := p.parseIterDecl(false)
 			if err != nil {
 				return err
 			}
-			if !isImport {
-				sameFileNames = append(sameFileNames, name)
-			}
+			p.fileDecls = append(p.fileDecls, name)
 		case "const":
 			name, err := p.parseConstDecl(false)
 			if err != nil {
 				return err
 			}
-			if !isImport {
-				sameFileNames = append(sameFileNames, name)
-			}
+			p.fileDecls = append(p.fileDecls, name)
 		case "enum":
 			name, err := p.parseEnumDecl(false)
 			if err != nil {
 				return err
 			}
-			if !isImport {
-				sameFileNames = append(sameFileNames, name)
+			p.fileDecls = append(p.fileDecls, name)
+		case "skip":
+			// Consume "skip prelude" directive
+			next, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			if next.val != "prelude" {
+				return p.errorf(next.pos, "expected 'prelude' after 'skip', got %s", next.describe())
 			}
 		case "import":
 			return p.errorf(tok.pos, "import statements must appear before function and behavior declarations")
 		default:
-			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'iter', 'const', 'enum', or 'private', got %q", tok.val)
+			return p.errorf(tok.pos, "expected 'behavior', 'fn', 'iter', 'const', 'enum', 'skip', or 'private', got %q", tok.val)
 		}
 	}
 
 	if !isImport {
-		return p.checkImportCollisions(sameFileNames)
+		return p.checkImportCollisions(p.fileDecls)
 	}
 	return nil
 }

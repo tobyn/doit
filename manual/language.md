@@ -65,6 +65,36 @@ doit compile -b harvest source.doit
 
 When a file contains only one behavior, `-b` is optional.
 
+## The Prelude
+
+Every source file is automatically prepended with the **prelude**
+(`stdlib/prelude.doit`), which imports the standard library:
+
+```doit
+import * from "std:instructions"
+```
+
+This makes all built-in functions, iterators, and enums available without
+any explicit imports. The prelude is prepended before parsing, so its imports
+behave exactly like imports you write yourself.
+
+To opt out of the prelude, add `skip prelude` at the very top of the file
+(before any other declarations or imports):
+
+```doit
+skip prelude
+
+# This file has no stdlib functions available unless explicitly imported.
+import notify from "std:instructions"
+
+behavior minimal {
+    notify "Only notify is available"
+}
+```
+
+`skip prelude` is mainly used internally by stdlib files to avoid circular
+dependencies. Most programs should not need it.
+
 ## Imports
 
 Functions can be shared across files using `import` statements. All imports

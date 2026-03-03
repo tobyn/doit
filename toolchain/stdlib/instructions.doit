@@ -1,5 +1,7 @@
 # This file defines all the built-in game instructions defined in Desynced's `instructions.lua`
 
+skip prelude
+
 # Mode enums for instructions with combo selectors.
 # Values are 1-based to match the game's combo indexing.
 

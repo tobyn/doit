@@ -3,7 +3,6 @@ package compiler
 import (
 	"fmt"
 	"io/fs"
-	"maps"
 	"path"
 	"strings"
 )
@@ -278,7 +277,7 @@ func (p *parser) skipToNextDecl() error {
 		}
 		if tok.kind == tokIdent {
 			switch tok.val {
-			case "import", "fn", "private", "behavior", "const", "enum":
+			case "import", "fn", "private", "behavior", "const", "enum", "skip":
 				p.unget(tok)
 				return nil
 			}
@@ -334,27 +333,33 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		return nil, p.errorf(pos, "cannot read import %q: %v", filePath, err)
 	}
 
-	// Clone the cached stdlib fns, iters, and enums for this imported file's parser.
-	stdlibFns := maps.Clone(p.stdlibFns)
-	stdlibIters := maps.Clone(p.stdlibIters)
-	stdlibEnums := maps.Clone(p.stdlibEnums)
+	src := string(data)
+	sourceOffset := 0
+	if p.prelude != "" && !hasSkipPrelude(src) {
+		src = p.prelude + src
+		sourceOffset = len(p.prelude)
+	}
 
 	sourceDir := path.Dir(filePath)
 	if sourceDir == "." {
 		sourceDir = ""
 	}
 
-	// Create a parser for the imported file
+	// Create a parser for the imported file with empty working maps.
+	// The prelude's import will bring in stdlib symbols through the
+	// normal import path.
 	ip := &parser{
 		scanner: scanner{
-			src:        string(data),
-			locale:     p.locale,
-			sourceFile: filePath,
+			src:          src,
+			locale:       p.locale,
+			sourceFile:   filePath,
+			sourceOffset: sourceOffset,
 		},
-		fns:         stdlibFns,
-		iters:       stdlibIters,
+		fns:         map[string]*fnDef{},
+		iters:       map[string]*iterDef{},
 		consts:      map[string]*constDef{},
-		enums:       stdlibEnums,
+		enums:       map[string]*enumDef{},
+		prelude:     p.prelude,
 		loopLabels:  map[string]bool{},
 		sourceFS:    p.sourceFS,
 		sourcePath:  filePath,
@@ -380,10 +385,18 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		return nil, err
 	}
 
+	// Build result using ip.fileDecls — only return symbols the file itself
+	// declared (not symbols brought in via the prelude or other imports).
+	fileDeclSet := map[string]bool{}
+	for _, name := range ip.fileDecls {
+		fileDeclSet[name] = true
+	}
+
 	// Build scope: all non-stdlib functions available in this file.
 	// Functions with bodies need this scope so that transitive dependencies
 	// (functions they call but the importer didn't explicitly import) are
-	// available during expandCall inlining.
+	// available during expandCall inlining. Stdlib functions are excluded
+	// since they're universally available through the prelude.
 	scope := map[string]*fnDef{}
 	for name, fn := range ip.fns {
 		if p.stdlibFns[name] == nil {
@@ -391,24 +404,43 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		}
 	}
 
-	// Extract only user-defined functions (exclude stdlib)
+	// Extract only file-declared functions
 	resultFns := map[string]*fnDef{}
-	for name, fn := range scope {
+	for name, fn := range ip.fns {
+		if !fileDeclSet[name] {
+			continue
+		}
 		if fn.astBody != nil && fn.scope == nil {
 			fn.scope = scope
 		}
 		resultFns[name] = fn
 	}
 
-	// Extract only user-defined iters (exclude stdlib)
+	// Extract only file-declared iters
 	resultIters := map[string]*iterDef{}
 	for name, it := range ip.iters {
-		if p.stdlibIters[name] == nil {
+		if fileDeclSet[name] {
 			resultIters[name] = it
 		}
 	}
 
-	return &symbolSet{fns: resultFns, iters: resultIters, consts: ip.consts, enums: ip.enums}, nil
+	// Extract only file-declared consts
+	resultConsts := map[string]*constDef{}
+	for name, c := range ip.consts {
+		if fileDeclSet[name] {
+			resultConsts[name] = c
+		}
+	}
+
+	// Extract only file-declared enums
+	resultEnums := map[string]*enumDef{}
+	for name, e := range ip.enums {
+		if fileDeclSet[name] {
+			resultEnums[name] = e
+		}
+	}
+
+	return &symbolSet{fns: resultFns, iters: resultIters, consts: resultConsts, enums: resultEnums}, nil
 }
 
 // collectImportedFns collects function and constant definitions from an imported file.

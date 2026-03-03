@@ -90,6 +90,7 @@ var Keywords = map[string]bool{
 	"out":         true,
 	"private":     true,
 	"return":      true,
+	"skip":        true,
 	"true":        true,
 	"unlocked":    true,
 	"var":         true,
@@ -131,6 +132,7 @@ type scanner struct {
 	ungotComment string // saved docComment for ungotten token
 	locale       string // BCP 47 locale tag; empty = use first entry
 	sourceFile   string // source file path for error messages (empty = main file)
+	sourceOffset int    // byte offset of user source (after prepended prelude)
 }
 
 func (s *scanner) save() scannerState {
@@ -161,6 +163,8 @@ type parser struct {
 	target      string   // behavior ID to compile ("" = auto-select)
 	behaviorIDs []string // collected during pass 1
 	imports     []ImportStmt     // parsed import statements
+	prelude    string   // prelude text (propagated to sub-parsers for imports)
+	fileDecls  []string // names declared in this file (populated by collectDecls)
 	sourceFS       fs.FS                      // file system for resolving imports (nil = no imports)
 	sourcePath     string                     // path of the source file within sourceFS
 	sourceDir      string                     // directory of the source file (derived from sourcePath)
@@ -189,8 +193,11 @@ type parser struct {
 // warnf appends a formatted warning message with line:column prefix.
 // posToLineCol converts a byte offset in the source to a 1-based line and column.
 func (s *scanner) posToLineCol(pos int) (line, col int) {
+	if pos < s.sourceOffset {
+		return 1, 1
+	}
 	line, col = 1, 1
-	for i := 0; i < pos && i < len(s.src); i++ {
+	for i := s.sourceOffset; i < pos && i < len(s.src); i++ {
 		if s.src[i] == '\n' {
 			line++
 			col = 1

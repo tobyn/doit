@@ -1,0 +1,6 @@
+# The prelude is automatically prepended to every program.
+# It provides the default set of imports so that common
+# standard library functions are available without explicit
+# import statements.
+
+import * from "std:instructions"

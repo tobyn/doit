@@ -7,7 +7,11 @@ the `*.doit` files in the `toolchain/stdlib/` directory.
 
 ## Architecture
 
-- **`toolchain/stdlib/instructions.doit`** — The built-in game instructions
+- **`toolchain/stdlib/prelude.doit`** — The prelude, automatically prepended
+  to every source file. Contains `import * from "std:instructions"` to bring
+  all stdlib symbols into scope. Files opt out with `skip prelude` at the top.
+- **`toolchain/stdlib/instructions.doit`** — The built-in game instructions.
+  Has `skip prelude` to avoid circular dependency with the prelude.
 - **`toolchain/stdlib/instructions.lua`** — The Lua file from the game that
   defines all of Desynced's built-in instructions
 
@@ -95,9 +99,12 @@ combo indexing. Affected functions expose mode via keyword parameters
 instruction block. When the keyword arg is omitted, the `c` field is
 dropped from the compiled output and the game uses its default.
 
-`parseStdlibFile` handles `fn`, `iter`, and `enum` declarations. Stdlib
-enums are propagated to user and imported file parsers via
-`parser.stdlibEnums`.
+`parseStdlibFile` handles `fn`, `iter`, `enum`, and `skip` declarations.
+`parseStdlib` skips `prelude.doit` (it contains `import`, which
+`parseStdlibFile` can't handle). Stdlib symbols are cached in
+`stdlibFns`/`stdlibIters`/`stdlibEnums` and made available to user
+code through the prelude's glob import rather than by pre-populating
+working maps.
 
 Each function body contains a `# frame:` comment showing the inferred JSON structure of the
 compiled instruction. These were derived from `instructions.lua` by mapping:

@@ -240,6 +240,39 @@ avoidance.
 same scope depth as an existing unused declaration. Child-scope
 re-declarations don't warn.
 
+## Prelude system
+
+The compiler prepends `stdlib/prelude.doit` to every source file before
+parsing. The prelude contains `import * from "std:instructions"`, which
+brings all stdlib symbols into scope through the normal import path.
+
+**Previous approach**: Stdlib symbols were pre-populated into the
+parser's working maps (`fns`, `iters`, `enums`) by cloning them from
+the cached stdlib parse results. This made stdlib implicitly available
+without any import mechanism.
+
+**New approach**: The parser starts with empty working maps. The
+prelude's glob import resolves through `parseImportedFile`, which
+parses `instructions.doit` and returns its declarations. This makes
+stdlib availability explicit and uses the same import machinery as
+user code.
+
+**`skip prelude`**: A directive at the top of a file that prevents
+prelude prepend. Used by `instructions.doit` to avoid circular
+dependency (the prelude imports from it). `skip` is a reserved keyword.
+
+**`fileDecls`**: `collectDecls` populates `parser.fileDecls` with
+the names of symbols declared in the current file. `parseImportedFile`
+uses this to return only file-declared symbols, preventing symbols
+brought in via the prelude from leaking through imports. This also
+fixes a pre-existing issue where stdlib enums leaked through
+unfiltered.
+
+**`sourceOffset`**: When the prelude is prepended, `sourceOffset`
+is set to `len(preludeText)`. `posToLineCol` starts counting from
+this offset so that error messages report positions relative to the
+user's source, not the prepended prelude.
+
 ## Import system
 
 **Transitive dependencies**: Imported functions carry a `scope`

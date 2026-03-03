@@ -33,7 +33,7 @@ func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.F
 // sourceFS and sourcePath provide file system context for resolving imports.
 // The returned warnings slice contains non-fatal compiler warnings (nil if none).
 func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (*codec.Object, []string, error) {
-	fns, stdlibIters, stdlibEnums, err := parseStdlib(stdlib)
+	stdlibFns, stdlibIters, stdlibEnums, err := parseStdlib(stdlib)
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdlib: %w", err)
 	}
@@ -44,25 +44,36 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 			sourceDir = ""
 		}
 	}
-	// Clone stdlib fns, iters, and enums for the parser's working maps (user
-	// declarations will be added to them). The originals are kept so imported
-	// files can clone them cheaply.
-	workingFns := maps.Clone(fns)
-	workingIters := maps.Clone(stdlibIters)
-	workingEnums := maps.Clone(stdlibEnums)
+
+	// Read the prelude and prepend it to the source unless opted out.
+	preludeText := ""
+	sourceOffset := 0
+	if stdlib != nil {
+		data, err := fs.ReadFile(stdlib, "prelude.doit")
+		if err != nil {
+			return nil, nil, fmt.Errorf("stdlib: reading prelude: %w", err)
+		}
+		preludeText = string(data)
+	}
+	if preludeText != "" && !hasSkipPrelude(src) {
+		src = preludeText + src
+		sourceOffset = len(preludeText)
+	}
+
 	p := &parser{
-		scanner:    scanner{src: src, locale: locale},
-		fns:        workingFns,
-		iters:      workingIters,
+		scanner:    scanner{src: src, locale: locale, sourceOffset: sourceOffset},
+		fns:        map[string]*fnDef{},
+		iters:      map[string]*iterDef{},
 		target:     behaviorID,
 		loopLabels: map[string]bool{},
 		consts:     map[string]*constDef{},
-		enums:      workingEnums,
+		enums:      map[string]*enumDef{},
+		prelude:    preludeText,
 		sourceFS:    sourceFS,
 		sourcePath:  sourcePath,
 		sourceDir:   sourceDir,
 		stdlibFS:    stdlib,
-		stdlibFns:   fns,
+		stdlibFns:   stdlibFns,
 		stdlibEnums: stdlibEnums,
 		stdlibIters: stdlibIters,
 	}
@@ -71,6 +82,20 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		return nil, nil, err
 	}
 	return obj, p.warnings, nil
+}
+
+// hasSkipPrelude reports whether the source starts with a `skip prelude` directive.
+func hasSkipPrelude(src string) bool {
+	s := &scanner{src: src}
+	tok1, err := s.next()
+	if err != nil || tok1.kind != tokIdent || tok1.val != "skip" {
+		return false
+	}
+	tok2, err := s.next()
+	if err != nil || tok2.kind != tokIdent || tok2.val != "prelude" {
+		return false
+	}
+	return true
 }
 
 // TestParseStdlibFile is a test helper that parses a stdlib source string.
