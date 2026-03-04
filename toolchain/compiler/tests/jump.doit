@@ -1,0 +1,6 @@
+# AI-generated test
+behavior a {
+    label "start"
+    notify "hello"
+    jump "start"
+}

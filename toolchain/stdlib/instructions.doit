@@ -103,12 +103,6 @@ fn build_registered(coordinate, rotation, id) exec(working, failed) {
     }
 }
 
-# Call a subroutine. Parameters are determined by the subroutine.
-fn call() {
-    # not implementable: parameters are dynamic, determined by subroutine
-    # frame: {"op": "call", "sub": <subroutine_id>, ...params from subroutine}
-    # (low confidence: numbered params are dynamic, determined by subroutine)
-}
 
 # Returns if a unit can produce an item.
 #   item [in] - production item
@@ -1331,18 +1325,13 @@ fn is_working(component, component_index component_index) exec(not_working) {
     }
 }
 
-# Jumps execution to a label with the same label id.
-#   label [in] - label identifier
-fn jump(label) {
-    # control flow: jump/label
-    # frame: {"op": "jump", "0": label [in]}
-}
-
 # Labels can be jumped to from anywhere in a behavior.
 #   label [in] - label identifier
 fn label(label) {
-    # control flow: jump/label
     # frame: {"op": "label", "0": label [in]}
+    instruction "label" {
+        0: label
+    }
 }
 
 # Tells a launched satellite to land.
@@ -1677,12 +1666,13 @@ fn ping(target) {
     }
 }
 
-# Sets a production component to produce a blueprint.
-fn produce() {
-    # not implementable: requires blueprint/frame UI selection
-    # frame: {"op": "produce", "bp": <blueprint>, "frame": <frame_type>}
-    # (low confidence: bp/frame fields inferred from build_produce_ui)
-}
+# Commented out: produce uses bp/frame fields that require UI selection
+# and can't be expressed as instruction parameters. May revisit if we add
+# support for blueprint literals.
+#
+# fn produce() {
+#     # frame: {"op": "produce", "bp": <blueprint>, "frame": <frame_type>}
+# }
 
 # Sets a production component to produce a registered blueprint.
 #   id [in] - id to register with
@@ -1802,11 +1792,6 @@ fn request_wait(item, channel channel, mode mode) {
     }
 }
 
-# Restart execution of the behavior.
-fn restart() {
-    # control flow: terminal instruction
-    # frame: {"op": "restart"} (terminal)
-}
 
 # Scan for the closest unit that matches the filters.
 #   filter_1 [in] - first filter
@@ -1936,12 +1921,13 @@ fn set_link(from, to, from_index from_index, to_index to_index) {
     }
 }
 
-# Sets current unit to the specified logistics settings.
-fn set_logistics_options() {
-    # not implementable: c/c2 are flag tables (low confidence)
-    # frame: {"op": "set_logistics_options", "c": <flags>, "c2": <flags>}
-    # (low confidence: c/c2 are flag tables, not simple integers)
-}
+# Commented out: set_logistics_options uses c/c2 as flag tables rather than
+# simple combo integers, so it can't use the standard keyword-parameter
+# pattern. May revisit if we add support for flag-table parameters.
+#
+# fn set_logistics_options() {
+#     # frame: {"op": "set_logistics_options", "c": <flags>, "c2": <flags>}
+# }
 
 # Sets the numerical/coordinate part of a value.
 #   value [in]

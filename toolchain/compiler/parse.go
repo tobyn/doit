@@ -2249,6 +2249,19 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			setComment(f, callComment)
 			b.emit(f)
 
+		case *RestartStmt:
+			callComment := inheritComment(s.Comment, comment)
+			f := map[string]any{"op": "restart"}
+			setComment(f, callComment)
+			b.emit(f)
+
+		case *JumpStmt:
+			callComment := inheritComment(s.Comment, comment)
+			ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+			if err := p.emitJumpStmt(s, ctx, callComment); err != nil {
+				return err
+			}
+
 		case *LastStmt:
 			callComment := inheritComment(s.Comment, comment)
 			f := map[string]any{"op": "last"}
@@ -3365,6 +3378,10 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 		case *ContinueStmt:
 			return &constEvalStatus{continued: true}, true
 		case *ExitStmt:
+			return nil, false // bail: runtime-only
+		case *RestartStmt:
+			return nil, false // bail: runtime-only
+		case *JumpStmt:
 			return nil, false // bail: runtime-only
 		case *LastStmt:
 			return nil, false // bail: runtime-only
@@ -4982,6 +4999,16 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 
 		case "exit":
 			astBody = append(astBody, &ExitStmt{Comment: comment})
+
+		case "restart":
+			astBody = append(astBody, &RestartStmt{Comment: comment})
+
+		case "jump":
+			stmt, err := p.parseJumpStmt(p.fnParseCtx(ctx), comment)
+			if err != nil {
+				return nil, err
+			}
+			astBody = append(astBody, stmt)
 
 		case "last":
 			astBody = append(astBody, &LastStmt{Comment: comment})

@@ -15,11 +15,6 @@ register types.
 
 ## 1.0 burndown
 
-- **Finish stdlib stubs** — implement or remove all unimplemented
-  `instructions.doit` stubs.
-- **Definition syntax parity** — revisit `fn`/`iter` declaration
-  syntax. `->` may be wanted elsewhere; `exec` before block names may
-  be unnecessary.
 - **Move tests into packages** — compiler tests in `compiler/`, codec
   tests in `codec/`. Only integration wiring tests stay in `main`.
 - **Error message quality** — review compiler errors for clarity and
@@ -156,3 +151,29 @@ its only unique capability is enabling recursion — for both functions
 and iterators. This is low priority but worth keeping in mind as a
 someday feature. The infrastructure (`call` instruction, dependency
 arrays, self-call via `"sub": -1`) is fully understood.
+
+## `call` keyword for inter-behavior calls
+
+The `call` game instruction can't live in the stdlib because it needs
+the dependency index of the callee, which can't be expressed as a
+literal parameter. Instead, `call` should become a language keyword
+with syntax for invoking behaviors defined in doit code.
+
+The language already has the building blocks: behavior IDs (from file
+names or declarations) and parameter definitions with directions
+(in/out). A `call` keyword would let users explicitly invoke another
+compiled behavior as a subroutine, with the compiler resolving the
+callee to a dependency index and wiring parameter slots.
+
+The main win is **user-driven recursion** — a behavior can `call`
+itself (via `"sub": -1`) without the compiler needing to auto-detect
+or optimize recursion. Users who need recursion opt into it explicitly,
+accepting the trade-offs (behavior list pollution, debugging blind
+spots — see "Subroutine calls instead of inlining" above).
+
+This also opens the door to multi-behavior projects where behaviors
+call each other, though the UX trade-offs (every callee appears as a
+separate behavior in the player's list) mean it should be an explicit
+choice rather than a default compilation strategy.
+
+Post-1.0. The `call` stub has been removed from the stdlib.

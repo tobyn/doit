@@ -1,0 +1,7 @@
+# AI-generated test
+behavior a {
+    let target = 1
+    label target
+    notify "hello"
+    jump target
+}

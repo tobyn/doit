@@ -1,0 +1,6 @@
+{
+  "name": "a",
+  "0": {"op": "label", "0": "start"},
+  "1": {"op": "notify", "txt": "hello"},
+  "2": {"op": "jump", "0": "start"}
+}

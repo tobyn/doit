@@ -4080,6 +4080,101 @@ func TestCompileWarnings(t *testing.T) {
 			t.Fatalf("expected unreachable code warning after last in fn body, got: %v", warnings)
 		}
 	})
+
+	t.Run("unreachable_after_restart", func(t *testing.T) {
+		src := `behavior a {
+			restart
+			notify "unreachable"
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'restart'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after restart, got: %v", warnings)
+		}
+	})
+
+	t.Run("unreachable_after_restart_fn", func(t *testing.T) {
+		src := `fn f() {
+			restart
+			notify "dead"
+		}
+		behavior a { f }`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'restart'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after restart in fn body, got: %v", warnings)
+		}
+	})
+
+	t.Run("unreachable_after_jump", func(t *testing.T) {
+		src := `behavior a {
+			jump "end"
+			notify "unreachable"
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'jump'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after jump, got: %v", warnings)
+		}
+	})
+
+	t.Run("unreachable_after_jump_fn", func(t *testing.T) {
+		src := `fn f() {
+			jump "end"
+			notify "dead"
+		}
+		behavior a { f }`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'jump'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable code warning after jump in fn body, got: %v", warnings)
+		}
+	})
+
+	t.Run("jump_missing_expression", func(t *testing.T) {
+		src := `behavior a {
+			jump
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error for jump without expression")
+		}
+		if !strings.Contains(err.Error(), "label expression after 'jump'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestImports(t *testing.T) {

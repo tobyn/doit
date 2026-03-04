@@ -55,7 +55,7 @@ func resolveInstructionFrame(frame map[string]any, retVals []any, paramMap map[s
 			}
 			continue
 		}
-		if s, ok := v.(string); ok {
+		if s, ok := v.(string); ok && k != "op" {
 			if paramMap != nil {
 				if arg, ok := paramMap[s]; ok {
 					instr[nativeKey] = arg
@@ -1370,6 +1370,36 @@ func (p *parser) emitWhileStmt(s *WhileStmt, ctx *emitContext, comment string) e
 	patchContinuePlaceholders(ctx.b, origLen, frameRef(loopStart))
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
 
+	return nil
+}
+
+// parseJumpStmt parses `jump <expr>`.
+func (p *parser) parseJumpStmt(ctx *parseContext, comment string) (*JumpStmt, error) {
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	var label Expr
+	if peek.kind == tokString {
+		label = &LiteralExpr{Value: peek.val}
+	} else {
+		label, err = p.parseSimpleExpr(peek, ctx.resolve, "label expression after 'jump'")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &JumpStmt{Label: label, Comment: comment}, nil
+}
+
+// emitJumpStmt emits a jump statement (terminal, no successor).
+func (p *parser) emitJumpStmt(s *JumpStmt, ctx *emitContext, comment string) error {
+	labelVal, err := ctx.exprGetValue(s.Label, "")
+	if err != nil {
+		return err
+	}
+	f := map[string]any{"op": "jump", "1": labelVal}
+	setComment(f, comment)
+	ctx.b.emit(f)
 	return nil
 }
 

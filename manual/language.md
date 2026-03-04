@@ -1816,6 +1816,54 @@ fn maybe_stop(flag) {
 }
 ```
 
+### `restart`
+
+Restarts execution of the behavior from the beginning. Unlike `exit`
+(which terminates permanently), `restart` causes the behavior controller
+to re-enter the behavior from the top.
+
+```doit
+behavior patrol {
+    move_to $waypoint
+    restart
+}
+```
+
+`restart` is terminal — the compiler warns about unreachable code after
+it. It works in both behavior bodies and function bodies.
+
+### `jump`
+
+Jumps execution to a matching `label` instruction. The game scans all
+instructions in the behavior for a `label` whose value matches the jump
+expression.
+
+```doit
+behavior a {
+    label "start"
+    notify "hello"
+    jump "start"
+}
+```
+
+The label value can be any expression — strings, numbers, or variables:
+
+```doit
+behavior a {
+    let target = 1
+    label target
+    notify "looping"
+    jump target
+}
+```
+
+`jump` is terminal — the compiler warns about unreachable code after it.
+It works in both behavior bodies and function bodies.
+
+> **Note:** `jump` and `label` are low-level goto primitives. The
+> compiler cannot verify that a matching label exists. Use structured
+> control flow (`while`, `loop`, `for`) when possible.
+
 ### `last`
 
 Stops the current iterator. Used inside detached continuation blocks
@@ -1842,8 +1890,8 @@ my_for_comp(entity) {
 
 ### Unreachable Code
 
-Code after `exit`, `break`, `last`, or `return` can never execute. The
-compiler warns about unreachable code:
+Code after `exit`, `restart`, `jump`, `break`, `last`, or `return` can
+never execute. The compiler warns about unreachable code:
 
 ```doit
 behavior a {

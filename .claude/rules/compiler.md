@@ -15,7 +15,7 @@ see `.claude/learnings/test_format.md`.
 
 ## Architecture
 
-- **`ast.go`** — `Stmt` interface (21 types) and `Expr` interface
+- **`ast.go`** — `Stmt` interface (23 types) and `Expr` interface
   (15 types). `isTerminalStmt`/`terminalKeyword` for unreachable code
   detection.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token

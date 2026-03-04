@@ -32,9 +32,9 @@ Functions fall into two categories:
   instructions (~69 functions with `exec` signatures and `instruction` bodies).
   Functions with output slots use `return instruction` and mark the primary output
   with `@1`. Optional inputs and secondary outputs use keyword parameters.
-- **Not-implementable stubs** — empty bodies with a `# not implementable:` comment.
-  These have dynamic parameters (`call`), require UI selection (`produce`), or use
-  non-standard field types (`set_logistics_options`).
+- **Commented-out stubs** — `produce` (requires blueprint/frame UI selection)
+  and `set_logistics_options` (flag-table parameters) are commented out with
+  rationale. May be revisited if the language adds support for their parameter types.
 
 ### Branching instruction categories
 
@@ -106,6 +106,18 @@ Note: `exit` is **not** in the stdlib. It is a language keyword that emits
 `{"op": "exit"}` with no successor. The compiler knows it is terminal and
 detects unreachable code after it.
 
+Note: `restart` is **not** in the stdlib. It is a language keyword that
+emits `{"op": "restart"}` with no successor. Terminal like `exit`.
+
+Note: `jump` is **not** in the stdlib. It is a language keyword:
+`jump <expr>` emits `{"op": "jump", "1": <value>}` with no successor.
+Terminal — the compiler detects unreachable code after it. The `label`
+function remains in the stdlib as a normal instruction wrapper.
+
+Note: `call` is **not** in the stdlib. It requires the dependency index
+of the callee, which can't be expressed as a parameter. A `call` keyword
+for inter-behavior calls is planned post-1.0 (see `future.md`).
+
 `instructions.doit` also defines **mode enums** (e.g., `MoveMode`,
 `BitwiseMode`, `AmountMode`) for instructions with `"c"` combo fields.
 These enums use `= 1` on the first member to match the game's 1-based
@@ -136,13 +148,11 @@ Comments marked `(low confidence)` have JSON fields inferred from Lua variable n
 code rather than from structured `args` data. These should be verified against actual game output
 before relying on them for code generation. The low-confidence instructions are:
 
-- **`call`** — numbered params are dynamic, determined by the selected
-  subroutine. `"sub"` field references a dependency index (1-based) or
-  `-1` for self-call. See `game.md` Subroutines section for full details.
 - **`build`**, **`build_registered`**, **`produce`**, **`produce_registered`** — `"bp"`/`"frame"`
-  field names inferred from `build_produce_ui` Lua code
+  field names inferred from `build_produce_ui` Lua code (`produce` is
+  commented out in the stdlib)
 - **`set_logistics_options`** — `"c"`/`"c2"` are flag tables (not simple integers like other
-  `"c"` fields)
+  `"c"` fields) (commented out in the stdlib)
 
 The `instruction` builtin's field keys and values should match the reference
 JSON decoding (0-based parameter slot keys, as produced by the reference JS

@@ -1,0 +1,12 @@
+# AI-generated test
+fn maybe_restart(x) {
+    if x {
+        restart
+    }
+    notify "still running"
+}
+
+behavior a {
+    let x = 5
+    maybe_restart x
+}

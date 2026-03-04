@@ -186,6 +186,17 @@ type ExitStmt struct {
 	Comment string
 }
 
+// RestartStmt restarts the behavior from the beginning: `restart`
+type RestartStmt struct {
+	Comment string
+}
+
+// JumpStmt jumps to a matching label: `jump <expr>`
+type JumpStmt struct {
+	Label   Expr
+	Comment string
+}
+
 // LastStmt stops the current iterator: `last`
 type LastStmt struct {
 	Comment string
@@ -337,7 +348,9 @@ func (*YieldBodyStmt) stmtNode()      {}
 func (*BreakStmt) stmtNode()          {}
 func (*ContinueStmt) stmtNode()      {}
 func (*ExitStmt) stmtNode()           {}
-func (*LastStmt) stmtNode()           {}
+func (*RestartStmt) stmtNode()       {}
+func (*JumpStmt) stmtNode()          {}
+func (*LastStmt) stmtNode()          {}
 func (*WaitStmt) stmtNode()           {}
 func (*exprTailStmt) stmtNode()       {}
 
@@ -358,10 +371,10 @@ func (*ModeBlockExpr) exprNode()    {}
 func (*IfExpr) exprNode()           {}
 
 // isTerminalStmt reports whether a statement terminates control flow
-// (exit, last, break, or return), making any following code unreachable.
+// (exit, restart, jump, last, break, or return), making any following code unreachable.
 func isTerminalStmt(s Stmt) bool {
 	switch s.(type) {
-	case *ExitStmt, *LastStmt, *BreakStmt, *ContinueStmt, *ReturnStmt:
+	case *ExitStmt, *RestartStmt, *JumpStmt, *LastStmt, *BreakStmt, *ContinueStmt, *ReturnStmt:
 		return true
 	}
 	return false
@@ -372,6 +385,10 @@ func terminalKeyword(s Stmt) string {
 	switch s.(type) {
 	case *ExitStmt:
 		return "exit"
+	case *RestartStmt:
+		return "restart"
+	case *JumpStmt:
+		return "jump"
 	case *LastStmt:
 		return "last"
 	case *BreakStmt:
