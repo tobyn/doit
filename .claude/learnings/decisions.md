@@ -103,6 +103,22 @@ When `return` references a parameter name, `expandCall` detects the
 collision and emits a `set_reg` frame to copy the parameter value to
 the caller's return target.
 
+## Truthy semantics for `if x`
+
+`if x` tests whether the register is **non-empty** (has been assigned any
+value), not whether the numeric component is non-zero. This uses
+`compare_register x, false` — the same instruction used for equality checks.
+
+Consequence: `var x = 0; if x` is **truthy** because `{"num": 0}` is a
+value-bearing register distinct from empty. Users who want numeric non-zero
+checks use `if x != 0` or `if x > 0`.
+
+Rationale: the VM's empty-vs-populated distinction is fundamental to
+Desynced programming (checking whether a scan found something, whether a
+parameter was passed, etc.). "Has a value" is the most useful default for
+bare truthiness. Non-numeric types (Item, Unit, etc.) are also truthy under
+this model, which would be surprising under `check_number` semantics.
+
 ## Boolean expressions
 
 **Comparison operators**: Numeric comparisons (`>`, `<`, `>=`, `<=`)
