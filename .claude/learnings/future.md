@@ -15,6 +15,15 @@ register types.
 
 ## 1.0 burndown
 
+- **Truthy semantics for `if x`** — the VM distinguishes empty
+  registers (`false`) from registers holding numeric zero (`{"num": 0}`).
+  Currently `if x` uses `compare_register` (tests emptiness), so
+  `var x = 0; if x` is truthy. Decide whether this is the right
+  semantics or whether `if x` should use `check_number` (tests
+  non-zero). Both are defensible: emptiness-based matches the VM model
+  and enables "has been assigned" checks; non-zero-based matches
+  programmer expectations from other languages. Document whichever is
+  chosen. See `game.md` "Empty vs Numeric Zero" for the full VM model.
 - **Move tests into packages** — compiler tests in `compiler/`, codec
   tests in `codec/`. Only integration wiring tests stay in `main`.
 - **Error message quality** — review compiler errors for clarity and
@@ -23,6 +32,10 @@ register types.
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
+- **Eliminate noop bridge frames** — when the last instruction in an
+  if-branch falls through to a `set_reg false, false` whose only
+  purpose is a `next` redirect (jump over else), fold the jump target
+  into the preceding instruction's `next` field instead.
 
 ## Compound doc comments from nested calls
 

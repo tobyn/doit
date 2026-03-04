@@ -880,11 +880,17 @@ set_number null, 5, x
 
 `null` compiles to `false` in the behavior JSON.
 
-**Important:** At runtime, `false`, `null`, and `0` are all indistinguishable
-— they all represent an empty register. There is no way to tell whether a
-value was "explicitly false", "no value", or "zero". Comparisons like
-`x == null`, `x == false`, and `x == 0` all test the same thing: whether the
-register is empty.
+**Important:** At runtime, `null` and `false` are equivalent — both produce
+an empty register. However, `0` is **not** the same: `var x = 0` produces a
+value-bearing register (`{"num": 0}`) that is distinct from empty. The VM's
+`compare_register` instruction sees `{"num": 0}` as truthy (it holds a value),
+while `null`/`false` are falsy (empty). Numeric comparisons via `check_number`
+collapse the distinction — both empty and `{"num": 0}` read as numeric 0.
+
+This means:
+- `x == null` and `x == false` test the same thing: whether the register is empty
+- `x == 0` tests whether the numeric component is zero (true for both empty and `{"num": 0}`)
+- `if x` tests whether the register holds any value — `{"num": 0}` passes, empty does not
 
 ## Boolean Literals
 
@@ -897,8 +903,8 @@ set_number true, 5
 ```
 
 In the VM, `true` compiles to `{"num": 1}` (a register with numeric value
-1) and `false` compiles to `false` (an empty register, same as `null` and
-`0`). Boolean literals can be used anywhere a value is expected: variable
+1) and `false` compiles to `false` (an empty register, same as `null`).
+Boolean literals can be used anywhere a value is expected: variable
 initialization, function arguments, comparisons, and return values.
 
 `true` and `false` are reserved keywords and cannot be used as variable
@@ -1616,26 +1622,27 @@ loop. Use labeled `break` to exit a specific outer loop instead.
 
 ```doit
 for i in Range(5) {
-    notify "hello"      # runs 5 times, i = 0, 1, 2, 3, 4
+    notify "hello"      # runs 6 times, i = 0, 1, 2, 3, 4, 5
 }
 ```
 
 The iteration variable (`i`) is immutable — assigning to it inside the
 loop body is a compile error.
 
-`Range` accepts 1–3 arguments:
+`Range` accepts 1–3 arguments. Ranges are **inclusive** of the stop value,
+matching the underlying `for_number` instruction:
 
 | Form | Meaning |
 |------|---------|
-| `Range(stop)` | 0, 1, 2, …, stop−1 |
-| `Range(start, stop)` | start, start+1, …, stop−1 |
-| `Range(start, stop, step)` | start, start+step, …, up to (but not including) stop |
+| `Range(stop)` | 0, 1, 2, …, stop |
+| `Range(start, stop)` | start, start+1, …, stop |
+| `Range(start, stop, step)` | start, start+step, …, up to and including stop |
 
 Negative steps count downward:
 
 ```doit
 for i in Range(10, 0, -2) {
-    notify "countdown"   # i = 10, 8, 6, 4, 2
+    notify "countdown"   # i = 10, 8, 6, 4, 2, 0
 }
 ```
 

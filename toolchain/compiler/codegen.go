@@ -1605,10 +1605,11 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 	// Look up the for_number iter to get its instruction frame
 	eachNumberIter := p.iters["each_number"]
 
-	// Build paramMap for for_number: from=0, to=N, step=1, i=stateVar
+	// Build paramMap for for_number: from=0, to=N-1, step=1, i=stateVar
+	// for_number is inclusive of the stop value, so N yields need 0..N-1
 	fnParamMap := map[string]any{
 		"from": map[string]any{"num": 0},
-		"to":   map[string]any{"num": N},
+		"to":   map[string]any{"num": N - 1},
 		"step": map[string]any{"num": 1},
 		"i":    stateVar,
 	}

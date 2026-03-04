@@ -68,6 +68,57 @@ In the compiled JSON, typed values are represented as objects:
 - **Number only**: `{"num": <n>}`
 - **Empty/no value**: `null` or `false`
 
+### Empty vs Numeric Zero
+
+The VM distinguishes two "zero" states that look identical in the game
+UI but behave differently under `compare_register`:
+
+| State | JSON | Created by | `compare_register` vs `false` |
+|-------|------|-----------|-------------------------------|
+| **Empty** | `false` / `null` | unset register, `set_reg false`, `= null` | equal (falsy) |
+| **Numeric zero** | `{"num": 0}` | `set_number x, 0`, arithmetic yielding 0 | **different** (truthy) |
+
+Key behaviors verified by in-game probes:
+
+- **`compare_register`** tests full register identity. It sees
+  `{"num": 0}` as a value-bearing register, distinct from empty. This
+  means truthy checks (`if x` → `compare_register x, false`) treat
+  numeric zero as truthy.
+- **`check_number`** extracts only the numeric component. Both empty
+  and `{"num": 0}` read as numeric 0 — comparisons like `<=`, `>=`
+  collapse the distinction.
+- **Assignment propagates the distinction.** Copying `{"num": 0}` to
+  another variable preserves its truthy state. Copying `false` over a
+  `{"num": 0}` variable clears it to empty.
+- **Arithmetic always produces `{"num": N}`**, even when the result is
+  zero (e.g., `sub(5, 5)` → `{"num": 0}`, not `false`). The only way
+  to produce an empty register is `set_reg` with `false`.
+- **Unset parameters are empty** (falsy).
+- **Typed values with num=0** (e.g., `Item("metalbar") & 0`) are
+  equal to the same typed value without `& 0` under `compare_register`.
+- **`{"num": 0}` survives parameter boundaries.** Writing `{"num": 0}`
+  to an output/inout parameter preserves the truthy state — it does not
+  collapse to empty. Reading it back via `compare_register` still
+  distinguishes it from empty.
+- **The game UI produces `{"num": 0}` when the player types 0** into a
+  parameter field. Clearing the field produces empty (`false`). Both
+  states are mechanically distinct in the VM, but the game UI displays
+  them identically (visual ambiguity only — not an expressiveness gap).
+- **`set_number(null, 0)` and `combine_register(0, null)` both produce
+  truthy `{"num": 0}`** — instruction outputs are consistent.
+
+This means the language can express a three-way distinction:
+- `x == null` → register is empty
+- `x == 0` → register holds numeric zero (not empty)
+- `if x` → register has any value (including zero)
+
+There is no expressiveness gap: every VM register state is reachable
+from both doit code and the game UI. The distinction is fully usable
+across parameter boundaries in both directions.
+
+The `if x` semantics are a language design question — see `future.md`
+burndown for the open decision on truthy checks.
+
 The `value_type` instruction ("Data type switch" in the game UI) is a
 6-way branch on data type. It takes one input and has 6 execution
 branch slots (one per type) plus a fall-through for empty/no-match.
