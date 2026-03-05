@@ -27,6 +27,13 @@ register types.
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
+- **Desynced 1.0 stdlib update** — see `.claude/learnings/desynced_1_0.md`
+  for full analysis. Key items: add 8 new instructions to stdlib
+  (+ 2 event instructions needing design), remove `unpackage_all` /
+  `package_all`, add "Path Blocked" exec branches to `dodrop` /
+  `dopickup` / `domove`, expand `BitwiseMode` enum (8 new ops),
+  design faction register syntax, design event instruction support,
+  handle `wait 0` behavior change.
 
 ## Compound doc comments from nested calls
 
