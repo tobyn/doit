@@ -1,6 +1,6 @@
 {
   "name": "a",
-  "0": {"op": "label", "0": "start"},
+  "0": {"op": "label", "0": {"id": "v_letter_L", "num": -1000001}},
   "1": {"op": "notify", "txt": "hello"},
-  "2": {"op": "jump", "0": "start"}
+  "2": {"op": "jump", "0": {"id": "v_letter_L", "num": -1000001}}
 }

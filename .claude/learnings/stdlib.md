@@ -111,8 +111,14 @@ emits `{"op": "restart"}` with no successor. Terminal like `exit`.
 
 Note: `jump` is **not** in the stdlib. It is a language keyword:
 `jump <expr>` emits `{"op": "jump", "1": <value>}` with no successor.
-Terminal — the compiler detects unreachable code after it. The `label`
-function remains in the stdlib as a normal instruction wrapper.
+Terminal — the compiler detects unreachable code after it.
+
+Note: `label` is **not** in the stdlib. It is a language keyword:
+`label <expr>` emits `{"op": "label", "1": <value>}`. Not terminal —
+execution continues past it. Both `label` and `jump` accept named labels
+(`'name` sigil) with compiler-managed value allocation, or runtime
+expressions. String literals are disallowed on both keywords (use
+`instruction` intrinsic for raw string slots).
 
 Note: `call` is **not** in the stdlib. It requires the dependency index
 of the callee, which can't be expressed as a parameter. A `call` keyword

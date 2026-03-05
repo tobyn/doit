@@ -27,6 +27,11 @@ register types.
   if-branch falls through to a `set_reg false, false` whose only
   purpose is a `next` redirect (jump over else), fold the jump target
   into the preceding instruction's `next` field instead.
+- **Runtime error on jump fallthrough** — for jumps that should always
+  match (named labels, iterator state machines), chain `next` to a
+  `notify` (txt = error message, value = expected label) followed by
+  `exit`. A cross-cutting concern applying everywhere the compiler
+  emits a jump with an expected matching label.
 
 ## Compound doc comments from nested calls
 
@@ -188,21 +193,14 @@ Verified in-game: `jump` escapes `for_number` loop bodies (including
 nested loops), variables survive the jump, and the VM abandons active
 iterators cleanly. These primitives enable several improvements.
 
-### Multi-level loop break — IMPLEMENTED
-
-Labeled `break` across exec block boundaries now compiles to
-`jump`/`label` pairs. The parser tracks `outerLoopLabels` across exec
-block boundaries via `enterExecBlock()`. `BreakStmt.CrossBoundary`
-marks these breaks, which emit `@jumpbreak` placeholders patched by
-`patchJumpBreakPlaceholders` to `jump <compiler_label>` with a
-matching `label` after the target loop.
-
 ### Computed goto for persistent state machines
 
 Jump/label with a variable stored in a **parameter** (which persists
 across ticks) enables computed-goto state machines. A behavior can
-store its current state as a label number in a parameter and `jump` to
+store its current state as a label value in a parameter and `jump` to
 it on entry, replacing chains of `if`/`else if` or `check_number`.
+This uses the expression form (no `'` sigil) since the jump target is
+dynamic.
 
 ```
 behavior patrol_fsm {

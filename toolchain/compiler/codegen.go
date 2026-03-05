@@ -345,6 +345,10 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		value["name"] = behaviorID
 	}
 
+	if err := b.validateNamedLabels(); err != nil {
+		return nil, err
+	}
+
 	b.finalize(value)
 	return &codec.Object{Type: codec.Behavior, Value: value}, nil
 }
@@ -1421,29 +1425,77 @@ func (p *parser) emitWhileStmt(s *WhileStmt, ctx *emitContext, comment string) e
 	return nil
 }
 
-// parseJumpStmt parses `jump <expr>`.
+// parseLabelStmt parses `label 'name` or `label <expr>`.
+func (p *parser) parseLabelStmt(ctx *parseContext, comment string) (*LabelStmt, error) {
+	peek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	if peek.kind == tokLabel {
+		return &LabelStmt{Name: peek.val, Comment: comment}, nil
+	}
+	if peek.kind == tokString {
+		return nil, p.errorf(peek.pos, "string literals not allowed; use 'name for named labels or a numeric/variable expression")
+	}
+	expr, err := p.parseSimpleExpr(peek, ctx.resolve, "label expression after 'label'")
+	if err != nil {
+		return nil, err
+	}
+	return &LabelStmt{Label: expr, Comment: comment}, nil
+}
+
+// parseJumpStmt parses `jump 'name` or `jump <expr>`.
 func (p *parser) parseJumpStmt(ctx *parseContext, comment string) (*JumpStmt, error) {
 	peek, err := p.next()
 	if err != nil {
 		return nil, err
 	}
-	var label Expr
+	if peek.kind == tokLabel {
+		return &JumpStmt{Name: peek.val, Comment: comment}, nil
+	}
 	if peek.kind == tokString {
-		label = &LiteralExpr{Value: peek.val}
+		return nil, p.errorf(peek.pos, "string literals not allowed; use 'name for named labels or a numeric/variable expression")
+	}
+	expr, err := p.parseSimpleExpr(peek, ctx.resolve, "label expression after 'jump'")
+	if err != nil {
+		return nil, err
+	}
+	return &JumpStmt{Label: expr, Comment: comment}, nil
+}
+
+// emitLabelStmt emits a label statement (not terminal — execution continues past it).
+func (p *parser) emitLabelStmt(s *LabelStmt, ctx *emitContext, comment string) error {
+	var labelVal any
+	if s.Name != "" {
+		labelVal = ctx.b.resolveNamedLabel(s.Name)
+		if err := ctx.b.markLabelEmitted(s.Name); err != nil {
+			return err
+		}
 	} else {
-		label, err = p.parseSimpleExpr(peek, ctx.resolve, "label expression after 'jump'")
+		var err error
+		labelVal, err = ctx.exprGetValue(s.Label, "")
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return &JumpStmt{Label: label, Comment: comment}, nil
+	f := map[string]any{"op": "label", "1": labelVal}
+	setComment(f, comment)
+	ctx.b.emit(f)
+	return nil
 }
 
 // emitJumpStmt emits a jump statement (terminal, no successor).
 func (p *parser) emitJumpStmt(s *JumpStmt, ctx *emitContext, comment string) error {
-	labelVal, err := ctx.exprGetValue(s.Label, "")
-	if err != nil {
-		return err
+	var labelVal any
+	if s.Name != "" {
+		labelVal = ctx.b.resolveNamedLabel(s.Name)
+		ctx.b.markJumpEmitted(s.Name)
+	} else {
+		var err error
+		labelVal, err = ctx.exprGetValue(s.Label, "")
+		if err != nil {
+			return err
+		}
 	}
 	f := map[string]any{"op": "jump", "1": labelVal}
 	setComment(f, comment)

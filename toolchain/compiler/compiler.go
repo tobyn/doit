@@ -7,6 +7,7 @@ import (
 	"maps"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/tobyn/doit/toolchain/codec"
 )
@@ -600,10 +601,13 @@ const (
 type frameRef int
 
 type frameBuilder struct {
-	frames    []map[string]any
-	cursor    int
-	mode      execMode
-	nextLabel int
+	frames        []map[string]any
+	cursor        int
+	mode          execMode
+	nextLabel     int
+	namedLabels   map[string]int  // name → allocated label index
+	emittedLabels map[string]bool // names with label instruction emitted
+	emittedJumps  map[string]bool // names with jump instruction emitted
 }
 
 // allocLabels reserves n label indices and returns the base index.
@@ -618,6 +622,62 @@ func (b *frameBuilder) allocLabels(n int) int {
 // collision with user labels.
 func compilerLabel(n int) map[string]any {
 	return map[string]any{"id": "v_letter_L", "num": -1000001 - n}
+}
+
+// resolveNamedLabel lazily allocates a compiler label for the given name.
+// Idempotent: returns the same label value on subsequent calls with the same name.
+func (b *frameBuilder) resolveNamedLabel(name string) map[string]any {
+	if b.namedLabels == nil {
+		b.namedLabels = map[string]int{}
+	}
+	if idx, ok := b.namedLabels[name]; ok {
+		return compilerLabel(idx)
+	}
+	idx := b.allocLabels(1)
+	b.namedLabels[name] = idx
+	return compilerLabel(idx)
+}
+
+// markLabelEmitted records that a label instruction was emitted for the given name.
+// Returns an error if a label with that name was already emitted (duplicate).
+func (b *frameBuilder) markLabelEmitted(name string) error {
+	if b.emittedLabels == nil {
+		b.emittedLabels = map[string]bool{}
+	}
+	if b.emittedLabels[name] {
+		return fmt.Errorf("duplicate label '%s", name)
+	}
+	b.emittedLabels[name] = true
+	return nil
+}
+
+// markJumpEmitted records that a jump instruction targeting the given name was emitted.
+func (b *frameBuilder) markJumpEmitted(name string) {
+	if b.emittedJumps == nil {
+		b.emittedJumps = map[string]bool{}
+	}
+	b.emittedJumps[name] = true
+}
+
+// validateNamedLabels checks that every named jump has a matching label.
+// Returns an error listing orphan jump names.
+func (b *frameBuilder) validateNamedLabels() error {
+	if b.emittedJumps == nil {
+		return nil
+	}
+	var orphans []string
+	for name := range b.emittedJumps {
+		if b.emittedLabels == nil || !b.emittedLabels[name] {
+			orphans = append(orphans, "'"+name)
+		}
+	}
+	if len(orphans) == 0 {
+		return nil
+	}
+	if len(orphans) == 1 {
+		return fmt.Errorf("jump to %s with no matching label", orphans[0])
+	}
+	return fmt.Errorf("jumps to %s with no matching labels", strings.Join(orphans, ", "))
 }
 
 func (b *frameBuilder) emit(f map[string]any) int {

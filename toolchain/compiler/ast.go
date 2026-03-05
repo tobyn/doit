@@ -192,9 +192,17 @@ type RestartStmt struct {
 	Comment string
 }
 
-// JumpStmt jumps to a matching label: `jump <expr>`
+// LabelStmt defines a jump target: `label 'name` or `label <expr>`
+type LabelStmt struct {
+	Label   Expr   // runtime expression, nil if Name is set
+	Name    string // named label ('foo sigil), empty if Label is set
+	Comment string
+}
+
+// JumpStmt jumps to a matching label: `jump 'name` or `jump <expr>`
 type JumpStmt struct {
-	Label   Expr
+	Label   Expr   // runtime expression, nil if Name is set
+	Name    string // named label ('foo sigil), empty if Label is set
 	Comment string
 }
 
@@ -350,6 +358,7 @@ func (*BreakStmt) stmtNode()          {}
 func (*ContinueStmt) stmtNode()      {}
 func (*ExitStmt) stmtNode()           {}
 func (*RestartStmt) stmtNode()       {}
+func (*LabelStmt) stmtNode()         {}
 func (*JumpStmt) stmtNode()          {}
 func (*LastStmt) stmtNode()          {}
 func (*WaitStmt) stmtNode()           {}

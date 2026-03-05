@@ -2,5 +2,6 @@
 behavior a {
     label 'start
     notify "hello"
+    label 'end
     jump 'start
 }

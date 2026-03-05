@@ -1325,15 +1325,6 @@ fn is_working(component, component_index component_index) exec(not_working) {
     }
 }
 
-# Labels can be jumped to from anywhere in a behavior.
-#   label [in] - label identifier
-fn label(label) {
-    # frame: {"op": "label", "0": label [in]}
-    instruction "label" {
-        0: label
-    }
-}
-
 # Tells a launched satellite to land.
 fn land() {
     # frame: {"op": "land"}

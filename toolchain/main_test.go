@@ -3761,6 +3761,50 @@ behavior a {
 		}
 	})
 
+	t.Run("label_string", func(t *testing.T) {
+		src := `behavior a { label "foo" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "string literals not allowed") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("jump_string", func(t *testing.T) {
+		src := `behavior a { jump "foo" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "string literals not allowed") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("duplicate_label", func(t *testing.T) {
+		src := `behavior a { label 'x; label 'x }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate label") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("orphan_jump", func(t *testing.T) {
+		src := `behavior a { jump 'x }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "no matching label") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {
@@ -4132,7 +4176,7 @@ func TestCompileWarnings(t *testing.T) {
 
 	t.Run("unreachable_after_jump", func(t *testing.T) {
 		src := `behavior a {
-			jump "end"
+			jump 1
 			notify "unreachable"
 		}`
 		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
@@ -4152,7 +4196,7 @@ func TestCompileWarnings(t *testing.T) {
 
 	t.Run("unreachable_after_jump_fn", func(t *testing.T) {
 		src := `fn f() {
-			jump "end"
+			jump 1
 			notify "dead"
 		}
 		behavior a { f }`

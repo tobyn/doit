@@ -80,6 +80,7 @@ var Keywords = map[string]bool{
 	"inout":       true,
 	"instruction":          true,
 	"jump":        true,
+	"label":       true,
 	"iterator_instruction": true,
 	"iter":                 true,
 	"last":        true,

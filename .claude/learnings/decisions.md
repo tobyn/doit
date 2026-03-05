@@ -387,27 +387,50 @@ between the VM and language constructs, able to express everything the
 VM does without the function layer. Local blocks complete this by
 adding branching capability directly to `instruction`.
 
-## `jump` and `label` value semantics
+## `jump` and `label` — named labels and keyword promotion
 
-`jump` and `label` both take a value slot that the VM interprets as a
-**register reference**. String literals like `"start"` compile into the
-slot as-is, but the VM reads them as variable names — since no variable
-named `start` typically exists, both instructions see an empty register
-and silently match on emptiness. Every `jump` would land on the first
-`label` regardless of the string used.
+Both `label` and `jump` are **compiler keywords** (label was promoted
+from stdlib). Both accept two forms:
 
-Number literals work correctly because they compile to `{"num": N}`
-values, which the VM compares by value. Use numbers for static jump
-targets and variables for dynamic ones.
+- **Named**: `label 'foo` / `jump 'foo` — the `'` sigil triggers
+  compiler-managed label resolution. The compiler lazily allocates a
+  `compilerLabel(n)` value the first time a name is seen (whether in
+  `label` or `jump`) and reuses it for all subsequent references to the
+  same name. Labels are behavior-scoped (flat, like the VM instruction
+  list).
+- **Expression**: `label expr` / `jump expr` — evaluated at runtime,
+  no compiler validation. Useful for computed-goto state machines.
+- **No string literals**: String arguments are a compile error on both
+  keywords. Strings caused a silent bug (VM reads them as variable
+  names, matches on emptiness). Users needing raw string slots can use
+  the `instruction` intrinsic.
 
-Verified in-game: `jump` successfully escapes `for_number` loop bodies,
-including nested loops. The VM follows the jump unconditionally and
-abandons any active iterators. Variables set before the jump retain
-their values.
+### Emit-time validation (named labels only)
+
+- **Duplicate label**: Two `label 'foo` instructions emitted → compile
+  error. Checked when a label frame is actually emitted, not at parse
+  time, since some parsed code may not reach the output.
+- **Orphan jump**: `jump 'foo` emitted but no `label 'foo` emitted →
+  compile error. Same emit-time check.
+- **Orphan label**: `label 'foo` with no `jump 'foo` — allowed (dead
+  code, not an error).
+
+### VM semantics (verified in-game)
+
+`jump` successfully escapes `for_number` loop bodies, including nested
+loops. The VM follows the jump unconditionally and abandons any active
+iterators. Variables set before the jump retain their values.
 
 When no matching `label` exists, `jump` follows its `next` field
-(falls through to the next instruction) rather than halting. Verified
-in-game.
+(falls through to the next instruction) rather than halting.
+
+### Runtime error on fallthrough (deferred)
+
+For jumps that should always match (named labels, iterator state
+machines), the `next` field should chain to a `notify` (with error
+message + expected label value) followed by `exit`. This is a
+cross-cutting concern — deferred to the burndown list rather than
+implemented per-feature.
 
 ## `iterator_instruction` keyword
 

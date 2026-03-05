@@ -2391,6 +2391,12 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		return []Stmt{&ExitStmt{Comment: comment}}, true, nil
 	case "restart":
 		return []Stmt{&RestartStmt{Comment: comment}}, true, nil
+	case "label":
+		labelStmt, err := p.parseLabelStmt(p.bhvParseCtx(syms), comment)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{labelStmt}, true, nil
 	case "jump":
 		jumpStmt, err := p.parseJumpStmt(p.bhvParseCtx(syms), comment)
 		if err != nil {
@@ -3125,6 +3131,11 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 			f := map[string]any{"op": "restart"}
 			setComment(f, s.Comment)
 			b.emit(f)
+
+		case *LabelStmt:
+			if err := p.emitLabelStmt(s, ctx, s.Comment); err != nil {
+				return 0, err
+			}
 
 		case *JumpStmt:
 			if err := p.emitJumpStmt(s, ctx, s.Comment); err != nil {

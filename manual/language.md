@@ -1854,22 +1854,32 @@ behavior patrol {
 `restart` is terminal — the compiler warns about unreachable code after
 it. It works in both behavior bodies and function bodies.
 
-### `jump`
+### `label` and `jump`
 
-Jumps execution to a matching `label` instruction. The game scans all
-instructions in the behavior for a `label` whose value matches the jump
-expression.
+`label` defines a jump target. `jump` transfers execution to a matching
+`label`. The game scans all instructions in the behavior for a `label`
+whose value matches the jump expression.
+
+**Named form** — the compiler manages label identity via the `'name` sigil:
 
 ```doit
 behavior a {
-    label 1
+    label 'start
     notify "hello"
-    jump 1
+    jump 'start
 }
 ```
 
-The label value can be any expression — numbers, variables, or type
-constructors:
+Named labels are the recommended form. The compiler:
+- Allocates a unique internal value for each name
+- Errors on duplicate `label 'name` declarations
+- Errors on `jump 'name` with no matching `label 'name`
+
+Named label scope is behavior-wide: a `jump` can reference a `label`
+that appears earlier or later in the behavior (as long as it is not
+skipped as unreachable code).
+
+**Expression form** — for dynamic or computed targets:
 
 ```doit
 behavior a {
@@ -1880,41 +1890,39 @@ behavior a {
 }
 ```
 
-Number literals are the simplest choice for static jump targets. Use a
-variable when the target must be computed at runtime.
+Expression labels accept numbers, variables, or any runtime expression.
+The compiler does not validate that expression-form jumps have matching
+labels — that is the programmer's responsibility.
 
-`jump` can break out of looping instructions like `for_number` — including
-nested loops. The VM follows the jump unconditionally, abandoning any
-active iterators:
+`jump` can break out of looping instructions — including nested loops.
+The VM follows the jump unconditionally, abandoning any active iterators:
 
 ```doit
+label 'top
 for i in Range(0, 100) {
     for j in Range(0, 100) {
         if i == 5 {
             if j == 3 {
-                jump 1      # escapes both loops
+                jump 'escape   # escapes both loops
             }
         }
         notify "inner"
     }
 }
-label 1
+label 'escape
 notify "escaped"
 ```
 
-`jump` is terminal — the compiler warns about unreachable code after it.
-It works in both behavior bodies and function bodies.
+`label` is not terminal — execution continues past it. `jump` is
+terminal — the compiler warns about unreachable code after it. Both work
+in behavior bodies and function bodies.
 
-> **Note:** `jump` and `label` are low-level goto primitives. The
-> compiler cannot verify that a matching label exists. Use structured
-> control flow (`while`, `loop`, `for`) when possible.
+> **Note:** `jump` and `label` are low-level goto primitives. Use
+> structured control flow (`while`, `loop`, `for`) when possible.
 
-> **Caution:** String literals like `"start"` compile into the
-> instruction's value slot, which the VM interprets as a **variable
-> name**. Because no variable named `start` exists, both `jump` and
-> `label` see an empty register and silently match on emptiness — every
-> `jump` lands on the first `label` regardless of the string used. Use
-> number literals or variables instead.
+> **String literals are not allowed.** Use `'name` for named labels
+> or a numeric/variable expression. For raw instruction-level control,
+> use the `instruction` intrinsic.
 
 ### `last`
 
