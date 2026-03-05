@@ -27,11 +27,6 @@ register types.
   if-branch falls through to a `set_reg false, false` whose only
   purpose is a `next` redirect (jump over else), fold the jump target
   into the preceding instruction's `next` field instead.
-- **Runtime error on jump fallthrough** — for jumps that should always
-  match (named labels, iterator state machines), chain `next` to a
-  `notify` (txt = error message, value = expected label) followed by
-  `exit`. A cross-cutting concern applying everywhere the compiler
-  emits a jump with an expected matching label.
 
 ## Compound doc comments from nested calls
 

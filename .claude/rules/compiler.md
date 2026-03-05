@@ -145,13 +145,26 @@ to exit the block: detached blocks get `set_reg false false` with
 false` patched to the join point. `@jumpbreak` is emitted for
 cross-exec-block-boundary labeled breaks (`BreakStmt.CrossBoundary`);
 `patchJumpBreakPlaceholders` replaces them with `jump` instructions
-targeting a compiler-generated label, and emits a matching `label`
-after the target loop. `@return` is patched to jump past the function
+targeting a compiler-generated label, emits a matching `label` after
+the target loop, and emits a fallthrough error handler (see below).
+`patchJumpBreakPlaceholders` must be called BEFORE computing
+`afterLoop` since it may emit frames. `@return` is patched to jump past the function
 expansion. `@break`, `@continue`, and `@return` are patched to
 `set_reg false false` with appropriate `"next"` targets. `@continue`
 in yield-based iterators is handled by `YieldBodyStmt`: a bridge noop
 is emitted after the inlined caller body, and `@continue` is patched
 to jump to it.
+
+**Jump fallthrough protection**: Compiler-emitted jumps that should
+always match (named labels, state machine dispatch, cross-boundary
+breaks) chain `"next"` to a `notify` + `exit` error handler via
+`emitJumpFallthroughError`. If the jump fails to match a label at
+runtime, the player sees "jump: no matching label" with the expected
+label value. Expression-form user jumps (`jump someVar`) are NOT
+protected — those are user-controlled. The error handler frames are
+dead code in normal execution, only reachable via the jump's `"next"`
+fallthrough. For `patchJumpBreakPlaceholders`, the label's `"next"`
+is set to skip over the error handler.
 
 **Iterator helpers**: Shared helpers reduce duplication across the
 five iterator emitters (`emitStateMachineIter`, `emitInstructionIter`,

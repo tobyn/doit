@@ -1,6 +1,33 @@
 {
-  "name": "a",
-  "0": {"op": "label", "0": {"id": "v_letter_L", "num": -1000001}},
-  "1": {"op": "notify", "txt": "hello"},
-  "2": {"op": "jump", "0": {"id": "v_letter_L", "num": -1000001}}
+  "0": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000001
+    },
+    "op": "label"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "2": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000001
+    },
+    "next": 4,
+    "op": "jump"
+  },
+  "3": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000001
+    },
+    "op": "notify",
+    "txt": "jump: no matching label"
+  },
+  "4": {
+    "op": "exit"
+  },
+  "name": "a"
 }

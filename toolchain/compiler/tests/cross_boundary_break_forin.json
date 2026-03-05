@@ -2,7 +2,7 @@
   "0": {
     "0": "comp",
     "1": "@out",
-    "2": 5,
+    "2": 8,
     "op": "for_component"
   },
   "1": {
@@ -17,6 +17,7 @@
       "id": "v_letter_L",
       "num": -1000001
     },
+    "next": 6,
     "op": "jump"
   },
   "3": {
@@ -30,9 +31,21 @@
       "id": "v_letter_L",
       "num": -1000001
     },
+    "next": 8,
     "op": "label"
   },
   "5": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000001
+    },
+    "op": "notify",
+    "txt": "jump: no matching label"
+  },
+  "6": {
+    "op": "exit"
+  },
+  "7": {
     "op": "notify",
     "txt": "done"
   },

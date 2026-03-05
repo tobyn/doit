@@ -1874,6 +1874,9 @@ Named labels are the recommended form. The compiler:
 - Allocates a unique internal value for each name
 - Errors on duplicate `label 'name` declarations
 - Errors on `jump 'name` with no matching `label 'name`
+- Emits a runtime fallthrough error (`notify` + `exit`) in case the
+  jump doesn't match at runtime — the player sees an error notification
+  instead of undefined behavior
 
 Named label scope is behavior-wide: a `jump` can reference a `label`
 that appears earlier or later in the behavior (as long as it is not
@@ -1892,7 +1895,8 @@ behavior a {
 
 Expression labels accept numbers, variables, or any runtime expression.
 The compiler does not validate that expression-form jumps have matching
-labels — that is the programmer's responsibility.
+labels — that is the programmer's responsibility. Expression-form jumps
+do not get runtime fallthrough protection.
 
 `jump` can break out of looping instructions — including nested loops.
 The VM follows the jump unconditionally, abandoning any active iterators:
