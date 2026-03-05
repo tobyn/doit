@@ -1557,9 +1557,24 @@ underscores; must start with a letter or underscore). Duplicate labels
 on nested loops are a compile error. `break` with an unknown label is a compile error. `break` outside of
 any loop or exec block is also a compile error.
 
-Exec blocks (continuation blocks at call sites) are a hard boundary for
-labeled `break` — labels from enclosing loops are not visible inside an
-exec block. See [Functions](functions.md#break-in-exec-blocks) for details.
+Labeled `break` works across exec block boundaries (continuation blocks
+at call sites). The compiler automatically emits `jump`/`label` pairs
+to escape the block at the VM level:
+
+```doit
+'outer: loop {
+    for_component() {
+        body { comp, idx ->
+            if comp {
+                break 'outer   # exits the outer loop
+            }
+        }
+    }
+}
+```
+
+See [Functions](functions.md#break-in-exec-blocks) for more details on
+`break` behavior in exec blocks.
 
 ### `continue`
 

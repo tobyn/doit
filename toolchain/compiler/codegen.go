@@ -1191,6 +1191,51 @@ func patchUnlabeledBreakToLast(b *frameBuilder, from int) {
 	}
 }
 
+// patchJumpBreakPlaceholders replaces @jumpbreak placeholder frames in
+// b.frames[from:] whose label matches with jump instructions targeting a
+// compiler-generated label, then emits a label instruction at the current
+// position. Used for cross-exec-block-boundary break: the break emits
+// jump (escaping the detached block at the VM level) and the label marks
+// the continuation point after the target loop.
+func patchJumpBreakPlaceholders(b *frameBuilder, from int, label string) {
+	// Scan for matching @jumpbreak placeholders
+	found := false
+	for j := from; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@jumpbreak" {
+			if fLabel, _ := f["label"].(string); fLabel == label {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		return
+	}
+
+	// Allocate a single compiler label for all matching breaks
+	labelNum := b.allocLabels(1)
+	target := compilerLabel(labelNum)
+
+	for j := from; j < len(b.frames); j++ {
+		f := b.frames[j]
+		if op, _ := f["op"].(string); op == "@jumpbreak" {
+			if fLabel, _ := f["label"].(string); fLabel == label {
+				b.frames[j] = map[string]any{
+					"op": "jump",
+					"1":  target,
+				}
+			}
+		}
+	}
+
+	// Emit the label at the current position (after the loop)
+	b.emit(map[string]any{
+		"op": "label",
+		"1":  target,
+	})
+}
+
 // emitLoopBackEdge emits the back-edge jump for while and infinite loops.
 // If the last body frame is @break or @continue, a noop jump is emitted
 // (the placeholder frame will be patched separately). If the last frame has
@@ -1273,6 +1318,7 @@ func (p *parser) emitLoopStmt(s *LoopStmt, ctx *emitContext, comment string) err
 	afterLoop := frameRef(ctx.b.pos())
 	patchContinuePlaceholders(ctx.b, origLen, frameRef(loopStart))
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	return nil
 }
@@ -1328,6 +1374,7 @@ func (p *parser) emitCountedLoop(s *LoopStmt, ctx *emitContext, comment string) 
 
 	patchContinuePlaceholders(ctx.b, origLen, frameRef(incrFrame))
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	return nil
 }
@@ -1369,6 +1416,7 @@ func (p *parser) emitWhileStmt(s *WhileStmt, ctx *emitContext, comment string) e
 
 	patchContinuePlaceholders(ctx.b, origLen, frameRef(loopStart))
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	return nil
 }
@@ -1723,6 +1771,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 	// Patch unlabeled @break → "last"; labeled @break → jump past loop
 	patchUnlabeledBreakToLast(ctx.b, origLen)
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	ctx.popScope()
 	return nil
@@ -1776,6 +1825,7 @@ func (p *parser) emitInstructionIter(s *ForStmt, it *iterDef, ctx *emitContext, 
 	patchIterDoneSlot(ctx.b, instrIdx, it.doneSlot, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	ctx.popScope()
 	return nil
@@ -1895,6 +1945,7 @@ func (p *parser) emitInlineIterInstruction(s *ForStmt, ctx *emitContext, comment
 	patchIterDoneSlot(ctx.b, instrIdx, s.IterInstrDone, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	ctx.popScope()
 	return nil
@@ -1935,6 +1986,7 @@ func (p *parser) emitYieldIter(s *ForStmt, it *iterDef, ctx *emitContext, commen
 
 	// Patch labeled break placeholders for the entire expansion
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	ctx.popScope()
 	return nil
@@ -2044,6 +2096,7 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 	patchIterDoneSlot(ctx.b, instrIdx, eachNumberIter.doneSlot, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	return nil
 }
@@ -2098,6 +2151,7 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 	patchIterDoneSlot(ctx.b, instrIdx, eachNumberIter.doneSlot, afterLoop)
 
 	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
 
 	return nil
 }

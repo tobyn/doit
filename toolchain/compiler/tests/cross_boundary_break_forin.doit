@@ -1,0 +1,13 @@
+# AI-generated test
+# Break across continuation block boundary inside for-in loop
+behavior cross_boundary_break_forin {
+    @name "Cross Break For-In"
+    'outer: for comp in each_component() {
+        compare_register comp, comp {
+            equal {
+                break 'outer
+            }
+        }
+    }
+    notify "done"
+}

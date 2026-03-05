@@ -1,0 +1,14 @@
+# AI-generated test
+# Break across exec block boundary using jump/label
+behavior cross_boundary_break {
+    @name "Cross-boundary Break"
+    'outer: loop {
+        for_component() {
+            body { comp, idx ->
+                if comp {
+                    break 'outer
+                }
+            }
+        }
+    }
+}

@@ -2218,12 +2218,16 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 			}
 
 		case *BreakStmt:
-			// Emit placeholder frame that emitLoopStmt/emitWhileStmt will patch
-			f := map[string]any{"op": "@break"}
-			if s.Label != "" {
-				f["label"] = s.Label
+			// Emit placeholder frame that the enclosing loop emitter will patch
+			if s.CrossBoundary {
+				b.emit(map[string]any{"op": "@jumpbreak", "label": s.Label})
+			} else {
+				f := map[string]any{"op": "@break"}
+				if s.Label != "" {
+					f["label"] = s.Label
+				}
+				b.emit(f)
 			}
-			b.emit(f)
 
 		case *YieldBodyStmt:
 			bodyStart := b.pos()
@@ -4544,16 +4548,7 @@ func (p *parser) maybeParseFnBodyContinuationBlocks(fn *fnDef, ctx *fnBodyContex
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
 		}
-		savedLoopDepth := p.loopDepth
-		savedLoopLabels := p.loopLabels
-		p.loopDepth = 0
-		p.loopLabels = map[string]bool{}
-		p.execBlockDepth++
-		defer func() {
-			p.loopDepth = savedLoopDepth
-			p.loopLabels = savedLoopLabels
-			p.execBlockDepth--
-		}()
+		defer p.enterExecBlock()()
 		return p.parseFnBodyStmts(ctx)
 	})
 }
@@ -4578,16 +4573,7 @@ func (p *parser) maybeParseFnBodyContinuationBlocksExpr(fn *fnDef, ctx *fnBodyCo
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
 		}
-		savedLoopDepth := p.loopDepth
-		savedLoopLabels := p.loopLabels
-		p.loopDepth = 0
-		p.loopLabels = map[string]bool{}
-		p.execBlockDepth++
-		defer func() {
-			p.loopDepth = savedLoopDepth
-			p.loopLabels = savedLoopLabels
-			p.execBlockDepth--
-		}()
+		defer p.enterExecBlock()()
 		return p.parseFnBodyStmtsInner(ctx, true) // exprTail=true
 	})
 	if err != nil {
@@ -4630,16 +4616,7 @@ func (p *parser) maybeParseFnBodyLocalBlocks(frame map[string]any, ctx *fnBodyCo
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
 		}
-		savedLoopDepth := p.loopDepth
-		savedLoopLabels := p.loopLabels
-		p.loopDepth = 0
-		p.loopLabels = map[string]bool{}
-		p.execBlockDepth++
-		defer func() {
-			p.loopDepth = savedLoopDepth
-			p.loopLabels = savedLoopLabels
-			p.execBlockDepth--
-		}()
+		defer p.enterExecBlock()()
 		return p.parseFnBodyStmts(ctx)
 	})
 }
@@ -4663,16 +4640,7 @@ func (p *parser) maybeParseFnBodyLocalBlocksExpr(frame map[string]any, ctx *fnBo
 		for _, name := range params {
 			ctx.declareFnVar(name, false)
 		}
-		savedLoopDepth := p.loopDepth
-		savedLoopLabels := p.loopLabels
-		p.loopDepth = 0
-		p.loopLabels = map[string]bool{}
-		p.execBlockDepth++
-		defer func() {
-			p.loopDepth = savedLoopDepth
-			p.loopLabels = savedLoopLabels
-			p.execBlockDepth--
-		}()
+		defer p.enterExecBlock()()
 		return p.parseFnBodyStmtsInner(ctx, true) // exprTail=true
 	})
 	if err != nil {
@@ -4983,19 +4951,24 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				return nil, p.errorf(tok.pos, "'break' outside of loop or exec block")
 			}
 			label := ""
+			crossBoundary := false
 			peek, err := p.next()
 			if err != nil {
 				return nil, err
 			}
 			if peek.kind == tokLabel {
-				if !p.loopLabels[peek.val] {
+				if p.loopLabels[peek.val] {
+					label = peek.val
+				} else if p.outerLoopLabels[peek.val] {
+					label = peek.val
+					crossBoundary = true
+				} else {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
 				}
-				label = peek.val
 			} else {
 				p.unget(peek)
 			}
-			astBody = append(astBody, &BreakStmt{Label: label, Comment: comment})
+			astBody = append(astBody, &BreakStmt{Label: label, CrossBoundary: crossBoundary, Comment: comment})
 
 		case "exit":
 			astBody = append(astBody, &ExitStmt{Comment: comment})

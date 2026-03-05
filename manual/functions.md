@@ -573,21 +573,24 @@ my_for_comp(entity) {
   }
   ```
 
-Exec blocks are a **hard boundary** for labeled `break` — labels from
-enclosing loops are not visible inside an exec block. A labeled break
-targeting an outer loop is a compile error:
+Labeled `break` can target loops **outside** the exec block. The
+compiler emits `jump`/`label` pairs to escape the block at the VM
+level:
 
 ```doit
-# ERROR: unknown loop label "outer"
 'outer: loop {
     my_iter(e) {
-        body { break 'outer }   # compile error
+        body { break 'outer }   # exits the outer loop
     }
 }
 ```
 
+This works across multiple exec block boundaries — for example,
+breaking out of a loop from inside nested continuation blocks.
+
 Loops declared *inside* an exec block can use `break` and labeled
-`break` normally.
+`break` normally — these compile to the standard `@break` placeholder
+mechanism without needing `jump`/`label`.
 
 #### Collapsed form
 

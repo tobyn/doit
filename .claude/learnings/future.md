@@ -188,19 +188,14 @@ Verified in-game: `jump` escapes `for_number` loop bodies (including
 nested loops), variables survive the jump, and the VM abandons active
 iterators cleanly. These primitives enable several improvements.
 
-### Multi-level loop break
+### Multi-level loop break — IMPLEMENTED
 
-Labeled `break` can't cross exec block boundaries — that's a hard
-compiler limitation because `break` compiles to structured control
-flow. `jump`/`label` operate at the VM level and don't care about
-block boundaries.
-
-For nested `for...in` loops, a labeled `break` on the outer loop is
-currently a compile error. The compiler could emit `jump N` / `label N`
-pairs instead, giving users the ergonomic `break 'outer` syntax across
-iterator boundaries without needing to know about the low-level
-mechanism. The compiler already knows the loop nesting structure, so it
-can allocate label numbers and emit the right pairs automatically.
+Labeled `break` across exec block boundaries now compiles to
+`jump`/`label` pairs. The parser tracks `outerLoopLabels` across exec
+block boundaries via `enterExecBlock()`. `BreakStmt.CrossBoundary`
+marks these breaks, which emit `@jumpbreak` placeholders patched by
+`patchJumpBreakPlaceholders` to `jump <compiler_label>` with a
+matching `label` after the target loop.
 
 ### Computed goto for persistent state machines
 

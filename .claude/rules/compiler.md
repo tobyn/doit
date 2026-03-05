@@ -131,23 +131,27 @@ extending to `)`, and trailing commas continuing to the next line.
 **Positional arg separators**: Commas between positional args are
 required in both parenthesized and unparenthesized call forms.
 
-**Control flow placeholders**: `@break`, `@continue`, and `@return`
-are placeholder opcodes in intermediate frames. In loops, `@break` is
-patched to jump past the enclosing loop. `@continue` is patched to
-jump to the loop's back-edge target: `frameRef(loopStart)` for
-infinite loops and while, `frameRef(incrFrame)` for counted loops,
+**Control flow placeholders**: `@break`, `@continue`, `@return`, and
+`@jumpbreak` are placeholder opcodes in intermediate frames. In loops,
+`@break` is patched to jump past the enclosing loop. `@continue` is
+patched to jump to the loop's back-edge target: `frameRef(loopStart)`
+for infinite loops and while, `frameRef(incrFrame)` for counted loops,
 and `false` (re-dispatch) for iterator-backed for loops. In
 iterator-backed loops, unlabeled `@break` is patched to `"last"`
 (stops the iterator) by `patchUnlabeledBreakToLast`, while labeled
 breaks still jump past the loop. In exec blocks, `@break` is patched
 to exit the block: detached blocks get `set_reg false false` with
 `"next": false` (re-dispatch); bridging blocks get `set_reg false
-false` patched to the join point. `@return` is patched to jump past
-the function expansion. All three are patched to `set_reg false
-false` with appropriate `"next"` targets. `@continue` in yield-based
-iterators is handled by `YieldBodyStmt`: a bridge noop is emitted
-after the inlined caller body, and `@continue` is patched to jump to
-it.
+false` patched to the join point. `@jumpbreak` is emitted for
+cross-exec-block-boundary labeled breaks (`BreakStmt.CrossBoundary`);
+`patchJumpBreakPlaceholders` replaces them with `jump` instructions
+targeting a compiler-generated label, and emits a matching `label`
+after the target loop. `@return` is patched to jump past the function
+expansion. `@break`, `@continue`, and `@return` are patched to
+`set_reg false false` with appropriate `"next"` targets. `@continue`
+in yield-based iterators is handled by `YieldBodyStmt`: a bridge noop
+is emitted after the inlined caller body, and `@continue` is patched
+to jump to it.
 
 **Iterator helpers**: Shared helpers reduce duplication across the
 five iterator emitters (`emitStateMachineIter`, `emitInstructionIter`,

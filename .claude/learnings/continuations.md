@@ -38,9 +38,11 @@ form. `{ var -> body }` (Kotlin binding) is always collapsed since
 
 ## `break` and `last` in exec blocks
 
-Exec blocks are a hard boundary for `break`. `loopDepth` and
-`loopLabels` are saved/reset at exec block entry (`execBlockDepth`
-tracks nesting). `break` inside an exec block means "exit this block":
+Exec blocks reset `loopDepth` and `loopLabels` at entry via
+`enterExecBlock()` (which also merges current labels into
+`outerLoopLabels` for cross-boundary break support).
+
+Unlabeled `break` inside an exec block means "exit this block":
 
 - **Detached blocks**: `@break` → `set_reg false false` with
   `"next": false` (re-dispatches to the iterator, does NOT stop it).
@@ -49,8 +51,13 @@ tracks nesting). `break` inside an exec block means "exit this block":
 - **Bridging blocks**: `@break` → `set_reg false false` patched to
   the join point (same as normal block completion).
 
-Labeled `break` from inside an exec block targeting an outer loop is
-a parse error (unknown label — the labels are not visible).
+Labeled `break` from inside an exec block targeting an outer loop
+compiles to `jump`/`label` pairs (cross-boundary break). The parser
+checks `outerLoopLabels` when `loopLabels` doesn't have the label
+and sets `BreakStmt.CrossBoundary = true`. The emitter produces
+`@jumpbreak` placeholders, which `patchJumpBreakPlaceholders`
+replaces with `jump <compiler_label>` instructions. A matching
+`label <compiler_label>` is emitted after the target loop.
 
 ## Value arguments in exec binding arg lists
 

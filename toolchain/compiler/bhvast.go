@@ -1803,16 +1803,7 @@ func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) (
 		for _, name := range params {
 			syms.declareVar(name, false)
 		}
-		savedLoopDepth := p.loopDepth
-		savedLoopLabels := p.loopLabels
-		p.loopDepth = 0
-		p.loopLabels = map[string]bool{}
-		p.execBlockDepth++
-		defer func() {
-			p.loopDepth = savedLoopDepth
-			p.loopLabels = savedLoopLabels
-			p.execBlockDepth--
-		}()
+		defer p.enterExecBlock()()
 		return p.parseBhvStmtBlockInner(syms)
 	})
 }
@@ -1837,16 +1828,7 @@ func (p *parser) maybeParseBhvContinuationBlocksExpr(fn *fnDef, syms *symbolTabl
 		for _, name := range params {
 			syms.declareVar(name, false)
 		}
-		savedLoopDepth := p.loopDepth
-		savedLoopLabels := p.loopLabels
-		p.loopDepth = 0
-		p.loopLabels = map[string]bool{}
-		p.execBlockDepth++
-		defer func() {
-			p.loopDepth = savedLoopDepth
-			p.loopLabels = savedLoopLabels
-			p.execBlockDepth--
-		}()
+		defer p.enterExecBlock()()
 		return p.parseBhvStmtBlockInner(syms, true) // exprTail=true
 	})
 	if err != nil {
@@ -1890,16 +1872,7 @@ func (p *parser) maybeParseBhvLocalBlocks(frame map[string]any, syms *symbolTabl
 		for _, name := range params {
 			syms.declareVar(name, false)
 		}
-		savedLoopDepth := p.loopDepth
-		savedLoopLabels := p.loopLabels
-		p.loopDepth = 0
-		p.loopLabels = map[string]bool{}
-		p.execBlockDepth++
-		defer func() {
-			p.loopDepth = savedLoopDepth
-			p.loopLabels = savedLoopLabels
-			p.execBlockDepth--
-		}()
+		defer p.enterExecBlock()()
 		return p.parseBhvStmtBlockInner(syms)
 	})
 }
@@ -1923,16 +1896,7 @@ func (p *parser) maybeParseBhvLocalBlocksExpr(frame map[string]any, syms *symbol
 		for _, name := range params {
 			syms.declareVar(name, false)
 		}
-		savedLoopDepth := p.loopDepth
-		savedLoopLabels := p.loopLabels
-		p.loopDepth = 0
-		p.loopLabels = map[string]bool{}
-		p.execBlockDepth++
-		defer func() {
-			p.loopDepth = savedLoopDepth
-			p.loopLabels = savedLoopLabels
-			p.execBlockDepth--
-		}()
+		defer p.enterExecBlock()()
 		return p.parseBhvStmtBlockInner(syms, true) // exprTail=true
 	})
 	if err != nil {
@@ -2554,19 +2518,24 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				return nil, p.errorf(tok.pos, "'break' outside of loop or exec block")
 			}
 			label := ""
+			crossBoundary := false
 			peek, err := p.next()
 			if err != nil {
 				return nil, err
 			}
 			if peek.kind == tokLabel {
-				if !p.loopLabels[peek.val] {
+				if p.loopLabels[peek.val] {
+					label = peek.val
+				} else if p.outerLoopLabels[peek.val] {
+					label = peek.val
+					crossBoundary = true
+				} else {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
 				}
-				label = peek.val
 			} else {
 				p.unget(peek)
 			}
-			stmt := &BreakStmt{Label: label, Comment: comment}
+			stmt := &BreakStmt{Label: label, CrossBoundary: crossBoundary, Comment: comment}
 			stmts = append(stmts, stmt)
 			terminal = stmt
 			continue
@@ -3134,11 +3103,15 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 			}
 
 		case *BreakStmt:
-			f := map[string]any{"op": "@break"}
-			if s.Label != "" {
-				f["label"] = s.Label
+			if s.CrossBoundary {
+				b.emit(map[string]any{"op": "@jumpbreak", "label": s.Label})
+			} else {
+				f := map[string]any{"op": "@break"}
+				if s.Label != "" {
+					f["label"] = s.Label
+				}
+				b.emit(f)
 			}
-			b.emit(f)
 
 		case *ContinueStmt:
 			b.emit(map[string]any{"op": "@continue"})
@@ -3210,13 +3183,17 @@ func (p *parser) emitBhvIfBreak(s *IfStmt, b *frameBuilder, syms *symbolTable) e
 	}
 	stripFallThrough(b, checkStart, checkCount)
 
-	// Emit @break placeholder
-	breakFrame := map[string]any{"op": "@break"}
-	breakLabel := s.Body[0].(*BreakStmt).Label
-	if breakLabel != "" {
-		breakFrame["label"] = breakLabel
+	// Emit break placeholder
+	bs := s.Body[0].(*BreakStmt)
+	if bs.CrossBoundary {
+		b.emit(map[string]any{"op": "@jumpbreak", "label": bs.Label})
+	} else {
+		breakFrame := map[string]any{"op": "@break"}
+		if bs.Label != "" {
+			breakFrame["label"] = bs.Label
+		}
+		b.emit(breakFrame)
 	}
-	b.emit(breakFrame)
 
 	return nil
 }

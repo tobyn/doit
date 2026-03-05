@@ -2261,6 +2261,7 @@ behavior a { f }`
 	})
 
 	t.Run("labeled_break_across_exec_boundary", func(t *testing.T) {
+		// Cross-boundary break compiles to jump/label pair
 		src := `
 fn my_iter(e) exec(body) {
     instruction "for_component" {
@@ -2276,12 +2277,19 @@ behavior a {
         }
     }
 }`
-		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "unknown loop label") {
+		obj, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
+		}
+		// Verify the output contains jump and label instructions
+		v := obj.Value.(map[string]any)
+		data, _ := json.Marshal(v)
+		s := string(data)
+		if !strings.Contains(s, `"op":"jump"`) {
+			t.Fatal("expected jump instruction for cross-boundary break")
+		}
+		if !strings.Contains(s, `"op":"label"`) {
+			t.Fatal("expected label instruction for cross-boundary break")
 		}
 	})
 

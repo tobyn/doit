@@ -184,7 +184,8 @@ type parser struct {
 	evalStepLimit  int                               // step limit for compile-time evaluation
 	loopDepth      int              // >0 when inside a loop body
 	execBlockDepth int              // >0 when inside an exec block body
-	loopLabels  map[string]bool  // labels of enclosing loops
+	loopLabels      map[string]bool // labels of enclosing loops
+	outerLoopLabels map[string]bool // labels of loops beyond exec block boundaries
 	warnings    []string         // compiler warnings (non-fatal)
 
 	// callExprParser is set by behavior/fn body contexts to enable
@@ -234,6 +235,36 @@ func (p *parser) exitLoop(label string) {
 	p.loopDepth--
 	if label != "" {
 		delete(p.loopLabels, label)
+	}
+}
+
+// enterExecBlock saves and resets loop state for an exec block boundary.
+// Current loopLabels and outerLoopLabels are merged into a new
+// outerLoopLabels so that cross-boundary `break 'label` can find them.
+// Returns a restore function for use with defer.
+func (p *parser) enterExecBlock() func() {
+	savedLoopDepth := p.loopDepth
+	savedLoopLabels := p.loopLabels
+	savedOuterLoopLabels := p.outerLoopLabels
+
+	newOuter := map[string]bool{}
+	for k := range p.outerLoopLabels {
+		newOuter[k] = true
+	}
+	for k := range p.loopLabels {
+		newOuter[k] = true
+	}
+
+	p.outerLoopLabels = newOuter
+	p.loopDepth = 0
+	p.loopLabels = map[string]bool{}
+	p.execBlockDepth++
+
+	return func() {
+		p.loopDepth = savedLoopDepth
+		p.loopLabels = savedLoopLabels
+		p.outerLoopLabels = savedOuterLoopLabels
+		p.execBlockDepth--
 	}
 }
 
