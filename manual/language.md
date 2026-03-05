@@ -1847,13 +1847,14 @@ expression.
 
 ```doit
 behavior a {
-    label "start"
+    label 1
     notify "hello"
-    jump "start"
+    jump 1
 }
 ```
 
-The label value can be any expression — strings, numbers, or variables:
+The label value can be any expression — numbers, variables, or type
+constructors:
 
 ```doit
 behavior a {
@@ -1864,12 +1865,41 @@ behavior a {
 }
 ```
 
+Number literals are the simplest choice for static jump targets. Use a
+variable when the target must be computed at runtime.
+
+`jump` can break out of looping instructions like `for_number` — including
+nested loops. The VM follows the jump unconditionally, abandoning any
+active iterators:
+
+```doit
+for i in Range(0, 100) {
+    for j in Range(0, 100) {
+        if i == 5 {
+            if j == 3 {
+                jump 1      # escapes both loops
+            }
+        }
+        notify "inner"
+    }
+}
+label 1
+notify "escaped"
+```
+
 `jump` is terminal — the compiler warns about unreachable code after it.
 It works in both behavior bodies and function bodies.
 
 > **Note:** `jump` and `label` are low-level goto primitives. The
 > compiler cannot verify that a matching label exists. Use structured
 > control flow (`while`, `loop`, `for`) when possible.
+
+> **Caution:** String literals like `"start"` compile into the
+> instruction's value slot, which the VM interprets as a **variable
+> name**. Because no variable named `start` exists, both `jump` and
+> `label` see an empty register and silently match on emptiness — every
+> `jump` lands on the first `label` regardless of the string used. Use
+> number literals or variables instead.
 
 ### `last`
 

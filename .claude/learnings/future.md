@@ -181,3 +181,51 @@ separate behavior in the player's list) mean it should be an explicit
 choice rather than a default compilation strategy.
 
 Post-1.0. The `call` stub has been removed from the stdlib.
+
+## Jump/label applications
+
+Verified in-game: `jump` escapes `for_number` loop bodies (including
+nested loops), variables survive the jump, and the VM abandons active
+iterators cleanly. These primitives enable several improvements.
+
+### Multi-level loop break
+
+Labeled `break` can't cross exec block boundaries — that's a hard
+compiler limitation because `break` compiles to structured control
+flow. `jump`/`label` operate at the VM level and don't care about
+block boundaries.
+
+For nested `for...in` loops, a labeled `break` on the outer loop is
+currently a compile error. The compiler could emit `jump N` / `label N`
+pairs instead, giving users the ergonomic `break 'outer` syntax across
+iterator boundaries without needing to know about the low-level
+mechanism. The compiler already knows the loop nesting structure, so it
+can allocate label numbers and emit the right pairs automatically.
+
+### Computed goto for persistent state machines
+
+Jump/label with a variable stored in a **parameter** (which persists
+across ticks) enables computed-goto state machines. A behavior can
+store its current state as a label number in a parameter and `jump` to
+it on entry, replacing chains of `if`/`else if` or `check_number`.
+
+```
+behavior patrol_fsm {
+    @param inout state "State"
+    if state { jump state }
+
+    # Initial state: patrol
+    label 1
+    domove $waypoint
+    state = 2
+    exit
+
+    # State 2: engage
+    label 2
+    ...
+}
+```
+
+This is a user-facing pattern (not a compiler feature) but worth
+documenting. Useful for behaviors that need to resume mid-sequence
+across ticks without re-evaluating from the top.

@@ -1621,49 +1621,96 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 	// Record body start for break patching
 	origLen := len(ctx.b.frames)
 
-	// Emit dispatch chain and yield blocks
-	for i := 0; i < N; i++ {
-		yield := it.astBody[i].(*YieldStmt)
-		checkIdx := -1
-
-		// Emit check_number for all but the last yield (catch-all)
-		if i < N-1 {
-			check := map[string]any{
-				"op":        "check_number",
-				checkValue:  stateVar,
-				checkTarget: map[string]any{"num": i},
-			}
-			checkIdx = ctx.b.emit(check)
-		}
-
-		// Emit yield value assignments
+	if N == 1 {
+		// Single yield — no dispatch needed, emit directly
+		yield := it.astBody[0].(*YieldStmt)
 		for j, expr := range yield.Values {
-			var outputReg any
 			if j < len(iterVarRegs) {
-				outputReg = iterVarRegs[j]
-			} else {
-				continue
+				if err := p.emitExprTo(expr, iterVarRegs[j], ctx.b, iterParamMap, ctx.usedVars, "", 0); err != nil {
+					ctx.popScope()
+					return err
+				}
 			}
-			if err := p.emitExprTo(expr, outputReg, ctx.b, iterParamMap, ctx.usedVars, "", 0); err != nil {
-				ctx.popScope()
-				return err
+		}
+		if err := ctx.emitBody(s.Body); err != nil {
+			ctx.popScope()
+			return err
+		}
+		lastIdx := ctx.b.pos() - 1
+		ctx.b.frames[lastIdx]["next"] = false
+	} else {
+		// N > 1: single-body yield compilation with jump/label
+		dispatchVar := allocUniqueVar("@jmp", ctx.usedVars)
+		baseLabel := ctx.b.allocLabels(N + 1)
+		bodyLabelNum := baseLabel + N
+
+		for i := 0; i < N; i++ {
+			yield := it.astBody[i].(*YieldStmt)
+			checkIdx := -1
+
+			// Emit check_number for all but the last yield (catch-all)
+			if i < N-1 {
+				check := map[string]any{
+					"op":        "check_number",
+					checkValue:  stateVar,
+					checkTarget: map[string]any{"num": i},
+				}
+				checkIdx = ctx.b.emit(check)
+			}
+
+			// Emit yield value assignments
+			for j, expr := range yield.Values {
+				if j < len(iterVarRegs) {
+					if err := p.emitExprTo(expr, iterVarRegs[j], ctx.b, iterParamMap, ctx.usedVars, "", 0); err != nil {
+						ctx.popScope()
+						return err
+					}
+				}
+			}
+
+			// Set dispatch var to this yield's resume label
+			ctx.b.emit(map[string]any{
+				"op": "set_reg",
+				"1":  compilerLabel(baseLabel + i),
+				"2":  dispatchVar,
+			})
+
+			// Jump to shared body
+			ctx.b.emit(map[string]any{
+				"op": "jump",
+				"1":  compilerLabel(bodyLabelNum),
+			})
+
+			// Resume label (reached after body executes jump @jmp)
+			ctx.b.emit(map[string]any{
+				"op":   "label",
+				"1":    compilerLabel(baseLabel + i),
+				"next": false,
+			})
+
+			// Patch checkLarger to point to the next frame
+			if checkIdx >= 0 {
+				ctx.b.frames[checkIdx][checkLarger] = frameRef(ctx.b.pos())
 			}
 		}
 
-		// Emit caller's for-loop body
+		// Shared body label
+		ctx.b.emit(map[string]any{
+			"op": "label",
+			"1":  compilerLabel(bodyLabelNum),
+		})
+
+		// Emit body ONCE
 		if err := ctx.emitBody(s.Body); err != nil {
 			ctx.popScope()
 			return err
 		}
 
-		// Set next: false on the last body frame (detached — VM re-dispatches)
-		lastIdx := ctx.b.pos() - 1
-		ctx.b.frames[lastIdx]["next"] = false
-
-		// Patch checkLarger to point to the next frame (after this yield block)
-		if checkIdx >= 0 {
-			ctx.b.frames[checkIdx][checkLarger] = frameRef(ctx.b.pos())
-		}
+		// Return to resume point
+		ctx.b.emit(map[string]any{
+			"op": "jump",
+			"1":  dispatchVar,
+		})
 	}
 
 	afterLoop := frameRef(ctx.b.pos())

@@ -1,0 +1,23 @@
+# AI-generated test
+# Two static sequence iterators in one behavior to validate label uniqueness
+iter colors() -> val {
+    yield 1
+    yield 2
+}
+
+iter shapes() -> val {
+    yield 10
+    yield 20
+}
+
+behavior for_iter_static_seq_dual_loop {
+    @name "For Iter Static Seq Dual Loop"
+
+    for c in colors() {
+        notify "color"
+    }
+
+    for s in shapes() {
+        notify "shape"
+    }
+}

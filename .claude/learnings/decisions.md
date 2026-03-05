@@ -366,8 +366,15 @@ instead of `fn...exec`. Key decisions:
   0 through N-1. `for_number` was chosen because the VM tracks its
   state across ticks natively — one instruction handles all the per-tick
   counter management instead of manual counter + comparison + increment.
-  For N=1, no dispatch check is emitted (single yield is the catch-all).
-  For N>1, N-1 `check_number` frames route each state to its yield block.
+  For N=1, no dispatch check is emitted (single yield is the catch-all)
+  and the body is emitted inline once. For N>1, single-body yield
+  compilation is used: each yield's setup code sets a dispatch variable
+  (`@jmp`) to its resume label, jumps to a shared body label, and
+  resumes via `jump @jmp` after the body executes. The body is emitted
+  once instead of N times. Labels use compiler-generated composite
+  values (`{id: "v_letter_L", num: -1000001-n}`) allocated via
+  `frameBuilder.allocLabels` to ensure uniqueness across multiple
+  loops in the same behavior.
 
 ## `'` sigil for instruction-level local blocks
 
@@ -379,6 +386,28 @@ loop labels). Rationale: `instruction` should be the clean boundary
 between the VM and language constructs, able to express everything the
 VM does without the function layer. Local blocks complete this by
 adding branching capability directly to `instruction`.
+
+## `jump` and `label` value semantics
+
+`jump` and `label` both take a value slot that the VM interprets as a
+**register reference**. String literals like `"start"` compile into the
+slot as-is, but the VM reads them as variable names — since no variable
+named `start` typically exists, both instructions see an empty register
+and silently match on emptiness. Every `jump` would land on the first
+`label` regardless of the string used.
+
+Number literals work correctly because they compile to `{"num": N}`
+values, which the VM compares by value. Use numbers for static jump
+targets and variables for dynamic ones.
+
+Verified in-game: `jump` successfully escapes `for_number` loop bodies,
+including nested loops. The VM follows the jump unconditionally and
+abandons any active iterators. Variables set before the jump retain
+their values.
+
+When no matching `label` exists, `jump` follows its `next` field
+(falls through to the next instruction) rather than halting. Verified
+in-game.
 
 ## `iterator_instruction` keyword
 

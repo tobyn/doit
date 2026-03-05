@@ -4,13 +4,13 @@
       "num": 0
     },
     "1": {
-      "num": 2
+      "num": 1
     },
     "2": {
       "num": 1
     },
     "3": "@sm",
-    "4": 19,
+    "4": 14,
     "op": "for_number"
   },
   "1": {
@@ -25,7 +25,7 @@
     "0": {
       "num": 1
     },
-    "1": "v",
+    "1": "c",
     "op": "set_reg"
   },
   "3": {
@@ -39,7 +39,7 @@
   "4": {
     "0": {
       "id": "v_letter_L",
-      "num": -1000004
+      "num": -1000003
     },
     "op": "jump"
   },
@@ -52,91 +52,146 @@
     "op": "label"
   },
   "6": {
-    "0": 12,
-    "2": "@sm",
-    "3": {
-      "num": 1
-    },
-    "op": "check_number"
-  },
-  "7": {
     "0": {
       "num": 2
     },
-    "1": "v",
+    "1": "c",
+    "op": "set_reg"
+  },
+  "7": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000002
+    },
+    "1": "@jmp",
     "op": "set_reg"
   },
   "8": {
     "0": {
       "id": "v_letter_L",
-      "num": -1000002
+      "num": -1000003
     },
-    "1": "@jmp",
-    "op": "set_reg"
+    "op": "jump"
   },
   "9": {
     "0": {
       "id": "v_letter_L",
-      "num": -1000004
-    },
-    "op": "jump"
-  },
-  "10": {
-    "0": {
-      "id": "v_letter_L",
       "num": -1000002
     },
     "next": false,
     "op": "label"
   },
-  "11": {
-    "0": {
-      "num": 3
-    },
-    "1": "v",
-    "op": "set_reg"
-  },
-  "12": {
+  "10": {
     "0": {
       "id": "v_letter_L",
       "num": -1000003
     },
-    "1": "@jmp",
-    "op": "set_reg"
+    "op": "label"
+  },
+  "11": {
+    "op": "notify",
+    "txt": "color"
+  },
+  "12": {
+    "0": "@jmp",
+    "op": "jump"
   },
   "13": {
+    "0": {
+      "num": 0
+    },
+    "1": {
+      "num": 1
+    },
+    "2": {
+      "num": 1
+    },
+    "3": "@sm_2",
+    "4": 27,
+    "op": "for_number"
+  },
+  "14": {
+    "0": 20,
+    "2": "@sm_2",
+    "3": {
+      "num": 0
+    },
+    "op": "check_number"
+  },
+  "15": {
+    "0": {
+      "num": 10
+    },
+    "1": "s",
+    "op": "set_reg"
+  },
+  "16": {
     "0": {
       "id": "v_letter_L",
       "num": -1000004
     },
-    "op": "jump"
+    "1": "@jmp_2",
+    "op": "set_reg"
   },
-  "14": {
+  "17": {
     "0": {
       "id": "v_letter_L",
-      "num": -1000003
+      "num": -1000006
+    },
+    "op": "jump"
+  },
+  "18": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000004
     },
     "next": false,
     "op": "label"
   },
-  "15": {
+  "19": {
+    "0": {
+      "num": 20
+    },
+    "1": "s",
+    "op": "set_reg"
+  },
+  "20": {
     "0": {
       "id": "v_letter_L",
-      "num": -1000004
+      "num": -1000005
+    },
+    "1": "@jmp_2",
+    "op": "set_reg"
+  },
+  "21": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000006
+    },
+    "op": "jump"
+  },
+  "22": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000005
+    },
+    "next": false,
+    "op": "label"
+  },
+  "23": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000006
     },
     "op": "label"
   },
-  "16": {
+  "24": {
     "op": "notify",
-    "txt": "got"
+    "txt": "shape"
   },
-  "17": {
-    "0": "@jmp",
+  "25": {
+    "0": "@jmp_2",
     "op": "jump"
   },
-  "18": {
-    "op": "notify",
-    "txt": "done"
-  },
-  "name": "For Iter Static Seq"
+  "name": "For Iter Static Seq Dual Loop"
 }

@@ -600,9 +600,24 @@ const (
 type frameRef int
 
 type frameBuilder struct {
-	frames []map[string]any
-	cursor int
-	mode   execMode
+	frames    []map[string]any
+	cursor    int
+	mode      execMode
+	nextLabel int
+}
+
+// allocLabels reserves n label indices and returns the base index.
+func (b *frameBuilder) allocLabels(n int) int {
+	base := b.nextLabel
+	b.nextLabel += n
+	return base
+}
+
+// compilerLabel returns a composite register value for a compiler-
+// generated label. Uses v_letter_L + large negative numbers to avoid
+// collision with user labels.
+func compilerLabel(n int) map[string]any {
+	return map[string]any{"id": "v_letter_L", "num": -1000001 - n}
 }
 
 func (b *frameBuilder) emit(f map[string]any) int {
