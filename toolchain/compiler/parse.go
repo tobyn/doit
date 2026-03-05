@@ -1978,7 +1978,13 @@ func (p *parser) emitFnBodyInstructionExprWithBlocks(e *InstructionExpr, retVals
 // emitFnBody emits frames for an AST body during call expansion.
 func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	collectASTOutputVars(stmts, paramMap, usedVars)
+	return p.emitFnBodyCore(stmts, b, paramMap, usedVars, comment, pos)
+}
 
+// emitFnBodyCore emits fn body statements without pre-scanning for output
+// variables. Used by YieldBodyStmt to emit the caller's loop body without
+// renaming caller-scope variables.
+func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	for _, stmt := range stmts {
 		switch s := stmt.(type) {
 		case *InstructionStmt:
@@ -2231,7 +2237,9 @@ func (p *parser) emitFnBody(stmts []Stmt, b *frameBuilder, paramMap map[string]a
 
 		case *YieldBodyStmt:
 			bodyStart := b.pos()
-			if err := p.emitFnBody(s.Body, b, paramMap, usedVars, comment, pos); err != nil {
+			// Use emitFnBodyCore (no pre-scan) — the caller body references
+			// behavior-level variables that must not be renamed.
+			if err := p.emitFnBodyCore(s.Body, b, paramMap, usedVars, comment, pos); err != nil {
 				return err
 			}
 			// If the body contains @continue placeholders, emit a bridge noop

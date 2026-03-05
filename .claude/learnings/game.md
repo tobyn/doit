@@ -175,6 +175,15 @@ Instructions are the nodes in the behavior graph. Each has:
 Conditional instructions have multiple output paths. In the compiled
 JSON, these map to numbered exec slots containing jump targets.
 
+**Missing exec slots cause fall-through**: When a conditional instruction
+(e.g., `check_number`, `compare_register`) has an exec slot omitted from
+the JSON, taking that branch causes the VM to fall through to the next
+frame in sequence. This is NOT a restart — it's equivalent to having the
+slot point to `currentFrame + 1`. The compiler's `stripFallThrough`
+optimization relies on this: it removes exec/next slots that explicitly
+point to the immediately following frame, producing smaller output with
+identical behavior. Verified in-game via existing test cases.
+
 The `check_number` instruction ("Compare Number" in the game UI) is a
 3-way branch that compares the numeric part of two registers. It takes
 two inputs: a value (slot `"2"`) and a comparison target (slot `"3"`).

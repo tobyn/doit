@@ -185,6 +185,7 @@ type parser struct {
 	evalStepLimit  int                               // step limit for compile-time evaluation
 	loopDepth      int              // >0 when inside a loop body
 	execBlockDepth int              // >0 when inside an exec block body
+	forNumberDepth int              // >0 when inside a for_number-backed loop body
 	loopLabels      map[string]bool // labels of enclosing loops
 	outerLoopLabels map[string]bool // labels of loops beyond exec block boundaries
 	warnings    []string         // compiler warnings (non-fatal)

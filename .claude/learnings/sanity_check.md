@@ -180,6 +180,16 @@ exit
 - Control flow in function bodies (while, if/else if/else, early return)
 - Transitive function calls (function A calling function B)
 
+## Workflow Notes
+
+- **Compiled behavior strings go in `scratch/`**: Write base62 output to
+  `scratch/*.b62` files, not terminal output. Terminal copying is painful
+  for the developer.
+- **Never use `2>&1` when compiling to `.b62` files**: Compiler warnings
+  go to stderr. Using `2>&1` merges them into the base62 output,
+  corrupting it silently (the game imports garbage without error).
+  Use `2>/dev/null` to suppress warnings or omit the redirect entirely.
+
 ## Past Sanity Checks
 
 ### Pre-1.0 (March 2026)
@@ -202,3 +212,36 @@ exit
   types 0 into a parameter field. No expressiveness gap exists.
 
 See `game.md` "Empty vs Numeric Zero" for the full VM register model.
+
+### Penultimate (March 2026) — PASSED
+
+66-test sanity check covering the full language. All 66 tests pass
+in-game (Result = 20 for tests 47-66, previously verified 1-46).
+
+**Identified and fixed bugs**:
+
+- **stripFallThrough + eliminateNoopBridges interaction**: check frame
+  branches pointing to noop bridge frames were stripped, then lost when
+  the bridge was eliminated. Fix: Phase 4 of `eliminateNoopBridges`
+  restores stripped branch slots.
+- **Variable renaming in iterator inlining**: `emitFnBody` renamed
+  caller-scope variables inside `YieldBodyStmt`. Fix: split into
+  `emitFnBody` + `emitFnBodyCore`; yield uses the no-scan variant.
+- **Nested `for_number` re-dispatch conflict**: Inner body's `next:false`
+  hit outer for_number first. Fix: `forNumberDepth` tracking +
+  `emitForStmtRangeManual` (manual counter with explicit back-edges).
+- **0-based slot keys in `emitForStmtRangeManual`**: Instruction slot
+  keys ("0","1","2") matched stdlib comment format (reference JS encoder)
+  instead of compiler's 1-based convention ("1","2","3"). Key "0" falls
+  into Lua's hash part, making frames unreliable. Fix: use 1-based keys
+  and slot constants (`checkLarger`, `checkSmaller`, etc.).
+- **Inner manual counter afterLoop exiting outer loop**: The detach noop
+  was emitted with `"next": false` and `afterLoop` pointed past it — the
+  same position as the outer for_number's done target. Inner loop
+  completion exited both loops. Fix: emit detach noop without `"next"`
+  (natural fall-through) and set `afterLoop` to point TO the noop. The
+  outer for_number sets `"next": false` on it when appropriate; noop
+  elimination resolves correctly in both cases.
+- **Namespace-qualified iterator bug**: `parseForStmt()` wasn't calling
+  `resolveFnName()` for iterator lookup. Fixed by adding namespace
+  resolution.

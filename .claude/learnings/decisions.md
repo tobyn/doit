@@ -125,6 +125,14 @@ this model, which would be surprising under `check_number` semantics.
 use `check_number` (3-way branch). Equality comparisons (`==`, `!=`)
 use `compare_register` (2-way) for full register composite equality.
 
+**Constant-folded boolean truthiness**: When a boolean expression is
+fully constant-folded (e.g., `const CF_CMP = 5 > 3`), it becomes
+`{"num": 1}` (true) or `false`. Using it in `if CF_CMP` compiles to
+`compare_register {"num": 1}, false` — this is correct. The VM treats
+"different" (exec 0) as the truthy branch. With `stripFallThrough`,
+the exec 0 slot is removed when the truthy branch is the next frame,
+relying on VM fall-through. This pattern was verified in-game.
+
 **Type check (`is` / `!is`)**: `is Number` is not supported because
 `value_type` cannot distinguish numbers from null. `!is` is a shorthand
 for negated type checks — `x !is Unit` compiles identically to
@@ -207,9 +215,16 @@ path). Labeled `break` across an exec block boundary is a parse error
 
 ## Range `for` loops — `for_number` emission
 
-Both emission paths compile to the VM's `for_number` instruction:
+Three emission paths:
 - **Literal Range** (`emitForStmtRange`): Evaluates start/stop/step
   from the constructor args, emits a single `for_number` frame.
+- **Nested literal Range** (`emitForStmtRangeManual`): When
+  `forNumberDepth > 0`, emits manual counter instructions. Uses
+  1-based slot keys and slot constants (not 0-based like stdlib
+  comments). The detach noop after the add frame is emitted WITHOUT
+  `"next"` — `afterLoop` points TO the noop so noop elimination
+  resolves it correctly based on context (re-dispatch when last in
+  outer body, fall-through otherwise).
 - **Variable Range** (`emitForStmtRuntime`): Decomposes with
   `separate_register`, then emits `for_number`. No step sign check
   needed — `for_number` handles direction natively.

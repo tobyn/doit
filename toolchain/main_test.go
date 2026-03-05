@@ -4692,6 +4692,73 @@ behavior main {
 		}
 	})
 
+	t.Run("namespace_qualified_iterator", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main {
+	for comp, idx in lib.each_comp() {
+		notify "found", value: comp
+	}
+}`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`iter each_comp() -> comp, idx {
+	instruction "for_component" {
+		0: comp
+		1: idx
+		done: 2
+	}
+}`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_qualified_iterator_in_fn_body", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+fn do_scan() {
+	for comp, idx in lib.each_comp() {
+		notify "found", value: comp
+	}
+}
+behavior main { do_scan }`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`iter each_comp() -> comp, idx {
+	instruction "for_component" {
+		0: comp
+		1: idx
+		done: 2
+	}
+}`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("namespace_qualified_static_iterator", func(t *testing.T) {
+		sourceFS := fstest.MapFS{
+			"main.doit": &fstest.MapFile{Data: []byte(`import "./lib" as lib
+behavior main {
+	for v in lib.things() {
+		notify "got", value: v
+	}
+}`)},
+			"lib.doit": &fstest.MapFile{Data: []byte(`iter things() -> val {
+	yield 10
+	yield 20
+}`)},
+		}
+		src, _ := sourceFS.ReadFile("main.doit")
+		_, _, err := compiler.CompileString(string(src), stdlib, "", "", sourceFS, "main.doit")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	// --- Constant import tests ---
 
 	t.Run("named_import_const", func(t *testing.T) {

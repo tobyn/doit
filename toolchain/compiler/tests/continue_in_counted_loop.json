@@ -16,6 +16,7 @@
     "op": "check_number"
   },
   "2": {
+    "0": 5,
     "1": -4,
     "2": false,
     "op": "compare_register"

@@ -15,6 +15,10 @@ register types.
 
 ## 1.0 burndown
 
+- ~~**Namespace qualification parity**~~ — Fixed. `for...in` now
+  supports namespace-qualified iterators (`for v in lib.my_iter()`).
+  Audit confirmed no other gaps: functions, constants, enums, and
+  iterators all resolve through `resolveFnName` in all contexts.
 - **Move tests into packages** — compiler tests in `compiler/`, codec
   tests in `codec/`. Only integration wiring tests stay in `main`.
 - **Error message quality** — review compiler errors for clarity and

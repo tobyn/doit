@@ -1432,7 +1432,6 @@ func (p *parser) emitWhileStmt(s *WhileStmt, ctx *emitContext, comment string) e
 		p.emitResolvedBoolFrames(resolved, trueBranch, falsePlaceholder, ctx.b, comment)
 	}
 	stripFallThrough(ctx.b, checkStart, checkCount)
-
 	origLen := len(ctx.b.frames)
 
 	ctx.pushScope()
@@ -2139,6 +2138,15 @@ func (p *parser) rewriteYieldToBody(iterBody []Stmt, callerBody []Stmt, outputs 
 // emitForStmtRange emits a for loop when the Range constructor is directly visible.
 // Compiles to a single for_number instruction frame.
 func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar string, ctx *emitContext, comment string) error {
+	// If we're inside another for_number loop, compile as a manual counter
+	// loop instead. Nested for_number instructions don't work correctly
+	// because the inner body's next:false re-dispatch hits the outer
+	// for_number first (lower frame number), advancing both counters on
+	// every inner iteration.
+	if p.forNumberDepth > 0 {
+		return p.emitForStmtRangeManual(s, ctor, iterVar, ctx, comment)
+	}
+
 	startVal, err := ctx.exprGetValue(ctor.Args[0], "")
 	if err != nil {
 		return err
@@ -2165,9 +2173,12 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 
 	origLen := len(ctx.b.frames)
 
+	p.forNumberDepth++
 	if err := ctx.emitBody(s.Body); err != nil {
+		p.forNumberDepth--
 		return err
 	}
+	p.forNumberDepth--
 
 	// Set "next": false on the last body frame (detached — VM re-dispatches)
 	lastIdx := ctx.b.pos() - 1
@@ -2191,9 +2202,125 @@ func (p *parser) emitForStmtRange(s *ForStmt, ctor *ConstructorExpr, iterVar str
 	return nil
 }
 
+// emitForStmtRangeManual emits a Range-based for loop using manual counter
+// instructions (set_number + check_number + add) instead of for_number.
+// Used for nested Range loops where the VM's re-dispatch model would cause
+// the outer for_number to advance on every inner iteration.
+func (p *parser) emitForStmtRangeManual(s *ForStmt, ctor *ConstructorExpr, iterVar string, ctx *emitContext, comment string) error {
+	startVal, err := ctx.exprGetValue(ctor.Args[0], "")
+	if err != nil {
+		return err
+	}
+	stopVal, err := ctx.exprGetValue(ctor.Args[1], "")
+	if err != nil {
+		return err
+	}
+	stepVal, err := ctx.exprGetValue(ctor.Args[2], "")
+	if err != nil {
+		return err
+	}
+
+	// Determine step direction for check_number branching.
+	stepPositive := false
+	if m, ok := stepVal.(map[string]any); ok {
+		if n, ok := m["num"].(int); ok {
+			if n == 0 {
+				return fmt.Errorf("Range step cannot be zero")
+			}
+			stepPositive = n > 0
+		} else {
+			return fmt.Errorf("nested Range loops require a compile-time constant step")
+		}
+	} else {
+		return fmt.Errorf("nested Range loops require a compile-time constant step")
+	}
+
+	// Initialize counter: set_number iterVar = startVal
+	ctx.b.emit(map[string]any{
+		"op": "set_number",
+		"2":  startVal,
+		"3":  iterVar,
+	})
+
+	// Check: check_number iterVar, stopVal
+	checkIdx := ctx.b.pos()
+	bodyRef := frameRef(checkIdx + 1)
+	donePlaceholder := frameRef(0)
+
+	checkFrame := map[string]any{
+		"op":          "check_number",
+		checkValue:    iterVar,
+		checkTarget:   stopVal,
+		"next":        bodyRef, // equal → body (inclusive range)
+	}
+	if stepPositive {
+		// Done when i > stop → larger branch
+		checkFrame[checkLarger] = donePlaceholder
+	} else {
+		// Done when i < stop → smaller branch
+		checkFrame[checkSmaller] = donePlaceholder
+	}
+	ctx.b.emit(checkFrame)
+
+	origLen := len(ctx.b.frames)
+
+	// Emit body (keep depth tracking for further nesting)
+	p.forNumberDepth++
+	if err := ctx.emitBody(s.Body); err != nil {
+		p.forNumberDepth--
+		return err
+	}
+	p.forNumberDepth--
+
+	// Increment: add iterVar += stepVal, then back-edge to check
+	incrIdx := ctx.b.pos()
+	ctx.b.emit(map[string]any{
+		"op":   "add",
+		"1":    iterVar,
+		"2":    stepVal,
+		"3":    iterVar,
+		"next": frameRef(checkIdx),
+	})
+
+	// Detach noop: absorbs outer for_number's "next: false" on the last
+	// body frame so the add frame's back-edge is preserved. Emitted without
+	// "next" — natural fall-through. When this IS the outer for_number's
+	// last body frame, the outer loop sets "next": false for re-dispatch.
+	// When it's NOT the last, it falls through to the next statement.
+	// Eliminated by eliminateNoopBridges.
+	detachIdx := ctx.b.pos()
+	ctx.b.emit(map[string]any{"op": "set_reg", "1": false, "2": false})
+
+	// Patch @continue → increment frame
+	patchContinuePlaceholders(ctx.b, origLen, frameRef(incrIdx))
+
+	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
+
+	// afterLoop points to the detach noop. After noop elimination,
+	// references resolve to the noop's target: false (re-dispatch) when
+	// this is the last body frame of the outer for_number, or the next
+	// statement otherwise.
+	afterLoop := frameRef(detachIdx)
+
+	// Patch done placeholder to afterLoop
+	if stepPositive {
+		ctx.b.frames[checkIdx][checkLarger] = afterLoop
+	} else {
+		ctx.b.frames[checkIdx][checkSmaller] = afterLoop
+	}
+
+	patchBreakPlaceholders(ctx.b, origLen, s.Label, afterLoop)
+
+	return nil
+}
+
 // emitForStmtRuntime emits a for loop where the range is a runtime value (Path C).
 // Decomposes the range with separate_register, then uses for_number.
 func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext, comment string) error {
+	if p.forNumberDepth > 0 {
+		return fmt.Errorf("nested Range loops with runtime range values are not supported; use Range(...) constructor")
+	}
+
 	rangeVal, err := ctx.exprGetValue(s.Range, "")
 	if err != nil {
 		return err
@@ -2220,9 +2347,12 @@ func (p *parser) emitForStmtRuntime(s *ForStmt, iterVar string, ctx *emitContext
 
 	origLen := len(ctx.b.frames)
 
+	p.forNumberDepth++
 	if err := ctx.emitBody(s.Body); err != nil {
+		p.forNumberDepth--
 		return err
 	}
+	p.forNumberDepth--
 
 	// Set "next": false on the last body frame (detached — VM re-dispatches)
 	lastIdx := ctx.b.pos() - 1
@@ -2698,17 +2828,22 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 		return p.parseIteratorInstruction(iterVars, lbl, comment, ctx, rangeTok)
 	}
 
-	// Check for iterator call
+	// Check for iterator call (including namespace-qualified: lib.my_iter)
 	if rangeTok.kind == tokIdent {
-		if it := p.iters[rangeTok.val]; it != nil {
+		resolvedName, fn, resolveErr := p.resolveFnName(rangeTok)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if it := p.iters[resolvedName]; it != nil {
 			// Validate iter var count
 			if len(iterVars) > len(it.outputs) {
 				return nil, p.errorf(iterTok.pos, "too many variables: %s yields %d value(s), but %d variable(s) bound",
-					rangeTok.val, len(it.outputs), len(iterVars))
+					resolvedName, len(it.outputs), len(iterVars))
 			}
 
-			// Parse iterator call args
-			iterArgs, iterKwArgs, err := p.parseIterCallArgs(it, rangeTok, ctx)
+			// Parse iterator call args (use resolved name token for error messages)
+			resolvedTok := token{kind: tokIdent, val: resolvedName, pos: rangeTok.pos}
+			iterArgs, iterKwArgs, err := p.parseIterCallArgs(it, resolvedTok, ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -2735,12 +2870,25 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 			return &ForStmt{
 				Label:      lbl,
 				IterVars:   iterVars,
-				IterName:   rangeTok.val,
+				IterName:   resolvedName,
 				IterArgs:   iterArgs,
 				IterKwArgs: iterKwArgs,
 				Body:       body,
 				Comment:    comment,
 			}, nil
+		}
+		// If resolveFnName consumed namespace tokens (qualified name), but it
+		// wasn't an iterator, error now — for...in only accepts iterators, Range,
+		// or variables holding Range values.
+		if resolvedName != rangeTok.val {
+			if fn != nil {
+				return nil, p.errorf(rangeTok.pos, "%q is a function, not an iterator; use 'iter' to declare iterators", resolvedName)
+			}
+			return nil, p.errorf(rangeTok.pos, "%q is not an iterator", resolvedName)
+		}
+		// Not a namespace-qualified name — check fn-as-iterator error
+		if fn != nil && fn.hasExec() {
+			return nil, p.errorf(rangeTok.pos, "%q is a function with exec blocks, not an iterator; use 'iter' to declare iterators", rangeTok.val)
 		}
 	}
 
@@ -2756,10 +2904,6 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 			return nil, err
 		}
 	} else if rangeTok.kind == tokIdent {
-		// Check if this is a regular fn being used with for...in (error)
-		if fn := p.fns[rangeTok.val]; fn != nil && fn.hasExec() {
-			return nil, p.errorf(rangeTok.pos, "%q is a function with exec blocks, not an iterator; use 'iter' to declare iterators", rangeTok.val)
-		}
 		resolved, err := ctx.resolve(rangeTok)
 		if err != nil {
 			return nil, err

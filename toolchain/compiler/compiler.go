@@ -792,14 +792,54 @@ func (b *frameBuilder) eliminateNoopBridges() {
 		}
 	}
 
-	// Phase 4: Fix fall-through predecessors. If a non-noop frame at
-	// position I-1 has no explicit "next" and falls through to a noop
-	// at position I, add an explicit "next" to maintain correct flow.
+	// Phase 4: Fix fall-through predecessors. When a non-noop frame at
+	// position I-1 falls through to a noop at position I, the noop's
+	// removal changes what the predecessor falls through to. If the
+	// noop's target differs from the natural fall-through after removal,
+	// we must add explicit branches. This restores branch slots that
+	// stripFallThrough deleted (because they pointed to the immediately
+	// following frame — the noop — which is now being removed).
 	for i := range noops {
 		if i > 0 && !noops[i-1] {
 			pred := b.frames[i-1]
+			target := targets[i]
+
+			// Find where fall-through will go after all noops are removed:
+			// the first non-noop frame after position i.
+			nextReal := i + 1
+			for nextReal < len(b.frames) && noops[nextReal] {
+				nextReal++
+			}
+
+			// If the noop's target is the natural fall-through successor,
+			// the stripped slots are still correct — no fix needed.
+			if target == frameRef(nextReal) {
+				continue
+			}
+
 			if _, hasNext := pred["next"]; !hasNext {
-				pred["next"] = targets[i]
+				pred["next"] = target
+			}
+			// Restore stripped branch slots on check frames.
+			op, _ := pred["op"].(string)
+			switch op {
+			case "check_number":
+				if _, has := pred[checkLarger]; !has {
+					pred[checkLarger] = target
+				}
+				if _, has := pred[checkSmaller]; !has {
+					pred[checkSmaller] = target
+				}
+			case "compare_register":
+				if _, has := pred[compareRegDifferent]; !has {
+					pred[compareRegDifferent] = target
+				}
+			case "value_type":
+				for _, slot := range allTypeSlots {
+					if _, has := pred[slot]; !has {
+						pred[slot] = target
+					}
+				}
 			}
 		}
 	}

@@ -78,8 +78,11 @@ approach: parse into `[]Stmt` with `Expr` nodes, then emit frames.
    redirects. Runs after all emission/patching and
    `validateNamedLabels`, before `finalize`. Five phases: identify
    noops, resolve targets transitively, redirect references, fix
-   fall-through predecessors, remove and reindex. See `isNoopBridge`
-   and `resolveNoopTarget` in `compiler.go`.
+   fall-through predecessors, remove and reindex. Phase 4 restores
+   branch slots on check/compare/value_type frames that were stripped
+   by `stripFallThrough` (which runs during emission) when the noop's
+   target differs from the natural fall-through after removal. See
+   `isNoopBridge` and `resolveNoopTarget` in `compiler.go`.
 
 `Compile` and `CompileString` accept `fs.FS` + path for import
 resolution, a `behaviorID` string (auto-selected when only one
@@ -142,9 +145,9 @@ required in both parenthesized and unparenthesized call forms.
 `@jumpbreak` are placeholder opcodes in intermediate frames. In loops,
 `@break` is patched to jump past the enclosing loop. `@continue` is
 patched to jump to the loop's back-edge target: `frameRef(loopStart)`
-for infinite loops and while, `frameRef(incrFrame)` for counted loops,
-and `false` (re-dispatch) for iterator-backed for loops. In
-iterator-backed loops, unlabeled `@break` is patched to `"last"`
+for infinite loops and while, `frameRef(incrFrame)` for counted loops
+and manual counter loops, and `false` (re-dispatch) for instruction-backed
+for loops. In iterator-backed loops, unlabeled `@break` is patched to `"last"`
 (stops the iterator) by `patchUnlabeledBreakToLast`, while labeled
 breaks still jump past the loop. In exec blocks, `@break` is patched
 to exit the block: detached blocks get `set_reg false false` with
@@ -174,6 +177,29 @@ dead code in normal execution, only reachable via the jump's `"next"`
 fallthrough. For `patchJumpBreakPlaceholders`, the label's `"next"`
 is set to skip over the error handler.
 
+**Nested `for_number` loops**: The VM's `for_number` instruction uses
+re-dispatch (`next: false`), but nested `for_number` loops cause the
+inner body's re-dispatch to hit the outer `for_number` first (lower
+frame number), advancing both counters every inner iteration. Fix:
+`forNumberDepth` on the parser tracks nesting. When
+`emitForStmtRange` detects `forNumberDepth > 0`, it dispatches to
+`emitForStmtRangeManual`, which compiles the inner loop as manual
+counter instructions (`set_number` init + `check_number` condition +
+body + `add` increment with explicit back-edge to `check_number`).
+A detach noop (`set_reg false false`, no `"next"` key) is emitted
+after the add frame. It serves two purposes: (1) absorbs the outer
+for_number's compile-time `"next": false` assignment on the last
+body frame, preserving the add frame's back-edge; (2) provides the
+inner loop's `afterLoop` target — `afterLoop` points TO the noop
+(not past it). When the inner loop is the outer body's last
+statement, the outer's `"next": false` assignment sets the noop to
+re-dispatch; otherwise, the noop falls through to the next statement.
+`eliminateNoopBridges` resolves correctly in both cases. Requires
+compile-time constant step for direction detection (positive →
+`larger` branch = done; negative → `smaller` branch = done).
+`emitForStmtRuntime` with `forNumberDepth > 0` errors since runtime
+step direction can't be determined at compile time.
+
 **Iterator helpers**: Shared helpers reduce duplication across the
 five iterator emitters (`emitStateMachineIter`, `emitInstructionIter`,
 `emitForStmtRange`, `emitForStmtRuntime`, `emitInlineIterInstruction`):
@@ -192,6 +218,10 @@ variable rename collision avoidance.
 **Inline variable renaming**: When inlining via `expandCall`, internal
 variables are pre-scanned by `collectASTOutputVars` and renamed with
 `allocUniqueVar` to avoid collisions with the caller's namespace.
+`emitFnBody` calls `collectASTOutputVars` then delegates to
+`emitFnBodyCore` (no scan). `YieldBodyStmt` (inlined caller loop body
+at yield sites) uses `emitFnBodyCore` directly — caller-scope variables
+must not be renamed.
 
 **Continuations and branching**: Functions declare exec branches via
 `exec(name1, name2)` after the param list. Instruction blocks bind
