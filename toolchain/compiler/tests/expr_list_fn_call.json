@@ -1,21 +1,21 @@
 {
-    "0": {
-        "0": "a",
-        "op": "get_self"
-    },
+  "0": {
+    "0": "a",
+    "op": "get_self"
+  },
+  "1": {
     "1": {
-        "1": {
-            "num": 1
-        },
-        "2": "b",
-        "op": "set_number"
+      "num": 1
     },
-    "2": {
-        "1": {
-            "num": 2
-        },
-        "2": "c",
-        "op": "set_number"
+    "2": "b",
+    "op": "set_number"
+  },
+  "2": {
+    "1": {
+      "num": 2
     },
-    "name": "Expr List Fn Call"
+    "2": "c",
+    "op": "set_number"
+  },
+  "name": "Expr List Fn Call"
 }

@@ -1,47 +1,28 @@
 {
-    "0": {
-        "1": {"num": 10},
-        "2": "x",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "1": 4,
-        "2": "x",
-        "3": {"num": 5},
-        "next": 4,
-        "op": "check_number"
+      "num": 10
     },
-    "2": {
-        "0": false,
-        "1": false,
-        "next": 5,
-        "op": "set_reg"
-    },
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "1": 4,
+    "2": "x",
     "3": {
-        "0": false,
-        "1": false,
-        "next": 7,
-        "op": "set_reg"
+      "num": 5
     },
-    "4": {
-        "op": "notify",
-        "txt": "big"
-    },
-    "5": {
-        "0": false,
-        "1": false,
-        "next": 9,
-        "op": "set_reg"
-    },
-    "6": {
-        "op": "notify",
-        "txt": "small"
-    },
-    "7": {
-        "0": false,
-        "1": false,
-        "next": 9,
-        "op": "set_reg"
-    },
-    "name": "Pure Logic Branch"
+    "next": 4,
+    "op": "check_number"
+  },
+  "2": {
+    "next": 5,
+    "op": "notify",
+    "txt": "big"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "small"
+  },
+  "name": "Pure Logic Branch"
 }

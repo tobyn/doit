@@ -1,7 +1,22 @@
 {
-  "name": "a",
-  "0": {"op": "set_number", "1": {"num": 1}, "2": "target"},
-  "1": {"op": "label", "0": "target"},
-  "2": {"op": "notify", "txt": "hello"},
-  "3": {"op": "jump", "0": "target"}
+  "0": {
+    "1": {
+      "num": 1
+    },
+    "2": "target",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "target",
+    "op": "label"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "3": {
+    "0": "target",
+    "op": "jump"
+  },
+  "name": "a"
 }

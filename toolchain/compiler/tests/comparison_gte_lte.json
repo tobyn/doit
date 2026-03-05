@@ -1,93 +1,109 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 5},
-        "2": "a"
-    },
+  "0": {
     "1": {
-        "op": "set_number",
-        "1": {"num": 3},
-        "2": "b"
+      "num": 5
     },
-    "2": {
-        "op": "check_number",
-        "0": 5,
-        "1": 4,
-        "2": "a",
-        "3": {"num": 2},
-        "next": 5
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 3
     },
+    "2": "b",
+    "op": "set_number"
+  },
+  "2": {
+    "0": 5,
+    "1": 4,
+    "2": "a",
     "3": {
-        "op": "set_reg",
-        "0": false,
-        "1": "gte",
-        "next": 6
+      "num": 2
     },
-    "4": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "gte"
+    "next": 5,
+    "op": "check_number"
+  },
+  "3": {
+    "0": false,
+    "1": "gte",
+    "next": 6,
+    "op": "set_reg"
+  },
+  "4": {
+    "0": {
+      "num": 1
     },
-    "5": {
-        "op": "check_number",
-        "0": 7,
-        "1": 8,
-        "2": "a",
-        "3": "b",
-        "next": 8
+    "1": "gte",
+    "op": "set_reg"
+  },
+  "5": {
+    "0": 7,
+    "1": 8,
+    "2": "a",
+    "3": "b",
+    "next": 8,
+    "op": "check_number"
+  },
+  "6": {
+    "0": false,
+    "1": "lte",
+    "next": 9,
+    "op": "set_reg"
+  },
+  "7": {
+    "0": {
+      "num": 1
     },
-    "6": {
-        "op": "set_reg",
-        "0": false,
-        "1": "lte",
-        "next": 9
+    "1": "lte",
+    "op": "set_reg"
+  },
+  "8": {
+    "0": 11,
+    "1": 10,
+    "2": "b",
+    "3": {
+      "num": 1
     },
-    "7": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "lte"
+    "next": 11,
+    "op": "check_number"
+  },
+  "9": {
+    "0": false,
+    "1": "r",
+    "next": 12,
+    "op": "set_reg"
+  },
+  "10": {
+    "0": {
+      "num": 1
     },
-    "8": {
-        "op": "check_number",
-        "0": 11,
-        "1": 10,
-        "2": "b",
-        "3": {"num": 1},
-        "next": 11
+    "1": "r",
+    "op": "set_reg"
+  },
+  "11": {
+    "0": 13,
+    "1": 14,
+    "2": "b",
+    "3": "a",
+    "next": 14,
+    "op": "check_number"
+  },
+  "12": {
+    "0": false,
+    "1": "r",
+    "next": 15,
+    "op": "set_reg"
+  },
+  "13": {
+    "0": {
+      "num": 1
     },
-    "9": {
-        "op": "set_reg",
-        "0": false,
-        "1": "r",
-        "next": 12
-    },
-    "10": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "r"
-    },
-    "11": {
-        "op": "check_number",
-        "0": 13,
-        "1": 14,
-        "2": "b",
-        "3": "a",
-        "next": 14
-    },
-    "12": {
-        "op": "set_reg",
-        "0": false,
-        "1": "r",
-        "next": 15
-    },
-    "13": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "r"
-    },
-    "14": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Comparison GTE LTE"
+    "1": "r",
+    "op": "set_reg"
+  },
+  "14": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Comparison GTE LTE"
 }

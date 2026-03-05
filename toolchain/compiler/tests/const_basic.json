@@ -1,22 +1,22 @@
 {
-    "0": {
-        "op": "notify",
-        "txt": "hello"
-    },
+  "0": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "1": {
     "1": {
-        "1": {
-            "num": 5
-        },
-        "2": "x",
-        "op": "set_number"
+      "num": 5
     },
-    "2": {
-        "0": {
-            "id": "metalbar",
-            "num": 10
-        },
-        "1": "y",
-        "op": "set_reg"
+    "2": "x",
+    "op": "set_number"
+  },
+  "2": {
+    "0": {
+      "id": "metalbar",
+      "num": 10
     },
-    "name": "Const Basic"
+    "1": "y",
+    "op": "set_reg"
+  },
+  "name": "Const Basic"
 }

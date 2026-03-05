@@ -1,7 +1,17 @@
 {
-    "0": { "op": "unlock" },
-    "1": { "op": "notify", "txt": "Running fast" },
-    "2": { "op": "lock" },
-    "3": { "op": "notify", "txt": "Running slow" },
-    "name": "locked_unlocked"
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "Running fast"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "Running slow"
+  },
+  "name": "locked_unlocked"
 }

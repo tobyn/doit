@@ -7,35 +7,30 @@
     "op": "set_number"
   },
   "1": {
-    "txt": "Loop iteration",
-    "op": "notify"
+    "op": "notify",
+    "txt": "Loop iteration"
   },
   "2": {
-    "1": 5,
+    "1": 4,
     "2": "i",
     "3": {
       "num": 5
     },
+    "next": 5,
     "op": "check_number"
   },
   "3": {
-    "0": false,
-    "1": false,
-    "next": 6,
-    "op": "set_reg"
-  },
-  "4": {
     "0": "i",
     "1": {
       "num": 1
     },
     "2": "i",
-    "op": "add",
-    "next": 2
+    "next": 2,
+    "op": "add"
   },
-  "5": {
-    "txt": "Loop finished",
-    "op": "notify"
+  "4": {
+    "op": "notify",
+    "txt": "Loop finished"
   },
   "name": "Loop"
 }

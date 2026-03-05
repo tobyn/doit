@@ -1,21 +1,21 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "num": 1
-        },
-        "1": {
-            "num": 5
-        },
-        "2": "t",
-        "op": "set_number"
+      "num": 1
     },
     "1": {
-        "0": false,
-        "1": {
-            "num": 3
-        },
-        "2": "f",
-        "op": "set_number"
+      "num": 5
     },
-    "name": "Bool Literal"
+    "2": "t",
+    "op": "set_number"
+  },
+  "1": {
+    "0": false,
+    "1": {
+      "num": 3
+    },
+    "2": "f",
+    "op": "set_number"
+  },
+  "name": "Bool Literal"
 }

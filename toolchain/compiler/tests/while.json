@@ -15,8 +15,8 @@
     "op": "check_number"
   },
   "2": {
-    "txt": "While iteration",
-    "op": "notify"
+    "op": "notify",
+    "txt": "While iteration"
   },
   "3": {
     "0": "i",
@@ -24,12 +24,12 @@
       "num": 1
     },
     "2": "i",
-    "op": "add",
-    "next": 2
+    "next": 2,
+    "op": "add"
   },
   "4": {
-    "txt": "While finished",
-    "op": "notify"
+    "op": "notify",
+    "txt": "While finished"
   },
   "name": "While"
 }

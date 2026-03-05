@@ -1,6 +1,14 @@
 {
-    "0": { "op": "unlock", "cmt": "Switch to fast mode" },
-    "1": { "op": "notify", "txt": "Fast" },
-    "2": { "op": "lock" },
-    "name": "locked_unlocked_comment"
+  "0": {
+    "cmt": "Switch to fast mode",
+    "op": "unlock"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "Fast"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "name": "locked_unlocked_comment"
 }

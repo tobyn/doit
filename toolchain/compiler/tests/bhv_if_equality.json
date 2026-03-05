@@ -1,37 +1,27 @@
 {
   "0": {
-    "0": 4,
+    "0": 3,
     "1": 1,
     "2": 2,
     "op": "compare_register"
   },
   "1": {
+    "next": 6,
     "op": "notify",
     "txt": "equal"
   },
   "2": {
-    "0": false,
-    "1": false,
-    "next": 8,
-    "op": "set_reg"
-  },
-  "3": {
     "1": 1,
     "2": false,
-    "next": 7,
+    "next": 5,
     "op": "compare_register"
   },
-  "4": {
+  "3": {
+    "next": 6,
     "op": "notify",
     "txt": "different and not null"
   },
-  "5": {
-    "0": false,
-    "1": false,
-    "next": 8,
-    "op": "set_reg"
-  },
-  "6": {
+  "4": {
     "op": "notify",
     "txt": "a is null"
   },

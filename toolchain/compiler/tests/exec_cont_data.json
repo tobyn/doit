@@ -1,13 +1,42 @@
 {
-    "0": { "1": {"num": 10}, "2": "x", "op": "set_number" },
-    "1": { "1": 5, "2": "x", "3": {"num": 5}, "next": 5, "op": "check_number" },
-    "2": { "0": "x", "1": "v", "op": "set_reg" },
-    "3": { "0": false, "1": false, "next": 7, "op": "set_reg" },
-    "4": { "0": "x", "1": "v", "op": "set_reg" },
-    "5": { "0": false, "1": false, "next": 9, "op": "set_reg" },
-    "6": { "0": "v", "op": "notify", "txt": "big" },
-    "7": { "0": false, "1": false, "next": 11, "op": "set_reg" },
-    "8": { "0": "v", "op": "notify", "txt": "small" },
-    "9": { "0": false, "1": false, "next": 11, "op": "set_reg" },
-    "name": "Exec Cont Data"
+  "0": {
+    "1": {
+      "num": 10
+    },
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "1": 4,
+    "2": "x",
+    "3": {
+      "num": 5
+    },
+    "next": 4,
+    "op": "check_number"
+  },
+  "2": {
+    "0": "x",
+    "1": "v",
+    "next": 5,
+    "op": "set_reg"
+  },
+  "3": {
+    "0": "x",
+    "1": "v",
+    "next": 6,
+    "op": "set_reg"
+  },
+  "4": {
+    "0": "v",
+    "next": 7,
+    "op": "notify",
+    "txt": "big"
+  },
+  "5": {
+    "0": "v",
+    "op": "notify",
+    "txt": "small"
+  },
+  "name": "Exec Cont Data"
 }

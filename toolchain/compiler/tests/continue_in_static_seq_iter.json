@@ -10,7 +10,7 @@
       "num": 1
     },
     "3": "@sm",
-    "4": 29,
+    "4": 28,
     "op": "for_number"
   },
   "1": {
@@ -20,6 +20,62 @@
       "num": 0
     },
     "op": "check_number"
+  },
+  "2": {
+    "0": {
+      "num": 1
+    },
+    "1": "x",
+    "op": "set_reg"
+  },
+  "3": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000001
+    },
+    "1": "@jmp",
+    "op": "set_reg"
+  },
+  "4": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000004
+    },
+    "op": "jump"
+  },
+  "5": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000004
+    },
+    "op": "notify",
+    "txt": "jump: no matching label"
+  },
+  "6": {
+    "op": "exit"
+  },
+  "7": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000001
+    },
+    "next": false,
+    "op": "label"
+  },
+  "8": {
+    "0": 16,
+    "2": "@sm",
+    "3": {
+      "num": 1
+    },
+    "op": "check_number"
+  },
+  "9": {
+    "0": {
+      "num": 2
+    },
+    "1": "x",
+    "op": "set_reg"
   },
   "10": {
     "0": {
@@ -34,7 +90,6 @@
       "id": "v_letter_L",
       "num": -1000004
     },
-    "next": 13,
     "op": "jump"
   },
   "12": {
@@ -76,7 +131,6 @@
       "id": "v_letter_L",
       "num": -1000004
     },
-    "next": 19,
     "op": "jump"
   },
   "18": {
@@ -89,13 +143,6 @@
   },
   "19": {
     "op": "exit"
-  },
-  "2": {
-    "0": {
-      "num": 1
-    },
-    "1": "x",
-    "op": "set_reg"
   },
   "20": {
     "0": {
@@ -113,85 +160,29 @@
     "op": "label"
   },
   "22": {
-    "0": 25,
+    "0": 24,
     "1": "x",
     "2": {
       "num": 2
     },
+    "next": false,
     "op": "compare_register"
   },
   "23": {
-    "0": false,
-    "1": false,
-    "next": false,
-    "op": "set_reg"
-  },
-  "24": {
     "op": "notify",
     "txt": "value"
   },
+  "24": {
+    "0": "@jmp",
+    "op": "jump"
+  },
   "25": {
     "0": "@jmp",
-    "next": 27,
-    "op": "jump"
+    "op": "notify",
+    "txt": "jump: no matching label"
   },
   "26": {
-    "0": "@jmp",
-    "op": "notify",
-    "txt": "jump: no matching label"
-  },
-  "27": {
     "op": "exit"
-  },
-  "3": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000001
-    },
-    "1": "@jmp",
-    "op": "set_reg"
-  },
-  "4": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000004
-    },
-    "next": 6,
-    "op": "jump"
-  },
-  "5": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000004
-    },
-    "op": "notify",
-    "txt": "jump: no matching label"
-  },
-  "6": {
-    "op": "exit"
-  },
-  "7": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000001
-    },
-    "next": false,
-    "op": "label"
-  },
-  "8": {
-    "0": 16,
-    "2": "@sm",
-    "3": {
-      "num": 1
-    },
-    "op": "check_number"
-  },
-  "9": {
-    "0": {
-      "num": 2
-    },
-    "1": "x",
-    "op": "set_reg"
   },
   "name": "Continue In Static Seq Iter"
 }

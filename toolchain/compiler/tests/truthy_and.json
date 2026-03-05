@@ -1,38 +1,44 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 1},
-        "2": "x"
-    },
+  "0": {
     "1": {
-        "op": "set_number",
-        "1": {"num": 5},
-        "2": "y"
+      "num": 1
     },
-    "2": {
-        "op": "compare_register",
-        "0": 4,
-        "1": "x",
-        "2": false,
-        "next": 5
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 5
     },
-    "3": {
-        "op": "compare_register",
-        "0": 6,
-        "1": "y",
-        "2": false,
-        "next": 5
+    "2": "y",
+    "op": "set_number"
+  },
+  "2": {
+    "0": 4,
+    "1": "x",
+    "2": false,
+    "next": 5,
+    "op": "compare_register"
+  },
+  "3": {
+    "0": 6,
+    "1": "y",
+    "2": false,
+    "next": 5,
+    "op": "compare_register"
+  },
+  "4": {
+    "0": false,
+    "1": "a",
+    "next": 7,
+    "op": "set_reg"
+  },
+  "5": {
+    "0": {
+      "num": 1
     },
-    "4": {
-        "op": "set_reg",
-        "0": false,
-        "1": "a",
-        "next": 7
-    },
-    "5": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "a"
-    },
-    "name": "Truthy And"
+    "1": "a",
+    "op": "set_reg"
+  },
+  "name": "Truthy And"
 }

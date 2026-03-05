@@ -2,20 +2,15 @@
   "0": {
     "1": 1,
     "2": false,
-    "next": 4,
+    "next": 3,
     "op": "compare_register"
   },
   "1": {
+    "next": 4,
     "op": "notify",
     "txt": "has value"
   },
   "2": {
-    "0": false,
-    "1": false,
-    "next": 5,
-    "op": "set_reg"
-  },
-  "3": {
     "op": "notify",
     "txt": "empty"
   },

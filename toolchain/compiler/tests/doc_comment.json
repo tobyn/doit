@@ -1,4 +1,8 @@
 {
-    "0": { "op": "notify", "txt": "Hello", "cmt": "Hello notification" },
-    "name": "doc_comment"
+  "0": {
+    "cmt": "Hello notification",
+    "op": "notify",
+    "txt": "Hello"
+  },
+  "name": "doc_comment"
 }

@@ -16,8 +16,8 @@
     "op": "check_number"
   },
   "2": {
-    "txt": "a < 9!",
-    "op": "notify"
+    "op": "notify",
+    "txt": "a \u003c 9!"
   },
   "3": {
     "1": {
@@ -27,7 +27,7 @@
     "op": "set_number"
   },
   "4": {
-    "1": 8,
+    "1": 7,
     "2": "a",
     "3": {
       "num": 3
@@ -35,66 +35,51 @@
     "op": "check_number"
   },
   "5": {
-    "txt": "a >= 3?! Wrongo!",
-    "op": "notify"
+    "next": 8,
+    "op": "notify",
+    "txt": "a \u003e= 3?! Wrongo!"
   },
   "6": {
-    "0": false,
-    "1": false,
-    "next": 9,
-    "op": "set_reg"
+    "op": "notify",
+    "txt": "a \u003c 3!"
   },
   "7": {
-    "txt": "a < 3!",
-    "op": "notify"
-  },
-  "8": {
     "1": {
       "num": 5
     },
     "2": "a",
     "op": "set_number"
   },
-  "9": {
-    "0": 13,
+  "8": {
+    "0": 11,
     "1": "a",
     "2": {
       "num": 1
     },
     "op": "compare_register"
   },
+  "9": {
+    "next": 14,
+    "op": "notify",
+    "txt": "a == 1?! Wrongo!"
+  },
   "10": {
-    "txt": "a == 1?! Wrongo!",
-    "op": "notify"
-  },
-  "11": {
-    "0": false,
-    "1": false,
-    "next": 17,
-    "op": "set_reg"
-  },
-  "12": {
-    "1": 16,
+    "1": 13,
     "2": "a",
     "3": {
       "num": 1
     },
-    "next": 16,
+    "next": 13,
     "op": "check_number"
   },
-  "13": {
-    "txt": "a > 1!",
-    "op": "notify"
+  "11": {
+    "next": 14,
+    "op": "notify",
+    "txt": "a \u003e 1!"
   },
-  "14": {
-    "0": false,
-    "1": false,
-    "next": 17,
-    "op": "set_reg"
-  },
-  "15": {
-    "txt": "a < 1?! Wrongo!",
-    "op": "notify"
+  "12": {
+    "op": "notify",
+    "txt": "a \u003c 1?! Wrongo!"
   },
   "name": "If"
 }

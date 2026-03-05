@@ -1,7 +1,17 @@
 {
-    "0": { "op": "unlock" },
-    "1": { "0": "@ctor", "op": "get_self" },
-    "2": { "op": "lock" },
-    "3": { "op": "notify", "txt": "@ctor" },
-    "name": "Mode Block Expr Fn Arg"
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "0": "@ctor",
+    "op": "get_self"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "@ctor"
+  },
+  "name": "Mode Block Expr Fn Arg"
 }

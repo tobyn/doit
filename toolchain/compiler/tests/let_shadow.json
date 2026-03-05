@@ -1,79 +1,79 @@
 {
-    "0": {
-        "1": {
-            "num": 1
-        },
-        "2": "a",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "1": {
-            "num": 2
-        },
-        "2": "a",
-        "op": "set_number"
+      "num": 1
     },
-    "2": {
-        "0": "a",
-        "op": "notify",
-        "txt": "let-let:"
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 2
     },
-    "3": {
-        "1": {
-            "num": 3
-        },
-        "2": "b",
-        "op": "set_number"
+    "2": "a",
+    "op": "set_number"
+  },
+  "2": {
+    "0": "a",
+    "op": "notify",
+    "txt": "let-let:"
+  },
+  "3": {
+    "1": {
+      "num": 3
     },
-    "4": {
-        "1": {
-            "num": 4
-        },
-        "2": "b",
-        "op": "set_number"
+    "2": "b",
+    "op": "set_number"
+  },
+  "4": {
+    "1": {
+      "num": 4
     },
-    "5": {
-        "0": "b",
-        "op": "notify",
-        "txt": "var-let:"
+    "2": "b",
+    "op": "set_number"
+  },
+  "5": {
+    "0": "b",
+    "op": "notify",
+    "txt": "var-let:"
+  },
+  "6": {
+    "1": {
+      "num": 5
     },
-    "6": {
-        "1": {
-            "num": 5
-        },
-        "2": "c",
-        "op": "set_number"
+    "2": "c",
+    "op": "set_number"
+  },
+  "7": {
+    "1": {
+      "num": 6
     },
-    "7": {
-        "1": {
-            "num": 6
-        },
-        "2": "c",
-        "op": "set_number"
+    "2": "c",
+    "op": "set_number"
+  },
+  "8": {
+    "0": "c",
+    "op": "notify",
+    "txt": "let-var:"
+  },
+  "9": {
+    "1": {
+      "num": 7
     },
-    "8": {
-        "0": "c",
-        "op": "notify",
-        "txt": "let-var:"
+    "2": "d",
+    "op": "set_number"
+  },
+  "10": {
+    "1": {
+      "num": 8
     },
-    "9": {
-        "1": {
-            "num": 7
-        },
-        "2": "d",
-        "op": "set_number"
-    },
-    "10": {
-        "1": {
-            "num": 8
-        },
-        "2": "d",
-        "op": "set_number"
-    },
-    "11": {
-        "0": "d",
-        "op": "notify",
-        "txt": "var-var:"
-    },
-    "name": "Let Shadow"
+    "2": "d",
+    "op": "set_number"
+  },
+  "11": {
+    "0": "d",
+    "op": "notify",
+    "txt": "var-var:"
+  },
+  "name": "Let Shadow"
 }

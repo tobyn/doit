@@ -1,49 +1,61 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 5},
-        "2": "a"
-    },
+  "0": {
     "1": {
-        "op": "set_number",
-        "1": {"num": 3},
-        "2": "b"
+      "num": 5
     },
-    "2": {
-        "op": "set_number",
-        "1": {"num": 0},
-        "2": "r"
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 3
     },
+    "2": "b",
+    "op": "set_number"
+  },
+  "2": {
+    "1": {
+      "num": 0
+    },
+    "2": "r",
+    "op": "set_number"
+  },
+  "3": {
+    "0": 5,
+    "1": 6,
+    "2": "a",
     "3": {
-        "op": "check_number",
-        "0": 5,
-        "1": 6,
-        "2": "a",
-        "3": {"num": 2},
-        "next": 6
+      "num": 2
     },
-    "4": {
-        "op": "check_number",
-        "0": 6,
-        "1": 7,
-        "2": "b",
-        "3": {"num": 10},
-        "next": 6
+    "next": 6,
+    "op": "check_number"
+  },
+  "4": {
+    "0": 6,
+    "1": 7,
+    "2": "b",
+    "3": {
+      "num": 10
     },
-    "5": {
-        "op": "set_reg",
-        "0": false,
-        "1": "r",
-        "next": 8
+    "next": 6,
+    "op": "check_number"
+  },
+  "5": {
+    "0": false,
+    "1": "r",
+    "next": 8,
+    "op": "set_reg"
+  },
+  "6": {
+    "0": {
+      "num": 1
     },
-    "6": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "r"
-    },
-    "7": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Logical And Assign"
+    "1": "r",
+    "op": "set_reg"
+  },
+  "7": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Logical And Assign"
 }

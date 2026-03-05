@@ -1,7 +1,23 @@
 {
-  "name": "a",
-  "0": {"op": "set_number", "1": {"num": 5}, "2": "x"},
-  "1": {"op": "compare_register", "1": "x", "2": false, "next": 4},
-  "2": {"op": "exit"},
-  "3": {"op": "notify", "txt": "still running"}
+  "0": {
+    "1": {
+      "num": 5
+    },
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "1": "x",
+    "2": false,
+    "next": 4,
+    "op": "compare_register"
+  },
+  "2": {
+    "op": "exit"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "still running"
+  },
+  "name": "a"
 }

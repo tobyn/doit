@@ -1,28 +1,28 @@
 {
-    "0": {
-        "0": "@call",
-        "op": "get_self"
-    },
-    "1": {
-        "0": "@call",
-        "1": "me",
-        "op": "set_reg"
-    },
-    "2": {
-        "0": "me",
-        "1": "loc",
-        "op": "get_location"
-    },
-    "3": {
-        "0": "me",
-        "1": "@call_2",
-        "op": "get_resource_num"
-    },
-    "4": {
-        "0": "loc",
-        "1": "@call_2",
-        "2": false,
-        "op": "add"
-    },
-    "name": "Nested Call Bhv"
+  "0": {
+    "0": "@call",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "@call",
+    "1": "me",
+    "op": "set_reg"
+  },
+  "2": {
+    "0": "me",
+    "1": "loc",
+    "op": "get_location"
+  },
+  "3": {
+    "0": "me",
+    "1": "@call_2",
+    "op": "get_resource_num"
+  },
+  "4": {
+    "0": "loc",
+    "1": "@call_2",
+    "2": false,
+    "op": "add"
+  },
+  "name": "Nested Call Bhv"
 }

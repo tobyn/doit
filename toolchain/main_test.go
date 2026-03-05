@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -5454,4 +5456,184 @@ func frameContentMatches(gFrame, wFrame map[string]any, g2w map[string]string) b
 		}
 	}
 	return true
+}
+
+// nativeToRef converts our codec's native format (1-based numeric string keys)
+// to the reference implementation format (0-based numeric string keys).
+// This is the inverse of refToNative.
+func nativeToRef(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(val))
+		for k, child := range val {
+			newKey := k
+			if n, err := strconv.Atoi(k); err == nil {
+				newKey = strconv.Itoa(n - 1)
+			}
+			result[newKey] = nativeToRef(child)
+		}
+		return result
+	case []any:
+		result := make([]any, len(val))
+		for i, elem := range val {
+			result[i] = nativeToRef(elem)
+		}
+		return result
+	default:
+		return v
+	}
+}
+
+// goldenSortedKeys returns map keys sorted with numeric keys first (in numeric
+// order) followed by non-numeric keys in alphabetical order. This matches the
+// key ordering used in the reference test JSON files.
+func goldenSortedKeys(m map[string]any) []string {
+	var numKeys []string
+	var strKeys []string
+	for k := range m {
+		if _, err := strconv.Atoi(k); err == nil {
+			numKeys = append(numKeys, k)
+		} else {
+			strKeys = append(strKeys, k)
+		}
+	}
+	sort.Slice(numKeys, func(i, j int) bool {
+		a, _ := strconv.Atoi(numKeys[i])
+		b, _ := strconv.Atoi(numKeys[j])
+		return a < b
+	})
+	sort.Strings(strKeys)
+	return append(numKeys, strKeys...)
+}
+
+// writeGoldenJSON writes a value as indented JSON with numeric-ordered keys.
+func writeGoldenJSON(buf *bytes.Buffer, v any, prefix string) {
+	switch val := v.(type) {
+	case map[string]any:
+		if len(val) == 0 {
+			buf.WriteString("{}")
+			return
+		}
+		keys := goldenSortedKeys(val)
+		buf.WriteString("{\n")
+		newPrefix := prefix + "  "
+		for i, k := range keys {
+			if i > 0 {
+				buf.WriteString(",\n")
+			}
+			buf.WriteString(newPrefix)
+			_, _ = fmt.Fprintf(buf, "%q: ", k)
+			writeGoldenJSON(buf, val[k], newPrefix)
+		}
+		buf.WriteByte('\n')
+		buf.WriteString(prefix)
+		buf.WriteByte('}')
+	case []any:
+		if len(val) == 0 {
+			buf.WriteString("[]")
+			return
+		}
+		buf.WriteString("[\n")
+		newPrefix := prefix + "  "
+		for i, elem := range val {
+			if i > 0 {
+				buf.WriteString(",\n")
+			}
+			buf.WriteString(newPrefix)
+			writeGoldenJSON(buf, elem, newPrefix)
+		}
+		buf.WriteByte('\n')
+		buf.WriteString(prefix)
+		buf.WriteByte(']')
+	case string:
+		data, _ := json.Marshal(val)
+		buf.Write(data)
+	case int:
+		buf.WriteString(strconv.Itoa(val))
+	case float64:
+		buf.WriteString(strconv.FormatFloat(val, 'f', -1, 64))
+	case bool:
+		if val {
+			buf.WriteString("true")
+		} else {
+			buf.WriteString("false")
+		}
+	case nil:
+		buf.WriteString("null")
+	default:
+		data, _ := json.Marshal(val)
+		buf.Write(data)
+	}
+}
+
+// TestUpdateGolden regenerates all test JSON files from their .doit sources.
+// Gated behind DOIT_UPDATE_GOLDEN=1 to avoid accidental overwrites.
+func TestUpdateGolden(t *testing.T) {
+	if os.Getenv("DOIT_UPDATE_GOLDEN") != "1" {
+		t.Skip("set DOIT_UPDATE_GOLDEN=1 to update golden files")
+	}
+
+	doitFiles, err := filepath.Glob("compiler/tests/*.doit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doitFiles) == 0 {
+		t.Fatal("no test cases found in compiler/tests/*.doit")
+	}
+
+	stdlib := os.DirFS("stdlib")
+
+	for _, doitFile := range doitFiles {
+		name := strings.TrimSuffix(filepath.Base(doitFile), ".doit")
+		jsonFile := strings.TrimSuffix(doitFile, ".doit") + ".json"
+
+		behaviorID := ""
+		if idx := strings.Index(name, "__"); idx >= 0 {
+			behaviorID = name[idx+2:]
+		}
+
+		t.Run(name, func(t *testing.T) {
+			f, err := os.Open(doitFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+
+			// Check for a "# locale: <tag>" directive on the second line.
+			locale := ""
+			sc := bufio.NewScanner(f)
+			lineNum := 0
+			for sc.Scan() && lineNum < 2 {
+				line := sc.Text()
+				if after, ok := strings.CutPrefix(line, "# locale: "); ok {
+					locale = strings.TrimSpace(after)
+				}
+				lineNum++
+			}
+			if _, err := f.Seek(0, 0); err != nil {
+				t.Fatal(err)
+			}
+
+			encoded, err := Compile(f, stdlib, behaviorID, locale, nil, "")
+			if err != nil {
+				t.Fatalf("Compile error: %v", err)
+			}
+
+			obj, err := codec.Decode(strings.NewReader(encoded))
+			if err != nil {
+				t.Fatalf("Decode error: %v", err)
+			}
+
+			// Convert native format (1-based keys) to reference format (0-based keys).
+			refVal := nativeToRef(obj.Value)
+
+			var buf bytes.Buffer
+			writeGoldenJSON(&buf, refVal, "")
+			buf.WriteByte('\n')
+
+			if err := os.WriteFile(jsonFile, buf.Bytes(), 0644); err != nil {
+				t.Fatalf("WriteFile error: %v", err)
+			}
+		})
+	}
 }

@@ -21,61 +21,6 @@
     },
     "op": "check_number"
   },
-  "10": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000003
-    },
-    "next": 12,
-    "op": "jump"
-  },
-  "11": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000003
-    },
-    "op": "notify",
-    "txt": "jump: no matching label"
-  },
-  "12": {
-    "op": "exit"
-  },
-  "13": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000002
-    },
-    "next": false,
-    "op": "label"
-  },
-  "14": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000003
-    },
-    "op": "label"
-  },
-  "15": {
-    "op": "notify",
-    "txt": "got"
-  },
-  "16": {
-    "0": "@jmp",
-    "next": 18,
-    "op": "jump"
-  },
-  "17": {
-    "0": "@jmp",
-    "op": "notify",
-    "txt": "jump: no matching label"
-  },
-  "18": {
-    "op": "exit"
-  },
-  "19": {
-    "op": "notify",
-    "txt": "done"
-  },
   "2": {
     "0": {
       "num": 10
@@ -132,6 +77,61 @@
     },
     "1": "@jmp",
     "op": "set_reg"
+  },
+  "10": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000003
+    },
+    "next": 12,
+    "op": "jump"
+  },
+  "11": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000003
+    },
+    "op": "notify",
+    "txt": "jump: no matching label"
+  },
+  "12": {
+    "op": "exit"
+  },
+  "13": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000002
+    },
+    "next": false,
+    "op": "label"
+  },
+  "14": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000003
+    },
+    "op": "label"
+  },
+  "15": {
+    "op": "notify",
+    "txt": "got"
+  },
+  "16": {
+    "0": "@jmp",
+    "next": 18,
+    "op": "jump"
+  },
+  "17": {
+    "0": "@jmp",
+    "op": "notify",
+    "txt": "jump: no matching label"
+  },
+  "18": {
+    "op": "exit"
+  },
+  "19": {
+    "op": "notify",
+    "txt": "done"
   },
   "name": "For Iter Static Param"
 }

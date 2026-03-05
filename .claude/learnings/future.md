@@ -23,10 +23,6 @@ register types.
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
-- **Eliminate noop bridge frames** — when the last instruction in an
-  if-branch falls through to a `set_reg false, false` whose only
-  purpose is a `next` redirect (jump over else), fold the jump target
-  into the preceding instruction's `next` field instead.
 
 ## Compound doc comments from nested calls
 

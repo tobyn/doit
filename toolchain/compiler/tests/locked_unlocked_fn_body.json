@@ -1,6 +1,13 @@
 {
-    "0": { "op": "unlock" },
-    "1": { "op": "notify", "txt": "Speedy" },
-    "2": { "op": "lock" },
-    "name": "locked_unlocked_fn_body"
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "Speedy"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "name": "locked_unlocked_fn_body"
 }

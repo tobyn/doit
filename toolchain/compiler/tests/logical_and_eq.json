@@ -1,47 +1,57 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 5},
-        "2": "a"
-    },
+  "0": {
     "1": {
-        "op": "set_number",
-        "1": {"num": 3},
-        "2": "b"
+      "num": 5
     },
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 3
+    },
+    "2": "b",
+    "op": "set_number"
+  },
+  "2": {
+    "1": {
+      "num": 7
+    },
+    "2": "c",
+    "op": "set_number"
+  },
+  "3": {
+    "0": 6,
+    "1": "a",
+    "2": "b",
+    "next": 5,
+    "op": "compare_register"
+  },
+  "4": {
+    "0": 7,
+    "1": "c",
     "2": {
-        "op": "set_number",
-        "1": {"num": 7},
-        "2": "c"
+      "num": 2
     },
-    "3": {
-        "op": "compare_register",
-        "0": 6,
-        "1": "a",
-        "2": "b",
-        "next": 5
+    "next": 6,
+    "op": "compare_register"
+  },
+  "5": {
+    "0": false,
+    "1": "r",
+    "next": 8,
+    "op": "set_reg"
+  },
+  "6": {
+    "0": {
+      "num": 1
     },
-    "4": {
-        "op": "compare_register",
-        "0": 7,
-        "1": "c",
-        "2": {"num": 2},
-        "next": 6
-    },
-    "5": {
-        "op": "set_reg",
-        "0": false,
-        "1": "r",
-        "next": 8
-    },
-    "6": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "r"
-    },
-    "7": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Logical And Eq"
+    "1": "r",
+    "op": "set_reg"
+  },
+  "7": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Logical And Eq"
 }

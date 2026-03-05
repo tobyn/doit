@@ -2,12 +2,12 @@
   "0": {
     "0": "comp",
     "1": "idx",
-    "2": 5,
+    "2": 4,
     "op": "for_component"
   },
   "1": {
     "0": "item",
-    "1": 5,
+    "1": 4,
     "2": "@out",
     "3": "@out_2",
     "4": "@out_3",
@@ -15,18 +15,12 @@
     "op": "for_inventory_item"
   },
   "2": {
-    "0": 5,
+    "0": 4,
     "1": "item",
     "2": false,
     "op": "compare_register"
   },
   "3": {
-    "0": false,
-    "1": false,
-    "next": 5,
-    "op": "set_reg"
-  },
-  "4": {
     "op": "notify",
     "txt": "done"
   },

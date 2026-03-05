@@ -1,23 +1,23 @@
 {
-    "0": {
-        "1": {
-            "num": 10
-        },
-        "2": "a",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "1": {
-            "num": 3
-        },
-        "2": "b",
-        "op": "set_number"
+      "num": 10
     },
-    "2": {
-        "0": "a",
-        "1": "b",
-        "2": "a",
-        "op": "add"
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 3
     },
-    "name": "Arith Compound Var"
+    "2": "b",
+    "op": "set_number"
+  },
+  "2": {
+    "0": "a",
+    "1": "b",
+    "2": "a",
+    "op": "add"
+  },
+  "name": "Arith Compound Var"
 }

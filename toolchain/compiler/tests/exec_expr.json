@@ -1,54 +1,39 @@
 {
-    "0": {
-        "1": {"num": 10},
-        "2": "x",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "1": 4,
-        "2": "x",
-        "3": {"num": 5},
-        "next": 4,
-        "op": "check_number"
+      "num": 10
     },
-    "2": {
-        "0": false,
-        "1": false,
-        "next": 5,
-        "op": "set_reg"
-    },
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "1": 4,
+    "2": "x",
     "3": {
-        "0": false,
-        "1": false,
-        "next": 7,
-        "op": "set_reg"
+      "num": 5
     },
-    "4": {
-        "1": {"num": 1},
-        "2": "result",
-        "op": "set_number"
+    "next": 4,
+    "op": "check_number"
+  },
+  "2": {
+    "1": {
+      "num": 1
     },
-    "5": {
-        "0": false,
-        "1": false,
-        "next": 9,
-        "op": "set_reg"
+    "2": "result",
+    "next": 5,
+    "op": "set_number"
+  },
+  "3": {
+    "1": {
+      "num": 0
     },
-    "6": {
-        "1": {"num": 0},
-        "2": "result",
-        "op": "set_number"
-    },
-    "7": {
-        "0": false,
-        "1": false,
-        "next": 9,
-        "op": "set_reg"
-    },
-    "8": {
-        "0": "result",
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Exec Expr"
+    "2": "result",
+    "op": "set_number"
+  },
+  "4": {
+    "0": "result",
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Exec Expr"
 }

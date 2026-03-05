@@ -1,49 +1,33 @@
 {
-    "0": {
-        "0": "a",
-        "op": "get_self"
-    },
-    "1": {
-        "0": "b",
-        "op": "get_self"
-    },
-    "2": {
-        "0": 4,
-        "1": 6,
-        "2": "a",
-        "3": "b",
-        "next": 8,
-        "op": "check_number"
-    },
-    "3": {
-        "op": "notify",
-        "txt": "larger"
-    },
-    "4": {
-        "0": false,
-        "1": false,
-        "next": 10,
-        "op": "set_reg"
-    },
-    "5": {
-        "op": "notify",
-        "txt": "smaller"
-    },
-    "6": {
-        "0": false,
-        "1": false,
-        "next": 10,
-        "op": "set_reg"
-    },
-    "7": {
-        "op": "notify",
-        "txt": "equal"
-    },
-    "8": {
-        "0": false,
-        "1": false,
-        "next": 10,
-        "op": "set_reg"
-    },
-    "name": "Exec Branch"
+  "0": {
+    "0": "a",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "b",
+    "op": "get_self"
+  },
+  "2": {
+    "0": 4,
+    "1": 5,
+    "2": "a",
+    "3": "b",
+    "next": 6,
+    "op": "check_number"
+  },
+  "3": {
+    "next": 7,
+    "op": "notify",
+    "txt": "larger"
+  },
+  "4": {
+    "next": 7,
+    "op": "notify",
+    "txt": "smaller"
+  },
+  "5": {
+    "op": "notify",
+    "txt": "equal"
+  },
+  "name": "Exec Branch"
 }

@@ -1,61 +1,40 @@
 {
-    "0": {
-        "0": "a",
-        "op": "get_self"
-    },
-    "1": {
-        "0": "b",
-        "op": "get_self"
-    },
-    "2": {
-        "0": 4,
-        "1": 8,
-        "2": "a",
-        "3": "b",
-        "next": 10,
-        "op": "check_number"
-    },
-    "3": {
-        "0": 6,
-        "1": "a",
-        "2": false,
-        "op": "compare_register"
-    },
-    "4": {
-        "0": false,
-        "1": false,
-        "next": 12,
-        "op": "set_reg"
-    },
-    "5": {
-        "op": "notify",
-        "txt": "larger"
-    },
-    "6": {
-        "0": false,
-        "1": false,
-        "next": 12,
-        "op": "set_reg"
-    },
-    "7": {
-        "op": "notify",
-        "txt": "smaller"
-    },
-    "8": {
-        "0": false,
-        "1": false,
-        "next": 12,
-        "op": "set_reg"
-    },
-    "9": {
-        "op": "notify",
-        "txt": "equal"
-    },
-    "10": {
-        "0": false,
-        "1": false,
-        "next": 12,
-        "op": "set_reg"
-    },
-    "name": "Exec Bridge Break"
+  "0": {
+    "0": "a",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "b",
+    "op": "get_self"
+  },
+  "2": {
+    "0": 4,
+    "1": 6,
+    "2": "a",
+    "3": "b",
+    "next": 7,
+    "op": "check_number"
+  },
+  "3": {
+    "0": 5,
+    "1": "a",
+    "2": false,
+    "next": 8,
+    "op": "compare_register"
+  },
+  "4": {
+    "next": 8,
+    "op": "notify",
+    "txt": "larger"
+  },
+  "5": {
+    "next": 8,
+    "op": "notify",
+    "txt": "smaller"
+  },
+  "6": {
+    "op": "notify",
+    "txt": "equal"
+  },
+  "name": "Exec Bridge Break"
 }

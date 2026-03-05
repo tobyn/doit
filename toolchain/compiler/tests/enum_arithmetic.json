@@ -1,34 +1,34 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "num": 15
-        },
-        "1": "x",
-        "op": "set_reg"
+      "num": 15
     },
-    "1": {
-        "0": 4,
-        "1": 3,
-        "2": {
-            "num": 3
-        },
-        "3": {
-            "num": 0
-        },
-        "op": "check_number"
-    },
+    "1": "x",
+    "op": "set_reg"
+  },
+  "1": {
+    "0": 4,
+    "1": 3,
     "2": {
-        "0": false,
-        "1": "y",
-        "next": 5,
-        "op": "set_reg"
+      "num": 3
     },
     "3": {
-        "0": {
-            "num": 1
-        },
-        "1": "y",
-        "op": "set_reg"
+      "num": 0
     },
-    "name": "Enum Arithmetic"
+    "op": "check_number"
+  },
+  "2": {
+    "0": false,
+    "1": "y",
+    "next": 5,
+    "op": "set_reg"
+  },
+  "3": {
+    "0": {
+      "num": 1
+    },
+    "1": "y",
+    "op": "set_reg"
+  },
+  "name": "Enum Arithmetic"
 }

@@ -1,41 +1,49 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 1},
-        "2": "w"
-    },
+  "0": {
     "1": {
-        "op": "set_number",
-        "1": {"num": 2},
-        "2": "x"
+      "num": 1
     },
-    "2": {
-        "op": "set_number",
-        "1": {"num": 3},
-        "2": "y"
+    "2": "w",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 2
     },
-    "3": {
-        "op": "set_number",
-        "1": {"num": 4},
-        "2": "z"
+    "2": "x",
+    "op": "set_number"
+  },
+  "2": {
+    "1": {
+      "num": 3
     },
-    "4": {
-        "op": "mul",
-        "0": "w",
-        "1": "x",
-        "2": "@arith1"
+    "2": "y",
+    "op": "set_number"
+  },
+  "3": {
+    "1": {
+      "num": 4
     },
-    "5": {
-        "op": "mul",
-        "0": "y",
-        "1": "z",
-        "2": "@arith2"
-    },
-    "6": {
-        "op": "add",
-        "0": "@arith1",
-        "1": "@arith2",
-        "2": "a"
-    },
-    "name": "Arith Chain Multi"
+    "2": "z",
+    "op": "set_number"
+  },
+  "4": {
+    "0": "w",
+    "1": "x",
+    "2": "@arith1",
+    "op": "mul"
+  },
+  "5": {
+    "0": "y",
+    "1": "z",
+    "2": "@arith2",
+    "op": "mul"
+  },
+  "6": {
+    "0": "@arith1",
+    "1": "@arith2",
+    "2": "a",
+    "op": "add"
+  },
+  "name": "Arith Chain Multi"
 }

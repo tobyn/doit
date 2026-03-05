@@ -1,15 +1,15 @@
 {
-    "0": {
-        "1": {
-            "num": 5
-        },
-        "2": "x",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "0": "x",
-        "op": "notify",
-        "txt": "Value is:"
+      "num": 5
     },
-    "name": "Let Variable"
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "x",
+    "op": "notify",
+    "txt": "Value is:"
+  },
+  "name": "Let Variable"
 }

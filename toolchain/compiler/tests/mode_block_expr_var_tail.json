@@ -1,8 +1,20 @@
 {
-    "0": { "op": "unlock" },
-    "1": { "0": 1, "1": "x", "op": "set_reg" },
-    "2": { "op": "lock" },
-    "name": "Mode Block Expr Var Tail",
-    "parameters": [false],
-    "pnames": ["Value"]
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "0": 1,
+    "1": "x",
+    "op": "set_reg"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "name": "Mode Block Expr Var Tail",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "Value"
+  ]
 }

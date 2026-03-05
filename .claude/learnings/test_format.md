@@ -23,11 +23,14 @@ same. The compiler may also emit frames in a different order than the handwritte
 output — the test comparison uses graph-isomorphism (`matchBehaviors` in `main_test.go`)
 to verify structural equivalence regardless of frame numbering.
 
-The `.json` test files were generated from the reference JavaScript codec and
-should not be modified programmatically. When our implementation's output format
-differs from the reference (e.g., 1-based vs 0-based integer keys), the test
-code bridges the gap via the `refToNative` conversion routine in `main_test.go`
-rather than modifying the test data.
+The `.json` test files can be regenerated from their `.doit` sources using
+`TestUpdateGolden` (run with `DOIT_UPDATE_GOLDEN=1`). This compiles each
+`.doit` file through the full encode/decode round-trip and writes the result
+as 0-based reference-format JSON via `nativeToRef`. Both `nativeToRef` and
+`TestUpdateGolden` are permanent fixtures in `main_test.go`. When our
+implementation's output format differs from the reference (e.g., 1-based vs
+0-based integer keys), the test code bridges the gap via the `refToNative`
+conversion routine in `main_test.go`.
 
 ## Writing test JSON: numbering conventions
 

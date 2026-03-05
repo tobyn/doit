@@ -1,44 +1,54 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 5},
-        "2": "a"
-    },
+  "0": {
     "1": {
-        "op": "set_number",
-        "1": {"num": 3},
-        "2": "b"
+      "num": 5
     },
-    "2": {
-        "op": "check_number",
-        "0": 6,
-        "1": 4,
-        "2": "a",
-        "3": {"num": 10},
-        "next": 6
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 3
     },
+    "2": "b",
+    "op": "set_number"
+  },
+  "2": {
+    "0": 6,
+    "1": 4,
+    "2": "a",
     "3": {
-        "op": "check_number",
-        "0": 5,
-        "1": 6,
-        "2": "b",
-        "3": {"num": 5},
-        "next": 6
+      "num": 10
     },
-    "4": {
-        "op": "set_reg",
-        "0": false,
-        "1": "r",
-        "next": 7
+    "next": 6,
+    "op": "check_number"
+  },
+  "3": {
+    "0": 5,
+    "1": 6,
+    "2": "b",
+    "3": {
+      "num": 5
     },
-    "5": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "r"
+    "next": 6,
+    "op": "check_number"
+  },
+  "4": {
+    "0": false,
+    "1": "r",
+    "next": 7,
+    "op": "set_reg"
+  },
+  "5": {
+    "0": {
+      "num": 1
     },
-    "6": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Logical Or GTE LTE"
+    "1": "r",
+    "op": "set_reg"
+  },
+  "6": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Logical Or GTE LTE"
 }

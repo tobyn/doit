@@ -1,10 +1,10 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "id": "v_pentagon"
-        },
-        "op": "notify",
-        "txt": "Got value"
+      "id": "v_pentagon"
     },
-    "name": "Value Literal"
+    "op": "notify",
+    "txt": "Got value"
+  },
+  "name": "Value Literal"
 }

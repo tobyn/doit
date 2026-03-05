@@ -1,27 +1,27 @@
 {
-    "0": {
-        "0": 3,
-        "1": 2,
-        "2": {"num": 10},
-        "3": {"num": 5},
-        "op": "check_number"
-    },
-    "1": {
-        "0": false,
-        "1": "x",
-        "next": 4,
-        "op": "set_reg"
-    },
+  "0": {
+    "0": 3,
+    "1": 2,
     "2": {
-        "0": {"num": 1},
-        "1": "x",
-        "op": "set_reg"
+      "num": 10
     },
     "3": {
-        "0": false,
-        "1": false,
-        "next": 5,
-        "op": "set_reg"
+      "num": 5
     },
-    "name": "Return Cmp"
+    "op": "check_number"
+  },
+  "1": {
+    "0": false,
+    "1": "x",
+    "next": 4,
+    "op": "set_reg"
+  },
+  "2": {
+    "0": {
+      "num": 1
+    },
+    "1": "x",
+    "op": "set_reg"
+  },
+  "name": "Return Cmp"
 }

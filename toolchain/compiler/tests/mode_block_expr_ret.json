@@ -1,7 +1,13 @@
 {
-    "0": { "op": "unlock" },
-    "1": { "0": "me", "op": "get_self" },
-    "2": { "op": "lock" },
-    "3": { "0": false, "1": false, "next": 5, "op": "set_reg" },
-    "name": "Mode Block Expr Ret"
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "0": "me",
+    "op": "get_self"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "name": "Mode Block Expr Ret"
 }

@@ -21,6 +21,63 @@
     },
     "op": "check_number"
   },
+  "2": {
+    "0": {
+      "num": 1
+    },
+    "1": "v",
+    "op": "set_reg"
+  },
+  "3": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000001
+    },
+    "1": "@jmp",
+    "op": "set_reg"
+  },
+  "4": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000004
+    },
+    "next": 6,
+    "op": "jump"
+  },
+  "5": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000004
+    },
+    "op": "notify",
+    "txt": "jump: no matching label"
+  },
+  "6": {
+    "op": "exit"
+  },
+  "7": {
+    "0": {
+      "id": "v_letter_L",
+      "num": -1000001
+    },
+    "next": false,
+    "op": "label"
+  },
+  "8": {
+    "0": 16,
+    "2": "@sm",
+    "3": {
+      "num": 1
+    },
+    "op": "check_number"
+  },
+  "9": {
+    "0": {
+      "num": 2
+    },
+    "1": "v",
+    "op": "set_reg"
+  },
   "10": {
     "0": {
       "id": "v_letter_L",
@@ -90,13 +147,6 @@
   "19": {
     "op": "exit"
   },
-  "2": {
-    "0": {
-      "num": 1
-    },
-    "1": "v",
-    "op": "set_reg"
-  },
   "20": {
     "0": {
       "id": "v_letter_L",
@@ -132,56 +182,6 @@
   "26": {
     "op": "notify",
     "txt": "done"
-  },
-  "3": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000001
-    },
-    "1": "@jmp",
-    "op": "set_reg"
-  },
-  "4": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000004
-    },
-    "next": 6,
-    "op": "jump"
-  },
-  "5": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000004
-    },
-    "op": "notify",
-    "txt": "jump: no matching label"
-  },
-  "6": {
-    "op": "exit"
-  },
-  "7": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000001
-    },
-    "next": false,
-    "op": "label"
-  },
-  "8": {
-    "0": 16,
-    "2": "@sm",
-    "3": {
-      "num": 1
-    },
-    "op": "check_number"
-  },
-  "9": {
-    "0": {
-      "num": 2
-    },
-    "1": "v",
-    "op": "set_reg"
   },
   "name": "For Iter Static Seq"
 }

@@ -1,18 +1,22 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 5},
-        "2": "b"
-    },
+  "0": {
     "1": {
-        "op": "add",
-        "0": "b",
-        "1": {"num": 1},
-        "2": "@arith1"
+      "num": 5
     },
-    "2": {
-        "op": "notify",
-        "0": "@arith1"
+    "2": "b",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "b",
+    "1": {
+      "num": 1
     },
-    "name": "Arith Fn Arg"
+    "2": "@arith1",
+    "op": "add"
+  },
+  "2": {
+    "0": "@arith1",
+    "op": "notify"
+  },
+  "name": "Arith Fn Arg"
 }

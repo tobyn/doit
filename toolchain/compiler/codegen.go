@@ -349,6 +349,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		return nil, err
 	}
 
+	b.eliminateNoopBridges()
 	b.finalize(value)
 	return &codec.Object{Type: codec.Behavior, Value: value}, nil
 }

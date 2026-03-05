@@ -1,18 +1,18 @@
 {
-    "0": {
-        "0": "target",
-        "op": "get_self"
-    },
-    "1": {
-        "0": "comp",
-        "1": 4,
-        "2": "target",
-        "op": "for_component"
-    },
-    "2": {
-        "next": false,
-        "op": "notify",
-        "txt": "component"
-    },
-    "name": "Iter Instr Inputs"
+  "0": {
+    "0": "target",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "comp",
+    "1": 4,
+    "2": "target",
+    "op": "for_component"
+  },
+  "2": {
+    "next": false,
+    "op": "notify",
+    "txt": "component"
+  },
+  "name": "Iter Instr Inputs"
 }

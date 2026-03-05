@@ -1,27 +1,33 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 10},
-        "2": "a"
-    },
+  "0": {
     "1": {
-        "op": "check_number",
-        "0": 3,
-        "1": 4,
-        "2": "a",
-        "3": {"num": 5},
-        "next": 4
+      "num": 10
     },
-    "2": {
-        "op": "set_reg",
-        "0": false,
-        "1": "r",
-        "next": 5
-    },
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 3,
+    "1": 4,
+    "2": "a",
     "3": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "r"
+      "num": 5
     },
-    "name": "Not Comparison"
+    "next": 4,
+    "op": "check_number"
+  },
+  "2": {
+    "0": false,
+    "1": "r",
+    "next": 5,
+    "op": "set_reg"
+  },
+  "3": {
+    "0": {
+      "num": 1
+    },
+    "1": "r",
+    "op": "set_reg"
+  },
+  "name": "Not Comparison"
 }

@@ -1,18 +1,18 @@
 {
-    "0": {
-        "1": {
-            "num": 5
-        },
-        "2": "a",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "0": "a",
-        "1": {
-            "num": 1
-        },
-        "2": "a",
-        "op": "sub"
+      "num": 5
     },
-    "name": "Arith Decrement"
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "a",
+    "1": {
+      "num": 1
+    },
+    "2": "a",
+    "op": "sub"
+  },
+  "name": "Arith Decrement"
 }

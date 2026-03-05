@@ -1,18 +1,12 @@
 {
-    "0": {
-        "op": "get_self",
-        "0": "me"
-    },
-    "1": {
-        "op": "set_reg",
-        "0": false,
-        "1": false,
-        "next": 3
-    },
-    "2": {
-        "op": "notify",
-        "0": "me",
-        "txt": "Done"
-    },
-    "name": "Return Fn Call"
+  "0": {
+    "0": "me",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "me",
+    "op": "notify",
+    "txt": "Done"
+  },
+  "name": "Return Fn Call"
 }

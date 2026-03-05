@@ -1,4 +1,8 @@
 {
-    "0": { "op": "notify", "txt": "Hello", "cmt": "\u901a\u77e5\u30e1\u30c3\u30bb\u30fc\u30b8" },
-    "name": "doc_comment_localized"
+  "0": {
+    "cmt": "通知メッセージ",
+    "op": "notify",
+    "txt": "Hello"
+  },
+  "name": "doc_comment_localized"
 }

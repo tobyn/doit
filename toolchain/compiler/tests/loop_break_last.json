@@ -1,36 +1,30 @@
 {
-    "0": {
-        "1": {"num": 0},
-        "2": "i",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "0": "i",
-        "1": {"num": 1},
-        "2": "i",
-        "op": "add"
+      "num": 0
     },
-    "2": {
-        "1": 5,
-        "2": "i",
-        "3": {"num": 3},
-        "op": "check_number"
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "i",
+    "1": {
+      "num": 1
     },
+    "2": "i",
+    "op": "add"
+  },
+  "2": {
+    "1": 2,
+    "2": "i",
     "3": {
-        "0": false,
-        "1": false,
-        "next": 6,
-        "op": "set_reg"
+      "num": 3
     },
-    "4": {
-        "0": false,
-        "1": false,
-        "next": 2,
-        "op": "set_reg"
-    },
-    "5": {
-        "op": "notify",
-        "txt": "Done"
-    },
-    "name": "Loop Break Last"
+    "op": "check_number"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "Done"
+  },
+  "name": "Loop Break Last"
 }

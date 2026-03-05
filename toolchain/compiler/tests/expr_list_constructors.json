@@ -1,17 +1,17 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "id": "metalbar"
-        },
-        "1": "x",
-        "op": "set_reg"
+      "id": "metalbar"
     },
-    "1": {
-        "0": {
-            "id": "circuit"
-        },
-        "1": "y",
-        "op": "set_reg"
+    "1": "x",
+    "op": "set_reg"
+  },
+  "1": {
+    "0": {
+      "id": "circuit"
     },
-    "name": "Expr List Constructors"
+    "1": "y",
+    "op": "set_reg"
+  },
+  "name": "Expr List Constructors"
 }

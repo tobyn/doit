@@ -1,41 +1,30 @@
 {
-    "0": {
-        "0": "t",
-        "op": "get_self"
-    },
-    "1": {
-        "0": "t",
-        "1": "entity",
-        "2": "distance",
-        "3": 3,
-        "next": 6,
-        "op": "scan"
-    },
-    "2": {
-        "0": "entity",
-        "op": "notify",
-        "txt": "found"
-    },
-    "3": {
-        "0": "distance",
-        "op": "notify",
-        "txt": "dist"
-    },
-    "4": {
-        "0": false,
-        "1": false,
-        "next": 8,
-        "op": "set_reg"
-    },
-    "5": {
-        "op": "notify",
-        "txt": "miss"
-    },
-    "6": {
-        "0": false,
-        "1": false,
-        "next": 8,
-        "op": "set_reg"
-    },
-    "name": "Exec Data Multi"
+  "0": {
+    "0": "t",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "t",
+    "1": "entity",
+    "2": "distance",
+    "3": 3,
+    "next": 5,
+    "op": "scan"
+  },
+  "2": {
+    "0": "entity",
+    "op": "notify",
+    "txt": "found"
+  },
+  "3": {
+    "0": "distance",
+    "next": 6,
+    "op": "notify",
+    "txt": "dist"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "miss"
+  },
+  "name": "Exec Data Multi"
 }

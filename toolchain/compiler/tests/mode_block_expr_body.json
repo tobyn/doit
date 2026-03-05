@@ -1,7 +1,17 @@
 {
-    "0": { "op": "unlock" },
-    "1": { "op": "notify", "txt": "x" },
-    "2": { "0": "me", "op": "get_self" },
-    "3": { "op": "lock" },
-    "name": "Mode Block Expr Body"
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "x"
+  },
+  "2": {
+    "0": "me",
+    "op": "get_self"
+  },
+  "3": {
+    "op": "lock"
+  },
+  "name": "Mode Block Expr Body"
 }

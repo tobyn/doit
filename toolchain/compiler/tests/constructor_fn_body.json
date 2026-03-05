@@ -1,11 +1,11 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "id": "metalbar",
-            "num": 5
-        },
-        "op": "notify",
-        "txt": "Delivering"
+      "id": "metalbar",
+      "num": 5
     },
-    "name": "Constructor Fn Body"
+    "op": "notify",
+    "txt": "Delivering"
+  },
+  "name": "Constructor Fn Body"
 }

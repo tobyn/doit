@@ -1,31 +1,31 @@
 {
-    "0": {
-        "1": {
-            "num": 0
-        },
-        "2": "a",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "1": {
-            "num": 5
-        },
-        "2": "b",
-        "op": "set_number"
+      "num": 0
     },
-    "2": {
-        "1": {
-            "num": 6
-        },
-        "2": "c",
-        "op": "set_number"
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 5
     },
-    "3": {
-        "1": {
-            "num": 100
-        },
-        "2": "d",
-        "op": "set_number"
+    "2": "b",
+    "op": "set_number"
+  },
+  "2": {
+    "1": {
+      "num": 6
     },
-    "name": "Enum Explicit"
+    "2": "c",
+    "op": "set_number"
+  },
+  "3": {
+    "1": {
+      "num": 100
+    },
+    "2": "d",
+    "op": "set_number"
+  },
+  "name": "Enum Explicit"
 }

@@ -1,55 +1,65 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 3},
-        "2": "b"
-    },
+  "0": {
     "1": {
-        "op": "set_number",
-        "1": {"num": 2},
-        "2": "c"
+      "num": 3
     },
-    "2": {
-        "op": "set_number",
-        "1": {"num": 7},
-        "2": "d"
+    "2": "b",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 2
     },
-    "3": {
-        "op": "add",
-        "0": "b",
-        "1": {"num": 1},
-        "2": "@arith1"
+    "2": "c",
+    "op": "set_number"
+  },
+  "2": {
+    "1": {
+      "num": 7
     },
-    "4": {
-        "op": "add",
-        "0": "@arith1",
-        "1": "c",
-        "2": "@call"
+    "2": "d",
+    "op": "set_number"
+  },
+  "3": {
+    "0": "b",
+    "1": {
+      "num": 1
     },
-    "5": {
-        "op": "compare_register",
-        "0": 9,
-        "1": "@call",
-        "2": false,
-        "next": 7
+    "2": "@arith1",
+    "op": "add"
+  },
+  "4": {
+    "0": "@arith1",
+    "1": "c",
+    "2": "@call",
+    "op": "add"
+  },
+  "5": {
+    "0": 9,
+    "1": "@call",
+    "2": false,
+    "next": 7,
+    "op": "compare_register"
+  },
+  "6": {
+    "0": 9,
+    "1": "d",
+    "2": false,
+    "next": 8,
+    "op": "compare_register"
+  },
+  "7": {
+    "0": false,
+    "1": "a",
+    "next": 10,
+    "op": "set_reg"
+  },
+  "8": {
+    "0": {
+      "num": 1
     },
-    "6": {
-        "op": "compare_register",
-        "0": 9,
-        "1": "d",
-        "2": false,
-        "next": 8
-    },
-    "7": {
-        "op": "set_reg",
-        "0": false,
-        "1": "a",
-        "next": 10
-    },
-    "8": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "a"
-    },
-    "name": "Combined Expr"
+    "1": "a",
+    "op": "set_reg"
+  },
+  "name": "Combined Expr"
 }

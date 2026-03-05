@@ -1,5 +1,10 @@
 {
-  "name": "a",
-  "0": {"op": "notify", "txt": "hello"},
-  "1": {"op": "restart"}
+  "0": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "1": {
+    "op": "restart"
+  },
+  "name": "a"
 }

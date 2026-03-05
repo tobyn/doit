@@ -1,7 +1,7 @@
 {
-    "0": {
-        "op": "notify",
-        "txt": "No name given"
-    },
-    "name": "no_name"
+  "0": {
+    "op": "notify",
+    "txt": "No name given"
+  },
+  "name": "no_name"
 }

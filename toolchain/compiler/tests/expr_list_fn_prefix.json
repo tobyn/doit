@@ -1,25 +1,25 @@
 {
-    "0": {
-        "op": "get_self",
-        "0": "@call"
-    },
+  "0": {
+    "0": "@call",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "@call",
+    "1": "coord",
+    "op": "get_location"
+  },
+  "2": {
     "1": {
-        "op": "get_location",
-        "0": "@call",
-        "1": "coord"
+      "num": 1
     },
-    "2": {
-        "1": {
-            "num": 1
-        },
-        "2": "a",
-        "op": "set_number"
-    },
-    "3": {
-        "0": "coord",
-        "1": "b",
-        "2": false,
-        "op": "separate_coordinate"
-    },
-    "name": "Expr List Fn Prefix"
+    "2": "a",
+    "op": "set_number"
+  },
+  "3": {
+    "0": "coord",
+    "1": "b",
+    "2": false,
+    "op": "separate_coordinate"
+  },
+  "name": "Expr List Fn Prefix"
 }

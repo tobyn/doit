@@ -1,36 +1,36 @@
 {
-    "0": {
-        "1": {
-            "num": 5
-        },
-        "2": "a",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "0": 3,
-        "1": "a",
-        "2": {
-            "id": "metalbar"
-        },
-        "next": 4,
-        "op": "compare_register"
+      "num": 5
     },
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 3,
+    "1": "a",
     "2": {
-        "0": false,
-        "1": "r",
-        "next": 5,
-        "op": "set_reg"
+      "id": "metalbar"
     },
-    "3": {
-        "0": {
-            "num": 1
-        },
-        "1": "r",
-        "op": "set_reg"
+    "next": 4,
+    "op": "compare_register"
+  },
+  "2": {
+    "0": false,
+    "1": "r",
+    "next": 5,
+    "op": "set_reg"
+  },
+  "3": {
+    "0": {
+      "num": 1
     },
-    "4": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Constructor RHS"
+    "1": "r",
+    "op": "set_reg"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Constructor RHS"
 }

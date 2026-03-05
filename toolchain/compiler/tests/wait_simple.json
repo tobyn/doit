@@ -1,13 +1,13 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "num": 5
-        },
-        "op": "wait"
+      "num": 5
     },
-    "1": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Wait Simple"
+    "op": "wait"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Wait Simple"
 }

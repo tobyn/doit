@@ -1,18 +1,18 @@
 {
-    "0": {
-        "1": {
-            "num": 5
-        },
-        "2": "b",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "0": "b",
-        "1": {
-            "num": 3
-        },
-        "2": "a",
-        "op": "add"
+      "num": 5
     },
-    "name": "Arith Number RHS"
+    "2": "b",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "b",
+    "1": {
+      "num": 3
+    },
+    "2": "a",
+    "op": "add"
+  },
+  "name": "Arith Number RHS"
 }

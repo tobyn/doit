@@ -1,18 +1,18 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "id": "metalbar"
-        },
-        "1": {
-            "num": 5
-        },
-        "2": "@ctor",
-        "op": "set_number"
+      "id": "metalbar"
     },
     "1": {
-        "0": "@ctor",
-        "op": "notify",
-        "txt": "Items"
+      "num": 5
     },
-    "name": "Constructor Fn Body Ampersand Runtime"
+    "2": "@ctor",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "@ctor",
+    "op": "notify",
+    "txt": "Items"
+  },
+  "name": "Constructor Fn Body Ampersand Runtime"
 }

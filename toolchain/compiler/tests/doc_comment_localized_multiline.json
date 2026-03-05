@@ -1,4 +1,8 @@
 {
-    "0": { "op": "notify", "txt": "Hello", "cmt": "line one continued on next line" },
-    "name": "doc_comment_localized_multiline"
+  "0": {
+    "cmt": "line one continued on next line",
+    "op": "notify",
+    "txt": "Hello"
+  },
+  "name": "doc_comment_localized_multiline"
 }

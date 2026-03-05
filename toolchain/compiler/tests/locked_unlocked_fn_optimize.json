@@ -1,6 +1,13 @@
 {
-    "0": { "op": "unlock" },
-    "1": { "op": "notify", "txt": "Fast" },
-    "2": { "op": "lock" },
-    "name": "locked_unlocked_fn_optimize"
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "Fast"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "name": "locked_unlocked_fn_optimize"
 }

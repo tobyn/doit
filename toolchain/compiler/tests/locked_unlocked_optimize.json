@@ -1,10 +1,29 @@
 {
-    "0": { "op": "notify", "txt": "Already locked" },
-    "1": { "op": "unlock" },
-    "2": { "op": "notify", "txt": "Now unlocked" },
-    "3": { "op": "notify", "txt": "Still unlocked" },
-    "4": { "op": "lock" },
-    "5": { "op": "notify", "txt": "Back to locked" },
-    "6": { "op": "notify", "txt": "Still locked" },
-    "name": "locked_unlocked_optimize"
+  "0": {
+    "op": "notify",
+    "txt": "Already locked"
+  },
+  "1": {
+    "op": "unlock"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "Now unlocked"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "Still unlocked"
+  },
+  "4": {
+    "op": "lock"
+  },
+  "5": {
+    "op": "notify",
+    "txt": "Back to locked"
+  },
+  "6": {
+    "op": "notify",
+    "txt": "Still locked"
+  },
+  "name": "locked_unlocked_optimize"
 }

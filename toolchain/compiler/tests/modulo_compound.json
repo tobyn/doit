@@ -1,18 +1,18 @@
 {
-    "0": {
-        "1": {
-            "num": 10
-        },
-        "2": "a",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "0": "a",
-        "1": {
-            "num": 3
-        },
-        "2": "a",
-        "op": "modulo"
+      "num": 10
     },
-    "name": "Modulo Compound"
+    "2": "a",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "a",
+    "1": {
+      "num": 3
+    },
+    "2": "a",
+    "op": "modulo"
+  },
+  "name": "Modulo Compound"
 }

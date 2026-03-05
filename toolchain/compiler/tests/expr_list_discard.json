@@ -1,10 +1,10 @@
 {
-    "0": {
-        "1": {
-            "num": 5
-        },
-        "2": "b",
-        "op": "set_number"
+  "0": {
+    "1": {
+      "num": 5
     },
-    "name": "Expr List Discard"
+    "2": "b",
+    "op": "set_number"
+  },
+  "name": "Expr List Discard"
 }

@@ -1,22 +1,22 @@
 {
-    "0": {
-        "1": {
-            "num": 0
-        },
-        "2": "i",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "op": "notify",
-        "txt": "Hello"
+      "num": 0
     },
-    "2": {
-        "0": "i",
-        "1": {
-            "num": 1
-        },
-        "2": "i",
-        "op": "add"
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "Hello"
+  },
+  "2": {
+    "0": "i",
+    "1": {
+      "num": 1
     },
-    "name": "Semicolons"
+    "2": "i",
+    "op": "add"
+  },
+  "name": "Semicolons"
 }

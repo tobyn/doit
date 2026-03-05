@@ -1,21 +1,21 @@
 {
-    "0": {
-        "op": "get_self",
-        "0": "me"
-    },
-    "1": {
-        "op": "get_self",
-        "0": "me_2"
-    },
-    "2": {
-        "op": "get_location",
-        "0": "me_2",
-        "1": "loc"
-    },
-    "3": {
-        "op": "notify",
-        "0": "loc",
-        "txt": "Done"
-    },
-    "name": "Inline Var Rename"
+  "0": {
+    "0": "me",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "me_2",
+    "op": "get_self"
+  },
+  "2": {
+    "0": "me_2",
+    "1": "loc",
+    "op": "get_location"
+  },
+  "3": {
+    "0": "loc",
+    "op": "notify",
+    "txt": "Done"
+  },
+  "name": "Inline Var Rename"
 }

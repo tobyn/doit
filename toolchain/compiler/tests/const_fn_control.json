@@ -1,13 +1,17 @@
 {
+  "0": {
     "0": {
-        "0": {"num": 7},
-        "1": false,
-        "op": "set_reg"
+      "num": 7
     },
-    "1": {
-        "0": {"num": 10},
-        "1": false,
-        "op": "set_reg"
+    "1": false,
+    "op": "set_reg"
+  },
+  "1": {
+    "0": {
+      "num": 10
     },
-    "name": "Const Fn Control"
+    "1": false,
+    "op": "set_reg"
+  },
+  "name": "Const Fn Control"
 }

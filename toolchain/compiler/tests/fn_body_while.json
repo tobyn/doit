@@ -1,49 +1,49 @@
 {
+  "0": {
     "0": {
-        "0": {
-            "num": 0
-        },
-        "1": "result",
-        "op": "set_reg"
+      "num": 0
     },
+    "1": "result",
+    "op": "set_reg"
+  },
+  "1": {
+    "0": {
+      "num": 1
+    },
+    "1": "i",
+    "op": "set_reg"
+  },
+  "2": {
+    "0": 6,
+    "2": "i",
+    "3": 1,
+    "op": "check_number"
+  },
+  "3": {
+    "0": "result",
+    "1": "i",
+    "2": "result",
+    "op": "add"
+  },
+  "4": {
+    "0": "i",
     "1": {
-        "0": {
-            "num": 1
-        },
-        "1": "i",
-        "op": "set_reg"
+      "num": 1
     },
-    "2": {
-        "0": 6,
-        "2": "i",
-        "3": 1,
-        "op": "check_number"
-    },
-    "3": {
-        "0": "result",
-        "1": "i",
-        "2": "result",
-        "op": "add"
-    },
-    "4": {
-        "0": "i",
-        "1": {
-            "num": 1
-        },
-        "2": "i",
-        "next": 3,
-        "op": "add"
-    },
-    "5": {
-        "0": "result",
-        "op": "notify",
-        "txt": "result"
-    },
-    "name": "Fn Body While",
-    "parameters": [
-        false
-    ],
-    "pnames": [
-        "N"
-    ]
+    "2": "i",
+    "next": 3,
+    "op": "add"
+  },
+  "5": {
+    "0": "result",
+    "op": "notify",
+    "txt": "result"
+  },
+  "name": "Fn Body While",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "N"
+  ]
 }

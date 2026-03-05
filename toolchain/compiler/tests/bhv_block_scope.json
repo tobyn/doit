@@ -1,39 +1,39 @@
 {
-    "0": {
-        "1": 1,
-        "2": false,
-        "next": 4,
-        "op": "compare_register"
-    },
+  "0": {
+    "1": 1,
+    "2": false,
+    "next": 4,
+    "op": "compare_register"
+  },
+  "1": {
     "1": {
-        "1": {
-            "num": 5
-        },
-        "2": "x",
-        "op": "set_number"
+      "num": 5
     },
-    "2": {
-        "0": "x",
-        "1": false,
-        "op": "set_reg"
+    "2": "x",
+    "op": "set_number"
+  },
+  "2": {
+    "0": "x",
+    "1": false,
+    "op": "set_reg"
+  },
+  "3": {
+    "1": {
+      "num": 10
     },
-    "3": {
-        "1": {
-            "num": 10
-        },
-        "2": "x",
-        "op": "set_number"
-    },
-    "4": {
-        "0": "x",
-        "1": false,
-        "op": "set_reg"
-    },
-    "name": "Block Scope",
-    "parameters": [
-        false
-    ],
-    "pnames": [
-        "P"
-    ]
+    "2": "x",
+    "op": "set_number"
+  },
+  "4": {
+    "0": "x",
+    "1": false,
+    "op": "set_reg"
+  },
+  "name": "Block Scope",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "P"
+  ]
 }

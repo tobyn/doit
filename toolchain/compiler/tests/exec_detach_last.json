@@ -1,29 +1,22 @@
 {
-    "0": {
-        "0": "e",
-        "op": "get_self"
-    },
-    "1": {
-        "0": "e",
-        "1": "comp",
-        "2": "idx",
-        "3": 4,
-        "next": 3,
-        "op": "for_component"
-    },
-    "2": {
-        "next": false,
-        "op": "last"
-    },
-    "3": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "4": {
-        "0": false,
-        "1": false,
-        "next": 6,
-        "op": "set_reg"
-    },
-    "name": "Exec Detach Last"
+  "0": {
+    "0": "e",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "e",
+    "1": "comp",
+    "2": "idx",
+    "3": 4,
+    "op": "for_component"
+  },
+  "2": {
+    "next": false,
+    "op": "last"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Exec Detach Last"
 }

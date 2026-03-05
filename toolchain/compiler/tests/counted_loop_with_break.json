@@ -14,12 +14,12 @@
     "op": "set_number"
   },
   "2": {
-    "0": 8,
+    "0": 7,
     "2": "@loop",
     "3": {
       "num": 10
     },
-    "next": 8,
+    "next": 7,
     "op": "check_number"
   },
   "3": {
@@ -31,20 +31,15 @@
     "op": "add"
   },
   "4": {
-    "1": 7,
+    "1": 6,
     "2": "i",
     "3": {
       "num": 3
     },
+    "next": 7,
     "op": "check_number"
   },
   "5": {
-    "0": false,
-    "1": false,
-    "next": 8,
-    "op": "set_reg"
-  },
-  "6": {
     "0": "@loop",
     "1": {
       "num": 1
@@ -53,7 +48,7 @@
     "next": 3,
     "op": "add"
   },
-  "7": {
+  "6": {
     "op": "notify",
     "txt": "Done"
   },

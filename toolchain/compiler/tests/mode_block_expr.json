@@ -1,6 +1,13 @@
 {
-    "0": { "op": "unlock" },
-    "1": { "0": "me", "op": "get_self" },
-    "2": { "op": "lock" },
-    "name": "Mode Block Expr"
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "0": "me",
+    "op": "get_self"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "name": "Mode Block Expr"
 }

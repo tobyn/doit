@@ -1,8 +1,8 @@
 {
-    "0": {
-        "op": "notify",
-        "1": "10",
-        "txt": "Hello!"
-    },
-    "name": "Keyword Args Passthrough"
+  "0": {
+    "1": "10",
+    "op": "notify",
+    "txt": "Hello!"
+  },
+  "name": "Keyword Args Passthrough"
 }

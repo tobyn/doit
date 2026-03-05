@@ -1,43 +1,26 @@
 {
-    "0": {
-        "0": 2,
-        "1": 6,
-        "2": -4,
-        "3": {
-            "num": 5
-        },
-        "next": 4,
-        "op": "check_number"
-    },
-    "1": {
-        "op": "notify",
-        "txt": "big"
-    },
-    "2": {
-        "0": false,
-        "1": false,
-        "next": 4,
-        "op": "set_reg"
-    },
+  "0": {
+    "0": 2,
+    "1": 4,
+    "2": -4,
     "3": {
-        "op": "notify",
-        "txt": "pass"
+      "num": 5
     },
-    "4": {
-        "0": false,
-        "1": false,
-        "next": 8,
-        "op": "set_reg"
-    },
-    "5": {
-        "op": "notify",
-        "txt": "fail"
-    },
-    "6": {
-        "0": false,
-        "1": false,
-        "next": 8,
-        "op": "set_reg"
-    },
-    "name": "Instr Local Blocks Mixed"
+    "next": 3,
+    "op": "check_number"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "big"
+  },
+  "2": {
+    "next": 5,
+    "op": "notify",
+    "txt": "pass"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "fail"
+  },
+  "name": "Instr Local Blocks Mixed"
 }

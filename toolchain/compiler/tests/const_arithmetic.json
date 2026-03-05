@@ -1,17 +1,17 @@
 {
-    "0": {
-        "1": {
-            "num": 13
-        },
-        "2": "x",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "1": {
-            "num": 30
-        },
-        "2": "y",
-        "op": "set_number"
+      "num": 13
     },
-    "name": "Const Arithmetic"
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "1": {
+      "num": 30
+    },
+    "2": "y",
+    "op": "set_number"
+  },
+  "name": "Const Arithmetic"
 }

@@ -1,15 +1,13 @@
 {
+  "0": {
     "0": {
-        "0": {"num": 1},
-        "1": {"num": 2},
-        "2": "x",
-        "op": "add"
+      "num": 1
     },
     "1": {
-        "0": false,
-        "1": false,
-        "next": 3,
-        "op": "set_reg"
+      "num": 2
     },
-    "name": "Return Arith"
+    "2": "x",
+    "op": "add"
+  },
+  "name": "Return Arith"
 }

@@ -1,18 +1,20 @@
 {
-    "0": {
-        "op": "set_number",
-        "1": {"num": 5},
-        "2": "x"
-    },
+  "0": {
     "1": {
-        "op": "compare_register",
-        "0": 4,
-        "1": "x",
-        "2": false
+      "num": 5
     },
-    "2": {
-        "op": "notify",
-        "txt": "empty"
-    },
-    "name": "If Not"
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 4,
+    "1": "x",
+    "2": false,
+    "op": "compare_register"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "empty"
+  },
+  "name": "If Not"
 }

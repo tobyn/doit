@@ -1,18 +1,20 @@
 {
-    "0": {
-        "1": {"num": 5},
-        "2": "v",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "0": "v",
-        "1": "r",
-        "op": "set_reg"
+      "num": 5
     },
-    "2": {
-        "0": "r",
-        "op": "notify",
-        "txt": "Done"
-    },
-    "name": "Return Param Passthrough"
+    "2": "v",
+    "op": "set_number"
+  },
+  "1": {
+    "0": "v",
+    "1": "r",
+    "op": "set_reg"
+  },
+  "2": {
+    "0": "r",
+    "op": "notify",
+    "txt": "Done"
+  },
+  "name": "Return Param Passthrough"
 }

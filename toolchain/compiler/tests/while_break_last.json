@@ -1,43 +1,39 @@
 {
-    "0": {
-        "1": {"num": 0},
-        "2": "i",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "0": 7,
-        "2": "i",
-        "3": {"num": 10},
-        "next": 7,
-        "op": "check_number"
+      "num": 0
     },
-    "2": {
-        "0": "i",
-        "1": {"num": 1},
-        "2": "i",
-        "op": "add"
-    },
+    "2": "i",
+    "op": "set_number"
+  },
+  "1": {
+    "0": 5,
+    "2": "i",
     "3": {
-        "1": 6,
-        "2": "i",
-        "3": {"num": 3},
-        "op": "check_number"
+      "num": 10
     },
-    "4": {
-        "0": false,
-        "1": false,
-        "next": 7,
-        "op": "set_reg"
+    "next": 5,
+    "op": "check_number"
+  },
+  "2": {
+    "0": "i",
+    "1": {
+      "num": 1
     },
-    "5": {
-        "0": false,
-        "1": false,
-        "next": 2,
-        "op": "set_reg"
+    "2": "i",
+    "op": "add"
+  },
+  "3": {
+    "1": 2,
+    "2": "i",
+    "3": {
+      "num": 3
     },
-    "6": {
-        "op": "notify",
-        "txt": "Done"
-    },
-    "name": "While Break Last"
+    "op": "check_number"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "Done"
+  },
+  "name": "While Break Last"
 }

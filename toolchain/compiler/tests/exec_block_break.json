@@ -1,43 +1,31 @@
 {
-    "0": {
-        "0": "e",
-        "op": "get_self"
-    },
-    "1": {
-        "0": "e",
-        "1": "comp",
-        "2": "idx",
-        "3": 6,
-        "next": 3,
-        "op": "for_component"
-    },
-    "2": {
-        "0": 5,
-        "1": "comp",
-        "2": false,
-        "op": "compare_register"
-    },
-    "3": {
-        "0": false,
-        "1": false,
-        "next": false,
-        "op": "set_reg"
-    },
-    "4": {
-        "0": "comp",
-        "next": false,
-        "op": "notify",
-        "txt": "comp"
-    },
-    "5": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "6": {
-        "0": false,
-        "1": false,
-        "next": 8,
-        "op": "set_reg"
-    },
-    "name": "Exec Block Break"
+  "0": {
+    "0": "e",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "e",
+    "1": "comp",
+    "2": "idx",
+    "3": 5,
+    "op": "for_component"
+  },
+  "2": {
+    "0": 4,
+    "1": "comp",
+    "2": false,
+    "next": false,
+    "op": "compare_register"
+  },
+  "3": {
+    "0": "comp",
+    "next": false,
+    "op": "notify",
+    "txt": "comp"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Exec Block Break"
 }

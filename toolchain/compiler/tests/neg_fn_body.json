@@ -1,11 +1,15 @@
 {
   "0": {
-    "0": {"num": -5},
+    "0": {
+      "num": -5
+    },
     "1": "x",
     "op": "set_reg"
   },
   "1": {
-    "0": {"num": 0},
+    "0": {
+      "num": 0
+    },
     "1": 1,
     "2": "y",
     "op": "sub"
@@ -21,6 +25,10 @@
     "op": "set_reg"
   },
   "name": "test",
-  "parameters": [false],
-  "pnames": ["A"]
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "A"
+  ]
 }

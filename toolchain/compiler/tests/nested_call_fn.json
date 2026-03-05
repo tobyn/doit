@@ -1,29 +1,29 @@
 {
-    "0": {
-        "0": "@ctor",
-        "op": "get_self"
-    },
-    "1": {
-        "0": "@ctor",
-        "1": "me",
-        "op": "set_reg"
-    },
-    "2": {
-        "0": "me",
-        "1": "@ctor_2",
-        "op": "get_resource_num"
-    },
-    "3": {
-        "0": 1,
-        "1": "@ctor_2",
-        "2": false,
-        "op": "add"
-    },
-    "name": "Nested Call Fn",
-    "parameters": [
-        false
-    ],
-    "pnames": [
-        "X"
-    ]
+  "0": {
+    "0": "@ctor",
+    "op": "get_self"
+  },
+  "1": {
+    "0": "@ctor",
+    "1": "me",
+    "op": "set_reg"
+  },
+  "2": {
+    "0": "me",
+    "1": "@ctor_2",
+    "op": "get_resource_num"
+  },
+  "3": {
+    "0": 1,
+    "1": "@ctor_2",
+    "2": false,
+    "op": "add"
+  },
+  "name": "Nested Call Fn",
+  "parameters": [
+    false
+  ],
+  "pnames": [
+    "X"
+  ]
 }

@@ -1,54 +1,39 @@
 {
-    "0": {
-        "1": {"num": 10},
-        "2": "x",
-        "op": "set_number"
-    },
+  "0": {
     "1": {
-        "1": 4,
-        "2": "x",
-        "3": {"num": 5},
-        "next": 4,
-        "op": "check_number"
+      "num": 10
     },
-    "2": {
-        "0": false,
-        "1": false,
-        "next": 5,
-        "op": "set_reg"
-    },
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "1": 4,
+    "2": "x",
     "3": {
-        "0": false,
-        "1": false,
-        "next": 7,
-        "op": "set_reg"
+      "num": 5
     },
-    "4": {
-        "0": {"num": 1},
-        "1": "val",
-        "op": "set_reg"
+    "next": 4,
+    "op": "check_number"
+  },
+  "2": {
+    "0": {
+      "num": 1
     },
-    "5": {
-        "0": false,
-        "1": false,
-        "next": 9,
-        "op": "set_reg"
+    "1": "val",
+    "next": 5,
+    "op": "set_reg"
+  },
+  "3": {
+    "0": {
+      "num": 0
     },
-    "6": {
-        "0": {"num": 0},
-        "1": "val",
-        "op": "set_reg"
-    },
-    "7": {
-        "0": false,
-        "1": false,
-        "next": 9,
-        "op": "set_reg"
-    },
-    "8": {
-        "0": "val",
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Exec Expr Fn"
+    "1": "val",
+    "op": "set_reg"
+  },
+  "4": {
+    "0": "val",
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Exec Expr Fn"
 }

@@ -73,6 +73,13 @@ approach: parse into `[]Stmt` with `Expr` nodes, then emit frames.
 4. **User source compilation** — Two passes: first collects
    declarations (`collectDecls`), then compiles the selected behavior
    via `parseBehaviorBody`.
+5. **Noop bridge elimination** — `eliminateNoopBridges` removes
+   `set_reg false, false` frames that serve only as control-flow
+   redirects. Runs after all emission/patching and
+   `validateNamedLabels`, before `finalize`. Five phases: identify
+   noops, resolve targets transitively, redirect references, fix
+   fall-through predecessors, remove and reindex. See `isNoopBridge`
+   and `resolveNoopTarget` in `compiler.go`.
 
 `Compile` and `CompileString` accept `fs.FS` + path for import
 resolution, a `behaviorID` string (auto-selected when only one
@@ -150,10 +157,11 @@ the target loop, and emits a fallthrough error handler (see below).
 `patchJumpBreakPlaceholders` must be called BEFORE computing
 `afterLoop` since it may emit frames. `@return` is patched to jump past the function
 expansion. `@break`, `@continue`, and `@return` are patched to
-`set_reg false false` with appropriate `"next"` targets. `@continue`
-in yield-based iterators is handled by `YieldBodyStmt`: a bridge noop
-is emitted after the inlined caller body, and `@continue` is patched
-to jump to it.
+`set_reg false false` with appropriate `"next"` targets; these noop
+bridge frames are eliminated by `eliminateNoopBridges` in a post-
+emission pass. `@continue` in yield-based iterators is handled by
+`YieldBodyStmt`: a bridge noop is emitted after the inlined caller
+body, and `@continue` is patched to jump to it.
 
 **Jump fallthrough protection**: Compiler-emitted jumps that should
 always match (named labels, state machine dispatch, cross-boundary

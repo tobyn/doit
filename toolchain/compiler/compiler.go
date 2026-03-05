@@ -699,6 +699,156 @@ func (b *frameBuilder) get(idx int) map[string]any {
 	return b.frames[idx]
 }
 
+// isNoopBridge reports whether f is a set_reg false, false frame
+// serving only as a control-flow redirect (no side effects).
+// Frames with extra keys (e.g., "cmt") are conservatively kept —
+// a comment is player-visible in the game's behavior editor.
+func isNoopBridge(f map[string]any) bool {
+	if f["op"] != "set_reg" || f["1"] != false || f["2"] != false {
+		return false
+	}
+	for k := range f {
+		switch k {
+		case "op", "1", "2", "next":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// resolveNoopTarget follows a chain of noop bridges starting at idx
+// to find the final non-noop target. Returns a frameRef for a real
+// frame or false for re-dispatch.
+func resolveNoopTarget(frames []map[string]any, idx int, noops map[int]bool) any {
+	visited := map[int]bool{idx: true}
+	for {
+		f := frames[idx]
+		next, hasNext := f["next"]
+		if !hasNext {
+			// Fall-through to idx+1.
+			target := idx + 1
+			if noops[target] {
+				if visited[target] {
+					return frameRef(target)
+				}
+				visited[target] = true
+				idx = target
+				continue
+			}
+			return frameRef(target)
+		}
+		if next == false {
+			return false
+		}
+		if ref, ok := next.(frameRef); ok {
+			target := int(ref)
+			if noops[target] {
+				if visited[target] {
+					return next
+				}
+				visited[target] = true
+				idx = target
+				continue
+			}
+			return next
+		}
+		return next
+	}
+}
+
+// eliminateNoopBridges removes set_reg false, false frames that serve
+// only as control-flow redirects, adjusting all references to maintain
+// correct control flow. Runs after all emission/patching, before finalize.
+func (b *frameBuilder) eliminateNoopBridges() {
+	// Phase 1: Identify noop frames.
+	noops := map[int]bool{}
+	for i, f := range b.frames {
+		if isNoopBridge(f) {
+			noops[i] = true
+		}
+	}
+	if len(noops) == 0 {
+		return
+	}
+
+	// Phase 2: Resolve targets transitively.
+	targets := make(map[int]any, len(noops))
+	for i := range noops {
+		targets[i] = resolveNoopTarget(b.frames, i, noops)
+	}
+
+	// Phase 3: Redirect references in all non-noop frames.
+	for i, f := range b.frames {
+		if noops[i] {
+			continue
+		}
+		for k, v := range f {
+			if ref, ok := v.(frameRef); ok {
+				if target, ok := targets[int(ref)]; ok {
+					f[k] = target
+				}
+			}
+		}
+	}
+
+	// Phase 4: Fix fall-through predecessors. If a non-noop frame at
+	// position I-1 has no explicit "next" and falls through to a noop
+	// at position I, add an explicit "next" to maintain correct flow.
+	for i := range noops {
+		if i > 0 && !noops[i-1] {
+			pred := b.frames[i-1]
+			if _, hasNext := pred["next"]; !hasNext {
+				pred["next"] = targets[i]
+			}
+		}
+	}
+
+	// Phase 5: Remove and reindex.
+	// Build offset table: offsets[i] = count of noops before index i.
+	offsets := make([]int, len(b.frames)+1)
+	count := 0
+	for i := range b.frames {
+		offsets[i] = count
+		if noops[i] {
+			count++
+		}
+	}
+	offsets[len(b.frames)] = count
+
+	// Build new frame slice without noops.
+	newFrames := make([]map[string]any, 0, len(b.frames)-len(noops))
+	for i, f := range b.frames {
+		if !noops[i] {
+			newFrames = append(newFrames, f)
+		}
+	}
+
+	// Adjust remaining frameRef values to account for removed frames.
+	for _, f := range newFrames {
+		for k, v := range f {
+			if ref, ok := v.(frameRef); ok {
+				idx := int(ref)
+				if idx < len(offsets) {
+					f[k] = frameRef(idx - offsets[idx])
+				}
+			}
+		}
+	}
+
+	// Strip redundant "next" that now points to the natural successor.
+	for i, f := range newFrames {
+		if next, ok := f["next"]; ok {
+			if ref, ok := next.(frameRef); ok && int(ref) == i+1 {
+				delete(f, "next")
+			}
+		}
+	}
+
+	b.frames = newFrames
+	b.cursor = len(newFrames)
+}
+
 // finalize writes 1-based frame entries into value, converting
 // any frameRef values to 1-based integers.
 func (b *frameBuilder) finalize(value map[string]any) {

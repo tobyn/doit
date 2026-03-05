@@ -1,42 +1,50 @@
 {
+  "0": {
+    "0": 1,
+    "1": 2,
+    "2": 4,
+    "3": 2,
+    "4": 2,
+    "5": 2,
+    "6": 2,
+    "next": 2,
+    "op": "value_type"
+  },
+  "1": {
+    "0": 2,
+    "1": 4,
+    "2": 3,
+    "3": 3,
+    "4": 3,
+    "5": 3,
+    "6": 3,
+    "next": 3,
+    "op": "value_type"
+  },
+  "2": {
+    "0": false,
+    "1": "a",
+    "next": 5,
+    "op": "set_reg"
+  },
+  "3": {
     "0": {
-        "op": "value_type",
-        "0": 1,
-        "1": 2,
-        "2": 4,
-        "3": 2,
-        "4": 2,
-        "5": 2,
-        "6": 2,
-        "next": 2
+      "num": 1
     },
-    "1": {
-        "op": "value_type",
-        "0": 2,
-        "1": 4,
-        "2": 3,
-        "3": 3,
-        "4": 3,
-        "5": 3,
-        "6": 3,
-        "next": 3
-    },
-    "2": {
-        "op": "set_reg",
-        "0": false,
-        "1": "a",
-        "next": 5
-    },
-    "3": {
-        "op": "set_reg",
-        "0": {"num": 1},
-        "1": "a"
-    },
-    "4": {
-        "op": "notify",
-        "txt": "done"
-    },
-    "name": "Is Chain Or",
-    "parameters": [false, false],
-    "pnames": ["X", "Y"]
+    "1": "a",
+    "op": "set_reg"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Is Chain Or",
+  "parameters": [
+    false,
+    false
+  ],
+  "pnames": [
+    "X",
+    "Y"
+  ]
 }
