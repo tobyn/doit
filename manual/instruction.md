@@ -330,7 +330,6 @@ See [Language](language.md#iterator_instruction) for more details.
 
 ## Field Reference Format
 
-Field keys in the instruction block use the reference codec's 0-based format
-for numbered parameter slots (`0`, `1`, `2`, ...). The compiler converts
-these to 1-based native format automatically. Named fields like `txt` and
-`c` are passed through as-is.
+Field keys in the instruction block use 0-based format for numbered
+parameter slots (`0`, `1`, `2`, ...), matching the reference codec
+convention. Named fields like `txt` and `c` are passed through as-is.

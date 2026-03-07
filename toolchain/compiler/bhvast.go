@@ -2750,7 +2750,7 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 					if err != nil {
 						return err
 					}
-					b.emit(map[string]any{"op": "set_reg", "1": val, "2": tmp})
+					b.emit(map[string]any{"op": "set_reg", "0": val, "1": tmp})
 					return nil
 				},
 			}
@@ -2816,18 +2816,18 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 		// Distinguish set_number from set_reg
 		if m, ok := e.Value.(map[string]any); ok {
 			if _, hasNum := m["num"]; hasNum && len(m) == 1 {
-				f := map[string]any{"op": "set_number", "2": m, "3": target}
+				f := map[string]any{"op": "set_number", "1": m, "2": target}
 				setComment(f, comment)
 				b.emit(f)
 				return nil
 			}
 		}
-		f := map[string]any{"op": "set_reg", "1": e.Value, "2": target}
+		f := map[string]any{"op": "set_reg", "0": e.Value, "1": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
 	case *IdentExpr:
-		f := map[string]any{"op": "set_reg", "1": syms.resolveReg(e.Name), "2": target}
+		f := map[string]any{"op": "set_reg", "0": syms.resolveReg(e.Name), "1": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
@@ -2899,7 +2899,7 @@ func (p *parser) emitBhvArithTo(expr *ArithExpr, target any, syms *symbolTable, 
 // emitBhvConstructorTo emits a constructor expression to target.
 func (p *parser) emitBhvConstructorTo(ctor *ConstructorExpr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
 	if val, ok := tryResolveConstructorLiteral(ctor); ok {
-		f := map[string]any{"op": "set_reg", "1": val, "2": target}
+		f := map[string]any{"op": "set_reg", "0": val, "1": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
@@ -2939,7 +2939,7 @@ func (p *parser) emitBhvConstructorTo(ctor *ConstructorExpr, target any, syms *s
 // emitBhvAmpersandTo emits an & expression to target.
 func (p *parser) emitBhvAmpersandTo(amp *AmpersandExpr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
 	if val, ok := tryResolveAmpersandLiteral(amp); ok {
-		f := map[string]any{"op": "set_reg", "1": val, "2": target}
+		f := map[string]any{"op": "set_reg", "0": val, "1": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
@@ -3353,9 +3353,9 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		}
 		f := map[string]any{
 			"op": arithOpName(s.Op),
-			"1":  target,
-			"2":  rhs,
-			"3":  target,
+			"0":  target,
+			"1":  rhs,
+			"2":  target,
 		}
 		setComment(f, s.Comment)
 		b.emit(f)
@@ -3372,9 +3372,9 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		}
 		f := map[string]any{
 			"op": op,
-			"1":  target,
-			"2":  map[string]any{"num": 1},
-			"3":  target,
+			"0":  target,
+			"1":  map[string]any{"num": 1},
+			"2":  target,
 		}
 		setComment(f, s.Comment)
 		b.emit(f)

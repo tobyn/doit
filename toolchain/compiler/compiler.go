@@ -109,33 +109,33 @@ func TestParseLocalePrefix(line string) (locale, rest string, ok bool) {
 	return parseLocalePrefix(line)
 }
 
-// --- check_number instruction slots (1-based wire format) ---
+// --- check_number instruction slots ---
 
 const (
-	checkLarger  = "1" // exec branch: value > target
-	checkSmaller = "2" // exec branch: value < target
-	checkValue   = "3" // input: value to compare
-	checkTarget  = "4" // input: comparison target
+	checkLarger  = "0" // exec branch: value > target
+	checkSmaller = "1" // exec branch: value < target
+	checkValue   = "2" // input: value to compare
+	checkTarget  = "3" // input: comparison target
 )
 
-// --- compare_register instruction slots (1-based wire format) ---
+// --- compare_register instruction slots ---
 
 const (
-	compareRegDifferent = "1" // exec branch: If Different
-	compareRegValue1    = "2" // input: value_1
-	compareRegValue2    = "3" // input: value_2
+	compareRegDifferent = "0" // exec branch: If Different
+	compareRegValue1    = "1" // input: value_1
+	compareRegValue2    = "2" // input: value_2
 )
 
-// --- value_type instruction slots (1-based wire format) ---
+// --- value_type instruction slots ---
 
 const (
-	valueTypeInput = "1" // input: value to check
-	valueTypeItem  = "2" // exec branch: Item
-	valueTypeUnit  = "3" // exec branch: Unit
-	valueTypeComp  = "4" // exec branch: Component
-	valueTypeTech  = "5" // exec branch: Tech
-	valueTypeValue = "6" // exec branch: Value
-	valueTypeCoord = "7" // exec branch: Coord
+	valueTypeInput = "0" // input: value to check
+	valueTypeItem  = "1" // exec branch: Item
+	valueTypeUnit  = "2" // exec branch: Unit
+	valueTypeComp  = "3" // exec branch: Component
+	valueTypeTech  = "4" // exec branch: Tech
+	valueTypeValue = "5" // exec branch: Value
+	valueTypeCoord = "6" // exec branch: Coord
 )
 
 // allTypeSlots lists the 6 type branch slot keys for value_type.
@@ -630,7 +630,8 @@ const (
 )
 
 // frameRef marks an integer as a reference to a 0-based index in a
-// frameBuilder's slice. finalize converts these to 1-based wire format indices.
+// frameBuilder's slice. finalize converts these to 1-based integers
+// for the output JSON (matching Lua's 1-based table indexing).
 type frameRef int
 
 type frameBuilder struct {
@@ -737,12 +738,12 @@ func (b *frameBuilder) get(idx int) map[string]any {
 // Frames with extra keys (e.g., "cmt") are conservatively kept —
 // a comment is player-visible in the game's behavior editor.
 func isNoopBridge(f map[string]any) bool {
-	if f["op"] != "set_reg" || f["1"] != false || f["2"] != false {
+	if f["op"] != "set_reg" || f["0"] != false || f["1"] != false {
 		return false
 	}
 	for k := range f {
 		switch k {
-		case "op", "1", "2", "next":
+		case "op", "0", "1", "next":
 		default:
 			return false
 		}
@@ -922,19 +923,19 @@ func (b *frameBuilder) eliminateNoopBridges() {
 	b.cursor = len(newFrames)
 }
 
-// finalize writes 1-based frame entries into value, converting
-// any frameRef values to 1-based integers.
+// finalize writes frame entries into value, converting any frameRef
+// values to plain integers.
 func (b *frameBuilder) finalize(value map[string]any) {
 	for i, f := range b.frames {
 		resolved := make(map[string]any, len(f))
 		for k, v := range f {
 			if ref, ok := v.(frameRef); ok {
-				resolved[k] = int(ref) + 1
+				resolved[k] = int(ref) + 1 // 1-based: frame refs are data values, not table keys
 			} else {
 				resolved[k] = v
 			}
 		}
-		value[strconv.Itoa(i+1)] = resolved
+		value[strconv.Itoa(i)] = resolved
 	}
 }
 

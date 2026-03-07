@@ -32,20 +32,15 @@ func frameReturnCount(frame map[string]any) int {
 	return count
 }
 
-// resolveInstructionFrame converts a raw instruction frame (0-based reference
-// keys) into a native-format frame (1-based keys) with parameter and return
-// slot substitutions applied. retVals provides return targets (indexed by
-// returnSlot(N)-1), paramMap substitutes string values, kwVars identifies
+// resolveInstructionFrame converts a raw instruction frame with parameter and
+// return slot substitutions applied. retVals provides return targets (indexed
+// by returnSlot(N)-1), paramMap substitutes string values, kwVars identifies
 // keyword param variables to omit when absent, and comment sets the "cmt"
 // field. Any of retVals, paramMap, kwVars may be nil.
 func resolveInstructionFrame(frame map[string]any, retVals []any, paramMap map[string]any, kwVars map[string]bool, comment string) map[string]any {
 	instr := make(map[string]any, len(frame))
 	for k, v := range frame {
-		// Convert 0-based reference keys to 1-based native keys.
 		nativeKey := k
-		if n, err := strconv.Atoi(k); err == nil {
-			nativeKey = strconv.Itoa(n + 1)
-		}
 		if rs, ok := v.(returnSlot); ok {
 			idx := int(rs) - 1
 			if retVals != nil && idx < len(retVals) {
@@ -450,16 +445,16 @@ func (p *parser) emitComparison(op tokenKind, lhs, rhs, target any, b *frameBuil
 	// False frame
 	b.emit(map[string]any{
 		"op":   "set_reg",
-		"1":    false,
-		"2":    target,
+		"0":    false,
+		"1":    target,
 		"next": frameRef(afterPos),
 	})
 
 	// True frame
 	b.emit(map[string]any{
 		"op": "set_reg",
-		"1":  map[string]any{"num": 1},
-		"2":  target,
+		"0":  map[string]any{"num": 1},
+		"1":  target,
 	})
 }
 
@@ -568,16 +563,16 @@ func (p *parser) emitTypeCheck(lhs, target any, typeSlot string, b *frameBuilder
 	// False frame
 	b.emit(map[string]any{
 		"op":   "set_reg",
-		"1":    false,
-		"2":    target,
+		"0":    false,
+		"1":    target,
 		"next": frameRef(afterPos),
 	})
 
 	// True frame
 	b.emit(map[string]any{
 		"op": "set_reg",
-		"1":  map[string]any{"num": 1},
-		"2":  target,
+		"0":  map[string]any{"num": 1},
+		"1":  target,
 	})
 }
 
@@ -601,16 +596,16 @@ func (p *parser) emitTruthyCheck(lhs, target any, b *frameBuilder, comment strin
 	// False frame
 	b.emit(map[string]any{
 		"op":   "set_reg",
-		"1":    false,
-		"2":    target,
+		"0":    false,
+		"1":    target,
 		"next": frameRef(afterPos),
 	})
 
 	// True frame
 	b.emit(map[string]any{
 		"op": "set_reg",
-		"1":  map[string]any{"num": 1},
-		"2":  target,
+		"0":  map[string]any{"num": 1},
+		"1":  target,
 	})
 }
 
@@ -641,14 +636,14 @@ func (p *parser) emitResolvedBoolExprTo(resolved *resolvedBoolExpr, target any, 
 
 	b.emit(map[string]any{
 		"op":   "set_reg",
-		"1":    false,
-		"2":    target,
+		"0":    false,
+		"1":    target,
 		"next": frameRef(afterPos),
 	})
 	b.emit(map[string]any{
 		"op": "set_reg",
-		"1":  map[string]any{"num": 1},
-		"2":  target,
+		"0":  map[string]any{"num": 1},
+		"1":  target,
 	})
 }
 
@@ -759,9 +754,9 @@ func (p *parser) emitArithNode(expr *ArithExpr, target any, b *frameBuilder, use
 
 	f := map[string]any{
 		"op": arithOpName(expr.Op),
-		"1":  lhs,
-		"2":  rhs,
-		"3":  target,
+		"0":  lhs,
+		"1":  rhs,
+		"2":  target,
 	}
 	setComment(f, comment)
 	b.emit(f)
@@ -1141,8 +1136,8 @@ func patchContinuePlaceholders(b *frameBuilder, from int, nextVal any) {
 		if op, _ := b.frames[j]["op"].(string); op == "@continue" {
 			b.frames[j] = map[string]any{
 				"op":   "set_reg",
+				"0":    false,
 				"1":    false,
-				"2":    false,
 				"next": nextVal,
 			}
 		}
@@ -1161,8 +1156,8 @@ func patchBreakPlaceholders(b *frameBuilder, from int, label string, target fram
 			if fLabel == "" || fLabel == label {
 				b.frames[j] = map[string]any{
 					"op":   "set_reg",
+					"0":    false,
 					"1":    false,
-					"2":    false,
 					"next": target,
 				}
 			}
@@ -1171,14 +1166,9 @@ func patchBreakPlaceholders(b *frameBuilder, from int, label string, target fram
 }
 
 // patchIterDoneSlot sets the "done" slot on an iterator instruction frame
-// to point to target. The doneSlot key is converted from 0-based to 1-based
-// if numeric.
+// to point to target.
 func patchIterDoneSlot(b *frameBuilder, instrIdx int, doneSlot string, target frameRef) {
-	nativeKey := doneSlot
-	if n, err := strconv.Atoi(doneSlot); err == nil {
-		nativeKey = strconv.Itoa(n + 1)
-	}
-	b.frames[instrIdx][nativeKey] = target
+	b.frames[instrIdx][doneSlot] = target
 }
 
 // patchUnlabeledBreakToLast replaces unlabeled @break placeholder frames
@@ -1204,7 +1194,7 @@ func emitJumpFallthroughError(b *frameBuilder, labelVal any) frameRef {
 	b.emit(map[string]any{
 		"op":  "notify",
 		"txt": "jump: no matching label",
-		"1":   labelVal,
+		"0":   labelVal,
 	})
 	b.emit(map[string]any{"op": "exit"})
 	return ref
@@ -1243,7 +1233,7 @@ func patchJumpBreakPlaceholders(b *frameBuilder, from int, label string) {
 			if fLabel, _ := f["label"].(string); fLabel == label {
 				newFrame := map[string]any{
 					"op": "jump",
-					"1":  target,
+					"0":  target,
 				}
 				b.frames[j] = newFrame
 				patchedFrames = append(patchedFrames, newFrame)
@@ -1254,7 +1244,7 @@ func patchJumpBreakPlaceholders(b *frameBuilder, from int, label string) {
 	// Emit the label at the current position (after the loop)
 	labelPos := b.emit(map[string]any{
 		"op": "label",
-		"1":  target,
+		"0":  target,
 	})
 
 	// Emit fallthrough error handler
@@ -1281,11 +1271,11 @@ func emitLoopBackEdge(b *frameBuilder, bodyStart int, target frameRef) {
 	}
 	lastFrame := b.get(b.pos() - 1)
 	if op, _ := lastFrame["op"].(string); op == "@break" || op == "@continue" {
-		b.emit(map[string]any{"op": "set_reg", "1": false, "2": false, "next": target})
+		b.emit(map[string]any{"op": "set_reg", "0": false, "1": false, "next": target})
 	} else if _, hasNext := lastFrame["next"]; !hasNext {
 		lastFrame["next"] = target
 	} else {
-		b.emit(map[string]any{"op": "set_reg", "1": false, "2": false, "next": target})
+		b.emit(map[string]any{"op": "set_reg", "0": false, "1": false, "next": target})
 	}
 }
 
@@ -1325,7 +1315,7 @@ func (p *parser) emitTailMulti(ctx *emitContext, tail Expr, retVals []any, comme
 		return err
 	}
 	for i := 1; i < len(retVals); i++ {
-		ctx.b.emit(map[string]any{"op": "set_reg", "1": false, "2": retVals[i]})
+		ctx.b.emit(map[string]any{"op": "set_reg", "0": false, "1": retVals[i]})
 	}
 	return nil
 }
@@ -1368,8 +1358,8 @@ func (p *parser) emitCountedLoop(s *LoopStmt, ctx *emitContext, comment string) 
 	// INIT: set_number 0 → counter
 	ctx.b.emit(map[string]any{
 		"op": "set_number",
-		"2":  map[string]any{"num": 0},
-		"3":  counterVar,
+		"1":  map[string]any{"num": 0},
+		"2":  counterVar,
 	})
 
 	// CHECK: check_number counter vs limit
@@ -1392,9 +1382,9 @@ func (p *parser) emitCountedLoop(s *LoopStmt, ctx *emitContext, comment string) 
 	// INCR: add counter + 1 → counter, next → CHECK
 	incrFrame := ctx.b.emit(map[string]any{
 		"op":   "add",
-		"1":    counterVar,
-		"2":    map[string]any{"num": 1},
-		"3":    counterVar,
+		"0":    counterVar,
+		"1":    map[string]any{"num": 1},
+		"2":    counterVar,
 		"next": frameRef(checkFrame),
 	})
 
@@ -1506,7 +1496,7 @@ func (p *parser) emitLabelStmt(s *LabelStmt, ctx *emitContext, comment string) e
 			return err
 		}
 	}
-	f := map[string]any{"op": "label", "1": labelVal}
+	f := map[string]any{"op": "label", "0": labelVal}
 	setComment(f, comment)
 	ctx.b.emit(f)
 	return nil
@@ -1525,7 +1515,7 @@ func (p *parser) emitJumpStmt(s *JumpStmt, ctx *emitContext, comment string) err
 			return err
 		}
 	}
-	f := map[string]any{"op": "jump", "1": labelVal}
+	f := map[string]any{"op": "jump", "0": labelVal}
 	setComment(f, comment)
 	ctx.b.emit(f)
 	// Named labels are compiler-validated; add fallthrough error in case
@@ -1544,7 +1534,7 @@ func (p *parser) emitWaitStmt(s *WaitStmt, ctx *emitContext, comment string) err
 	}
 
 	if s.Tail == nil {
-		f := map[string]any{"op": "wait", "1": ticksVal}
+		f := map[string]any{"op": "wait", "0": ticksVal}
 		setComment(f, comment)
 		ctx.b.emit(f)
 		return nil
@@ -1562,13 +1552,13 @@ func (p *parser) emitWaitStmt(s *WaitStmt, ctx *emitContext, comment string) err
 		tmp := allocUniqueVar("@wait", ctx.usedVars)
 		ctx.b.emit(map[string]any{
 			"op": "set_reg",
-			"1":  ticksVal,
-			"2":  tmp,
+			"0":  ticksVal,
+			"1":  tmp,
 		})
 		ticksVar = tmp
 	}
 
-	waitFrame := map[string]any{"op": "wait", "1": ticksVar}
+	waitFrame := map[string]any{"op": "wait", "0": ticksVar}
 	setComment(waitFrame, comment)
 	waitPos := ctx.b.emit(waitFrame)
 
@@ -1804,14 +1794,14 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 			// Set dispatch var to this yield's resume label
 			ctx.b.emit(map[string]any{
 				"op": "set_reg",
-				"1":  compilerLabel(baseLabel + i),
-				"2":  dispatchVar,
+				"0":  compilerLabel(baseLabel + i),
+				"1":  dispatchVar,
 			})
 
 			// Jump to shared body
 			bodyJump := map[string]any{
 				"op": "jump",
-				"1":  compilerLabel(bodyLabelNum),
+				"0":  compilerLabel(bodyLabelNum),
 			}
 			ctx.b.emit(bodyJump)
 			bodyJump["next"] = emitJumpFallthroughError(ctx.b, compilerLabel(bodyLabelNum))
@@ -1819,7 +1809,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 			// Resume label (reached after body executes jump @jmp)
 			ctx.b.emit(map[string]any{
 				"op":   "label",
-				"1":    compilerLabel(baseLabel + i),
+				"0":    compilerLabel(baseLabel + i),
 				"next": false,
 			})
 
@@ -1832,7 +1822,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 		// Shared body label
 		ctx.b.emit(map[string]any{
 			"op": "label",
-			"1":  compilerLabel(bodyLabelNum),
+			"0":  compilerLabel(bodyLabelNum),
 		})
 
 		// Emit body ONCE
@@ -1844,7 +1834,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 		// Return to resume point
 		dispatchJump := map[string]any{
 			"op": "jump",
-			"1":  dispatchVar,
+			"0":  dispatchVar,
 		}
 		ctx.b.emit(dispatchJump)
 		dispatchJump["next"] = emitJumpFallthroughError(ctx.b, dispatchVar)
@@ -2238,8 +2228,8 @@ func (p *parser) emitForStmtRangeManual(s *ForStmt, ctor *ConstructorExpr, iterV
 	// Initialize counter: set_number iterVar = startVal
 	ctx.b.emit(map[string]any{
 		"op": "set_number",
-		"2":  startVal,
-		"3":  iterVar,
+		"1":  startVal,
+		"2":  iterVar,
 	})
 
 	// Check: check_number iterVar, stopVal
@@ -2276,9 +2266,9 @@ func (p *parser) emitForStmtRangeManual(s *ForStmt, ctor *ConstructorExpr, iterV
 	incrIdx := ctx.b.pos()
 	ctx.b.emit(map[string]any{
 		"op":   "add",
-		"1":    iterVar,
-		"2":    stepVal,
-		"3":    iterVar,
+		"0":    iterVar,
+		"1":    stepVal,
+		"2":    iterVar,
 		"next": frameRef(checkIdx),
 	})
 
@@ -2289,7 +2279,7 @@ func (p *parser) emitForStmtRangeManual(s *ForStmt, ctor *ConstructorExpr, iterV
 	// When it's NOT the last, it falls through to the next statement.
 	// Eliminated by eliminateNoopBridges.
 	detachIdx := ctx.b.pos()
-	ctx.b.emit(map[string]any{"op": "set_reg", "1": false, "2": false})
+	ctx.b.emit(map[string]any{"op": "set_reg", "0": false, "1": false})
 
 	// Patch @continue → increment frame
 	patchContinuePlaceholders(ctx.b, origLen, frameRef(incrIdx))
@@ -2424,8 +2414,8 @@ func (p *parser) emitIfStmt(s *IfStmt, ctx *emitContext, comment string) error {
 			jumpIdx := ctx.b.pos()
 			ctx.b.emit(map[string]any{
 				"op":   "set_reg",
+				"0":    false,
 				"1":    false,
-				"2":    false,
 				"next": frameRef(0),
 			})
 			jumpsToPatch = append(jumpsToPatch, jumpIdx)

@@ -49,10 +49,11 @@ encodings of the same data to be equal.
 The `.decoded` and `.encoded` files are trusted inputs derived from the
 reference JavaScript implementation. They should never be changed
 programmatically — changes require human verification against the reference
-implementation. When our codec's output format differs from the reference
-(e.g., 1-based vs 0-based integer keys), the test code bridges the gap via
-a conversion routine (`refToNative` in `main_test.go`) rather than modifying
-the test data.
+implementation. Our codec matches the reference JS codec's 0-based key
+convention: array-part keys start at `"0"`, and hash-part numeric keys
+are decremented by 1 on decode (incremented by 1 on encode) to convert
+between Lua's 1-based indexing and 0-based JSON keys. Integer data
+**values** (e.g., frame references) are stored as-is without adjustment.
 
 `TestDecodeErrors` in `main_test.go` covers invalid-input cases for the
 decoder (empty input, malformed prefix, bad checksums, corrupted data, etc.).

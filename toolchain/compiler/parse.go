@@ -452,8 +452,8 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 				if op, _ := b.frames[j]["op"].(string); op == "@break" {
 					b.frames[j] = map[string]any{
 						"op":   "set_reg",
+						"0":    false,
 						"1":    false,
-						"2":    false,
 						"next": false,
 					}
 				}
@@ -462,8 +462,8 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 			// Bridging block: jump to join point after body
 			jumpIdx := b.emit(map[string]any{
 				"op": "set_reg",
+				"0":  false,
 				"1":  false,
-				"2":  false,
 				// "next" will be patched to join point
 			})
 			bridgeJumps = append(bridgeJumps, jumpIdx)
@@ -472,8 +472,8 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 				if op, _ := b.frames[j]["op"].(string); op == "@break" {
 					b.frames[j] = map[string]any{
 						"op": "set_reg",
+						"0":  false,
 						"1":  false,
-						"2":  false,
 					}
 					bridgeJumps = append(bridgeJumps, j)
 				}
@@ -515,8 +515,8 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 		if op, _ := f["op"].(string); op == "@return" {
 			b.frames[j] = map[string]any{
 				"op":   "set_reg",
+				"0":    false,
 				"1":    false,
-				"2":    false,
 				"next": frameRef(joinPoint),
 			}
 		}
@@ -614,8 +614,8 @@ func (p *parser) expandInstructionBlocks(instrIdx int, blocks []*ContinuationBlo
 				if op, _ := b.frames[j]["op"].(string); op == "@break" {
 					b.frames[j] = map[string]any{
 						"op":   "set_reg",
+						"0":    false,
 						"1":    false,
-						"2":    false,
 						"next": false,
 					}
 				}
@@ -624,8 +624,8 @@ func (p *parser) expandInstructionBlocks(instrIdx int, blocks []*ContinuationBlo
 			// Bridging block: jump to join point after body
 			jumpIdx := b.emit(map[string]any{
 				"op": "set_reg",
+				"0":  false,
 				"1":  false,
-				"2":  false,
 			})
 			bridgeJumps = append(bridgeJumps, jumpIdx)
 			// Patch @break to jump to join point
@@ -633,8 +633,8 @@ func (p *parser) expandInstructionBlocks(instrIdx int, blocks []*ContinuationBlo
 				if op, _ := b.frames[j]["op"].(string); op == "@break" {
 					b.frames[j] = map[string]any{
 						"op": "set_reg",
+						"0":  false,
 						"1":  false,
-						"2":  false,
 					}
 					bridgeJumps = append(bridgeJumps, j)
 				}
@@ -1701,13 +1701,13 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 	case *AmpersandExpr:
 		return p.emitAmpersandTo(e, target, b, paramMap, usedVars, comment, pos)
 	case *LiteralExpr:
-		f := map[string]any{"op": "set_reg", "1": e.Value, "2": target}
+		f := map[string]any{"op": "set_reg", "0": e.Value, "1": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
 	case *IdentExpr:
 		val := resolveVarName(e.Name, paramMap)
-		f := map[string]any{"op": "set_reg", "1": val, "2": target}
+		f := map[string]any{"op": "set_reg", "0": val, "1": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
@@ -1729,7 +1729,7 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 func (p *parser) emitConstructorTo(ctor *ConstructorExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	// Try compile-time resolution first (based on AST types, not resolved values)
 	if val, ok := tryResolveConstructorLiteral(ctor); ok {
-		f := map[string]any{"op": "set_reg", "1": val, "2": target}
+		f := map[string]any{"op": "set_reg", "0": val, "1": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
@@ -1771,7 +1771,7 @@ func (p *parser) emitConstructorTo(ctor *ConstructorExpr, target any, b *frameBu
 func (p *parser) emitAmpersandTo(amp *AmpersandExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
 	// Try compile-time resolution (based on AST types)
 	if val, ok := tryResolveAmpersandLiteral(amp); ok {
-		f := map[string]any{"op": "set_reg", "1": val, "2": target}
+		f := map[string]any{"op": "set_reg", "0": val, "1": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
@@ -2165,9 +2165,9 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			}
 			f := map[string]any{
 				"op": arithOpName(s.Op),
-				"1":  target,
-				"2":  rhs,
-				"3":  target,
+				"0":  target,
+				"1":  rhs,
+				"2":  target,
 			}
 			setComment(f, callComment)
 			b.emit(f)
@@ -2181,9 +2181,9 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			}
 			f := map[string]any{
 				"op": op,
-				"1":  target,
-				"2":  map[string]any{"num": 1},
-				"3":  target,
+				"0":  target,
+				"1":  map[string]any{"num": 1},
+				"2":  target,
 			}
 			setComment(f, callComment)
 			b.emit(f)
@@ -2248,7 +2248,7 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			// giving correct re-dispatch. At top level, the bridge falls
 			// through sequentially to the next iterator statement.
 			if hasContinuePlaceholder(b, bodyStart) {
-				bridge := b.emit(map[string]any{"op": "set_reg", "1": false, "2": false})
+				bridge := b.emit(map[string]any{"op": "set_reg", "0": false, "1": false})
 				patchContinuePlaceholders(b, bodyStart, frameRef(bridge))
 			}
 
@@ -2301,8 +2301,8 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 				// Continuation dispatch: emit @exec_<name> placeholder
 				b.emit(map[string]any{
 					"op":   "set_reg",
+					"0":    false,
 					"1":    false,
-					"2":    false,
 					"next": "@exec_" + s.Continuation,
 				})
 			} else {
@@ -2360,7 +2360,7 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 				}
 				for i := retOffset + 1; i <= totalRets; i++ {
 					target := resolveVarName("@ret"+strconv.Itoa(i), paramMap)
-					f := map[string]any{"op": "set_reg", "1": false, "2": target}
+					f := map[string]any{"op": "set_reg", "0": false, "1": target}
 					b.emit(f)
 				}
 				// Emit @return jump placeholder
@@ -6021,7 +6021,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		return err
 	}
 	for _, rc := range retCopies {
-		f := map[string]any{"op": "set_reg", "1": rc.from, "2": rc.to}
+		f := map[string]any{"op": "set_reg", "0": rc.from, "1": rc.to}
 		setComment(f, comment)
 		b.emit(f)
 	}
@@ -6052,8 +6052,8 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		if op, _ := f["op"].(string); op == "@return" {
 			b.frames[j] = map[string]any{
 				"op":   "set_reg",
+				"0":    false,
 				"1":    false,
-				"2":    false,
 				"next": frameRef(afterAll),
 			}
 		}

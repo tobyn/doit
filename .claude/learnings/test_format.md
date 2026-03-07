@@ -26,49 +26,27 @@ to verify structural equivalence regardless of frame numbering.
 The `.json` test files can be regenerated from their `.doit` sources using
 `TestUpdateGolden` (run with `DOIT_UPDATE_GOLDEN=1`). This compiles each
 `.doit` file through the full encode/decode round-trip and writes the result
-as 0-based reference-format JSON via `nativeToRef`. Both `nativeToRef` and
-`TestUpdateGolden` are permanent fixtures in `main_test.go`. When our
-implementation's output format differs from the reference (e.g., 1-based vs
-0-based integer keys), the test code bridges the gap via the `refToNative`
-conversion routine in `main_test.go`.
+as JSON. `TestUpdateGolden` is a permanent fixture in `main_test.go`.
 
-## Writing test JSON: numbering conventions
+## Numbering conventions
 
-The test JSON uses two numbering systems simultaneously, which is
-confusing. Understanding the rules saves significant debugging time.
+The codec and compiler use 0-based integer keys for table keys (both
+frame keys and instruction slot keys), matching the reference JavaScript
+implementation. Integer **values** (such as frame references in `"next"`
+or branch slots) remain 1-based because they are data values stored
+as-is in the binary format — the game's Lua engine uses 1-based table
+lookup, so frame references must match.
 
-**`refToNative`** only transforms **map keys** (adds +1 to numeric
-string keys). It does **not** touch integer values inside frames.
+Summary:
 
-This means:
-
-- **Frame keys** (top-level `"0"`, `"1"`, ...): 0-based in JSON.
-  `refToNative` converts to 1-based (`"0"` → `"1"`).
-- **Slot keys** within frames (`"0"`, `"1"`, ...): 0-based in JSON.
-  `refToNative` converts to 1-based.
+- **Frame keys** (top-level `"0"`, `"1"`, ...): 0-based.
+- **Slot keys** within frames (`"0"`, `"1"`, ...): 0-based.
 - **Frame reference values** (integers in slot values or `"next"`):
-  **1-based (native) in JSON**. `refToNative` does NOT change them.
-  The graph isomorphism matcher (`matchBehaviors`) compares integer
-  values directly between got and want sides.
+  1-based. These are plain integer data, not table keys.
 
-**Practical rule**: When writing a test `.json` file, use `compile -json`
-to get the compiler's native (1-based) output. Convert frame keys and
-slot keys to 0-based (subtract 1), but **leave integer frame reference
-values exactly as the compiler produced them** (1-based). Non-frame
-data like `"name"`, `"op"`, string slot values, `false`, and
-`{"num": N}` objects are unchanged.
-
-**Example**: If the compiler outputs native frame `"2"` with slot
-`"1": 3` (a frame reference to native frame 3), the test JSON should
-have frame key `"1"` (= 2-1) with slot key `"0"` (= 1-1) and value
-`3` (unchanged).
-
-**Why this works**: `matchBehaviors` uses BFS graph isomorphism. When
-it sees unequal integer values at the same slot position, it treats
-them as frame references and creates a mapping (e.g., got:3 → want:3).
-Equal integers are treated as data values. Since both sides use the
-same native numbering for frame refs, the mapping is identity and
-everything matches.
+The graph isomorphism matcher (`matchBehaviors`) handles frame reference
+remapping via BFS, so frame numbering differences between got and want
+are tolerated.
 
 ## Locale directive
 

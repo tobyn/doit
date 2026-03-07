@@ -79,10 +79,6 @@ func TestCompile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("UnmarshalJSON error: %v", err)
 			}
-			// Convert reference implementation output (0-based keys) to our
-			// native format (1-based keys).
-			wantVal = refToNative(wantVal)
-
 			matchBehaviors(t, obj.Value.(map[string]any), wantVal.(map[string]any))
 		})
 	}
@@ -187,7 +183,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
 		if frame["cmt"] != "Greeting" {
 			t.Fatalf("expected cmt %q, got %v", "Greeting", frame["cmt"])
 		}
@@ -200,13 +196,13 @@ func TestCompileErrors(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		v := obj.Value.(map[string]any)
-		f1 := v["1"].(map[string]any)
-		f2 := v["2"].(map[string]any)
+		f1 := v["0"].(map[string]any)
+		f2 := v["1"].(map[string]any)
 		if f1["cmt"] != "Inner" {
-			t.Fatalf("frame 1: expected cmt %q, got %v", "Inner", f1["cmt"])
+			t.Fatalf("frame 0: expected cmt %q, got %v", "Inner", f1["cmt"])
 		}
 		if f2["cmt"] != "Outer" {
-			t.Fatalf("frame 2: expected cmt %q, got %v", "Outer", f2["cmt"])
+			t.Fatalf("frame 1: expected cmt %q, got %v", "Outer", f2["cmt"])
 		}
 	})
 
@@ -216,7 +212,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
 		if _, exists := frame["cmt"]; exists {
 			t.Fatalf("expected no cmt field, got %v", frame["cmt"])
 		}
@@ -651,7 +647,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
 		if frame["cmt"] != "日本語コメント" {
 			t.Fatalf("expected cmt %q, got %v", "日本語コメント", frame["cmt"])
 		}
@@ -663,7 +659,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
 		if frame["cmt"] != "English comment" {
 			t.Fatalf("expected cmt %q, got %v", "English comment", frame["cmt"])
 		}
@@ -675,7 +671,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
 		if frame["cmt"] != "English comment" {
 			t.Fatalf("expected cmt %q, got %v", "English comment", frame["cmt"])
 		}
@@ -687,7 +683,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
 		if frame["cmt"] != "line one continued" {
 			t.Fatalf("expected cmt %q, got %v", "line one continued", frame["cmt"])
 		}
@@ -700,7 +696,7 @@ func TestCompileErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		frame := obj.Value.(map[string]any)["1"].(map[string]any)
+		frame := obj.Value.(map[string]any)["0"].(map[string]any)
 		if frame["cmt"] != "plain comment" {
 			t.Fatalf("expected cmt %q, got %v", "plain comment", frame["cmt"])
 		}
@@ -5072,9 +5068,6 @@ func TestCodec(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantType, wantVal := parseDecodedFile(t, string(decodedBytes))
-		// Convert reference implementation output (0-based keys) to our
-		// native format (1-based keys).
-		wantVal = refToNative(wantVal)
 
 		t.Run(name+"/decode", func(t *testing.T) {
 			if obj.Type != wantType {
@@ -5183,36 +5176,9 @@ func parseDecodedFile(t *testing.T, content string) (codec.ObjectType, any) {
 	return typ, val
 }
 
-// refToNative converts reference implementation decoded output to match our
-// codec's native format. The reference JS codec stores Lua integer table keys
-// as 0-based strings (k - 1); our codec preserves Lua's native 1-based
-// numbering. This function shifts all numeric string keys in maps by +1.
-func refToNative(v any) any {
-	switch val := v.(type) {
-	case map[string]any:
-		result := make(map[string]any, len(val))
-		for k, child := range val {
-			newKey := k
-			if n, err := strconv.Atoi(k); err == nil {
-				newKey = strconv.Itoa(n + 1)
-			}
-			result[newKey] = refToNative(child)
-		}
-		return result
-	case []any:
-		result := make([]any, len(val))
-		for i, elem := range val {
-			result[i] = refToNative(elem)
-		}
-		return result
-	default:
-		return v
-	}
-}
-
 // matchBehaviors compares two behavior maps using graph isomorphism.
 // Frame numbers may differ between got and want; the comparison builds a
-// bijective frame-number mapping via BFS from frame "1".
+// bijective frame-number mapping via BFS from frame "0".
 func matchBehaviors(t *testing.T, got, want map[string]any) {
 	t.Helper()
 
@@ -5278,7 +5244,7 @@ func matchBehaviors(t *testing.T, got, want map[string]any) {
 		queue = append(queue, framePair{g, w})
 	}
 
-	addMapping("1", "1")
+	addMapping("0", "0")
 
 	for len(queue) > 0 {
 		p := queue[0]
@@ -5525,32 +5491,6 @@ func frameContentMatches(gFrame, wFrame map[string]any, g2w map[string]string) b
 	return true
 }
 
-// nativeToRef converts our codec's native format (1-based numeric string keys)
-// to the reference implementation format (0-based numeric string keys).
-// This is the inverse of refToNative.
-func nativeToRef(v any) any {
-	switch val := v.(type) {
-	case map[string]any:
-		result := make(map[string]any, len(val))
-		for k, child := range val {
-			newKey := k
-			if n, err := strconv.Atoi(k); err == nil {
-				newKey = strconv.Itoa(n - 1)
-			}
-			result[newKey] = nativeToRef(child)
-		}
-		return result
-	case []any:
-		result := make([]any, len(val))
-		for i, elem := range val {
-			result[i] = nativeToRef(elem)
-		}
-		return result
-	default:
-		return v
-	}
-}
-
 // goldenSortedKeys returns map keys sorted with numeric keys first (in numeric
 // order) followed by non-numeric keys in alphabetical order. This matches the
 // key ordering used in the reference test JSON files.
@@ -5691,11 +5631,8 @@ func TestUpdateGolden(t *testing.T) {
 				t.Fatalf("Decode error: %v", err)
 			}
 
-			// Convert native format (1-based keys) to reference format (0-based keys).
-			refVal := nativeToRef(obj.Value)
-
 			var buf bytes.Buffer
-			writeGoldenJSON(&buf, refVal, "")
+			writeGoldenJSON(&buf, obj.Value, "")
 			buf.WriteByte('\n')
 
 			if err := os.WriteFile(jsonFile, buf.Bytes(), 0644); err != nil {
