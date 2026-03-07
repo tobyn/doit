@@ -236,7 +236,13 @@ must not be renamed.
 `exec(name1, name2)` after the param list. Instruction blocks bind
 exec slots with `exec N: name`, `next: name`, or `detach next: name` syntax. `execBinding`
 structs in instruction frames are patched to `frameRef` targets by
-`expandContinuationBlocks`. Exec bindings can carry data via
+`expandContinuationBlocks`. **Optional exec branches**: When a
+branching function is called without continuation blocks, `expandCall`
+strips unresolved `execBinding` values and absent keyword params from
+emitted frames after `emitFnBody` returns. This enables functions like
+`domove` to declare optional exec branches (e.g., `path_blocked`) that
+callers can omit. `tryPromoteInstruction` rejects frames with exec
+bindings, so these functions always go through the AST body path. Exec bindings can carry data via
 `@N` args (e.g., `exec 0: found(@1, @2)`) that map instruction
 output slots to continuation block params. Call sites use Kotlin-style
 bindings (`{ name -> body }`) to receive this data. Scanner supports

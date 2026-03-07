@@ -7,7 +7,11 @@ skip prelude
 
 enum MoveMode { Sync = 1, Async }
 enum AmountMode { Specified = 1, UpTo }
-enum BitwiseMode { And = 1, Or, Xor, Not, ShiftLeft, ShiftRight }
+enum BitwiseMode {
+    And = 1, Or, Xor, Not, ShiftLeft, ShiftRight,
+    CompareEqual, CompareLarger, CompareLargerOrEqual,
+    Add, Subtract, Multiply, Divide, Modulo
+}
 enum LockSlotMode { OnlyUnfixed = 1, OverrideFixed }
 enum CountSlotType { All = 1, Storage, Gas, Virus, Anomaly, Drone, Garage, Alien, Satellite }
 enum CountItemMode { Remaining = 1, Reserved }
@@ -42,6 +46,15 @@ fn add(to, num) {
         0: to
         1: num
         2: @1
+    }
+}
+
+# Generic component activation.
+#   "Failed" [branch] - if activation failed
+fn activate() exec(failed) {
+    # frame: {"op": "activate", "0": "Failed" [exec]}
+    instruction "activate" {
+        exec 0: failed
     }
 }
 
@@ -414,21 +427,29 @@ fn div(from, num) {
 # Drop off items at a unit or location.
 #   destination [in] - unit or destination to bring items to
 #   item_amount [in, optional] - item and amount to drop off
-fn dodrop(destination, item_amount item_amount, mode mode) {
-    # frame: {"op": "dodrop", "0": destination [in], "1": item_amount [in], "c": <mode>}
+#   "Path Blocked" [branch] - if path to destination was blocked
+fn dodrop(destination, item_amount item_amount, mode mode) exec(path_blocked) {
+    # frame: {"op": "dodrop", "0": destination [in], "1": item_amount [in],
+    #   "2": "Path Blocked" [exec], "c": <mode>}
     instruction "dodrop" {
         0: destination
         1: item_amount
+        exec 2: path_blocked
         c: mode
     }
 }
 
 # Moves to another unit or within a range of another unit.
 #   target [in] - unit to move to; the number specifies the range
-fn domove(target, mode mode) {
-    # frame: {"op": "domove", "0": target [in], "c": <mode>}
+#   unit [in, optional] - target unit (if not self)
+#   "Path Blocked" [branch] - if path is blocked
+fn domove(target, unit unit, mode mode) exec(path_blocked) {
+    # frame: {"op": "domove", "0": target [in], "1": "Path Blocked" [exec],
+    #   "2": unit [in], "c": <mode>}
     instruction "domove" {
         0: target
+        exec 1: path_blocked
+        2: unit
         c: mode
     }
 }
@@ -456,11 +477,14 @@ fn domove_range(target) {
 # Picks up items from a unit.
 #   source [in] - unit to take items from
 #   item_amount [in, optional] - item and amount to pick up
-fn dopickup(source, item_amount item_amount, mode mode) {
-    # frame: {"op": "dopickup", "0": source [in], "1": item_amount [in], "c": <mode>}
+#   "Path Blocked" [branch] - if path to source was blocked
+fn dopickup(source, item_amount item_amount, mode mode) exec(path_blocked) {
+    # frame: {"op": "dopickup", "0": source [in], "1": item_amount [in],
+    #   "2": "Path Blocked" [exec], "c": <mode>}
     instruction "dopickup" {
         0: source
         1: item_amount
+        exec 2: path_blocked
         c: mode
     }
 }
@@ -601,6 +625,19 @@ fn for_number(from, to, step step) exec(body, done) {
 fn for_producers(production) exec(body, done) {
     instruction "for_producers" {
         0: production
+        1: @1
+        detach next: body(@1)
+        exec 2: done
+    }
+}
+
+# Loops through all unlocked items a production component can produce.
+#   producer [in] - producer to check
+#   item [out] - produceable item
+# See also: each_producer_item (iterator version)
+fn for_producers_items(producer) exec(body, done) {
+    instruction "for_producers_items" {
+        0: producer
         1: @1
         detach next: body(@1)
         exec 2: done
@@ -806,6 +843,17 @@ fn get_first_locked_0() {
     # frame: {"op": "get_first_locked_0", "0": item [out]}
     return instruction "get_first_locked_0" {
         0: @1
+    }
+}
+
+# Gets current offset from a unit.
+#   target [in] - unit or coordinate to get offset from
+#   offset [out] - offset from unit
+fn get_offset(target) {
+    # frame: {"op": "get_offset", "0": target [in], "1": offset [out]}
+    return instruction "get_offset" {
+        0: target
+        1: @1
     }
 }
 
@@ -1090,6 +1138,17 @@ fn get_unit_type(unit) {
     }
 }
 
+# Loops through all produceable unlocked components with a recipe.
+#   component [out] - produceable component
+# See also: each_unlocked_component (iterator version)
+fn get_unlocked_components() exec(body, done) {
+    instruction "get_unlocked_components" {
+        0: @1
+        detach next: body(@1)
+        exec 1: done
+    }
+}
+
 # Returns how many of the input item can fit in the inventory.
 #   item [in] - item to check
 #   result [out] - number that can fit
@@ -1140,6 +1199,20 @@ fn have_item(item, unit unit) exec(have) {
         0: item
         exec 1: have
         2: unit
+    }
+}
+
+# Checks if a unit has a component matching a base type.
+#   component [in] - component to check for
+#   unit [in, optional] - the unit to check (if not self)
+#   "Failed" [branch] - if unit does not have the component
+fn has_like_component(component, unit unit) exec(failed) {
+    # frame: {"op": "has_like_component", "0": component [in], "1": unit [in],
+    #   "2": "Failed" [exec]}
+    instruction "has_like_component" {
+        0: component
+        1: unit
+        exec 2: failed
     }
 }
 
@@ -1565,6 +1638,17 @@ fn move_west(number) {
     }
 }
 
+# Moves to an offset from current location or a specified unit.
+#   offset [in] - x,y offset to move to
+#   unit [in, optional] - unit to offset from (defaults to current location)
+fn move_offset(offset, unit unit) {
+    # frame: {"op": "move_offset", "0": offset [in], "1": unit [in]}
+    instruction "move_offset" {
+        0: offset
+        1: unit
+    }
+}
+
 # Moves out of range of another unit.
 #   target [in] - unit to move away from; the number specifies the range
 fn moveaway_range(target, mode mode) {
@@ -1622,15 +1706,6 @@ fn order_transfer(target, item) {
     instruction "order_transfer" {
         0: target
         1: item
-    }
-}
-
-# Tries to pack all packable units into items.
-#   unit [in, optional] - the destination to pack (if not self)
-fn package_all(unit unit) {
-    # frame: {"op": "package_all", "0": unit [in]}
-    instruction "package_all" {
-        0: unit
     }
 }
 
@@ -2114,15 +2189,6 @@ fn unlock_slots(slot_index slot_index) {
     # frame: {"op": "unlock_slots", "0": slot_index [in]}
     instruction "unlock_slots" {
         0: slot_index
-    }
-}
-
-# Tries to unpack all packaged items.
-#   unit [in, optional] - the destination to unpack (if not self)
-fn unpackage_all(unit unit) {
-    # frame: {"op": "unpackage_all", "0": unit [in]}
-    instruction "unpackage_all" {
-        0: unit
     }
 }
 

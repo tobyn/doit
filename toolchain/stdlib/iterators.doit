@@ -91,6 +91,18 @@ iter each_producer(production) -> producer {
     }
 }
 
+# Loops through all unlocked items a production component can produce.
+#   producer [in] - producer to check
+#   item [out] - produceable item
+# See also: for_producers_items (exec block version)
+iter each_producer_item(producer) -> item {
+    instruction "for_producers_items" {
+        0: producer
+        1: item
+        done: 2
+    }
+}
+
 # Loops through recipe ingredients.
 #   recipe [in]
 #   ingredient [out] - recipe ingredient
@@ -146,6 +158,16 @@ iter each_research_unlock(tech) -> unlock {
         0: tech
         1: unlock
         done: 2
+    }
+}
+
+# Loops through all produceable unlocked components with a recipe.
+#   component [out] - produceable component
+# See also: get_unlocked_components (exec block version)
+iter each_unlocked_component() -> component {
+    instruction "get_unlocked_components" {
+        0: component
+        done: 1
     }
 }
 

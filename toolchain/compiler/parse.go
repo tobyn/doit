@@ -6020,6 +6020,26 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 	if err != nil {
 		return err
 	}
+
+	// Strip unresolved exec bindings and absent keyword params when
+	// called without continuation blocks. The AST emission path
+	// doesn't pass kwVars to resolveInstructionFrame, so keyword
+	// params that weren't provided end up as bare string references.
+	if contBlocks == nil && fn.hasExec() {
+		kwVars := fn.keywordVarNames()
+		for j := origPos; j < b.pos(); j++ {
+			for k, v := range b.frames[j] {
+				if _, ok := v.(execBinding); ok {
+					delete(b.frames[j], k)
+				} else if s, ok := v.(string); ok && k != "op" && kwVars[s] {
+					if _, inMap := paramMap[s]; !inMap {
+						delete(b.frames[j], k)
+					}
+				}
+			}
+		}
+	}
+
 	for _, rc := range retCopies {
 		f := map[string]any{"op": "set_reg", "0": rc.from, "1": rc.to}
 		setComment(f, comment)

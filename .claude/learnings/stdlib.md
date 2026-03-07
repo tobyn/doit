@@ -48,7 +48,8 @@ All use the same call-site syntax (continuation blocks).
    `check_health`, `check_battery`, `check_grid_effeciency`,
    `is_logistics`, `is_same_grid`, `is_moving`, `is_passable`,
    `is_fixed`, `is_unlocked`, `have_item`, `checkfreespace`,
-   `can_produce`, `gettrust`, `match`, `switch`, `check_bit`) —
+   `can_produce`, `gettrust`, `match`, `switch`, `check_bit`,
+   `has_like_component`) —
    Route execution to one of N paths. No data output. All
    continuations are bridging.
 
@@ -58,16 +59,20 @@ All use the same call-site syntax (continuation blocks).
    - **`each_*` iterators** (in `iterators.doit`): `each_component`,
      `each_nearby_resource`, `each_entity_in_range`,
      `each_inventory_item`, `each_number`, `each_producer`,
-     `each_recipe_ingredient`, `each_repair_ingredient`, `each_tech`,
+     `each_producer_item`, `each_recipe_ingredient`,
+     `each_repair_ingredient`, `each_tech`,
      `each_research_ingredient`, `each_research_unlock`,
+     `each_unlocked_component`,
      `each_signal`, `each_signal_match`, `each_memory_entry` —
      `iter` declarations for `for ... in` call syntax.
-   - **`for_*` / `memory_loop` fns** (in `instructions.doit`):
+   - **`for_*` / `memory_loop` / `get_unlocked_components` fns**
+     (in `instructions.doit`):
      `for_component`, `for_count_resources`, `for_entities_in_range`,
      `for_inventory_item`, `for_number`, `for_producers`,
-     `for_recipe_ingredients`, `for_repair_ingredients`,
-     `for_research`, `for_research_ingredients`,
-     `for_research_unlocks`, `for_signal`, `for_signal_match`,
+     `for_producers_items`, `for_recipe_ingredients`,
+     `for_repair_ingredients`, `for_research`,
+     `for_research_ingredients`, `for_research_unlocks`,
+     `for_signal`, `for_signal_match`, `get_unlocked_components`,
      `memory_loop` — `fn...exec(body, done)` declarations for
      exec-block call syntax.
 

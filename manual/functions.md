@@ -178,7 +178,7 @@ The standard library defines enums for each mode selector. Values are
 |------|--------|---------|
 | `MoveMode` | `Sync`, `Async` | `domove`, `moveaway_range`, `scout` |
 | `AmountMode` | `Specified`, `UpTo` | `dodrop`, `dopickup`, `request_item`, `request_wait` |
-| `BitwiseMode` | `And`, `Or`, `Xor`, `Not`, `ShiftLeft`, `ShiftRight` | `bitwise_op` |
+| `BitwiseMode` | `And`, `Or`, `Xor`, `Not`, `ShiftLeft`, `ShiftRight`, `CompareEqual`, `CompareLarger`, `CompareLargerOrEqual`, `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo` | `bitwise_op` |
 | `LockSlotMode` | `OnlyUnfixed`, `OverrideFixed` | `lock_slots` |
 | `CountSlotType` | `All`, `Storage`, `Gas`, `Virus`, `Anomaly`, `Drone`, `Garage`, `Alien`, `Satellite` | `count_slots` |
 | `CountItemMode` | `Remaining`, `Reserved` | `count_item` |

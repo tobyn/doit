@@ -50,53 +50,50 @@ sequence handler.
 
 ## New Instructions (10)
 
-| Instruction | Category | Purpose | doit action |
+| Instruction | Category | Purpose | Status |
 |---|---|---|---|
-| `sequence` | Flow | Execute up to 5 exec branches in order | Wrap in stdlib |
-| `for_producers_items` | Flow | Loop items a producer can make | Wrap in stdlib + iterator |
-| `get_unlocked_components` | Flow | Loop produceable unlocked components | Wrap in stdlib + iterator |
-| `has_like_component` | Flow | Check unit for component by base type | Wrap in stdlib |
-| `get_offset` | Move | Get coordinate offset from unit | Wrap in stdlib |
-| `move_offset` | Move | Move to offset from location/unit | Wrap in stdlib |
-| `activate` | Global | Generic component activation | Wrap in stdlib |
-| `load_behavior` | Unit | Remotely load behavior onto adjacent unit | Wrap in stdlib (uses `var_args`) |
-| `event_radio` | Flow | Event on radio band signal change | New paradigm — see below |
-| `event_parameter` | Flow | Event on parameter value change | New paradigm — see below |
+| `sequence` | Flow | Execute up to 5 exec branches in order | **TODO** — new paradigm |
+| `for_producers_items` | Flow | Loop items a producer can make | **Done** — stdlib + iterator |
+| `get_unlocked_components` | Flow | Loop produceable unlocked components | **Done** — stdlib + iterator |
+| `has_like_component` | Flow | Check unit for component by base type | **Done** — stdlib |
+| `get_offset` | Move | Get coordinate offset from unit | **Done** — stdlib |
+| `move_offset` | Move | Move to offset from location/unit | **Done** — stdlib |
+| `activate` | Global | Generic component activation | **Done** — stdlib |
+| `load_behavior` | Unit | Remotely load behavior onto adjacent unit | **TODO** — uses `var_args`/`sub` |
+| `event_radio` | Flow | Event on radio band signal change | **TODO** — new paradigm |
+| `event_parameter` | Flow | Event on parameter value change | **TODO** — new paradigm |
 
-## Removed Instructions
+## Removed Instructions — **Done**
 
-- **`unpackage_all`** — removed entirely
-- **`package_all`** — removed entirely
-
-These should be removed from the stdlib if present.
+- **`unpackage_all`** — removed from stdlib
+- **`package_all`** — removed from stdlib
 
 ## Deprecated Instructions
 
 - **`get_ingredients`** — use `for_recipe_ingredients` instead
-- **`domove_range`** — deprecated
-- **`move_east`**, **`move_west`**, **`move_north`**, **`move_south`** — deprecated
+- **`domove_range`** — deprecated (still in stdlib for compatibility)
+- **`move_east`**, **`move_west`**, **`move_north`**, **`move_south`** — deprecated (still in stdlib)
 
 ## Renamed / Rebranded
 
-- `is_unlocked` → "Is Researched" (unlock → research terminology)
-- `lock_slots` / `unlock_slots` / `is_fixed` — "Fix" → "Lock" rebrand
-- `for_component` → "Loop Equipped Components"
+Display name changes only. The instruction IDs are unchanged, so doit
+code is unaffected. No changes needed.
 
-These are display name changes only. The instruction IDs are unchanged,
-so doit code is unaffected.
-
-## Path Blocking — New Exec Branches
+## Path Blocking — New Exec Branches — **Done**
 
 `dodrop`, `dopickup`, and `domove` now have a "Path Blocked" exec
-branch. This is a new continuation path doit should expose. The exec
-slot is the last arg in each instruction's args list.
+branch. These are exposed as optional `exec(path_blocked)` continuations
+in the stdlib. Callers can omit the branch if they don't need it — the
+compiler strips unresolved exec bindings. `domove` also gained an
+optional `unit` keyword parameter for specifying a target unit other
+than self.
 
-## `bitwise_op` Expanded
+## `bitwise_op` Expanded — **Done**
 
-Now has 14 operations (was 6). New operations: Compare Equal (7),
-Compare Larger (8), Compare Larger or Equal (9), Add (10), Subtract (11),
-Multiply (12), Divide (13), Modulo (14). The doit `BitwiseMode` enum
-needs updating. Note: the arithmetic operations overlap with doit's
+Now has 14 operations (was 6). The `BitwiseMode` enum has been updated
+with: `CompareEqual` (7), `CompareLarger` (8), `CompareLargerOrEqual` (9),
+`Add` (10), `Subtract` (11), `Multiply` (12), `Divide` (13),
+`Modulo` (14). Note: the arithmetic operations overlap with doit's
 built-in arithmetic operators, which compile to dedicated instructions.
 
 ## Event System (New Paradigm — Verified In-Game)
