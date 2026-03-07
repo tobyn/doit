@@ -29,6 +29,25 @@ returns parameter info. This is a game UI concern — doit already handles
 `call` parameters via the planned `call` keyword, and `build`/`produce`
 are commented-out stubs.
 
+## Sequence Instruction (Verified In-Game)
+
+`sequence` uses the `BeginBlock`/`next`/`last` iterator mechanism to
+execute up to 5 exec branches in order. `exec_arg = false` — no
+`"next"` field; all branching is through explicit exec slots 0–4.
+Each branch must end with `"next": false` to re-dispatch back to the
+sequence handler.
+
+- Branches execute in order: First, Second, Third, Fourth, then Last.
+- Optional branches (Second–Fourth) are skipped if not connected.
+- The `last` VM instruction works within sequence branches — it skips
+  remaining branches and jumps directly to the Last handler.
+- The `break` VM opcode has been **removed in 1.0**. The game shows
+  "invalid instruction [break]" with a tooltip saying it has been
+  removed. The `last` instruction is the only block-control opcode.
+  The doit compiler never emits `break` — it uses `last` for iterator
+  breaks and noop bridges / `jump` for other break forms — so this
+  removal does not affect doit output.
+
 ## New Instructions (10)
 
 | Instruction | Category | Purpose | doit action |
@@ -80,7 +99,7 @@ Multiply (12), Divide (13), Modulo (14). The doit `BitwiseMode` enum
 needs updating. Note: the arithmetic operations overlap with doit's
 built-in arithmetic operators, which compile to dedicated instructions.
 
-## Event System (New Paradigm)
+## Event System (New Paradigm — Verified In-Game)
 
 `event_radio` and `event_parameter` are a new instruction category.
 They have `event_setup` and `event_trigger` hooks that create persistent
@@ -89,6 +108,20 @@ changes. This is fundamentally different from normal branching — the
 listener persists across ticks and fires asynchronously. Supporting
 this in doit may require new language constructs or at minimum careful
 stdlib design.
+
+Verified behavior:
+- Event instructions are placed in the instruction list but disconnected
+  from the main flow. They act as interrupt entry points.
+- When the event fires, execution jumps to the instruction after the
+  event node. The handler chain should end with `"next": false` to
+  avoid falling through into unrelated instructions.
+- `event_parameter` uses `"pnum": N` (1-based parameter index) to
+  select which parameter to watch.
+- `event_radio` uses `"band": {register_value}` to select the radio
+  band. The band must be a valid entity ID (e.g., `v_octagon`).
+  Note: `v_circle` is NOT a valid ID.
+- The `nx`/`ny` fields on event instructions are visual editor node
+  positions (cosmetic, not semantic).
 
 ## Faction Registers / Radio Storage (New)
 
