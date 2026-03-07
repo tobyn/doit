@@ -245,3 +245,21 @@ in-game (Result = 20 for tests 47-66, previously verified 1-46).
 - **Namespace-qualified iterator bug**: `parseForStmt()` wasn't calling
   `resolveFnName()` for iterator lookup. Fixed by adding namespace
   resolution.
+
+### Desynced 1.0 (March 2026) — PASSED
+
+74-test sanity check covering the full language plus branching functions,
+iterators, and label/jump. All 74 tests pass after fix.
+
+**Identified and fixed bugs**:
+
+- **Block scope register isolation**: Inner-scope `var x = 99` inside
+  `if true { }` overwrote outer `var x = 1` because both used register
+  `"x"`. Root cause: `pushScope`/`popScope` tracked name visibility but
+  not register isolation. Fix: `declareVarScoped` allocates unique
+  register names (`"x$1"`) for shadowed variables. `declareVar` (no
+  renaming) kept for exec bindings where register names must match.
+
+No Desynced 1.0 regressions found — all game data changes (new/removed
+instructions, event system, faction registers, etc.) are compatible
+with existing compiled behaviors.

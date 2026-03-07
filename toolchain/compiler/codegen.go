@@ -366,7 +366,7 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, co
 		if compound {
 			syms.markUsed(name) // compound assignment reads the variable
 		}
-		return name, nil
+		return vi.regName, nil
 	}
 	if strings.HasPrefix(name, "$") {
 		if reg, ok := unitRegisters[name]; ok {

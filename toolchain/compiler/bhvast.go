@@ -97,8 +97,8 @@ func (p *parser) bhvEmitCtx(b *frameBuilder, syms *symbolTable) *emitContext {
 			scopeStack = scopeStack[:n]
 		},
 		declareIterVar: func(name string) string {
-			syms.declareVar(name, false)
-			return name
+			syms.declareVarScoped(name, false)
+			return syms.resolveReg(name)
 		},
 	}
 }
@@ -2702,7 +2702,7 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 	case *LiteralExpr:
 		return e.Value, nil
 	case *IdentExpr:
-		return e.Name, nil
+		return syms.resolveReg(e.Name), nil
 	case *ArithExpr:
 		tmp := allocUniqueVar("@arith1", syms.usedVars)
 		if err := p.emitBhvArithTo(e, tmp, syms, b, comment); err != nil {
@@ -2827,7 +2827,7 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 		b.emit(f)
 		return nil
 	case *IdentExpr:
-		f := map[string]any{"op": "set_reg", "1": e.Name, "2": target}
+		f := map[string]any{"op": "set_reg", "1": syms.resolveReg(e.Name), "2": target}
 		setComment(f, comment)
 		b.emit(f)
 		return nil
@@ -3324,8 +3324,8 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		return p.expandCall(s.Name, resolvedArgs, resolvedKwArgs, nil, b, 0, s.Comment, syms.usedVars)
 
 	case *LetStmt:
-		syms.declareVar(s.Name, s.Mutable)
-		return p.emitBhvExprTo(s.Value, s.Name, syms, b, s.Comment)
+		syms.declareVarScoped(s.Name, s.Mutable)
+		return p.emitBhvExprTo(s.Value, syms.resolveReg(s.Name), syms, b, s.Comment)
 
 	case *AssignStmt:
 		var target any
@@ -3386,8 +3386,8 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 			if bind.Discard {
 				retVals[i] = false
 			} else {
-				syms.declareVar(bind.Name, bind.Mutable)
-				retVals[i] = bind.Name
+				syms.declareVarScoped(bind.Name, bind.Mutable)
+				retVals[i] = syms.resolveReg(bind.Name)
 			}
 		}
 		switch v := s.Value.(type) {

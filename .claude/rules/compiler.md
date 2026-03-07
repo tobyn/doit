@@ -213,7 +213,16 @@ frame. `patchUnlabeledBreakToLast` converts unlabeled `@break` to
 block. Behavior level uses `symbolTable.pushScope`/`popScope`. Fn
 bodies use `fnBodyContext.pushFnScope`/`popFnScope`. The `usedVars`
 map is NOT saved/restored — it tracks all names ever used for inline
-variable rename collision avoidance.
+variable rename collision avoidance. At the behavior level, variable
+names are register keys in compiled output. When an inner-scope
+variable shadows an outer-scope variable, `declareVarScoped` allocates
+a unique register name (`name$1`, `name$2`, etc.) via
+`allocUniqueShadow` so the inner assignment doesn't overwrite the
+outer register. `resolveReg(name)` returns the register name for a
+user-visible variable. `declareVar` (no renaming) is used for exec
+bindings and other paths where register names must match binding names;
+`declareVarScoped` (with shadow renaming) is used for user `var`/`let`
+declarations.
 
 **Inline variable renaming**: When inlining via `expandCall`, internal
 variables are pre-scanned by `collectASTOutputVars` and renamed with

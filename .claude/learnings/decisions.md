@@ -456,3 +456,18 @@ and validates that no exec bindings are present (use `instruction`
 with `'` blocks for branching). Rationale: one-off iteration shouldn't
 require declaring a named `iter` — `iterator_instruction` is to `iter`
 what `instruction` is to `fn`.
+
+## Block scope register isolation (`declareVarScoped`)
+
+At the behavior level, variable names are register keys in compiled
+output. Before this fix, `pushScope`/`popScope` only tracked name
+visibility — an inner `var x = 99` inside an `if` block would
+overwrite the outer `var x = 1` because both used register `"x"`.
+
+Fix: `declareVarScoped` allocates a unique register name (e.g.,
+`"x$1"`) when a variable shadows an outer-scope variable. Two
+declaration methods exist: `declareVar` (no renaming, for exec
+bindings where register names must match binding names) and
+`declareVarScoped` (shadow renaming, for user `var`/`let`
+declarations). The `$` character is safe because it's not valid in
+doit identifiers, similar to the `@` prefix convention.

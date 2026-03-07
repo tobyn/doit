@@ -452,9 +452,10 @@ var unitRegisters = map[string]int{
 }
 
 type varInfo struct {
-	mutable bool // true for var, false for let
-	depth   int  // scope depth at declaration (for shadowing warnings)
-	used    bool // whether the variable has been read since declaration
+	mutable bool   // true for var, false for let
+	depth   int    // scope depth at declaration (for shadowing warnings)
+	used    bool   // whether the variable has been read since declaration
+	regName string // register name in compiled output (may differ from user name when shadowing)
 }
 
 type paramInfo struct {
@@ -497,9 +498,41 @@ func (s *symbolTable) popScope(saved map[string]varInfo) {
 }
 
 // declareVar registers a variable at the current scope depth.
+// The register name matches the user-visible name. Use declareVarScoped
+// for user var/let declarations that should isolate shadowed registers.
 func (s *symbolTable) declareVar(name string, mutable bool) {
-	s.vars[name] = varInfo{mutable: mutable, depth: s.scopeDepth}
+	s.vars[name] = varInfo{mutable: mutable, depth: s.scopeDepth, regName: name}
 	s.usedVars[name] = true
+}
+
+// declareVarScoped registers a variable and allocates a unique register
+// name when the variable shadows an outer-scope variable. This prevents
+// an inner var/let from overwriting the outer variable's register value.
+func (s *symbolTable) declareVarScoped(name string, mutable bool) {
+	regName := name
+	if existing, ok := s.vars[name]; ok && existing.depth < s.scopeDepth {
+		regName = s.allocUniqueShadow(name)
+	}
+	s.vars[name] = varInfo{mutable: mutable, depth: s.scopeDepth, regName: regName}
+	s.usedVars[regName] = true
+}
+
+// allocUniqueShadow generates a unique register name for a shadowed variable.
+func (s *symbolTable) allocUniqueShadow(name string) string {
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("%s$%d", name, i)
+		if !s.usedVars[candidate] {
+			return candidate
+		}
+	}
+}
+
+// resolveReg returns the register name for a user-visible variable name.
+func (s *symbolTable) resolveReg(name string) string {
+	if vi, ok := s.vars[name]; ok {
+		return vi.regName
+	}
+	return name
 }
 
 // declareVarWarn is like declareVar but also emits a warning if the name
