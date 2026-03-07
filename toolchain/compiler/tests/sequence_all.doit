@@ -1,0 +1,13 @@
+# AI-generated test
+# Tests sequence with all five branches
+behavior sequence_all {
+    @name "Sequence All"
+    sequence() {
+        first { notify "step 1" }
+        second { notify "step 2" }
+        third { notify "step 3" }
+        fourth { notify "step 4" }
+        done { notify "done" }
+    }
+    notify "after"
+}

@@ -1,0 +1,39 @@
+{
+  "0": {
+    "0": 2,
+    "1": 3,
+    "2": 4,
+    "3": 5,
+    "4": 6,
+    "op": "sequence"
+  },
+  "1": {
+    "next": false,
+    "op": "notify",
+    "txt": "step 1"
+  },
+  "2": {
+    "next": false,
+    "op": "notify",
+    "txt": "step 2"
+  },
+  "3": {
+    "next": false,
+    "op": "notify",
+    "txt": "step 3"
+  },
+  "4": {
+    "next": false,
+    "op": "notify",
+    "txt": "step 4"
+  },
+  "5": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "6": {
+    "op": "notify",
+    "txt": "after"
+  },
+  "name": "Sequence All"
+}

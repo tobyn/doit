@@ -741,6 +741,13 @@ func isNoopBridge(f map[string]any) bool {
 	if f["op"] != "set_reg" || f["0"] != false || f["1"] != false {
 		return false
 	}
+	// Re-dispatch noops ("next": false) must be kept. They provide a
+	// target frame whose "next": false triggers iterator re-dispatch.
+	// Numbered exec slots can't express re-dispatch (false means
+	// "unconnected/fall-through"), so the noop is semantically needed.
+	if f["next"] == false {
+		return false
+	}
 	for k := range f {
 		switch k {
 		case "op", "0", "1", "next":

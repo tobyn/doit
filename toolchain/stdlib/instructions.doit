@@ -1948,6 +1948,28 @@ fn separate_register(register) {
     }
 }
 
+# Executes a series of exec branches in order.
+# First through Fourth are executed sequentially. Optional branches
+# (Second–Fourth) are skipped if not connected. `last` inside any
+# branch skips remaining branches and jumps to the Done handler.
+#   "First" [branch] - first step
+#   "Second" [branch, optional] - second step
+#   "Third" [branch, optional] - third step
+#   "Fourth" [branch, optional] - fourth step
+#   "Done" [branch] - final step (runs after all others, or on `last`)
+fn sequence() exec(first, second, third, fourth, done) {
+    # frame: {"op": "sequence", "0": "First" [exec, detach],
+    #   "1": "Second" [exec, detach, optional], "2": "Third" [exec, detach, optional],
+    #   "3": "Fourth" [exec, detach, optional], "4": "Done" [exec]}
+    instruction "sequence" {
+        detach exec 0: first
+        detach exec 1: second
+        detach exec 2: third
+        detach exec 3: fourth
+        exec 4: done
+    }
+}
+
 # Produce materials needed in construction sites.
 #   "If Working" [branch] - where to continue if the unit started working
 fn serve_construction() exec(working) {

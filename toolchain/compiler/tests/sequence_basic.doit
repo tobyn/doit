@@ -1,0 +1,11 @@
+# AI-generated test
+# Tests sequence with first, second, and done (third/fourth omitted)
+behavior sequence_basic {
+    @name "Sequence Basic"
+    sequence() {
+        first { notify "step 1" }
+        second { notify "step 2" }
+        done { notify "done" }
+    }
+    notify "after"
+}

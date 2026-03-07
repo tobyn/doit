@@ -1,0 +1,14 @@
+# AI-generated test
+# Tests `last` inside a sequence branch (skips to done handler)
+behavior sequence_last {
+    @name "Sequence Last"
+    sequence() {
+        first {
+            notify "step 1"
+            last
+        }
+        second { notify "step 2" }
+        done { notify "done" }
+    }
+    notify "after"
+}

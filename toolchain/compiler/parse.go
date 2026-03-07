@@ -502,8 +502,13 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 				f[k] = frameRef(start)
 			} else if eb.name == "return" {
 				f[k] = frameRef(joinPoint)
+			} else if eb.detached {
+				// Unprovided detached continuation → remove from frame.
+				// The game sees absent exec slots as unconnected and skips
+				// them (e.g., sequence's optional Second–Fourth steps).
+				delete(f, k)
 			} else {
-				// Unprovided continuation → bridge to join point
+				// Unprovided bridging continuation → bridge to join point
 				f[k] = frameRef(joinPoint)
 			}
 		}

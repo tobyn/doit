@@ -1,0 +1,17 @@
+# AI-generated test
+# Tests `break` inside a sequence branch (exits current step, advances to next)
+behavior sequence_break {
+    @name "Sequence Break"
+    let x = get_self
+    sequence() {
+        first {
+            if x {
+                break
+            }
+            notify "maybe"
+        }
+        second { notify "step 2" }
+        done { notify "done" }
+    }
+    notify "after"
+}

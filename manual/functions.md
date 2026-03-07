@@ -726,7 +726,19 @@ mine(resource) {
     cannot_mine { notify "blocked" }
     full { notify "inventory full" }
 }
+
+# Sequence — executes steps in order, then done
+sequence() {
+    first { domove waypoint_a }
+    second { dopickup resource }
+    done { notify "finished" }
+}
 ```
+
+The `sequence` instruction executes up to four steps in order (first through
+fourth), then runs the done handler. Second through fourth are optional — omit
+them to skip. Inside any step, `last` skips remaining steps and jumps directly
+to the done handler. `break` exits the current step and advances to the next.
 
 The continuation names are documented in the `# frame:` comments in
 the standard library source (`toolchain/stdlib/instructions.doit`).

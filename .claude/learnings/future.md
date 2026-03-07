@@ -3,6 +3,16 @@
 Ideas to revisit later. These are not committed designs — just things
 worth thinking about when the time is right.
 
+## Optional parens on zero-arg branching calls
+
+Zero-argument branching functions like `sequence()`, `for_component()`,
+and `each_component()` require empty parens today. The parser could be
+extended to allow `sequence { first { ... } done { ... } }` without
+parens, matching how zero-arg non-branching calls already work. The
+disambiguation rule would be: if the token after the identifier is `{`
+and the function has exec continuations, treat `{` as the start of
+continuation blocks rather than a statement block.
+
 ## Optional static type checking (post-release priority)
 
 Add optional type annotations that the compiler checks at compile time.

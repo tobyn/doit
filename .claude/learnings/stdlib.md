@@ -95,7 +95,12 @@ All use the same call-site syntax (continuation blocks).
    continuations AND data output. Output available regardless of
    which path is taken. Rare (one known case).
 
-Categories 1, 3, 4, 5 use bare (bridging) blocks at call sites.
+6. **Sequencing** (`sequence`) — Executes up to 4 detached steps
+   (first–fourth) in order, then a bridging done handler. Optional
+   middle steps (second–fourth) are skipped if not provided.
+   `last` inside any step skips to done. No data output.
+
+Categories 1, 3, 4, 5, 6 use bare blocks at call sites.
 Category 2 uses `for`-prefixed (looping) blocks.
 
 Note: `lock` and `unlock` are **not** in the stdlib. They are language

@@ -29,18 +29,20 @@ returns parameter info. This is a game UI concern — doit already handles
 `call` parameters via the planned `call` keyword, and `build`/`produce`
 are commented-out stubs.
 
-## Sequence Instruction (Verified In-Game)
+## Sequence Instruction (Verified In-Game) — **Done**
 
 `sequence` uses the `BeginBlock`/`next`/`last` iterator mechanism to
 execute up to 5 exec branches in order. `exec_arg = false` — no
 `"next"` field; all branching is through explicit exec slots 0–4.
-Each branch must end with `"next": false` to re-dispatch back to the
-sequence handler.
+First–Fourth branches are detached (`"next": false`), re-dispatching
+to the sequence handler. The Last/Done branch is bridging — it flows
+back to the caller after the sequence completes.
 
-- Branches execute in order: First, Second, Third, Fourth, then Last.
-- Optional branches (Second–Fourth) are skipped if not connected.
+- Branches execute in order: First, Second, Third, Fourth, then Done.
+- Optional branches (Second–Fourth) are skipped if not connected
+  (absent from JSON).
 - The `last` VM instruction works within sequence branches — it skips
-  remaining branches and jumps directly to the Last handler.
+  remaining branches and jumps directly to the Done handler.
 - The `break` VM opcode has been **removed in 1.0**. The game shows
   "invalid instruction [break]" with a tooltip saying it has been
   removed. The `last` instruction is the only block-control opcode.
@@ -48,11 +50,17 @@ sequence handler.
   breaks and noop bridges / `jump` for other break forms — so this
   removal does not affect doit output.
 
+**doit implementation**: Stdlib function `sequence()` with
+`exec(first, second, third, fourth, done)`. The `done` name is used
+instead of `last` because `last` is a reserved keyword. Unprovided
+detached exec bindings are stripped from the compiled JSON (compiler
+fix in `expandContinuationBlocks`).
+
 ## New Instructions (10)
 
 | Instruction | Category | Purpose | Status |
 |---|---|---|---|
-| `sequence` | Flow | Execute up to 5 exec branches in order | **TODO** — new paradigm |
+| `sequence` | Flow | Execute up to 5 exec branches in order | **Done** — stdlib + continuation blocks |
 | `for_producers_items` | Flow | Loop items a producer can make | **Done** — stdlib + iterator |
 | `get_unlocked_components` | Flow | Loop produceable unlocked components | **Done** — stdlib + iterator |
 | `has_like_component` | Flow | Check unit for component by base type | **Done** — stdlib |
