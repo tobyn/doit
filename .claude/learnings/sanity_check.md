@@ -4,6 +4,12 @@ End-to-end verification that the compiler produces correct game behavior.
 The developer imports compiled base62 into Desynced and reports the output
 parameter value.
 
+**Do not record run-specific results here.** No test counts, pass/fail
+status, or bugs-found-and-fixed per run. That's changelog noise that
+wastes context. Only update this file to improve the *process* itself
+(new diagnostic techniques, corrected procedures, lessons about how
+to write better tests).
+
 ## When to Run
 
 The developer will say "do a sanity check" (or similar). Run through
@@ -164,6 +170,14 @@ Tests should be independent — each test's variables should not depend on
 side effects from previous tests (except `step` itself). Use fresh
 variable names per test to avoid collisions.
 
+**Test language constructs, not game instructions.** Verify values using
+language-level operations — comparisons (`>`, `==`), arithmetic (`+`),
+type checks (`is`) — not game-specific instructions whose runtime
+semantics we may not fully understand. For example, to verify
+`Item("metalbar") & 5` has numeric component 5, use `item >= 5 &&
+item <= 5` (numeric comparison), not `get_resource_num` (game
+instruction with unknown semantics).
+
 The behavior ends with:
 
 ```
@@ -190,76 +204,3 @@ exit
   corrupting it silently (the game imports garbage without error).
   Use `2>/dev/null` to suppress warnings or omit the redirect entirely.
 
-## Past Sanity Checks
-
-### Pre-1.0 (March 2026)
-
-48 tests, all passing after fixes. Discovered and fixed:
-
-- **`for_number` is inclusive**: The VM's `for_number` instruction includes
-  the stop value (stops when `i > to`, not `i >= to`). Range documentation
-  updated to reflect inclusive semantics.
-- **Iterator dispatch off-by-one**: `emitStateMachineIter` was emitting
-  `for_number(0, N, 1)` for N yields, giving N+1 iterations. Fixed to
-  `for_number(0, N-1, 1)`. This caused the last yield body to execute
-  twice.
-- **`{"num": 0}` is truthy**: The VM distinguishes empty registers
-  (`false`) from registers holding numeric zero (`{"num": 0}`).
-  `var x = 0` produces `{"num": 0}` which is truthy under
-  `compare_register`. Test for negation updated to use `var x = false`.
-- **Parameter boundary behavior**: `{"num": 0}` survives parameter
-  read/write roundtrips. The game UI produces `{"num": 0}` when a player
-  types 0 into a parameter field. No expressiveness gap exists.
-
-See `game.md` "Empty vs Numeric Zero" for the full VM register model.
-
-### Penultimate (March 2026) — PASSED
-
-66-test sanity check covering the full language. All 66 tests pass
-in-game (Result = 20 for tests 47-66, previously verified 1-46).
-
-**Identified and fixed bugs**:
-
-- **stripFallThrough + eliminateNoopBridges interaction**: check frame
-  branches pointing to noop bridge frames were stripped, then lost when
-  the bridge was eliminated. Fix: Phase 4 of `eliminateNoopBridges`
-  restores stripped branch slots.
-- **Variable renaming in iterator inlining**: `emitFnBody` renamed
-  caller-scope variables inside `YieldBodyStmt`. Fix: split into
-  `emitFnBody` + `emitFnBodyCore`; yield uses the no-scan variant.
-- **Nested `for_number` re-dispatch conflict**: Inner body's `next:false`
-  hit outer for_number first. Fix: `forNumberDepth` tracking +
-  `emitForStmtRangeManual` (manual counter with explicit back-edges).
-- **0-based slot keys in `emitForStmtRangeManual`**: Instruction slot
-  keys ("0","1","2") matched stdlib comment format (reference JS encoder)
-  instead of compiler's 1-based convention ("1","2","3"). Key "0" falls
-  into Lua's hash part, making frames unreliable. Fix: use 1-based keys
-  and slot constants (`checkLarger`, `checkSmaller`, etc.).
-- **Inner manual counter afterLoop exiting outer loop**: The detach noop
-  was emitted with `"next": false` and `afterLoop` pointed past it — the
-  same position as the outer for_number's done target. Inner loop
-  completion exited both loops. Fix: emit detach noop without `"next"`
-  (natural fall-through) and set `afterLoop` to point TO the noop. The
-  outer for_number sets `"next": false` on it when appropriate; noop
-  elimination resolves correctly in both cases.
-- **Namespace-qualified iterator bug**: `parseForStmt()` wasn't calling
-  `resolveFnName()` for iterator lookup. Fixed by adding namespace
-  resolution.
-
-### Desynced 1.0 (March 2026) — PASSED
-
-74-test sanity check covering the full language plus branching functions,
-iterators, and label/jump. All 74 tests pass after fix.
-
-**Identified and fixed bugs**:
-
-- **Block scope register isolation**: Inner-scope `var x = 99` inside
-  `if true { }` overwrote outer `var x = 1` because both used register
-  `"x"`. Root cause: `pushScope`/`popScope` tracked name visibility but
-  not register isolation. Fix: `declareVarScoped` allocates unique
-  register names (`"x$1"`) for shadowed variables. `declareVar` (no
-  renaming) kept for exec bindings where register names must match.
-
-No Desynced 1.0 regressions found — all game data changes (new/removed
-instructions, event system, faction registers, etc.) are compatible
-with existing compiled behaviors.
