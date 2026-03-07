@@ -18,6 +18,10 @@ go test ./...                   # Run all tests
 go test -run TestCompile        # Run compile tests only
 go test -run TestCompileErrors  # Run compiler error case tests only
 go test -run TestCodec          # Run codec tests only
+
+# Validate against reference JS codec (requires Node.js):
+node codec/refcodec.js decode file.b62   # decode with reference
+node codec/refcodec.js encode file.json  # encode with reference
 ```
 
 ## Architecture

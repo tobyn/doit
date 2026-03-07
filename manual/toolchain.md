@@ -88,3 +88,28 @@ doit help [command]
 
 With no argument, prints a summary of all available commands. With a command
 name, prints detailed usage for that command.
+
+## Reference codec CLI
+
+A Node.js CLI wrapper around the vendored reference JavaScript codec is
+available at `toolchain/codec/refcodec.js`. This uses the first-party
+codec from Desynced's developers (`toolchain/codec/tests/reference/`)
+without modification.
+
+```
+node toolchain/codec/refcodec.js decode [file]
+node toolchain/codec/refcodec.js encode [file]
+```
+
+- **decode** reads a Base62 string and writes the type character on the
+  first line followed by the JSON representation (matching the
+  `.decoded` test file format).
+- **encode** reads a type-prefixed JSON file (or plain JSON, defaulting
+  to behavior type `C`) and writes the Base62 string.
+
+Both commands read from the given file, or from stdin if no file is
+provided. Requires Node.js.
+
+Use this tool to validate our Go codec against the authoritative
+reference implementation. The reference JS codec is the ground truth —
+our codec must always match its output.

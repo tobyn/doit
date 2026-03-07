@@ -13,17 +13,25 @@ can bidirectionally convert between these strings and a structured representatio
 or behavior.
 
 The `codec` package provides a Go implementation of the same functionality.
+**Our codec must always match the reference JS codec's output.** The JS
+codec is a first-party product of Desynced's developers and is the
+authoritative specification. When in doubt, decode the same input with
+both codecs and compare.
 
 ## Architecture
 
 - **`codec/codec.go`** — Codec implementation
 - **`codec/json.go`** — JSON unmarshaling into the codec's native Go value types
+- **`codec/refcodec.js`** — Node.js CLI wrapper for the reference JS codec
+  (`node codec/refcodec.js decode|encode [file]`). Use this to validate
+  our Go codec against the reference. See `manual/toolchain.md` for usage.
 - **`codec/tests/`** — Test case pairs: `.encoded` (Base62 string) +
   `.decoded` (type indicator line + JSON)
 - **`codec/tests/reference/`** — Vendored
   [Stage Games JavaScript codec](https://github.com/StageGames/DesyncedJavaScriptUtils)
   used as the reference implementation; `index.html` can be opened in a
-  browser to create new test cases
+  browser to create new test cases. **Do not modify** files in this
+  directory.
 
 ## Test Case Format
 

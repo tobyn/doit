@@ -48,6 +48,13 @@ The graph isomorphism matcher (`matchBehaviors`) handles frame reference
 remapping via BFS, so frame numbering differences between got and want
 are tolerated.
 
+## Reference codec validation
+
+Every behavior test `.json` file must roundtrip through the reference
+JS codec. See the "Validating Against the Reference Codec" section in
+`.claude/CLAUDE.md` for the procedure. This catches cases where our
+JSON contains values the reference codec encodes or decodes differently.
+
 ## Locale directive
 
 Test `.doit` files can specify a compilation locale via a `# locale: <tag>`

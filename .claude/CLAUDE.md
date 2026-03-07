@@ -40,6 +40,29 @@ and significant enough to warrant its own commit, ask the developer
 whether to include it or split it out. Never dismiss failing tests as
 "pre-existing" without flagging them.
 
+## Validating Against the Reference Codec
+
+The reference JavaScript codec (`toolchain/codec/tests/reference/`) is
+the authoritative specification for the binary format. A CLI wrapper at
+`toolchain/codec/refcodec.js` makes it easy to use from the command
+line (requires Node.js).
+
+Any behavior test JSON we create or update must roundtrip cleanly
+through the reference codec. After writing a `.json` test file, verify:
+
+```sh
+(echo C; cat compiler/tests/foo.json) \
+  | node codec/refcodec.js encode \
+  | node codec/refcodec.js decode \
+  | tail -n +2 \
+  | python3 -c "import sys,json; a=json.load(sys.stdin); b=json.load(open(sys.argv[1])); exit(0 if a==b else 1)" compiler/tests/foo.json \
+  && echo OK
+```
+
+If it prints `OK`, the roundtrip succeeded. If not, our JSON contains
+values the reference codec handles differently — fix the discrepancy
+before considering the work done.
+
 ## Project Memory
 
 Project memory lives in two places under `.claude/`:
