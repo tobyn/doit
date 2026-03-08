@@ -196,11 +196,6 @@ exit
 
 ## Workflow Notes
 
-- **Compiled behavior strings go in `scratch/`**: Write base62 output to
-  `scratch/*.b62` files, not terminal output. Terminal copying is painful
-  for the developer.
-- **Never use `2>&1` when compiling to `.b62` files**: Compiler warnings
-  go to stderr. Using `2>&1` merges them into the base62 output,
-  corrupting it silently (the game imports garbage without error).
-  Use `2>/dev/null` to suppress warnings or omit the redirect entirely.
+See `in_game_testing.md` for general guidelines (parameters for I/O,
+exit at end, compiled output to scratch/, avoiding `2>&1`).
 

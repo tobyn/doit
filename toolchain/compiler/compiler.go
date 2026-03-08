@@ -737,15 +737,16 @@ func (b *frameBuilder) get(idx int) map[string]any {
 // serving only as a control-flow redirect (no side effects).
 // Frames with extra keys (e.g., "cmt") are conservatively kept —
 // a comment is player-visible in the game's behavior editor.
+//
+// Re-dispatch noops ("next": false) ARE eligible for elimination.
+// When a numbered exec slot references a noop, replacing the ref
+// with false produces correct re-dispatch semantics — the VM treats
+// false in any exec slot (numbered or "next") as "no connection",
+// which triggers re-dispatch to the enclosing iterator or restarts
+// the behavior at the top level. Absent keys (not false) cause
+// fall-through to the next frame.
 func isNoopBridge(f map[string]any) bool {
 	if f["op"] != "set_reg" || f["0"] != false || f["1"] != false {
-		return false
-	}
-	// Re-dispatch noops ("next": false) must be kept. They provide a
-	// target frame whose "next": false triggers iterator re-dispatch.
-	// Numbered exec slots can't express re-dispatch (false means
-	// "unconnected/fall-through"), so the noop is semantically needed.
-	if f["next"] == false {
 		return false
 	}
 	for k := range f {

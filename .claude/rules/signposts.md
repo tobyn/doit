@@ -5,6 +5,9 @@ topic is relevant to your current task.
 
 ## Processes
 
+- **In-game testing** — `.claude/learnings/in_game_testing.md`
+  Guidelines for building behaviors the developer tests in-game
+  (parameters for I/O, exit at end, output to scratch/).
 - **Language ergonomics audit** — `.claude/learnings/audit.md`
   Process and open items for auditing language ergonomics.
 - **Sanity check** — `.claude/learnings/sanity_check.md`

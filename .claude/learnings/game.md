@@ -175,14 +175,23 @@ Instructions are the nodes in the behavior graph. Each has:
 Conditional instructions have multiple output paths. In the compiled
 JSON, these map to numbered exec slots containing jump targets.
 
-**Missing exec slots cause fall-through**: When a conditional instruction
-(e.g., `check_number`, `compare_register`) has an exec slot omitted from
-the JSON, taking that branch causes the VM to fall through to the next
-frame in sequence. This is NOT a restart — it's equivalent to having the
-slot point to `currentFrame + 1`. The compiler's `stripFallThrough`
-optimization relies on this: it removes exec/next slots that explicitly
-point to the immediately following frame, producing smaller output with
-identical behavior. Verified in-game via existing test cases.
+**Exec slot semantics — absent vs false**: Exec slots (both numbered
+like `"0"` and `"next"`) have two distinct "empty" states:
+
+- **Absent key** — fall-through to the next frame in sequence. Equivalent
+  to the slot pointing to `currentFrame + 1`. The compiler's
+  `stripFallThrough` optimization relies on this: it removes exec/next
+  slots that explicitly point to the immediately following frame,
+  producing smaller output with identical behavior.
+- **`false`** — no connection. The VM treats the branch as having no
+  successor, which triggers re-dispatch: control returns to the enclosing
+  iterator (e.g., `for_number`, `sequence`), or the behavior restarts
+  from the beginning at the top level. This applies uniformly to all
+  exec slots — `"next": false` and `"0": false` have the same semantics.
+
+Verified in-game: a `compare_register` with `"0": false` terminates
+execution on the "different" branch (re-dispatch), identical to how
+`"next": false` behaves on the "same" branch.
 
 The `check_number` instruction ("Compare Number" in the game UI) is a
 3-way branch that compares the numeric part of two registers. It takes

@@ -7,28 +7,23 @@
     "0": "e",
     "1": "comp",
     "2": "idx",
-    "3": 6,
+    "3": 5,
     "op": "for_component"
   },
   "2": {
-    "0": 5,
+    "0": 4,
     "1": "comp",
     "2": false,
+    "next": false,
     "op": "compare_register"
   },
   "3": {
-    "0": false,
-    "1": false,
-    "next": false,
-    "op": "set_reg"
-  },
-  "4": {
     "0": "comp",
     "next": false,
     "op": "notify",
     "txt": "comp"
   },
-  "5": {
+  "4": {
     "op": "notify",
     "txt": "done"
   },

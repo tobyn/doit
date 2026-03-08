@@ -46,12 +46,11 @@ Unlabeled `break` inside an exec block means "exit this block":
 
 - **Detached blocks**: `@break` → `set_reg false false` with
   `"next": false` (re-dispatches to the iterator, does NOT stop it).
-  These re-dispatch noops are excluded from `eliminateNoopBridges`
-  (`isNoopBridge` returns false when `"next" == false`) because
-  numbered exec slots can't express re-dispatch — `false` in a
-  numbered slot means "unconnected/fall-through", not "re-dispatch".
-  To stop the iterator, use the `last` keyword (terminal — no `break`
-  needed after it).
+  These noops are eliminated by `eliminateNoopBridges` — references
+  are replaced with `false`, which correctly triggers re-dispatch
+  (the VM treats `false` in any exec slot as "no connection" /
+  re-dispatch). To stop the iterator, use the `last` keyword
+  (terminal — no `break` needed after it).
 - **Bridging blocks**: `@break` → `set_reg false false` patched to
   the join point (same as normal block completion).
 

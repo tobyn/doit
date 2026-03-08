@@ -33,6 +33,13 @@ register types.
   tests in `codec/`. Only integration wiring tests stay in `main`.
 - **Error message quality** — review compiler errors for clarity and
   source locations. Important for new users at 1.0.
+- **Assert + debug/release modes** — `assert` statement that checks
+  a condition at runtime: `assert expr, "message"` with optional value
+  `assert expr, "message", val`. In debug mode, emits a truthy check
+  that proceeds on success or shows a notification with the error
+  message (and value) then exits on failure. In release mode, all
+  `assert` statements are omitted entirely. Requires a compiler flag
+  for mode selection.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
@@ -198,6 +205,27 @@ separate behavior in the player's list) mean it should be an explicit
 choice rather than a default compilation strategy.
 
 Post-1.0. The `call` stub has been removed from the stdlib.
+
+## Visual layout (nx/ny fields)
+
+The compiled JSON supports `"nx"` and `"ny"` fields on each frame to
+control instruction placement in the game's visual behavior editor.
+The compiler currently omits these, leaving layout to the game's
+auto-layout algorithm. Since the compiler knows the control flow
+structure it built (sequential blocks, if/else diamonds, loop bodies,
+continuation branches), it could produce much cleaner layouts:
+
+- Sequential statements in a vertical column
+- Conditional branches side by side
+- Loop bodies visually grouped and indented
+- Continuation blocks (exec branches) laid out as parallel columns
+
+Every compiled behavior would look better in the editor immediately.
+The game's auto-layout doesn't understand structured control flow,
+so it often produces tangled graphs for non-trivial behaviors.
+
+Post-1.0. Requires reverse-engineering the coordinate system and
+grid spacing the game uses for `nx`/`ny` values.
 
 ## Jump/label applications
 

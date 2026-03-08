@@ -206,12 +206,15 @@ assuming iterator semantics. `loopDepth` and `loopLabels` are
 saved/reset at exec block entry; `execBlockDepth` tracks nesting to
 allow `break` without a surrounding loop. In detached blocks, `@break`
 becomes a noop (`set_reg false false` with `"next": false`) that
-re-dispatches to the iterator without stopping it. In bridging blocks,
-`@break` jumps to the join point. Users who need `last` use the
-`last` keyword (terminal — no `break` needed after it). `for...in`
-loops still emit `last` automatically (the compiler controls that
-path). Labeled `break` across an exec block boundary is a parse error
-(labels are not visible).
+re-dispatches to the iterator without stopping it. These noops are
+eliminated by `eliminateNoopBridges` — numbered exec slot references
+are replaced with `false`, which correctly triggers re-dispatch (the
+VM treats `false` in any exec slot as "no connection" / re-dispatch).
+In bridging blocks, `@break` jumps to the join point. Users who need
+`last` use the `last` keyword (terminal — no `break` needed after
+it). `for...in` loops still emit `last` automatically (the compiler
+controls that path). Labeled `break` across an exec block boundary is
+a parse error (labels are not visible).
 
 ## Range `for` loops — `for_number` emission
 

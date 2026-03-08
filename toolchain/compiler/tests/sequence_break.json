@@ -5,37 +5,31 @@
   },
   "1": {
     "0": 3,
-    "1": 6,
-    "4": 7,
+    "1": 5,
+    "4": 6,
     "op": "sequence"
   },
   "2": {
+    "0": false,
     "1": "x",
     "2": false,
-    "next": 5,
     "op": "compare_register"
   },
   "3": {
-    "0": false,
-    "1": false,
-    "next": false,
-    "op": "set_reg"
-  },
-  "4": {
     "next": false,
     "op": "notify",
     "txt": "maybe"
   },
-  "5": {
+  "4": {
     "next": false,
     "op": "notify",
     "txt": "step 2"
   },
-  "6": {
+  "5": {
     "op": "notify",
     "txt": "done"
   },
-  "7": {
+  "6": {
     "op": "notify",
     "txt": "after"
   },
