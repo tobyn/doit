@@ -1,0 +1,8 @@
+{
+  "0": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "keeparrays": "store",
+  "name": "Keep Arrays"
+}

@@ -67,7 +67,7 @@
   },
   "name": "Counted Loop In For",
   "parameters": [
-    false
+    true
   ],
   "pnames": [
     "Result"

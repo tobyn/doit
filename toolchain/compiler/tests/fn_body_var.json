@@ -29,7 +29,7 @@
   },
   "name": "Fn Body Var",
   "parameters": [
-    false
+    true
   ],
   "pnames": [
     "Val"

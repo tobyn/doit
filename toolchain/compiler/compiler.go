@@ -462,6 +462,7 @@ type paramInfo struct {
 	index     int    // 1-based parameter index
 	name      string // display name
 	direction string // "in", "out", or "inout"
+	initValue any    // initial value for pinits (nil = no default)
 }
 
 type symbolTable struct {

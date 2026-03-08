@@ -1,0 +1,6 @@
+# AI-generated test
+behavior bhv_keeparrays {
+    @name "Keep Arrays"
+    @keeparrays
+    notify "hello"
+}

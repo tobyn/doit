@@ -1,0 +1,8 @@
+{
+  "0": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "keepvars": true,
+  "name": "Keep Vars"
+}

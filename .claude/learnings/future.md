@@ -45,12 +45,12 @@ register types.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
 - **Desynced 1.0 stdlib update** — see `.claude/learnings/desynced_1_0.md`
-  for full analysis. Key items: add 8 new instructions to stdlib
-  (+ 2 event instructions needing design), remove `unpackage_all` /
-  `package_all`, add "Path Blocked" exec branches to `dodrop` /
-  `dopickup` / `domove`, expand `BitwiseMode` enum (8 new ops),
-  design faction register syntax, design event instruction support,
-  handle `wait 0` behavior change.
+  for full analysis. Done: 8 new stdlib instructions, removed
+  `unpackage_all`/`package_all`, "Path Blocked" exec branches,
+  `BitwiseMode` expansion, `wait 0` behavior change, behavior
+  properties (`@keepvars`, `@keeparrays`, `@param` defaults).
+  Remaining: faction register syntax, event instruction design,
+  `load_behavior` + `dependencies` format (deferred to `call`).
 
 ## Compound doc comments from nested calls
 
@@ -203,6 +203,11 @@ This also opens the door to multi-behavior projects where behaviors
 call each other, though the UX trade-offs (every callee appears as a
 separate behavior in the player's list) mean it should be an explicit
 choice rather than a default compilation strategy.
+
+The `load_behavior` instruction (new in 1.0) also belongs here — it
+remotely loads a behavior onto an adjacent unit, requiring the same
+behavior-reference mechanism that `call` needs. Both instructions are
+deferred until the language has a notion of behavior references.
 
 Post-1.0. The `call` stub has been removed from the stdlib.
 

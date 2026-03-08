@@ -253,6 +253,16 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				if err := p.parseParamAttr(syms, tok.pos); err != nil {
 					return nil, err
 				}
+			case "keepvars":
+				if _, exists := value["keepvars"]; exists {
+					return nil, p.errorf(tok.pos, "duplicate @keepvars")
+				}
+				value["keepvars"] = true
+			case "keeparrays":
+				if _, exists := value["keeparrays"]; exists {
+					return nil, p.errorf(tok.pos, "duplicate @keeparrays")
+				}
+				value["keeparrays"] = "store"
 			default:
 				return nil, p.errorf(attr.pos, "unknown attribute @%s", attr.val)
 			}
@@ -328,12 +338,31 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	if len(syms.params) > 0 {
 		params := make([]any, len(syms.params))
 		pnames := make([]any, len(syms.params))
+		hasPinits := false
 		for i, pi := range syms.params {
-			params[i] = false // default value (empty)
+			params[i] = pi.direction == "out" || pi.direction == "inout"
 			pnames[i] = pi.name
+			if pi.initValue != nil {
+				hasPinits = true
+			}
 		}
 		value["parameters"] = params
 		value["pnames"] = pnames
+		if hasPinits {
+			pinits := make([]any, len(syms.params))
+			for i, pi := range syms.params {
+				if pi.initValue != nil {
+					pinits[i] = pi.initValue
+				} else {
+					pinits[i] = false
+				}
+			}
+			// Trim trailing false entries
+			for len(pinits) > 0 && pinits[len(pinits)-1] == false {
+				pinits = pinits[:len(pinits)-1]
+			}
+			value["pinits"] = pinits
+		}
 	}
 
 	if _, exists := value["name"]; !exists {
@@ -842,8 +871,9 @@ func (p *parser) emitBoolCheckFrame(term *comparisonTerm, trueTarget, falseTarge
 }
 
 // parseParamAttr parses an @param attribute inside a behavior body.
-// Syntax: @param <direction> <name> <"display name" | { localized block }>
+// Syntax: @param <direction> <name> <"display name" | { localized block }> [= <default>]
 // Direction is one of: in, out, inout.
+// Default values: = <number>, = <entity_id>, or = <entity_id> <number>.
 func (p *parser) parseParamAttr(syms *symbolTable, pos int) error {
 	// Parse direction
 	dirTok, err := p.expect(tokIdent)
@@ -890,6 +920,24 @@ func (p *parser) parseParamAttr(syms *symbolTable, pos int) error {
 		p.unget(peek)
 	}
 
+	// Parse optional default value: = <value>
+	var initValue any
+	peek, err = p.next()
+	if err != nil {
+		return err
+	}
+	if peek.kind == tokEquals {
+		if dirTok.val == "out" {
+			return p.errorf(peek.pos, "output parameter %q cannot have a default value", dollarName)
+		}
+		initValue, err = p.parseParamInitValue()
+		if err != nil {
+			return err
+		}
+	} else {
+		p.unget(peek)
+	}
+
 	if len(syms.params) >= 10 {
 		return p.errorf(pos, "too many parameters (maximum 10)")
 	}
@@ -899,9 +947,72 @@ func (p *parser) parseParamAttr(syms *symbolTable, pos int) error {
 		index:     idx,
 		name:      displayName,
 		direction: dirTok.val,
+		initValue: initValue,
 	})
 	syms.paramMap[dollarName] = idx
 	return nil
+}
+
+// parseParamInitValue parses a parameter default value after '='.
+// Returns a register value object: {"num": N}, {"id": "..."}, or {"id": "...", "num": N}.
+func (p *parser) parseParamInitValue() (any, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	switch tok.kind {
+	case tokNumber:
+		n, err := strconv.Atoi(tok.val)
+		if err != nil {
+			return nil, p.errorf(tok.pos, "invalid number in default value: %s", tok.val)
+		}
+		return map[string]any{"num": n}, nil
+
+	case tokMinus:
+		// Negative number
+		numTok, err := p.expect(tokNumber)
+		if err != nil {
+			return nil, p.errorf(tok.pos, "expected number after '-' in default value")
+		}
+		n, err := strconv.Atoi(numTok.val)
+		if err != nil {
+			return nil, p.errorf(numTok.pos, "invalid number in default value: %s", numTok.val)
+		}
+		return map[string]any{"num": -n}, nil
+
+	case tokIdent:
+		// Entity ID, possibly followed by a number
+		id := tok.val
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokNumber {
+			n, err := strconv.Atoi(peek.val)
+			if err != nil {
+				return nil, p.errorf(peek.pos, "invalid number in default value: %s", peek.val)
+			}
+			return map[string]any{"id": id, "num": n}, nil
+		}
+		if peek.kind == tokMinus {
+			// Entity ID followed by negative number
+			numTok, err := p.expect(tokNumber)
+			if err != nil {
+				return nil, p.errorf(peek.pos, "expected number after '-' in default value")
+			}
+			n, err := strconv.Atoi(numTok.val)
+			if err != nil {
+				return nil, p.errorf(numTok.pos, "invalid number in default value: %s", numTok.val)
+			}
+			return map[string]any{"id": id, "num": -n}, nil
+		}
+		p.unget(peek)
+		return map[string]any{"id": id}, nil
+
+	default:
+		return nil, p.errorf(tok.pos, "expected number or identifier in default value, got %s", tok.describe())
+	}
 }
 
 // parseConstructorExpr parses a type constructor call into a ConstructorExpr.

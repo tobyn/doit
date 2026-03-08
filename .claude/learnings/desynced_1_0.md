@@ -67,9 +67,9 @@ fix in `expandContinuationBlocks`).
 | `get_offset` | Move | Get coordinate offset from unit | **Done** — stdlib |
 | `move_offset` | Move | Move to offset from location/unit | **Done** — stdlib |
 | `activate` | Global | Generic component activation | **Done** — stdlib |
-| `load_behavior` | Unit | Remotely load behavior onto adjacent unit | **TODO** — uses `var_args`/`sub` |
-| `event_radio` | Flow | Event on radio band signal change | **TODO** — new paradigm |
-| `event_parameter` | Flow | Event on parameter value change | **TODO** — new paradigm |
+| `load_behavior` | Unit | Remotely load behavior onto adjacent unit | **Deferred** — needs behavior references (see `call` keyword in `future.md`) |
+| `event_radio` | Flow | Event on radio band signal change | **Deferred** — needs language design (async interrupts) |
+| `event_parameter` | Flow | Event on parameter value change | **Deferred** — needs language design (async interrupts) |
 
 ## Removed Instructions — **Done**
 
@@ -145,32 +145,39 @@ doit has no syntax for faction registers yet. Supporting them would
 require new language constructs (e.g., `$faction.my_counter` or a
 `radio` keyword).
 
-## `dependencies` Format Update
+## `dependencies` Format Update — **Deferred**
 
 The behavior JSON format now prefers `dependencies` (flat array at root)
 over the old `subs` format for subroutine packaging. The old format is
 still supported as a fallback. The `dependencies` format is already
-documented in `game.md` and `behavior_json.md`. The doit codec may need
+documented in `game.md` and `behavior_json.md`. The doit codec will need
 to handle both formats for round-tripping.
 
-## Behavior Properties
+Deferred to the `call`/`load_behavior` implementation — those are the
+only instructions that reference subroutine dependencies, so the format
+isn't needed until then. When implementing, the codec needs to:
+- Read both `dependencies` (flat array) and `subs` (legacy) on decode
+- Write `dependencies` format on encode (prefer the new format)
+- Map dependency indices used by `call`'s `"sub"` field to entries in
+  the array
 
-Three behavior-level fields confirmed in `library.lua`:
+## Behavior Properties — **Done**
 
-- **`pinits`** — Parameter initial/default values. Already documented in
-  `behavior_json.md`. Not yet a language feature or codec concern.
-- **`keepvars`** (boolean) — Don't zero-fill variables on restart.
-- **`keeparrays`** (string `"store"`) — Memory arrays persist across
-  restarts.
+Three behavior-level fields confirmed in `library.lua`, now supported:
 
-These are not new to 1.0 but are confirmed present. None are currently
-supported by the doit compiler or codec.
+- **`pinits`** — Parameter initial/default values via `@param ... = <value>`.
+- **`keepvars`** (boolean) — `@keepvars` attribute; don't zero-fill variables on restart.
+- **`keeparrays`** (string `"store"`) — `@keeparrays` attribute; memory arrays persist
+  across restarts.
 
-## `wait` Behavior Change
+The codec handles these transparently (generic map serialization).
+The compiler emits them as top-level keys on the behavior JSON.
+
+## `wait` Behavior Change — **Done**
 
 `wait` with zero or negative ticks now does nothing (returns immediately)
-instead of clamping to 1 tick. This may affect doit programs that rely
-on `wait 0` as a one-tick pause — that no longer works.
+instead of clamping to 1 tick. Manual updated to reflect the new behavior
+and recommend `wait 1` for a one-tick pause.
 
 ## Entity Registry Summary
 

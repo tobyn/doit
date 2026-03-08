@@ -1,0 +1,25 @@
+{
+  "0": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "name": "Param Defaults",
+  "parameters": [
+    false,
+    false,
+    true
+  ],
+  "pinits": [
+    {
+      "id": "v_iron"
+    },
+    {
+      "num": 5
+    }
+  ],
+  "pnames": [
+    "Resource",
+    "Count",
+    "Result"
+  ]
+}

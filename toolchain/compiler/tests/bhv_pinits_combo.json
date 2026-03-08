@@ -1,0 +1,24 @@
+{
+  "0": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "name": "Param Combo",
+  "parameters": [
+    false,
+    false
+  ],
+  "pinits": [
+    {
+      "id": "c_battery",
+      "num": 3
+    },
+    {
+      "num": -10
+    }
+  ],
+  "pnames": [
+    "Slot",
+    "Neg"
+  ]
+}

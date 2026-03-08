@@ -45,6 +45,32 @@ For localized names, use `localize`:
 The compiler selects the best match for the active locale (set via `-l` or
 auto-detected). If no match is found, the first entry is used.
 
+### `@keepvars`
+
+By default, all variables are zeroed when a behavior restarts. The
+`@keepvars` attribute preserves variable values across restart cycles:
+
+```doit
+behavior counter {
+    @keepvars
+    var n = 0
+    n++
+    notify "tick"
+}
+```
+
+### `@keeparrays`
+
+By default, memory arrays are cleared when a behavior restarts. The
+`@keeparrays` attribute preserves them until the behavior is switched:
+
+```doit
+behavior logger {
+    @keeparrays
+    # memory arrays survive restarts
+}
+```
+
 When a file contains multiple behaviors, the `-b` flag selects which to compile:
 
 ```doit
@@ -579,12 +605,14 @@ behavior miner_hauler {
 }
 ```
 
-The syntax is `@param <direction> <name> <display>`:
+The syntax is `@param <direction> <name> <display> [= <default>]`:
 
 - **Direction**: `in` (read-only input), `out` (write-only output), or
   `inout` (read/write)
 - **Name**: the identifier used to reference this parameter as `$name`
 - **Display**: a string literal or `localize { ... }` (same as `@name`)
+- **Default** (optional): an initial value applied when the behavior is
+  first loaded onto a unit
 
 ```doit
 @param in target "Target"
@@ -595,6 +623,28 @@ The syntax is `@param <direction> <name> <display>`:
 ```
 
 If the display name is omitted, it defaults to the identifier name.
+
+### Default values
+
+Parameters can have default values that are applied when the behavior is first
+loaded onto a unit. The default value is specified after `=`:
+
+```doit
+@param in resource "Resource" = v_iron
+@param in count "Count" = 5
+@param in slot "Slot" = c_battery 3
+@param in offset "Offset" = -10
+```
+
+Default values can be:
+
+- A **number**: `= 5` or `= -10`
+- An **entity ID**: `= v_iron`
+- An **entity ID with a number**: `= c_battery 3`
+
+Output parameters (`out`) cannot have default values. Default values are
+stored in the behavior's `pinits` array and applied by the game engine —
+they are not set by the behavior's own instructions.
 
 Parameters must be declared before any instructions. The game UI can display
 at most 10 parameters; the compiler errors if more are declared.
@@ -1806,10 +1856,10 @@ wait 10 {
 condition block is evaluated after each wait period, and the wait
 repeats only if the condition is falsy.
 
-`wait 0` compiles to a `wait` instruction with zero ticks. In locked
-mode, every instruction takes at least one tick to execute, so `wait 0`
-effectively pauses for one tick. In unlocked mode, the behavior is
-game-engine-dependent.
+`wait 0` compiles to a `wait` instruction with zero ticks. As of
+Desynced 1.0, `wait` with zero or negative ticks does nothing — it
+returns immediately without pausing. To pause for exactly one tick,
+use `wait 1`.
 
 `wait` works in both behavior bodies and function bodies.
 

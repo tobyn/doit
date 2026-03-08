@@ -1,0 +1,8 @@
+# AI-generated test
+behavior bhv_pinits {
+    @name "Param Defaults"
+    @param in resource "Resource" = v_iron
+    @param in count "Count" = 5
+    @param inout result "Result"
+    notify "hello"
+}

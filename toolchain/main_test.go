@@ -339,6 +339,50 @@ func TestCompileErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("duplicate_keepvars", func(t *testing.T) {
+		src := `behavior a { @keepvars @keepvars notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate @keepvars") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("duplicate_keeparrays", func(t *testing.T) {
+		src := `behavior a { @keeparrays @keeparrays notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate @keeparrays") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("out_param_default_value", func(t *testing.T) {
+		src := `behavior a { @param out x "X" = 5 notify "hi" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "output parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("param_default_invalid_token", func(t *testing.T) {
+		src := `behavior a { @param in x "X" = "hello" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected number or identifier") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("unknown_attribute", func(t *testing.T) {
 		src := `behavior a { @foo "bar" }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")

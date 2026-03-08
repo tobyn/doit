@@ -79,7 +79,7 @@
   },
   "name": "Compound Full Expr Fn",
   "parameters": [
-    false,
+    true,
     false
   ],
   "pnames": [

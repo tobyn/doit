@@ -1,0 +1,7 @@
+# AI-generated test
+behavior bhv_pinits_combo {
+    @name "Param Combo"
+    @param in slot "Slot" = c_battery 3
+    @param in neg "Neg" = -10
+    notify "hello"
+}

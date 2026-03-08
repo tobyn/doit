@@ -20,7 +20,7 @@
   },
   "name": "Fn Body Labeled Break",
   "parameters": [
-    false
+    true
   ],
   "pnames": [
     "x"

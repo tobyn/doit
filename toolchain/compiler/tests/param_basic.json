@@ -11,7 +11,7 @@
   "name": "Param Basic",
   "parameters": [
     false,
-    false
+    true
   ],
   "pnames": [
     "Target",
