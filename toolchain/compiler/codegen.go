@@ -105,6 +105,11 @@ func argDirection(val any, syms *symbolTable) string {
 		}
 		return "inout"
 	default:
+		if m, ok := val.(map[string]any); ok {
+			if _, hasFr := m["fr"]; hasFr {
+				return "inout"
+			}
+		}
 		return "in" // literals, maps, false
 	}
 }
@@ -301,6 +306,16 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			continue
 		}
 
+		if tok.kind == tokPercent {
+			next, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if next.kind != tokIdent {
+				return nil, p.errorf(tok.pos, "expected identifier after '%%'")
+			}
+			tok = token{tokIdent, "%" + next.val, tok.pos}
+		}
 		if tok.kind != tokIdent {
 			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
 		}
@@ -391,6 +406,9 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, co
 			syms.markUsed(name) // compound assignment reads the variable
 		}
 		return vi.regName, nil
+	}
+	if strings.HasPrefix(name, "%") {
+		return map[string]any{"fr": name[1:]}, nil
 	}
 	if strings.HasPrefix(name, "$") {
 		if reg, ok := unitRegisters[name]; ok {

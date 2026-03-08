@@ -1039,6 +1039,9 @@ func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int)
 // marks fn body variables as used, and returns IdentExpr for all other identifiers.
 func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 	return func(tok token) (Expr, error) {
+		if strings.HasPrefix(tok.val, "%") {
+			return &LiteralExpr{Value: map[string]any{"fr": tok.val[1:]}}, nil
+		}
 		if strings.HasPrefix(tok.val, "$") {
 			if reg, ok := unitRegisters[tok.val]; ok {
 				return &LiteralExpr{Value: reg}, nil
@@ -1117,6 +1120,8 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 				return nil, err
 			}
 			base = ctor
+		} else if strings.HasPrefix(tok.val, "%") {
+			base = &LiteralExpr{Value: map[string]any{"fr": tok.val[1:]}}
 		} else if strings.HasPrefix(tok.val, "$") {
 			if reg, ok := unitRegisters[tok.val]; ok {
 				base = &LiteralExpr{Value: reg}
@@ -1429,17 +1434,23 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 			}
 			collectExprOutputVars(s.Value, paramMap, usedVars)
 		case *AssignStmt:
-			if _, mapped := paramMap[s.Target]; !mapped {
-				paramMap[s.Target] = allocUniqueVar(s.Target, usedVars)
+			if !strings.HasPrefix(s.Target, "%") {
+				if _, mapped := paramMap[s.Target]; !mapped {
+					paramMap[s.Target] = allocUniqueVar(s.Target, usedVars)
+				}
 			}
 			collectExprOutputVars(s.Value, paramMap, usedVars)
 		case *CompoundAssignStmt:
-			if _, mapped := paramMap[s.Target]; !mapped {
-				paramMap[s.Target] = allocUniqueVar(s.Target, usedVars)
+			if !strings.HasPrefix(s.Target, "%") {
+				if _, mapped := paramMap[s.Target]; !mapped {
+					paramMap[s.Target] = allocUniqueVar(s.Target, usedVars)
+				}
 			}
 		case *IncrDecrStmt:
-			if _, mapped := paramMap[s.Target]; !mapped {
-				paramMap[s.Target] = allocUniqueVar(s.Target, usedVars)
+			if !strings.HasPrefix(s.Target, "%") {
+				if _, mapped := paramMap[s.Target]; !mapped {
+					paramMap[s.Target] = allocUniqueVar(s.Target, usedVars)
+				}
 			}
 		case *MultiReturnStmt:
 			for _, bind := range s.Bindings {
@@ -1495,6 +1506,9 @@ func collectExprOutputVars(expr Expr, paramMap map[string]any, usedVars map[stri
 
 // resolveVarName resolves a variable name through paramMap.
 func resolveVarName(name string, paramMap map[string]any) any {
+	if strings.HasPrefix(name, "%") {
+		return map[string]any{"fr": name[1:]}
+	}
 	if val, ok := paramMap[name]; ok {
 		return val
 	}
@@ -3963,6 +3977,9 @@ func (ctx *fnBodyContext) isExecName(name string) bool {
 
 // canAssign checks whether name can be written to in a fn body context.
 func (ctx *fnBodyContext) canAssign(name string, p *parser, pos int) error {
+	if strings.HasPrefix(name, "%") {
+		return nil
+	}
 	if info, ok := ctx.fnVarInfo[name]; ok {
 		if !info.mutable {
 			return p.errorf(pos, "cannot assign to immutable variable %q", name)
@@ -4751,6 +4768,16 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				return nil, p.errorf(kw.pos, "expected 'loop', 'while', or 'for' after label, got %s", kw.describe())
 			}
 			continue
+		}
+		if tok.kind == tokPercent {
+			next, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if next.kind != tokIdent {
+				return nil, p.errorf(tok.pos, "expected identifier after '%%'")
+			}
+			tok = token{tokIdent, "%" + next.val, tok.pos}
 		}
 		if tok.kind != tokIdent {
 			if exprTail && tok.kind == tokNumber {

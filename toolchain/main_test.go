@@ -3847,6 +3847,17 @@ behavior a {
 		}
 	})
 
+	t.Run("faction_register_missing_ident", func(t *testing.T) {
+		src := `behavior a { @name "A" var x = % }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected identifier after '%'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

@@ -128,10 +128,10 @@ Verified behavior:
 - The `nx`/`ny` fields on event instructions are visual editor node
   positions (cosmetic, not semantic).
 
-## Faction Registers / Radio Storage (New)
+## Faction Registers / Radio Storage — **Done**
 
 Register indices ≤ -100 address faction-wide shared registers. In
-behavior JSON, these are `{fr: "name"}` table values. When a behavior
+behavior JSON, these are `{"fr": "name"}` map values. When a behavior
 uses them, the runtime auto-creates the named faction register. This
 enables global state shared across all behaviors in a faction.
 
@@ -141,9 +141,12 @@ The register addressing scheme is now:
 - `N+1` to `N+M`: Local variables (backed by `mem` array)
 - `-100` and below: Faction registers (`-99 - index`)
 
-doit has no syntax for faction registers yet. Supporting them would
-require new language constructs (e.g., `$faction.my_counter` or a
-`radio` keyword).
+**doit syntax**: `%name` — the `%` sigil accesses faction registers.
+Can be read, written, used in arithmetic/comparisons, and passed as
+function arguments. The parser disambiguates `%` in primary position
+(faction register) vs binary position (modulo) by lookahead: when `%`
+appears after a value and is followed by `ident = | += | ++ | --`,
+it's treated as a new `%name` statement rather than modulo.
 
 ## `dependencies` Format Update — **Deferred**
 

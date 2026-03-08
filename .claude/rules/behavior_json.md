@@ -54,7 +54,8 @@ Each frame is a `map[string]any` with:
     matching Lua indexing); negative: unit register (`-4` Signal, `-3`
     Visual, `-2` Store, `-1` Goto)
   - `map[string]any` — literal value (e.g., `{"num": 5}`,
-    `{"id": "foundationplate", "num": 22}`)
+    `{"id": "foundationplate", "num": 22}`,
+    `{"fr": "name"}` for faction registers)
   - `bool` — flag
 
 ## Example

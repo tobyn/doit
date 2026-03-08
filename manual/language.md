@@ -919,6 +919,30 @@ $signal = 0
 
 Unknown `$` names are a compile error.
 
+## Faction Registers
+
+Faction registers are global shared state accessible by all behaviors in a
+faction. They are accessed with the `%` prefix:
+
+```doit
+%counter = 42          # write a value
+var x = %counter       # read into a local variable
+%counter += 1          # compound assignment
+%counter++             # increment
+var y = %a + %b        # use in arithmetic
+if %x > 5 { ... }     # use in comparisons
+```
+
+Named faction registers are auto-created at runtime — any `%name` identifier
+is valid. They persist across behavior restarts and are shared across all
+units in the faction.
+
+In the compiled JSON, faction registers appear as `{"fr": "name"}` map values.
+
+The `%` sigil doubles as the modulo operator. The parser disambiguates by
+position: `%name` at the start of an expression is a faction register, while
+`a % b` between two values is modulo.
+
 ## Null
 
 The `null` keyword represents an empty value. Use it in argument positions

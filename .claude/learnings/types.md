@@ -46,10 +46,10 @@ value is one of the six game types below, or empty (for a pure number).
   arguments, resolved at compile time. With variable arguments, emits
   `combine_coordinate` at runtime.
 
-All register types can be stored in variables, parameters, and unit
-registers, and passed through register slots in instructions. The VM is
-dynamically typed within registers — any register can hold any register
-type.
+All register types can be stored in variables, parameters, unit
+registers, and faction registers (`%name`), and passed through register
+slots in instructions. The VM is dynamically typed within registers —
+any register can hold any register type.
 
 Constructor names (`Item`, `Component`, `Technology`, `Value`,
 `Coordinate`, `Range`) are reserved keywords and cannot be used as

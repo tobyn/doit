@@ -1,0 +1,14 @@
+# AI-generated test
+# Faction register read, write, compound assign, incr, arithmetic, comparison
+behavior faction_reg {
+    @name "Faction Reg"
+    %counter = 42
+    var x = %counter
+    %counter += 1
+    %counter++
+    var y = %a + %b
+    if %x > 5 {
+        var z = 10
+    }
+    var m = x % 3
+}

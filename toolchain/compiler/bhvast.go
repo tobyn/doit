@@ -199,6 +199,15 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 			}
 		}
 		return resolve(tok)
+	case tokPercent:
+		next, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if next.kind != tokIdent {
+			return nil, p.errorf(tok.pos, "expected identifier after '%%'")
+		}
+		return resolve(token{tokIdent, "%" + next.val, tok.pos})
 	default:
 		return nil, p.errorf(tok.pos, "expected number, variable, or '(' in arithmetic expression, got %s", tok.describe())
 	}
@@ -341,6 +350,29 @@ func (p *parser) parseArithTermFrom(first Expr, resolve operandResolver) (Expr, 
 			p.unget(peek)
 			return result, nil
 		}
+		// Disambiguate % as modulo vs faction register: if % is followed
+		// by an identifier and then an assignment/increment operator, it's
+		// the start of a new %name statement, not a modulo expression.
+		if peek.kind == tokPercent {
+			saved := p.save()
+			ahead, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if ahead.kind == tokIdent {
+				after, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if after.kind == tokEquals || isCompoundAssignOp(after.kind) ||
+					after.kind == tokPlusPlus || after.kind == tokMinusMinus {
+					p.restore(saved)
+					p.unget(peek)
+					return result, nil
+				}
+			}
+			p.restore(saved)
+		}
 		rhs, err := p.parseArithPrimary(resolve)
 		if err != nil {
 			return nil, err
@@ -431,8 +463,13 @@ func tryFoldArith(expr *ArithExpr) (*LiteralExpr, bool) {
 // as opposed to a runtime reference (parameter index as int, variable name
 // as string).
 func isCompileTimeConstant(v any) bool {
-	switch v.(type) {
-	case map[string]any, bool:
+	switch v := v.(type) {
+	case map[string]any:
+		if _, hasFr := v["fr"]; hasFr {
+			return false
+		}
+		return true
+	case bool:
 		return true
 	default:
 		return v == nil
@@ -547,6 +584,9 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 	if err := p.checkReadable(tok.val, syms, tok.pos); err != nil {
 		return nil, err
 	}
+	if strings.HasPrefix(tok.val, "%") {
+		return &LiteralExpr{Value: map[string]any{"fr": tok.val[1:]}}, nil
+	}
 	if strings.HasPrefix(tok.val, "$") {
 		if reg, ok := unitRegisters[tok.val]; ok {
 			return &LiteralExpr{Value: reg}, nil
@@ -606,7 +646,7 @@ func (p *parser) parseBoolPrimary(resolve operandResolver) (Expr, error) {
 	}
 
 	var lhs Expr
-	if tok.kind == tokNumber || tok.kind == tokMinus || tok.kind == tokIdent {
+	if tok.kind == tokNumber || tok.kind == tokMinus || tok.kind == tokIdent || tok.kind == tokPercent {
 		p.unget(tok)
 		lhs, err = p.parseArithExpr(resolve)
 		if err != nil {
@@ -807,6 +847,13 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 				return nil, err
 			}
 			result, err := p.parseArithExprFromFull(Expr(ifExpr), resolve)
+			if err != nil {
+				return nil, err
+			}
+			base = result
+		} else if strings.HasPrefix(tok.val, "%") {
+			resolved := &LiteralExpr{Value: map[string]any{"fr": tok.val[1:]}}
+			result, err := p.parseArithExprFromFull(Expr(resolved), resolve)
 			if err != nil {
 				return nil, err
 			}
@@ -1162,6 +1209,17 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 			return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: final, Comment: comment}}, nil
 		}
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
+	}
+
+	if rhsTok.kind == tokPercent {
+		next, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if next.kind != tokIdent {
+			return nil, p.errorf(rhsTok.pos, "expected identifier after '%%'")
+		}
+		rhsTok = token{tokIdent, "%" + next.val, rhsTok.pos}
 	}
 
 	if rhsTok.kind == tokNumber {
@@ -1526,6 +1584,17 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 				return []Stmt{&AssignStmt{Target: tok.val, Value: final, Comment: comment, Pos: tok.pos}}, nil
 			}
 			return []Stmt{&AssignStmt{Target: tok.val, Value: result, Comment: comment, Pos: tok.pos}}, nil
+		}
+
+		if rhsTok.kind == tokPercent {
+			next, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if next.kind != tokIdent {
+				return nil, p.errorf(rhsTok.pos, "expected identifier after '%%'")
+			}
+			rhsTok = token{tokIdent, "%" + next.val, rhsTok.pos}
 		}
 
 		if rhsTok.kind == tokNumber {
@@ -2480,6 +2549,16 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			}
 			stmts = append(stmts, stmt)
 			continue
+		}
+		if tok.kind == tokPercent {
+			next, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if next.kind != tokIdent {
+				return nil, p.errorf(tok.pos, "expected identifier after '%%'")
+			}
+			tok = token{tokIdent, "%" + next.val, tok.pos}
 		}
 		if tok.kind != tokIdent {
 			if allowExprTail && tok.kind == tokNumber {
