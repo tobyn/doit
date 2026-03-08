@@ -149,10 +149,16 @@ Three kinds of registers are available:
   - **Goto** — the unit's default destination when it has no other
     orders.
 
+- **Faction Registers** — Shared across all behaviors in a faction.
+  Register indices ≤ -100 address faction-wide shared registers
+  (`-99 - index`). In the behavior JSON, these appear as
+  `{"fr": "name"}` map values. The runtime auto-creates named faction
+  registers when a behavior uses them.
+
 In the compiled JSON, variables and parameters are referenced by name
 strings in instruction parameter slots. Unit registers are referenced
 as negative integers: `-4` (Signal), `-3` (Visual), `-2` (Store),
-`-1` (Goto).
+`-1` (Goto). Faction registers are negative integers ≤ -100.
 
 Variable names are arbitrary strings. The game suggests default
 names (A, B, C, ...) but users can rename them freely.
@@ -272,6 +278,43 @@ Example call instruction:
 This calls dependency 1, passing variable A as param 1 (input),
 literal 8 as param 2 (input), and routing param 3 (output) back
 to the caller's parameter 2.
+
+## Behavior Properties
+
+Three optional top-level fields on the behavior JSON:
+
+- **`pinits`** — Parameter initial/default values (array, parallel to
+  `parameters`).
+- **`keepvars`** (boolean) — Don't zero-fill variables on restart.
+- **`keeparrays`** (string `"store"`) — Memory arrays persist across
+  restarts.
+
+## Event System
+
+`event_radio` and `event_parameter` are a distinct instruction category.
+They have `event_setup` and `event_trigger` hooks that create persistent
+listeners interrupting normal execution flow when a signal or parameter
+changes. The listener persists across ticks and fires asynchronously —
+fundamentally different from normal branching.
+
+- Event instructions are placed in the instruction list but disconnected
+  from the main flow. They act as interrupt entry points.
+- When the event fires, execution jumps to the instruction after the
+  event node. The handler chain should end with `"next": false` to
+  avoid falling through into unrelated instructions.
+- `event_parameter` uses `"pnum": N` (1-based parameter index) to
+  select which parameter to watch.
+- `event_radio` uses `"band": {register_value}` to select the radio
+  band. The band must be a valid entity ID (e.g., `v_octagon`).
+- The `nx`/`ny` fields on event instructions are visual editor node
+  positions (cosmetic, not semantic).
+
+## Removed VM Opcodes
+
+The `break` VM opcode was removed in Desynced 1.0. The `last`
+instruction is the only block-control opcode. The doit compiler never
+emits `break` — it uses `last` for iterator breaks and noop bridges /
+`jump` for other break forms.
 
 ## Import/Export
 

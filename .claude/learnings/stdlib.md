@@ -19,7 +19,7 @@ the `*.doit` files in the `toolchain/stdlib/` directory.
   loop instructions, using `each_*` names (e.g., `each_component`).
   Has `skip prelude`. These are the primary names for `for...in` usage.
 - **`toolchain/stdlib/instructions.lua`** — The Lua file from the game that
-  defines all of Desynced's built-in instructions
+  defines all of Desynced's built-in instructions (updated to Desynced 1.0)
 
 ## `instructions.doit`
 
@@ -132,7 +132,14 @@ expressions. String literals are disallowed on both keywords (use
 
 Note: `call` is **not** in the stdlib. It requires the dependency index
 of the callee, which can't be expressed as a parameter. A `call` keyword
-for inter-behavior calls is planned post-1.0 (see `future.md`).
+for inter-behavior calls is a 1.0 burndown item (see `future.md`).
+
+### Deprecated instructions
+
+`get_ingredients` (use `for_recipe_ingredients`), `domove_range`,
+`move_east`, `move_west`, `move_north`, `move_south` are deprecated
+in Desynced 1.0. They remain in the stdlib for compatibility.
+`unpackage_all` and `package_all` were removed entirely.
 
 `instructions.doit` also defines **mode enums** (e.g., `MoveMode`,
 `BitwiseMode`, `AmountMode`) for instructions with `"c"` combo fields.

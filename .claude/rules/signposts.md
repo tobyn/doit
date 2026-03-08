@@ -30,12 +30,6 @@ topic is relevant to your current task.
 - **Test case format** — `.claude/learnings/test_format.md`
   Test pair conventions, JSON numbering, AI-generated test markers.
 
-## Game updates
-
-- **Desynced 1.0 changes** — `.claude/learnings/desynced_1_0.md`
-  New/removed/changed instructions, event system, faction registers,
-  path blocking, `bitwise_op` expansion, and entity registries.
-
 ## Design
 
 - **Design decisions** — `.claude/learnings/decisions.md`

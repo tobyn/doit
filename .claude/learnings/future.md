@@ -44,13 +44,26 @@ register types.
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
-- **Desynced 1.0 stdlib update** — see `.claude/learnings/desynced_1_0.md`
-  for full analysis. Done: 8 new stdlib instructions, removed
-  `unpackage_all`/`package_all`, "Path Blocked" exec branches,
+- ~~**Desynced 1.0 stdlib update**~~ — Done. New stdlib instructions,
+  removed `unpackage_all`/`package_all`, "Path Blocked" exec branches,
   `BitwiseMode` expansion, `wait 0` behavior change, behavior
-  properties (`@keepvars`, `@keeparrays`, `@param` defaults).
-  Remaining: faction register syntax, event instruction design,
-  `load_behavior` + `dependencies` format (deferred to `call`).
+  properties (`@keepvars`, `@keeparrays`, `@param` defaults),
+  faction register syntax (`%name`). `instructions.lua` updated to 1.0.
+- **`call` keyword + `load_behavior` + `dependencies` format** —
+  `call` needs to become a language keyword for inter-behavior calls
+  (the game instruction requires a dependency index that can't be a
+  stdlib parameter). `load_behavior` (remotely loads a behavior onto
+  an adjacent unit) needs the same behavior-reference mechanism.
+  The codec needs to handle the new `dependencies` format (flat array
+  at root, preferred over legacy `subs`). See detailed analysis in
+  "Subroutine calls instead of inlining" and "`call` keyword for
+  inter-behavior calls" sections below.
+- **Event instructions** (`event_radio`, `event_parameter`) — New
+  async interrupt paradigm. Persistent listeners that fire when a
+  signal or parameter changes. Requires language design for
+  disconnected-flow instructions (interrupt entry points with
+  `"next": false` handler chains). See `game.md` Event System
+  section for verified VM behavior.
 
 ## Compound doc comments from nested calls
 
@@ -206,10 +219,9 @@ choice rather than a default compilation strategy.
 
 The `load_behavior` instruction (new in 1.0) also belongs here — it
 remotely loads a behavior onto an adjacent unit, requiring the same
-behavior-reference mechanism that `call` needs. Both instructions are
-deferred until the language has a notion of behavior references.
+behavior-reference mechanism that `call` needs.
 
-Post-1.0. The `call` stub has been removed from the stdlib.
+1.0 burndown item. The `call` stub has been removed from the stdlib.
 
 ## Visual layout (nx/ny fields)
 
