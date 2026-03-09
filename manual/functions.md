@@ -283,6 +283,34 @@ In `instruction` blocks, non-`@N` slots are treated as inputs and `@N` slots
 as outputs. An `out` parameter cannot appear in a non-`@N` slot (that would
 read it). `inout` parameters can appear in either position.
 
+### The `param` modifier
+
+The `param` modifier on a function parameter requires the caller to pass a
+behavior parameter (not a variable or expression). This is used with event
+handlers — see [Events](language.md#events):
+
+```doit
+fn setup_event(param trigger) {
+    on trigger {
+        notify "triggered"
+    }
+}
+```
+
+The `param` modifier is orthogonal to direction and can be combined:
+
+```doit
+fn setup_event(in param trigger, out result) {
+    on trigger {
+        result = 42
+    }
+}
+```
+
+At the call site, the argument must be a `$parameter` reference. The modifier
+propagates transitively — a `param` argument must come from another `param`
+parameter or directly from a behavior parameter.
+
 ### The `return` statement
 
 The `return` statement declares the function's return value:

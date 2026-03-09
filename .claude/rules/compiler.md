@@ -15,9 +15,9 @@ see `.claude/learnings/test_format.md`.
 
 ## Architecture
 
-- **`ast.go`** — `Stmt` interface (24 types) and `Expr` interface
-  (15 types). `isTerminalStmt`/`terminalKeyword` for unreachable code
-  detection.
+- **`ast.go`** — `Stmt` interface (25 types, including `OnEventStmt`)
+  and `Expr` interface (15 types). `isTerminalStmt`/`terminalKeyword`
+  for unreachable code detection.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
   types, `Keywords` map, `skipToCloseBrace`. The `scanner` has a
   `sourceOffset` field (byte offset of user source after prepended
@@ -27,7 +27,8 @@ see `.claude/learnings/test_format.md`.
   `fileDecls` (names declared in this file), loop/exec-block tracking,
   `callExprParser` callback, and `warnings []string`.
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
-  types (`symbolSet`, `fnDef`, `iterDef`, `paramDef`, `symbolTable`, `constDef`,
+  types (`symbolSet`, `fnDef`, `iterDef`, `paramDef` (with `isParam`
+  field), `symbolTable`, `constDef`, `deferredEvent`,
   `enumDef`), `frameBuilder`/`frameRef` abstraction, `emitContext`
   struct, `execMode` tracking, slot constants for `check_number`,
   `compare_register`, and `value_type`.
@@ -289,3 +290,26 @@ validates no exec bindings, and validates `@N` count. Emitted by
 callback on `emitContext` for frame resolution, then reuses the shared
 iterator helpers. `ForStmt` carries `IterInstrFrame` and `IterInstrDone`
 fields for this form.
+
+**Event system**: `on` keyword declares event handlers that are
+disconnected from the main flow. Two forms: `on $param { body }` for
+parameter-change events (`event_parameter`) and `on radio(band) -> sig
+{ body }` for radio-band events (`event_radio`). Parsed by
+`parseBhvOnEvent` (bhvast.go) at behavior level and
+`parseFnBodyOnEvent` (parse.go) in function bodies. `OnEventStmt` AST
+node carries `Kind`, `Param`, `Band`, `Signal`, `Body`, `Comment`.
+Events are collected into `frameBuilder.deferredEvents` during emission
+(both behavior-level and inlined fn body events). After all main-flow
+frames are emitted, `emitDeferredEvents` (codegen.go) emits them as
+disconnected chains: patches the last main-flow frame with
+`"next": false` if it would fall through, then emits
+`event_parameter`/`event_radio` setup frames followed by handler body
+frames. Handler bodies end with `"next": false` (restart behavior).
+The `param` modifier on function parameters (`paramDef.isParam`)
+requires the caller to pass a behavior parameter; validated by
+`checkCallDirections` (behavior level) and
+`checkFnBodyCallDirectionsExpr` (fn body level via
+`fnBodyContext.paramFlags`). `param` propagates transitively — a
+`param`-flagged argument can only receive another `param`-flagged
+argument or a behavior parameter. Radio band expressions must be
+compile-time evaluable (resolved via `tryEvalExpr`).

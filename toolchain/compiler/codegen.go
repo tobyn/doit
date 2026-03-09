@@ -153,6 +153,16 @@ func (p *parser) checkCallDirections(fn *fnDef, fnName string, args []any, kwArg
 			return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
 				aDir, paramDir, pd.name, fnName)
 		}
+		// Check param modifier: argument must be a behavior parameter
+		if pd.isParam {
+			if intVal, ok := argVal.(int); ok {
+				if intVal >= 1 && intVal <= len(syms.params) {
+					continue // valid behavior parameter
+				}
+			}
+			return p.errorf(pos, "argument to param parameter %q of %s must be a behavior parameter",
+				pd.name, fnName)
+		}
 	}
 	return nil
 }
@@ -227,6 +237,16 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 		}
 		if tok.kind == tokEOF {
 			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+		// Allow `on` event handlers after terminal statements —
+		// events are disconnected from the main flow.
+		if terminal != nil && tok.kind == tokIdent && tok.val == "on" {
+			onStmt, err := p.parseBhvOnEvent(syms, p.docComment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, onStmt)
+			continue
 		}
 		if terminal != nil {
 			p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
@@ -322,6 +342,16 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 
 		hasInstruction = true
 
+		// Parse `on` event handlers at behavior top level
+		if tok.val == "on" {
+			onStmt, err := p.parseBhvOnEvent(syms, p.docComment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, onStmt)
+			continue
+		}
+
 		// Try shared keyword cases
 		parsed, handled, err := p.parseBhvOneStmt(tok, syms)
 		if err != nil {
@@ -347,6 +377,13 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	b.mode = modeLocked
 	if _, err := p.emitBehaviorStmts(stmts, b, syms); err != nil {
 		return nil, err
+	}
+
+	// Phase 3: Emit deferred events after main flow.
+	if len(b.deferredEvents) > 0 {
+		if err := p.emitDeferredEvents(b, syms); err != nil {
+			return nil, err
+		}
 	}
 
 	// Emit parameter declarations.
@@ -391,6 +428,132 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	b.eliminateNoopBridges()
 	b.finalize(value)
 	return &codec.Object{Type: codec.Behavior, Value: value}, nil
+}
+
+// emitDeferredEvents emits all deferred event handlers after the main flow.
+// It patches the last main-flow frame to prevent fall-through into event area,
+// then emits each event setup + handler chain.
+func (p *parser) emitDeferredEvents(b *frameBuilder, syms *symbolTable) error {
+	// Ensure no fall-through from main flow into event area.
+	// If the last main-flow frame would fall through (no explicit "next"),
+	// patch it with "next": false (restart).
+	mainEnd := b.pos()
+	if mainEnd > 0 {
+		lastFrame := b.get(mainEnd - 1)
+		if _, hasNext := lastFrame["next"]; !hasNext {
+			lastFrame["next"] = false
+		}
+	}
+
+	for _, de := range b.deferredEvents {
+		evt := de.stmt
+		fromFnBody := de.paramMap != nil
+
+		switch evt.Kind {
+		case "parameter":
+			// Resolve pnum from param name
+			var pnum int
+			if fromFnBody {
+				// Function body: resolve param name through paramMap
+				mapped, ok := de.paramMap[evt.Param]
+				if !ok {
+					return fmt.Errorf("unknown parameter %q in event handler", evt.Param)
+				}
+				idx, ok := mapped.(int)
+				if !ok {
+					return fmt.Errorf("parameter %q in event handler did not resolve to a behavior parameter", evt.Param)
+				}
+				pnum = idx
+			} else {
+				// Behavior-level: resolve from syms.paramMap
+				idx, ok := syms.paramMap[evt.Param]
+				if !ok {
+					return fmt.Errorf("unknown parameter %q in event handler", evt.Param)
+				}
+				pnum = idx
+			}
+
+			handlerStart := frameRef(b.pos() + 1)
+			f := map[string]any{
+				"op":   "event_parameter",
+				"pnum": pnum,
+				"next": handlerStart,
+			}
+			setComment(f, evt.Comment)
+			b.emit(f)
+
+			// Emit handler body
+			if fromFnBody {
+				if err := p.emitFnBody(evt.Body, b, de.paramMap, syms.usedVars, evt.Comment, 0); err != nil {
+					return err
+				}
+			} else {
+				if _, err := p.emitBehaviorStmts(evt.Body, b, syms); err != nil {
+					return err
+				}
+			}
+
+			// Ensure handler ends with "next": false (restart)
+			p.patchHandlerEnd(b)
+
+		case "radio":
+			// Evaluate band expression at compile time
+			var env map[string]any
+			if fromFnBody {
+				env = de.paramMap
+			}
+			bandVal, ok := p.tryEvalExpr(evt.Band, env)
+			if !ok {
+				return fmt.Errorf("radio band must be a compile-time constant")
+			}
+
+			handlerStart := frameRef(b.pos() + 1)
+			f := map[string]any{
+				"op":   "event_radio",
+				"band": bandVal,
+				"next": handlerStart,
+			}
+			// Signal output register
+			if evt.Signal != "" {
+				if fromFnBody {
+					sigReg := allocUniqueVar(evt.Signal, syms.usedVars)
+					de.paramMap[evt.Signal] = sigReg
+					f["0"] = sigReg
+				} else {
+					syms.declareVar(evt.Signal, false)
+					f["0"] = syms.resolveReg(evt.Signal)
+				}
+			}
+			setComment(f, evt.Comment)
+			b.emit(f)
+
+			// Emit handler body
+			if fromFnBody {
+				if err := p.emitFnBody(evt.Body, b, de.paramMap, syms.usedVars, evt.Comment, 0); err != nil {
+					return err
+				}
+			} else {
+				if _, err := p.emitBehaviorStmts(evt.Body, b, syms); err != nil {
+					return err
+				}
+			}
+
+			// Ensure handler ends with "next": false
+			p.patchHandlerEnd(b)
+		}
+	}
+	return nil
+}
+
+// patchHandlerEnd ensures the last emitted frame has "next": false.
+func (p *parser) patchHandlerEnd(b *frameBuilder) {
+	endPos := b.pos()
+	if endPos > 0 {
+		lastHandler := b.get(endPos - 1)
+		if _, hasNext := lastHandler["next"]; !hasNext {
+			lastHandler["next"] = false
+		}
+	}
 }
 
 // resolveAssignTarget resolves an assignment target identifier through the

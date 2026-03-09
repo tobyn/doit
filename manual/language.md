@@ -658,6 +658,92 @@ used as variable or parameter names. When calling a function with `out` or
 `inout` parameters, the call site must annotate the argument with the matching
 direction keyword — see [Direction annotations](functions.md#direction-annotations).
 
+## Events
+
+Events let a behavior respond to changes in parameter values or radio band
+signals. Event handlers are disconnected from the main flow — the compiler
+places them after the main flow's terminal instruction. When an event fires,
+it destroys all current execution context and jumps to the handler.
+
+### Parameter Events
+
+Watch for changes to a behavior parameter:
+
+```doit
+behavior sensor {
+    @param in trigger "Trigger"
+    loop {
+        wait 10
+    }
+    on $trigger {
+        notify "parameter changed"
+    }
+}
+```
+
+The `on $param { ... }` syntax creates an event listener that fires whenever
+the specified parameter changes. The parameter must be declared with `@param`.
+
+### Radio Events
+
+Watch for changes on a radio band:
+
+```doit
+behavior listener {
+    loop {
+        wait 10
+    }
+    on radio(Item("metalbar")) -> signal {
+        notify "radio signal received"
+    }
+}
+```
+
+The `on radio(band) -> signal { ... }` syntax creates a radio event listener.
+The band expression must be a compile-time constant (entity ID literal, const,
+or arithmetic on constants). The `-> signal` binding is optional — it declares
+a variable that receives the new signal value.
+
+### Event Semantics
+
+- Events register at behavior load time, not when the main flow reaches them.
+- Events fire only while the behavior is alive. After `exit`, events stop
+  firing. Behaviors with events should stay alive (e.g., with `loop` or
+  `wait`).
+- When an event fires, all execution context is destroyed (loops, iterators,
+  call stacks). The handler runs from a clean state.
+- After the handler completes, the behavior restarts from the beginning.
+- Multiple events on the same behavior are allowed.
+
+### Events in Functions
+
+Events can be defined inside functions using the `param` modifier on function
+parameters. The `param` modifier requires the caller to pass a behavior
+parameter (not a variable or expression):
+
+```doit
+fn setup_event(param trigger) {
+    on trigger {
+        notify "triggered"
+    }
+}
+
+behavior my_bhv {
+    @param in trigger "Trigger"
+    setup_event $trigger
+    loop { wait 10 }
+}
+```
+
+The `param` modifier is orthogonal to direction (`in`, `out`, `inout`).
+Both are checked at call sites — direction must be compatible and the
+argument must be a behavior parameter.
+
+Inside a function body, `on` can only reference parameters declared with the
+`param` modifier. The `param` requirement propagates transitively: a function
+calling another function with a `param` parameter must itself receive the value
+through a `param` parameter.
+
 ## Variables
 
 All variables must be declared with `var` or `let` before use. Using an

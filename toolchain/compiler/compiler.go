@@ -177,6 +177,7 @@ type paramDef struct {
 	name      string // variable name used in the function body
 	keyword   string // "" for positional, keyword name for keyword params
 	direction string // "" or "in", "out", "inout"; "" defaults to "in"
+	isParam   bool   // true for param modifier (requires behavior parameter at call site)
 }
 
 // effectiveDirection returns the direction of the parameter, defaulting to "in".
@@ -643,6 +644,7 @@ type frameBuilder struct {
 	namedLabels   map[string]int  // name → allocated label index
 	emittedLabels map[string]bool // names with label instruction emitted
 	emittedJumps  map[string]bool // names with jump instruction emitted
+	deferredEvents []deferredEvent // events to emit after main flow
 }
 
 // allocLabels reserves n label indices and returns the base index.
@@ -946,6 +948,15 @@ func (b *frameBuilder) finalize(value map[string]any) {
 		}
 		value[strconv.Itoa(i)] = resolved
 	}
+}
+
+// deferredEvent holds an event statement and the context needed to emit it
+// after the main flow. Both behavior-level and inlined function events use
+// this struct.
+type deferredEvent struct {
+	stmt     *OnEventStmt
+	paramMap map[string]any  // resolved param mappings (nil for behavior-level)
+	syms     *symbolTable    // behavior-level symbol table
 }
 
 // emitContext abstracts the differences between behavior-level and fn body

@@ -3858,6 +3858,110 @@ behavior a {
 		}
 	})
 
+	t.Run("event_on_non_parameter", func(t *testing.T) {
+		src := `behavior a {
+			@param in trigger "Trigger"
+			on $nonexistent { notify "x" }
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("event_fn_non_param_arg", func(t *testing.T) {
+		src := `fn setup(x) {
+			on x { notify "x" }
+		}
+		behavior a {
+			@param in trigger "Trigger"
+			setup $trigger
+			loop { wait 10 }
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "param modifier") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("param_arg_receives_non_param", func(t *testing.T) {
+		src := `fn setup(param trigger) {
+			on trigger { notify "x" }
+		}
+		behavior a {
+			@param in trigger "Trigger"
+			var x = $trigger
+			setup x
+			loop { wait 10 }
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "must be a behavior parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("event_in_nested_block", func(t *testing.T) {
+		src := `behavior a {
+			@param inout trigger "Trigger"
+			if $trigger {
+				on $trigger { notify "x" }
+			}
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "top level") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("param_direction_mismatch", func(t *testing.T) {
+		src := `fn setup(out param trigger) {
+			on trigger { notify "x" }
+		}
+		behavior a {
+			@param in trigger "Trigger"
+			setup out $trigger
+			loop { wait 10 }
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "cannot pass") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fn_param_arg_with_non_param_value", func(t *testing.T) {
+		src := `fn setup(param trigger) {
+			on trigger { notify "x" }
+		}
+		behavior a {
+			@param in trigger "Trigger"
+			let x = $trigger
+			setup x
+			loop { wait 10 }
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "must be a behavior parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

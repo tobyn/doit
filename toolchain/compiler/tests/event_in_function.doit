@@ -1,0 +1,14 @@
+# AI-generated test
+fn setup_event(param trigger) {
+    on trigger {
+        notify "changed"
+    }
+}
+
+behavior a {
+    @param in trigger "Trigger"
+    setup_event $trigger
+    loop {
+        wait 10
+    }
+}

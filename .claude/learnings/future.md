@@ -58,12 +58,72 @@ register types.
   at root, preferred over legacy `subs`). See detailed analysis in
   "Subroutine calls instead of inlining" and "`call` keyword for
   inter-behavior calls" sections below.
-- **Event instructions** (`event_radio`, `event_parameter`) — New
-  async interrupt paradigm. Persistent listeners that fire when a
-  signal or parameter changes. Requires language design for
-  disconnected-flow instructions (interrupt entry points with
-  `"next": false` handler chains). See `game.md` Event System
-  section for verified VM behavior.
+- ~~**Event instructions**~~ — Done. `on $param { handler }` for
+  parameter-change events, `on radio(band) -> signal { handler }` for
+  radio events. `param` modifier on function args enforces behavior
+  parameter at call sites. Events deferred and emitted after main flow.
+- **Locked/unlocked block parity** — `locked { ... }` and
+  `unlocked { ... }` blocks should behave like other block constructs:
+  support `break` to exit early, return value(s) from the block
+  expression, etc. Currently they're simpler than other blocks. Aligning
+  their semantics makes the language more consistent and composable.
+- **Initial mode = unknown** — The compiler currently assumes behaviors
+  start in locked mode. Change this to unknown (`modeUnknown`). This
+  prepares behaviors to be good subroutine citizens: a `call`ed behavior
+  inherits the caller's lock state (see game.md), so assuming locked is
+  incorrect when the behavior is invoked as a subroutine. A
+  straightforward change to make now, before `call` support lands.
+
+## Reactive block (`watch` / `react`)
+
+Many behaviors are driven by parameter values and radio signals from
+other sources. A reactive block construct could listen to multiple
+event sources and re-execute its body whenever any of them change:
+
+```
+watch $param1, $param2, radio(band) -> sig {
+    # body re-runs whenever param1, param2, or the radio signal changes
+    result = compute($param1, $param2, sig)
+}
+```
+
+This extracts the common pattern of "set up N event handlers that all
+re-trigger the same logic" into a single declarative construct. Under
+the hood it would compile to multiple `event_parameter` /
+`event_radio` instructions all pointing to the same handler entry.
+
+### Polling non-event sources
+
+Some data sources don't have event instructions — faction registers
+(`%name`), unit registers (`$signal`, `$visual`), or arbitrary
+expressions. A unified reactive model could support polling these on a
+timer alongside true event sources:
+
+```
+watch $param1, poll(%shared_counter, ticks=5) {
+    # re-runs on param1 change OR every 5 ticks if %shared_counter changed
+}
+```
+
+`poll` would compile to a periodic check (e.g., `wait_ticks` +
+`compare_register` against a cached previous value), while true event
+sources use the native event instructions. The block body sees a
+consistent snapshot regardless of the trigger source.
+
+### Open questions
+
+- **Syntax**: `watch`, `react`, `observe`, or something else?
+- **Polling semantics**: Should polled sources use dirty-checking
+  (compare current vs cached) or always re-run? Dirty-checking is
+  more efficient but adds hidden state (cached values in registers).
+- **Debouncing**: If multiple events fire in the same tick, does the
+  body run once or multiple times? The VM's event model (events don't
+  nest) may naturally deduplicate.
+- **Interaction with main flow**: Does the reactive block replace the
+  main loop entirely (the behavior IS the reactive block), or can it
+  coexist with imperative main flow? Both patterns seem useful.
+- **Scope**: Should this be a behavior-level-only construct, or should
+  it work inside functions (like `on` does with `param` args)?
 
 ## Compound doc comments from nested calls
 

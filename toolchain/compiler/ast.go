@@ -219,6 +219,17 @@ type WaitStmt struct {
 	Comment string
 }
 
+// OnEventStmt is an event handler declaration: `on $param { ... }` or
+// `on radio(band) -> signal { ... }`.
+type OnEventStmt struct {
+	Kind    string // "parameter" or "radio"
+	Param   string // for parameter events: the $param name (behavior) or fn arg name
+	Band    Expr   // for radio events: the band expression
+	Signal  string // for radio events: the output variable name ("" if none)
+	Body    []Stmt
+	Comment string
+}
+
 // --- Expression nodes ---
 
 // LiteralExpr is a compile-time value: number, string, null, or resolved
@@ -362,6 +373,7 @@ func (*LabelStmt) stmtNode()         {}
 func (*JumpStmt) stmtNode()          {}
 func (*LastStmt) stmtNode()          {}
 func (*WaitStmt) stmtNode()           {}
+func (*OnEventStmt) stmtNode()        {}
 func (*exprTailStmt) stmtNode()       {}
 
 func (*LiteralExpr) exprNode()      {}

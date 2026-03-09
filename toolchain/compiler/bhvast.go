@@ -2474,6 +2474,8 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		return []Stmt{jumpStmt}, true, nil
 	case "last":
 		return []Stmt{&LastStmt{Comment: comment}}, true, nil
+	case "on":
+		return nil, false, p.errorf(tok.pos, "'on' event handlers can only appear at the top level of a behavior or function body")
 	case "return":
 		return nil, false, p.errorf(tok.pos, "'return' can only be used inside function bodies")
 	case "fn", "private":
@@ -2490,6 +2492,83 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 	default:
 		return nil, false, nil
 	}
+}
+
+// parseBhvOnEvent parses an `on` event handler at behavior level.
+// Syntax: `on $param { body }` or `on radio(bandExpr) -> signal { body }`
+func (p *parser) parseBhvOnEvent(syms *symbolTable, comment string) (*OnEventStmt, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	// radio event: on radio(bandExpr) -> signal { body }
+	if tok.kind == tokIdent && tok.val == "radio" {
+		if _, err := p.expect(tokLParen); err != nil {
+			return nil, err
+		}
+		bandExpr, err := p.parseArithExpr(p.bhvResolver(syms))
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		// Optional -> signal binding
+		signal := ""
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokArrow {
+			sigTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			if Keywords[sigTok.val] {
+				return nil, p.errorf(sigTok.pos, "expected signal variable name, got keyword %q", sigTok.val)
+			}
+			signal = sigTok.val
+		} else {
+			p.unget(peek)
+		}
+		if _, err := p.expect(tokLBrace); err != nil {
+			return nil, err
+		}
+		body, err := p.parseBhvStmtBlockInner(syms)
+		if err != nil {
+			return nil, err
+		}
+		return &OnEventStmt{
+			Kind:    "radio",
+			Band:    bandExpr,
+			Signal:  signal,
+			Body:    body,
+			Comment: comment,
+		}, nil
+	}
+
+	// parameter event: on $param { body }
+	if tok.kind != tokIdent || !strings.HasPrefix(tok.val, "$") {
+		return nil, p.errorf(tok.pos, "expected $parameter name or 'radio' after 'on', got %s", tok.describe())
+	}
+	paramName := tok.val
+	if _, ok := syms.paramMap[paramName]; !ok {
+		return nil, p.errorf(tok.pos, "unknown parameter %q in event handler", paramName)
+	}
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+	body, err := p.parseBhvStmtBlockInner(syms)
+	if err != nil {
+		return nil, err
+	}
+	return &OnEventStmt{
+		Kind:    "parameter",
+		Param:   paramName,
+		Body:    body,
+		Comment: comment,
+	}, nil
 }
 
 // parseBhvStmtBlockInner parses a brace-delimited block of statements.
@@ -3225,6 +3304,13 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 			f := map[string]any{"op": "last"}
 			setComment(f, s.Comment)
 			b.emit(f)
+
+		case *OnEventStmt:
+			// Defer event emission until after main flow
+			b.deferredEvents = append(b.deferredEvents, deferredEvent{
+				stmt: s,
+				syms: syms,
+			})
 
 		default:
 			if err := p.emitBhvStmtSimple(stmt, b, syms); err != nil {

@@ -765,15 +765,20 @@ func (p *parser) parseIterDecl(private bool) (string, error) {
 		return "", err
 	}
 
-	// Build direction maps for enforcement in body
+	// Build direction and param flag maps for enforcement in body
 	paramDirs := map[string]string{}
+	paramFlags := map[string]bool{}
 	for _, pd := range params {
 		paramDirs[pd.name] = pd.effectiveDirection()
+		if pd.isParam {
+			paramFlags[pd.name] = true
+		}
 	}
 	ctx := &fnBodyContext{
-		paramDirs: paramDirs,
-		fnVarInfo: map[string]fnVarInfo{},
-		inIter:    true,
+		paramDirs:   paramDirs,
+		paramFlags:  paramFlags,
+		fnVarInfo:   map[string]fnVarInfo{},
+		inIter:      true,
 		iterOutputs: outputs,
 	}
 	ctx.resolve = p.fnBodyResolver(ctx)
@@ -1369,7 +1374,7 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, ctx *fnBody
 		}
 	}
 
-	if err := p.checkFnBodyCallDirectionsExpr(callee, calleeTok.val, args, kwArgs, paramDirs, letVars, calleeTok.pos); err != nil {
+	if err := p.checkFnBodyCallDirectionsExpr(callee, calleeTok.val, args, kwArgs, paramDirs, letVars, calleeTok.pos, ctx.paramFlags); err != nil {
 		return nil, nil, err
 	}
 
@@ -1395,13 +1400,19 @@ func fnBodyExprDir(expr Expr, paramDirs map[string]string, fnVars map[string]fnV
 }
 
 // checkFnBodyCallDirectionsExpr checks direction compatibility for AST-typed args.
-func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string, args []Expr, kwArgs map[string]Expr, paramDirs map[string]string, letVars map[string]fnVarInfo, pos int) error {
+func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string, args []Expr, kwArgs map[string]Expr, paramDirs map[string]string, letVars map[string]fnVarInfo, pos int, paramFlags ...map[string]bool) error {
+	var pFlags map[string]bool
+	if len(paramFlags) > 0 {
+		pFlags = paramFlags[0]
+	}
 	posIdx := 0
 	for _, pd := range callee.params {
 		calleeDir := pd.effectiveDirection()
+		var argExpr Expr
 		if pd.keyword == "" {
 			if posIdx < len(args) {
-				aDir := fnBodyExprDir(args[posIdx], paramDirs, letVars)
+				argExpr = args[posIdx]
+				aDir := fnBodyExprDir(argExpr, paramDirs, letVars)
 				if !canPass(calleeDir, aDir) {
 					return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
 						aDir, calleeDir, pd.name, calleeName)
@@ -1410,12 +1421,23 @@ func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string,
 			posIdx++
 		} else if kwArgs != nil {
 			if val, ok := kwArgs[pd.keyword]; ok {
+				argExpr = val
 				aDir := fnBodyExprDir(val, paramDirs, letVars)
 				if !canPass(calleeDir, aDir) {
 					return p.errorf(pos, "cannot pass %s parameter to %s parameter %q of %s",
 						aDir, calleeDir, pd.name, calleeName)
 				}
 			}
+		}
+		// Check param modifier: argument must be a param-flagged parameter
+		if pd.isParam && argExpr != nil {
+			if ident, ok := argExpr.(*IdentExpr); ok {
+				if pFlags != nil && pFlags[ident.Name] {
+					continue // transitively param
+				}
+			}
+			return p.errorf(pos, "argument to param parameter %q of %s must be a behavior parameter",
+				pd.name, calleeName)
 		}
 	}
 	return nil
@@ -1476,6 +1498,8 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 		case *ModeBlockStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 		case *WaitStmt:
+			collectASTOutputVars(s.Body, paramMap, usedVars)
+		case *OnEventStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 		}
 	}
@@ -2306,6 +2330,14 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			setComment(f, callComment)
 			b.emit(f)
 
+		case *OnEventStmt:
+			// Defer event emission until after main flow.
+			// Resolve the param through paramMap for inlined function context.
+			b.deferredEvents = append(b.deferredEvents, deferredEvent{
+				stmt:     s,
+				paramMap: maps.Clone(paramMap),
+			})
+
 		case *ReturnStmt:
 			callComment := inheritComment(s.Comment, comment)
 
@@ -2429,6 +2461,16 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			}
 		}
 
+		// Check for param modifier
+		isParamMod := false
+		if tok.val == "param" {
+			isParamMod = true
+			tok, err = p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		// Peek: if next is an identifier, this is a keyword param
 		peek, err := p.next()
 		if err != nil {
@@ -2438,7 +2480,7 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			// keyword param: tok is keyword, peek is variable name
 			seenKeyword = true
 			params = append(params, paramDef{
-				name: peek.val, keyword: tok.val, direction: direction,
+				name: peek.val, keyword: tok.val, direction: direction, isParam: isParamMod,
 			})
 		} else {
 			// positional param
@@ -2446,7 +2488,7 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			if seenKeyword {
 				return nil, p.errorf(tok.pos, "positional parameter after keyword parameter")
 			}
-			params = append(params, paramDef{name: tok.val, direction: direction})
+			params = append(params, paramDef{name: tok.val, direction: direction, isParam: isParamMod})
 		}
 	}
 	return params, nil
@@ -3909,6 +3951,7 @@ type fnVarInfo struct {
 
 type fnBodyContext struct {
 	paramDirs    map[string]string    // param name -> effective direction
+	paramFlags   map[string]bool      // param name -> true if param modifier (requires behavior parameter)
 	fnVarInfo    map[string]fnVarInfo // name -> var info (mutability, depth, used tracking)
 	fnScopeDepth int                  // current nesting depth (0 = fn top-level)
 	resolve      operandResolver
@@ -4080,15 +4123,20 @@ func (p *parser) parseUserFn() (string, error) {
 		return "", p.errorf(tok.pos, "expected '{' or 'exec', got %s", tok.describe())
 	}
 
-	// Build direction maps for enforcement in fn body
+	// Build direction and param flag maps for enforcement in fn body
 	paramDirs := map[string]string{} // param name -> effective direction
+	paramFlags := map[string]bool{}  // param name -> true if param modifier
 	for _, pd := range params {
 		paramDirs[pd.name] = pd.effectiveDirection()
+		if pd.isParam {
+			paramFlags[pd.name] = true
+		}
 	}
 	ctx := &fnBodyContext{
-		paramDirs: paramDirs,
-		fnVarInfo: map[string]fnVarInfo{},
-		execNames: execNames,
+		paramDirs:  paramDirs,
+		paramFlags: paramFlags,
+		fnVarInfo:  map[string]fnVarInfo{},
+		execNames:  execNames,
 	}
 	ctx.resolve = p.fnBodyResolver(ctx)
 
@@ -4703,6 +4751,86 @@ func (p *parser) maybeParseFnBodyLocalBlocksExpr(frame map[string]any, ctx *fnBo
 	return blocks, nil
 }
 
+// parseFnBodyOnEvent parses an `on` event handler inside a function body.
+// Syntax: `on paramName { body }` or `on radio(bandExpr) -> signal { body }`
+func (p *parser) parseFnBodyOnEvent(ctx *fnBodyContext, comment string) (*OnEventStmt, error) {
+	tok, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+
+	// radio event: on radio(bandExpr) -> signal { body }
+	if tok.kind == tokIdent && tok.val == "radio" {
+		if _, err := p.expect(tokLParen); err != nil {
+			return nil, err
+		}
+		bandExpr, err := p.parseArithExpr(ctx.resolve)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+		signal := ""
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokArrow {
+			sigTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			if Keywords[sigTok.val] {
+				return nil, p.errorf(sigTok.pos, "expected signal variable name, got keyword %q", sigTok.val)
+			}
+			signal = sigTok.val
+			ctx.declareFnVar(signal, false)
+		} else {
+			p.unget(peek)
+		}
+		if _, err := p.expect(tokLBrace); err != nil {
+			return nil, err
+		}
+		body, err := p.parseFnBodyStmts(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &OnEventStmt{
+			Kind:    "radio",
+			Band:    bandExpr,
+			Signal:  signal,
+			Body:    body,
+			Comment: comment,
+		}, nil
+	}
+
+	// parameter event: on paramName { body }
+	if tok.kind != tokIdent {
+		return nil, p.errorf(tok.pos, "expected parameter name or 'radio' after 'on', got %s", tok.describe())
+	}
+	paramName := tok.val
+	if !ctx.paramFlags[paramName] {
+		if _, isParam := ctx.paramDirs[paramName]; !isParam {
+			return nil, p.errorf(tok.pos, "unknown parameter %q in event handler", paramName)
+		}
+		return nil, p.errorf(tok.pos, "event listener requires a param argument; %q is not declared with the param modifier", paramName)
+	}
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+	body, err := p.parseFnBodyStmts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &OnEventStmt{
+		Kind:    "parameter",
+		Param:   paramName,
+		Body:    body,
+		Comment: comment,
+	}, nil
+}
+
 // parseFnBodyStmts parses fn body statements until '}'. The opening '{'
 // has been consumed. Returns the parsed statements.
 func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
@@ -4826,6 +4954,13 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				Body:    body,
 				Comment: comment,
 			})
+
+		case "on":
+			onStmt, err := p.parseFnBodyOnEvent(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			astBody = append(astBody, onStmt)
 
 		case "instruction":
 			frame, err := p.parseInstruction()

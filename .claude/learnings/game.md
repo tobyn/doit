@@ -293,19 +293,75 @@ Three optional top-level fields on the behavior JSON:
 
 `event_radio` and `event_parameter` are a distinct instruction category.
 They have `event_setup` and `event_trigger` hooks that create persistent
-listeners interrupting normal execution flow when a signal or parameter
-changes. The listener persists across ticks and fires asynchronously —
-fundamentally different from normal branching.
+listeners. Verified in-game behavior:
 
-- Event instructions are placed in the instruction list but disconnected
-  from the main flow. They act as interrupt entry points.
-- When the event fires, execution jumps to the instruction after the
-  event node. The handler chain should end with `"next": false` to
-  avoid falling through into unrelated instructions.
+### Disconnection is by convention, not VM magic
+
+The VM executes event instructions if normal flow reaches them — the
+event's `func` sets `state.counter = false`, forcing a restart as a
+safety mechanism. The visual editor enforces disconnection by not
+drawing input connectors on event nodes. **The compiler must emit event
+instructions after the main flow's terminal instruction**, with no
+fall-through or jump path from the main flow reaching them.
+
+### Listener lifecycle
+
+`event_setup` runs at behavior load time (when the instruction list is
+scanned), independent of whether the main flow reaches the event
+instruction. The `c_event_reg` component persists as long as the
+behavior controller is active. **Events do not fire after `exit`** —
+exit kills the behavior controller and event processing stops.
+Behaviors with events must stay alive (loop or wait) to keep
+processing events.
+
+### Event semantics: unconditional jump + restart
+
+When an event fires (`InstTriggerEvent`):
+1. The current execution context is destroyed — blocks stack trimmed,
+   call stack unrolled (`InstUnrollReturns`).
+2. Counter is set to the event instruction's `"next"` value (the
+   handler's entry point).
+3. `comp:Activate()` wakes the behavior (interrupts sleep/wait).
+4. The handler chain runs. It must end with `"next": false`.
+5. After `"next": false`, re-dispatch sets counter = 1 (frame 0) —
+   the behavior restarts from the beginning.
+
+Events can interrupt **any** execution state: sleep (`wait`), running
+loops, iterators, nested calls. All control flow context is lost — the
+handler cannot resume where the interruption occurred.
+
+Events do not nest — `InstTriggerEvent` returns without firing if
+another event handler is already running.
+
+### Interaction with iterators and branching
+
+When an event fires during an iterator (e.g., `for_number`), the
+iterator's block context is destroyed (blocks stack trimmed). If the
+handler reconnects into the iterator body (via `jump` or direct
+`"next"`), the body frames execute linearly — one pass through the
+remaining frames. When the body's `"next": false` is reached, it pops
+the event handler block (not the iterator block, which is gone),
+giving `next_counter = 1` → restart. The iterator is effectively
+bypassed; it does not re-enter or resume.
+
+### Handler flow is flexible, not isolated
+
+Event instructions have no input connection (nothing flows into them),
+but their `"next"` can point anywhere in the instruction list. Handler
+chains are not required to end with `"next": false` — they can rejoin
+the main flow at any point. This makes events behave like **detached
+entry points with goto semantics**: the event is a label reachable
+only by the event trigger, but once execution enters the handler,
+normal flow rules apply. `"next": false` (restart from frame 0) is
+just one option; the handler can also jump into the middle of the
+main loop or share a tail with other flow paths.
+
+### Instruction-specific fields
+
 - `event_parameter` uses `"pnum": N` (1-based parameter index) to
-  select which parameter to watch.
+  select which parameter to watch. No numbered argument slots.
 - `event_radio` uses `"band": {register_value}` to select the radio
-  band. The band must be a valid entity ID (e.g., `v_octagon`).
+  band. One output slot (slot 0): the new signal value.
 - The `nx`/`ny` fields on event instructions are visual editor node
   positions (cosmetic, not semantic).
 

@@ -1,0 +1,9 @@
+# AI-generated test
+behavior a {
+    loop {
+        wait 10
+    }
+    on radio(Item("metalbar")) -> signal {
+        notify "radio event"
+    }
+}

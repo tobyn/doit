@@ -1,0 +1,23 @@
+{
+  "0": {
+    "0": {
+      "num": 10
+    },
+    "next": 1,
+    "op": "wait"
+  },
+  "1": {
+    "0": "signal",
+    "band": {
+      "id": "metalbar"
+    },
+    "next": 3,
+    "op": "event_radio"
+  },
+  "2": {
+    "next": false,
+    "op": "notify",
+    "txt": "radio event"
+  },
+  "name": "a"
+}
