@@ -1,0 +1,17 @@
+{
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "working"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Mode Block Break Fn"
+}

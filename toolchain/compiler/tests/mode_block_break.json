@@ -1,0 +1,17 @@
+{
+  "0": {
+    "op": "unlock"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "fast"
+  },
+  "2": {
+    "op": "lock"
+  },
+  "3": {
+    "op": "notify",
+    "txt": "slow"
+  },
+  "name": "Mode Block Break"
+}

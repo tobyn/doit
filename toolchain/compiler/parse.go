@@ -2043,11 +2043,14 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 
 		case *ModeBlockStmt:
 			callComment := inheritComment(s.Comment, comment)
+			origLen := len(b.frames)
 			saved := emitModeEntry(b, s.Unlock, callComment)
 			if err := p.emitFnBody(s.Body, b, paramMap, usedVars, comment, pos); err != nil {
 				return err
 			}
+			modeExitTarget := frameRef(b.pos())
 			emitModeExit(b, saved)
+			patchBreakPlaceholders(b, origLen, "", modeExitTarget)
 
 		case *CallStmt:
 			resolvedArgs, resolvedKwArgs, err := p.emitCallExprArgs(s.Args, s.KwArgs, b, paramMap, usedVars, pos)
@@ -4945,7 +4948,9 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			if _, err := p.expect(tokLBrace); err != nil {
 				return nil, err
 			}
+			p.modeBlockDepth++
 			body, err := p.parseFnBodyStmts(ctx)
+			p.modeBlockDepth--
 			if err != nil {
 				return nil, err
 			}
@@ -5131,8 +5136,8 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			astBody = append(astBody, stmt)
 
 		case "break":
-			if p.loopDepth == 0 && p.execBlockDepth == 0 {
-				return nil, p.errorf(tok.pos, "'break' outside of loop or exec block")
+			if p.loopDepth == 0 && p.execBlockDepth == 0 && p.modeBlockDepth == 0 {
+				return nil, p.errorf(tok.pos, "'break' outside of loop, exec block, or mode block")
 			}
 			label := ""
 			crossBoundary := false

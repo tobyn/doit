@@ -1,0 +1,13 @@
+# AI-generated test
+# Mode block inside loop: break exits mode block, not the loop
+behavior mode_block_break_loop {
+    @name "Mode Block Break Loop"
+    var x = 0
+    loop 3 {
+        unlocked {
+            x += 1
+            break
+        }
+    }
+    notify "done"
+}

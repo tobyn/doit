@@ -1,0 +1,12 @@
+# AI-generated test
+# Nested mode blocks: break exits innermost mode block
+behavior mode_block_break_nested {
+    @name "Mode Block Break Nested"
+    locked {
+        unlocked {
+            notify "inner"
+            break
+        }
+        notify "outer"
+    }
+}

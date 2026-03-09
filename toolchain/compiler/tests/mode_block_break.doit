@@ -1,0 +1,11 @@
+# AI-generated test
+# Basic break in unlocked block exits the block and restores mode
+behavior mode_block_break {
+    @name "Mode Block Break"
+    unlocked {
+        notify "fast"
+        break
+        notify "unreachable"
+    }
+    notify "slow"
+}

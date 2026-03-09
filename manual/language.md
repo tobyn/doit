@@ -2257,6 +2257,50 @@ Mode block expressions are supported in `let`/`var` declarations,
 assignments, function call arguments, and `return` items, at both
 behavior level and in function bodies.
 
+### `break` in mode blocks
+
+Mode blocks are breakable constructs — `break` exits the innermost mode
+block and restores the previous execution mode:
+
+```doit
+unlocked {
+    notify "fast"
+    if some_condition {
+        break      # exits the unlocked block, restores locked mode
+    }
+    notify "still fast"
+}
+notify "slow"
+```
+
+When a mode block is nested inside a loop, `break` exits the mode block,
+not the loop. Use labeled `break` to target the loop:
+
+```doit
+'outer: loop 5 {
+    unlocked {
+        do_work
+        break           # exits unlocked block, loop continues
+    }
+    break 'outer        # exits the loop
+}
+```
+
+Nested mode blocks follow the same rule — `break` exits the innermost:
+
+```doit
+locked {
+    unlocked {
+        break           # exits the unlocked block
+    }
+    notify "still locked"
+}
+```
+
+`break` is not yet supported in mode block *expressions* (`let x =
+unlocked { ... }`). A future `break <value>` form will enable early exit
+with a value in expression contexts.
+
 ## Localization
 
 The `localize` construct provides locale-aware strings at compile time. It

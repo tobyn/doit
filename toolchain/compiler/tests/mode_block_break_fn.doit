@@ -1,0 +1,14 @@
+# AI-generated test
+# Break in mode block inside fn body
+fn do_work() {
+    unlocked {
+        notify "working"
+        break
+    }
+}
+
+behavior mode_block_break_fn {
+    @name "Mode Block Break Fn"
+    do_work
+    notify "done"
+}

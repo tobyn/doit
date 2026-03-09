@@ -1,0 +1,13 @@
+# AI-generated test
+# Break inside if in a mode block (early exit)
+behavior mode_block_break_if {
+    @name "Mode Block Break If"
+    var x = 0
+    unlocked {
+        if x >= 5 {
+            break
+        }
+        x += 1
+    }
+    notify "done"
+}

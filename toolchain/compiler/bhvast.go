@@ -2357,7 +2357,9 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		if _, err := p.expect(tokLBrace); err != nil {
 			return nil, false, err
 		}
+		p.modeBlockDepth++
 		body, err := p.parseBhvStmtBlockInner(syms)
+		p.modeBlockDepth--
 		if err != nil {
 			return nil, false, err
 		}
@@ -2366,7 +2368,9 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		if _, err := p.expect(tokLBrace); err != nil {
 			return nil, false, err
 		}
+		p.modeBlockDepth++
 		body, err := p.parseBhvStmtBlockInner(syms)
+		p.modeBlockDepth--
 		if err != nil {
 			return nil, false, err
 		}
@@ -2678,8 +2682,8 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 
 		// Block-only: break
 		if tok.val == "break" {
-			if p.loopDepth == 0 && p.execBlockDepth == 0 {
-				return nil, p.errorf(tok.pos, "'break' outside of loop or exec block")
+			if p.loopDepth == 0 && p.execBlockDepth == 0 && p.modeBlockDepth == 0 {
+				return nil, p.errorf(tok.pos, "'break' outside of loop, exec block, or mode block")
 			}
 			label := ""
 			crossBoundary := false
@@ -3665,13 +3669,16 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 // It emits a mode transition frame on entry (if needed), recurses into the
 // body, then restores the mode on exit (if needed).
 func (p *parser) emitBhvModeBlock(s *ModeBlockStmt, b *frameBuilder, syms *symbolTable) error {
+	origLen := len(b.frames)
 	savedMode := emitModeEntry(b, s.Unlock, s.Comment)
 	savedScope := syms.pushScope()
 	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}
 	syms.popScope(savedScope)
+	modeExitTarget := frameRef(b.pos())
 	emitModeExit(b, savedMode)
+	patchBreakPlaceholders(b, origLen, "", modeExitTarget)
 	return nil
 }
 

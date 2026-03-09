@@ -24,7 +24,8 @@ see `.claude/learnings/test_format.md`.
   prelude; `posToLineCol` starts counting from this offset). The
   `parser` struct extends `scanner` with `fns`, `iters`, `consts`,
   `enums`, import state, `prelude` string (propagated to sub-parsers),
-  `fileDecls` (names declared in this file), loop/exec-block tracking,
+  `fileDecls` (names declared in this file), loop/exec-block/mode-block
+  tracking (`loopDepth`, `execBlockDepth`, `modeBlockDepth`),
   `callExprParser` callback, and `warnings []string`.
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
   types (`symbolSet`, `fnDef`, `iterDef`, `paramDef` (with `isParam`
@@ -153,7 +154,10 @@ for loops. In iterator-backed loops, unlabeled `@break` is patched to `"last"`
 breaks still jump past the loop. In exec blocks, `@break` is patched
 to exit the block: detached blocks get `set_reg false false` with
 `"next": false` (re-dispatch); bridging blocks get `set_reg false
-false` patched to the join point. `@jumpbreak` is emitted for
+false` patched to the join point. In mode blocks (statement form),
+unlabeled `@break` is patched to jump to the mode exit instruction
+via `patchBreakPlaceholders` with empty label; labeled breaks pass
+through to enclosing loops. `@jumpbreak` is emitted for
 cross-exec-block-boundary labeled breaks (`BreakStmt.CrossBoundary`);
 `patchJumpBreakPlaceholders` replaces them with `jump` instructions
 targeting a compiler-generated label, emits a matching `label` after

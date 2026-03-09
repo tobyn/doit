@@ -62,11 +62,17 @@ register types.
   parameter-change events, `on radio(band) -> signal { handler }` for
   radio events. `param` modifier on function args enforces behavior
   parameter at call sites. Events deferred and emitted after main flow.
-- **Locked/unlocked block parity** — `locked { ... }` and
-  `unlocked { ... }` blocks should behave like other block constructs:
-  support `break` to exit early, return value(s) from the block
-  expression, etc. Currently they're simpler than other blocks. Aligning
-  their semantics makes the language more consistent and composable.
+- ~~**Locked/unlocked block parity: `break`**~~ — Done. Mode blocks
+  are now breakable constructs. Unlabeled `break` exits the innermost
+  mode block (or loop/exec block). Labeled `break 'label` passes
+  through to target outer loops. Statement-form only; expression-form
+  mode blocks don't support break yet (needs break-with-value).
+- **Break with value** — `break <expr>` for early exit from expression-
+  form blocks (mode blocks, exec blocks, potentially if-expressions).
+  The `'label` sigil disambiguates labels from value expressions.
+  Requires a `Value` field on `BreakStmt`, emission logic to write the
+  value to the target register before jumping, and validation that
+  break-with-value only appears in expression contexts.
 - ~~**Initial mode = unknown**~~ — Done. Behaviors now start in
   `modeUnknown`. The first mode block always emits its transition
   instruction. Top-level mode block exit defaults to locked for the

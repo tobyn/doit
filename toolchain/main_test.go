@@ -2286,7 +2286,7 @@ behavior a { f }`
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "'break' outside of loop or exec block") {
+		if !strings.Contains(err.Error(), "'break' outside of loop, exec block, or mode block") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2297,7 +2297,20 @@ behavior a { f }`
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "'break' outside of loop or exec block") {
+		if !strings.Contains(err.Error(), "'break' outside of loop, exec block, or mode block") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("break_in_mode_block_expr_no_enclosing", func(t *testing.T) {
+		// break inside a mode block expression (not statement) without an enclosing
+		// breakable construct should error — break-with-value is not yet supported
+		src := `behavior a { let x = unlocked { break } }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "'break' outside of loop, exec block, or mode block") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

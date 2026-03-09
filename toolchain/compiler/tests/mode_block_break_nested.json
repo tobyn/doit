@@ -1,0 +1,20 @@
+{
+  "0": {
+    "op": "lock"
+  },
+  "1": {
+    "op": "unlock"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "inner"
+  },
+  "3": {
+    "op": "lock"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "outer"
+  },
+  "name": "Mode Block Break Nested"
+}
