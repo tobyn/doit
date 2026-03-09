@@ -612,8 +612,16 @@ func emitModeEntry(b *frameBuilder, unlock bool, comment string) execMode {
 }
 
 // emitModeExit restores the execution mode to saved, emitting a transition
-// frame if the current mode differs.
+// frame if the current mode differs. When saved is modeUnknown (top-level
+// mode block), defaults to locked for the restore.
 func emitModeExit(b *frameBuilder, saved execMode) {
+	if saved == modeUnknown {
+		if b.mode != modeLocked {
+			b.emit(map[string]any{"op": "lock"})
+		}
+		b.mode = modeLocked
+		return
+	}
 	if b.mode != saved {
 		op := "lock"
 		if saved == modeUnlocked {
@@ -629,6 +637,7 @@ type execMode int
 const (
 	modeLocked   execMode = iota
 	modeUnlocked
+	modeUnknown
 )
 
 // frameRef marks an integer as a reference to a 0-based index in a

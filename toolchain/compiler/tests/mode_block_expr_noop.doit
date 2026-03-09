@@ -1,5 +1,5 @@
 # AI-generated test
-# Mode block expression already in target mode (no transition frames)
+# Mode block expression emits transition even for locked (initial mode unknown)
 behavior mode_block_expr_noop {
     @name "Mode Block Expr Noop"
     let me = locked { get_self }

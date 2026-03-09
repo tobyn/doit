@@ -30,7 +30,7 @@ see `.claude/learnings/test_format.md`.
   types (`symbolSet`, `fnDef`, `iterDef`, `paramDef` (with `isParam`
   field), `symbolTable`, `constDef`, `deferredEvent`,
   `enumDef`), `frameBuilder`/`frameRef` abstraction, `emitContext`
-  struct, `execMode` tracking, slot constants for `check_number`,
+  struct, `execMode` tracking (initial `modeUnknown`), slot constants for `check_number`,
   `compare_register`, and `value_type`.
 - **`parse.go`** — Stdlib parsing, file-level parsing, function and iterator
   definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing and emission

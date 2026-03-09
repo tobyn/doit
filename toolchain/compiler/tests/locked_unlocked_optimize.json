@@ -1,27 +1,30 @@
 {
   "0": {
+    "op": "lock"
+  },
+  "1": {
     "op": "notify",
     "txt": "Already locked"
   },
-  "1": {
-    "op": "unlock"
-  },
   "2": {
-    "op": "notify",
-    "txt": "Now unlocked"
+    "op": "unlock"
   },
   "3": {
     "op": "notify",
-    "txt": "Still unlocked"
+    "txt": "Now unlocked"
   },
   "4": {
-    "op": "lock"
+    "op": "notify",
+    "txt": "Still unlocked"
   },
   "5": {
+    "op": "lock"
+  },
+  "6": {
     "op": "notify",
     "txt": "Back to locked"
   },
-  "6": {
+  "7": {
     "op": "notify",
     "txt": "Still locked"
   },

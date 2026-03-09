@@ -67,12 +67,11 @@ register types.
   support `break` to exit early, return value(s) from the block
   expression, etc. Currently they're simpler than other blocks. Aligning
   their semantics makes the language more consistent and composable.
-- **Initial mode = unknown** — The compiler currently assumes behaviors
-  start in locked mode. Change this to unknown (`modeUnknown`). This
-  prepares behaviors to be good subroutine citizens: a `call`ed behavior
-  inherits the caller's lock state (see game.md), so assuming locked is
-  incorrect when the behavior is invoked as a subroutine. A
-  straightforward change to make now, before `call` support lands.
+- ~~**Initial mode = unknown**~~ — Done. Behaviors now start in
+  `modeUnknown`. The first mode block always emits its transition
+  instruction. Top-level mode block exit defaults to locked for the
+  restore (backward compatible with standalone behaviors while
+  preparing for `call` subroutines).
 
 ## Reactive block (`watch` / `react`)
 

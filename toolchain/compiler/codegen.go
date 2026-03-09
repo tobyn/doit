@@ -374,7 +374,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	}
 
 	// Phase 2: Emit frames from AST.
-	b.mode = modeLocked
+	b.mode = modeUnknown
 	if _, err := p.emitBehaviorStmts(stmts, b, syms); err != nil {
 		return nil, err
 	}

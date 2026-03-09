@@ -2147,10 +2147,10 @@ The `-e` / `--error` compiler flag promotes warnings to errors.
 
 ## Execution Mode
 
-Behavior controllers start each execution cycle in **locked** mode, running
-one instruction per tick. Use `unlocked { ... }` to run a block in unlocked
-mode (runs as many instructions as possible per tick) and `locked { ... }`
-to run a block in locked mode:
+Desynced's behavior VM has two execution modes: **locked** (one instruction
+per tick) and **unlocked** (as many instructions as possible per tick). Use
+`unlocked { ... }` and `locked { ... }` to control which mode a block runs
+in:
 
 ```doit
 unlocked {
@@ -2189,15 +2189,17 @@ unlocked {
 
 ### Redundant mode change elimination
 
-The compiler tracks the current execution mode via `frameBuilder.mode` and
-only emits transition frames when the mode actually changes:
+The compiler tracks the current execution mode and only emits transition
+frames when the mode actually changes. Nested `unlocked { ... }` inside an
+`unlocked` block emits no transition, for example.
 
-- `locked { ... }` at the start of a behavior emits no transition (already
-  locked)
-- Nested `unlocked { ... }` inside an `unlocked` block emits no transition
-  (already unlocked)
-- Mode is always statically known at every program point — no conservative
-  fallback needed
+The initial mode of a behavior is **unknown** — the compiler does not
+assume locked or unlocked at the start. This means the first mode block
+always emits its transition instruction, even `locked { ... }`. After a
+top-level mode block exits, the compiler defaults to locked for
+subsequent code. This conservative approach ensures behaviors work
+correctly both as top-level controllers (which start locked) and as
+subroutines via `call` (which inherit the caller's lock state).
 
 When a function containing mode blocks is inlined at a call site, the
 compiler tracks mode through the inlined body. If the caller is already in
