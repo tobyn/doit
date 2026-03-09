@@ -1,0 +1,22 @@
+# AI-generated test
+# Break with value in continuation block expression
+fn check(a) exec(big, small) {
+    if a > 5 {
+        return big
+    }
+    return small
+}
+
+behavior "Exec Expr Break" {
+    var x = 10
+    let result = check(x) {
+        big {
+            if x > 100 {
+                break 99
+            }
+            x
+        }
+        small { 0 }
+    }
+    notify "done", value: result
+}

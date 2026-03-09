@@ -129,6 +129,12 @@ Expression arity = max across all continuation paths. Each path
 contributes: tail expression for provided blocks, `@N` values for
 the `return` path, `null` for unprovided blocks.
 
+`break <value>` provides early exit from expression-form blocks.
+`expandCallOpts.breakRetVals` threads target registers through to
+`expandContinuationBlocks`, which sets `p.breakRetVals` before each
+block body. Break value emission writes to these targets before the
+`@break` placeholder.
+
 ## Block param count validation
 
 `expandContinuationBlocks` validates that each block's Kotlin-style

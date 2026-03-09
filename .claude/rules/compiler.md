@@ -16,8 +16,9 @@ see `.claude/learnings/test_format.md`.
 ## Architecture
 
 - **`ast.go`** — `Stmt` interface (25 types, including `OnEventStmt`)
-  and `Expr` interface (15 types). `isTerminalStmt`/`terminalKeyword`
-  for unreachable code detection.
+  and `Expr` interface (15 types). `BreakStmt` has `Values []Expr`
+  for break-with-value. `isTerminalStmt`/`terminalKeyword` for
+  unreachable code detection.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
   types, `Keywords` map, `skipToCloseBrace`. The `scanner` has a
   `sourceOffset` field (byte offset of user source after prepended
@@ -26,7 +27,9 @@ see `.claude/learnings/test_format.md`.
   `enums`, import state, `prelude` string (propagated to sub-parsers),
   `fileDecls` (names declared in this file), loop/exec-block/mode-block
   tracking (`loopDepth`, `execBlockDepth`, `modeBlockDepth`),
-  `callExprParser` callback, and `warnings []string`.
+  `callExprParser` callback, `breakRetVals []any` (target registers
+  for break-with-value in expression-form blocks; nil outside),
+  and `warnings []string`.
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
   types (`symbolSet`, `fnDef`, `iterDef`, `paramDef` (with `isParam`
   field), `symbolTable`, `constDef`, `deferredEvent`,
@@ -157,7 +160,12 @@ to exit the block: detached blocks get `set_reg false false` with
 false` patched to the join point. In mode blocks (statement form),
 unlabeled `@break` is patched to jump to the mode exit instruction
 via `patchBreakPlaceholders` with empty label; labeled breaks pass
-through to enclosing loops. `@jumpbreak` is emitted for
+through to enclosing loops. In mode block and continuation block
+*expressions*, `BreakStmt.Values` carries break-with-value
+expressions; the emitter writes values to `p.breakRetVals` targets
+before the `@break` placeholder. The `emitBhvIfBreak` optimization
+(if/break pattern) also handles break values, accounting for
+value-write frames in branch target calculations. `@jumpbreak` is emitted for
 cross-exec-block-boundary labeled breaks (`BreakStmt.CrossBoundary`);
 `patchJumpBreakPlaceholders` replaces them with `jump` instructions
 targeting a compiler-generated label, emits a matching `label` after

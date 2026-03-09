@@ -65,14 +65,14 @@ register types.
 - ~~**Locked/unlocked block parity: `break`**~~ — Done. Mode blocks
   are now breakable constructs. Unlabeled `break` exits the innermost
   mode block (or loop/exec block). Labeled `break 'label` passes
-  through to target outer loops. Statement-form only; expression-form
-  mode blocks don't support break yet (needs break-with-value).
-- **Break with value** — `break <expr>` for early exit from expression-
-  form blocks (mode blocks, exec blocks, potentially if-expressions).
-  The `'label` sigil disambiguates labels from value expressions.
-  Requires a `Value` field on `BreakStmt`, emission logic to write the
-  value to the target register before jumping, and validation that
-  break-with-value only appears in expression contexts.
+  through to target outer loops. Both statement-form and expression-form.
+- ~~**Break with value**~~ — Done. `break <expr>` for early exit from
+  expression-form blocks (mode block expressions, continuation block
+  expressions). `BreakStmt.Values []Expr` carries break values;
+  `p.breakRetVals` tracks target registers. The `emitBhvIfBreak`
+  optimization handles the if/break-with-value pattern. Validation
+  rejects break-with-value outside expression blocks and arity
+  mismatches.
 - ~~**Initial mode = unknown**~~ — Done. Behaviors now start in
   `modeUnknown`. The first mode block always emits its transition
   instruction. Top-level mode block exit defaults to locked for the

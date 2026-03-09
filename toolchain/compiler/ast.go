@@ -173,6 +173,7 @@ type YieldBodyStmt struct {
 // BreakStmt is a break from a loop.
 type BreakStmt struct {
 	Label         string // "" for unlabeled (breaks innermost)
+	Values        []Expr // non-nil for break-with-value (expression-form blocks only)
 	CrossBoundary bool   // true when breaking across an exec block boundary (emits jump/label)
 	Comment       string
 }

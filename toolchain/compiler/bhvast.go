@@ -2687,6 +2687,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			}
 			label := ""
 			crossBoundary := false
+			var values []Expr
 			peek, err := p.next()
 			if err != nil {
 				return nil, err
@@ -2700,10 +2701,49 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				} else {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
 				}
+			} else if peek.kind != tokRBrace && peek.kind != tokEOF {
+				// Not a label and not end-of-block — try to parse break values.
+				// Use save/restore: if expression parsing fails, this is a bare break.
+				saved := p.save()
+				savedComment := comment
+				p.unget(peek)
+				resolve := p.bhvResolver(syms)
+				parseOK := true
+				for {
+					expr, err := p.parseBoolExpr(resolve)
+					if err != nil {
+						parseOK = false
+						break
+					}
+					if truthy, ok := expr.(*TruthyExpr); ok {
+						expr = truthy.Value
+					}
+					expr, _, err = p.maybeExprContinuation(expr, resolve)
+					if err != nil {
+						parseOK = false
+						break
+					}
+					values = append(values, expr)
+					sep, err := p.next()
+					if err != nil {
+						parseOK = false
+						break
+					}
+					if sep.kind != tokComma {
+						p.unget(sep)
+						break
+					}
+				}
+				if !parseOK {
+					// Expression parsing failed — restore and treat as bare break
+					p.restore(saved)
+					comment = savedComment
+					values = nil
+				}
 			} else {
 				p.unget(peek)
 			}
-			stmt := &BreakStmt{Label: label, CrossBoundary: crossBoundary, Comment: comment}
+			stmt := &BreakStmt{Label: label, Values: values, CrossBoundary: crossBoundary, Comment: comment}
 			stmts = append(stmts, stmt)
 			terminal = stmt
 			continue
@@ -2720,21 +2760,24 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 			continue
 		}
 
-		// ExprTail: if-expression
+		// ExprTail: if-expression (with fallback to statement on parse failure)
 		if allowExprTail && tok.val == "if" {
-			ifExpr, err := p.parseIfExpr(p.bhvParseCtx(syms), comment)
-			if err != nil {
-				return nil, err
+			savedState := p.save()
+			savedComment := comment
+			ifExpr, err := p.parseIfExpr(p.bhvParseCtx(syms), savedComment)
+			if err == nil {
+				peek, err := p.next()
+				if err == nil && peek.kind == tokRBrace {
+					stmts = append(stmts, &exprTailStmt{Expr: ifExpr})
+					return stmts, nil
+				}
+				if err == nil {
+					return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
+				}
 			}
-			peek, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if peek.kind == tokRBrace {
-				stmts = append(stmts, &exprTailStmt{Expr: ifExpr})
-				return stmts, nil
-			}
-			return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
+			// If-expression parsing failed — restore and try as statement
+			p.restore(savedState)
+			comment = savedComment
 		}
 
 		// Try shared keyword cases
@@ -2915,6 +2958,7 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 					b.emit(map[string]any{"op": "set_reg", "0": val, "1": tmp})
 					return nil
 				},
+				breakRetVals: []any{tmp},
 			}
 			if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{tmp}, b, 0, comment, syms.usedVars, opts); err != nil {
 				return nil, err
@@ -3014,6 +3058,7 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 				emitTail: func(tail Expr) error {
 					return p.emitBhvExprTo(tail, target, syms, b, comment)
 				},
+				breakRetVals: []any{target},
 			}
 			return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, 0, comment, syms.usedVars, opts)
 		}
@@ -3271,6 +3316,19 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 			}
 
 		case *BreakStmt:
+			if len(s.Values) > 0 {
+				if p.breakRetVals == nil {
+					return 0, fmt.Errorf("break with value outside of expression block")
+				}
+				if len(s.Values) != len(p.breakRetVals) {
+					return 0, fmt.Errorf("break has %d value(s) but expression block expects %d", len(s.Values), len(p.breakRetVals))
+				}
+				for i, val := range s.Values {
+					if err := p.emitBhvExprTo(val, p.breakRetVals[i], syms, b, s.Comment); err != nil {
+						return 0, err
+					}
+				}
+			}
 			if s.CrossBoundary {
 				b.emit(map[string]any{"op": "@jumpbreak", "label": s.Label})
 			} else {
@@ -3348,13 +3406,26 @@ func (p *parser) emitBhvIfBreak(s *IfStmt, b *frameBuilder, syms *symbolTable) e
 		return err
 	}
 
+	bs := s.Body[0].(*BreakStmt)
+
+	// Validate break values up front
+	if len(bs.Values) > 0 {
+		if p.breakRetVals == nil {
+			return fmt.Errorf("break with value outside of expression block")
+		}
+		if len(bs.Values) != len(p.breakRetVals) {
+			return fmt.Errorf("break has %d value(s) but expression block expects %d", len(bs.Values), len(p.breakRetVals))
+		}
+	}
+
 	checkStart := b.pos()
 	checkCount := resolved.frameCount()
+	valueCount := len(bs.Values)
 
-	// true → @break placeholder (right after check frames)
+	// true → first break value frame (or @break placeholder if no values)
 	trueBranch := frameRef(checkStart + checkCount)
-	// false → continuation (after @break placeholder)
-	falsePlaceholder := frameRef(checkStart + checkCount + 1)
+	// false → continuation (after value frames + @break placeholder)
+	falsePlaceholder := frameRef(checkStart + checkCount + valueCount + 1)
 
 	if resolved.isLeaf() {
 		p.emitBoolCheckFrame(resolved.term, trueBranch, falsePlaceholder, b, s.Comment)
@@ -3363,8 +3434,14 @@ func (p *parser) emitBhvIfBreak(s *IfStmt, b *frameBuilder, syms *symbolTable) e
 	}
 	stripFallThrough(b, checkStart, checkCount)
 
+	// Emit break values if present
+	for i, val := range bs.Values {
+		if err := p.emitBhvExprTo(val, p.breakRetVals[i], syms, b, s.Comment); err != nil {
+			return err
+		}
+	}
+
 	// Emit break placeholder
-	bs := s.Body[0].(*BreakStmt)
 	if bs.CrossBoundary {
 		b.emit(map[string]any{"op": "@jumpbreak", "label": bs.Label})
 	} else {
@@ -3672,6 +3749,12 @@ func (p *parser) emitBhvModeBlock(s *ModeBlockStmt, b *frameBuilder, syms *symbo
 	origLen := len(b.frames)
 	savedMode := emitModeEntry(b, s.Unlock, s.Comment)
 	savedScope := syms.pushScope()
+
+	// Statement-form mode block: clear breakRetVals so break-with-value is rejected
+	savedBreakRetVals := p.breakRetVals
+	p.breakRetVals = nil
+	defer func() { p.breakRetVals = savedBreakRetVals }()
+
 	if _, err := p.emitBehaviorStmts(s.Body, b, syms); err != nil {
 		return err
 	}

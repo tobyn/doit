@@ -1,0 +1,14 @@
+# AI-generated test
+# Break with value in mode block expression: early exit from body
+behavior mode_block_expr_break {
+    @name "Mode Block Expr Break"
+    var x = 0
+    let me = unlocked {
+        notify "start"
+        if x > 1 {
+            break get_self
+        }
+        notify "still going"
+        get_self
+    }
+}

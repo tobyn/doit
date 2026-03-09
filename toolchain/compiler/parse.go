@@ -382,7 +382,7 @@ func (p *parser) parseExecBindingArgs() ([]any, error) {
 // returnSlot(N) indices to allocated register names (nil if no data).
 // emitTail, if non-nil, is called after each block's body to emit
 // the block's tail expression to the return target (expression form).
-func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock, b *frameBuilder, origPos int, emitBody func([]Stmt, map[string]any) error, execOutputRegs map[int]string, emitTail func(Expr) error) error {
+func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock, b *frameBuilder, origPos int, emitBody func([]Stmt, map[string]any) error, execOutputRegs map[int]string, emitTail func(Expr) error, breakRetVals []any) error {
 	// Resolve collapsed form: empty name → leftmost exec name
 	for _, blk := range blocks {
 		if blk.Name == "" {
@@ -429,9 +429,18 @@ func (p *parser) expandContinuationBlocks(fn *fnDef, blocks []*ContinuationBlock
 			}
 		}
 
+		// Set breakRetVals for expression-form blocks so break-with-value
+		// inside the body can write to the same target registers as the tail.
+		savedBreakRetVals := p.breakRetVals
+		if breakRetVals != nil && blk.Tail != nil && !blk.Detached {
+			p.breakRetVals = breakRetVals
+		}
+
 		if err := emitBody(blk.Body, bindings); err != nil {
+			p.breakRetVals = savedBreakRetVals
 			return err
 		}
+		p.breakRetVals = savedBreakRetVals
 
 		// Emit tail expression for expression-form blocks
 		if blk.Tail != nil && emitTail != nil {
@@ -1728,6 +1737,7 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 				emitTail: func(tail Expr) error {
 					return p.emitExprTo(tail, target, b, paramMap, usedVars, comment, pos)
 				},
+				breakRetVals: []any{target},
 			}
 			return p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, []any{target}, b, pos, comment, usedVars, opts)
 		}
@@ -2045,9 +2055,16 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			callComment := inheritComment(s.Comment, comment)
 			origLen := len(b.frames)
 			saved := emitModeEntry(b, s.Unlock, callComment)
+
+			// Statement-form mode block: clear breakRetVals so break-with-value is rejected
+			savedBreakRetVals := p.breakRetVals
+			p.breakRetVals = nil
+
 			if err := p.emitFnBody(s.Body, b, paramMap, usedVars, comment, pos); err != nil {
+				p.breakRetVals = savedBreakRetVals
 				return err
 			}
+			p.breakRetVals = savedBreakRetVals
 			modeExitTarget := frameRef(b.pos())
 			emitModeExit(b, saved)
 			patchBreakPlaceholders(b, origLen, "", modeExitTarget)
@@ -2270,6 +2287,19 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			}
 
 		case *BreakStmt:
+			if len(s.Values) > 0 {
+				if p.breakRetVals == nil {
+					return fmt.Errorf("break with value outside of expression block")
+				}
+				if len(s.Values) != len(p.breakRetVals) {
+					return fmt.Errorf("break has %d value(s) but expression block expects %d", len(s.Values), len(p.breakRetVals))
+				}
+				for i, val := range s.Values {
+					if err := p.emitExprTo(val, p.breakRetVals[i], b, paramMap, usedVars, s.Comment, pos); err != nil {
+						return err
+					}
+				}
+			}
 			// Emit placeholder frame that the enclosing loop emitter will patch
 			if s.CrossBoundary {
 				b.emit(map[string]any{"op": "@jumpbreak", "label": s.Label})
@@ -5141,6 +5171,7 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			}
 			label := ""
 			crossBoundary := false
+			var values []Expr
 			peek, err := p.next()
 			if err != nil {
 				return nil, err
@@ -5154,10 +5185,40 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				} else {
 					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
 				}
+			} else if peek.kind != tokRBrace && peek.kind != tokEOF {
+				// Not a label and not end-of-block — try to parse break values.
+				// Use save/restore: if expression parsing fails, this is a bare break.
+				saved := p.save()
+				savedComment := comment
+				p.unget(peek)
+				parseOK := true
+				for {
+					item, err := p.parseFnBodyReturnItem(ctx)
+					if err != nil {
+						parseOK = false
+						break
+					}
+					values = append(values, item)
+					sep, err := p.next()
+					if err != nil {
+						parseOK = false
+						break
+					}
+					if sep.kind != tokComma {
+						p.unget(sep)
+						break
+					}
+				}
+				if !parseOK {
+					// Expression parsing failed — restore and treat as bare break
+					p.restore(saved)
+					comment = savedComment
+					values = nil
+				}
 			} else {
 				p.unget(peek)
 			}
-			astBody = append(astBody, &BreakStmt{Label: label, CrossBoundary: crossBoundary, Comment: comment})
+			astBody = append(astBody, &BreakStmt{Label: label, Values: values, CrossBoundary: crossBoundary, Comment: comment})
 
 		case "exit":
 			astBody = append(astBody, &ExitStmt{Comment: comment})
@@ -6086,6 +6147,7 @@ type expandCallOpts struct {
 	blocks        []*ContinuationBlock
 	emitBlockBody func(stmts []Stmt, bindings map[string]any) error // emitter for block bodies; bindings map param names to register values
 	emitTail      func(Expr) error                                  // emitter for expression-form block tails; nil = no tails
+	breakRetVals  []any                                             // target registers for break-with-value in expression-form blocks
 }
 
 func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool, opts ...expandCallOpts) error {
@@ -6098,10 +6160,12 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 	var contBlocks []*ContinuationBlock
 	var emitBlockBody func([]Stmt, map[string]any) error
 	var emitTailFn func(Expr) error
+	var breakRetValsOpt []any
 	if len(opts) > 0 {
 		contBlocks = opts[0].blocks
 		emitBlockBody = opts[0].emitBlockBody
 		emitTailFn = opts[0].emitTail
+		breakRetValsOpt = opts[0].breakRetVals
 	}
 
 	paramMap := map[string]any{}
@@ -6231,7 +6295,7 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 				return p.emitFnBody(stmts, b, pm, usedVars, comment, pos)
 			}
 		}
-		if err := p.expandContinuationBlocks(fn, contBlocks, b, origPos, bodyEmitter, execOutputRegs, emitTailFn); err != nil {
+		if err := p.expandContinuationBlocks(fn, contBlocks, b, origPos, bodyEmitter, execOutputRegs, emitTailFn, breakRetValsOpt); err != nil {
 			return err
 		}
 		return nil

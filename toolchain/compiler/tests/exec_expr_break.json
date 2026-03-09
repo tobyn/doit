@@ -1,0 +1,54 @@
+{
+  "0": {
+    "1": {
+      "num": 10
+    },
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "1": 6,
+    "2": "x",
+    "3": {
+      "num": 5
+    },
+    "next": 6,
+    "op": "check_number"
+  },
+  "2": {
+    "1": 5,
+    "2": "x",
+    "3": {
+      "num": 100
+    },
+    "next": 5,
+    "op": "check_number"
+  },
+  "3": {
+    "1": {
+      "num": 99
+    },
+    "2": "result",
+    "next": 7,
+    "op": "set_number"
+  },
+  "4": {
+    "0": "x",
+    "1": "result",
+    "next": 7,
+    "op": "set_reg"
+  },
+  "5": {
+    "1": {
+      "num": 0
+    },
+    "2": "result",
+    "op": "set_number"
+  },
+  "6": {
+    "0": "result",
+    "op": "notify",
+    "txt": "done"
+  },
+  "name": "Exec Expr Break"
+}

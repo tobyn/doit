@@ -1,0 +1,42 @@
+{
+  "0": {
+    "1": {
+      "num": 0
+    },
+    "2": "x",
+    "op": "set_number"
+  },
+  "1": {
+    "op": "unlock"
+  },
+  "2": {
+    "op": "notify",
+    "txt": "start"
+  },
+  "3": {
+    "1": 6,
+    "2": "x",
+    "3": {
+      "num": 1
+    },
+    "next": 6,
+    "op": "check_number"
+  },
+  "4": {
+    "0": "me",
+    "next": 8,
+    "op": "get_self"
+  },
+  "5": {
+    "op": "notify",
+    "txt": "still going"
+  },
+  "6": {
+    "0": "me",
+    "op": "get_self"
+  },
+  "7": {
+    "op": "lock"
+  },
+  "name": "Mode Block Expr Break"
+}

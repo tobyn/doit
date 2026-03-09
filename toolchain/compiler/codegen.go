@@ -1884,8 +1884,15 @@ func (p *parser) emitModeBlockExpr(e *ModeBlockExpr, retVals []any, ctx *emitCon
 	if mbeComment == "" {
 		mbeComment = comment
 	}
+	origLen := len(ctx.b.frames)
 	savedMode := emitModeEntry(ctx.b, e.Unlock, mbeComment)
 	ctx.pushScope()
+
+	// Set breakRetVals so break-with-value inside the body can write to retVals
+	savedBreakRetVals := p.breakRetVals
+	p.breakRetVals = retVals
+	defer func() { p.breakRetVals = savedBreakRetVals }()
+
 	if err := ctx.emitBody(e.Body); err != nil {
 		ctx.popScope()
 		emitModeExit(ctx.b, savedMode)
@@ -1897,7 +1904,9 @@ func (p *parser) emitModeBlockExpr(e *ModeBlockExpr, retVals []any, ctx *emitCon
 		return err
 	}
 	ctx.popScope()
+	modeExitTarget := frameRef(ctx.b.pos())
 	emitModeExit(ctx.b, savedMode)
+	patchBreakPlaceholders(ctx.b, origLen, "", modeExitTarget)
 	return nil
 }
 
@@ -3349,7 +3358,9 @@ func (p *parser) parseModeBlockExpr(unlock bool, ctx *parseContext, comment stri
 	if err != nil {
 		return nil, err
 	}
+	p.modeBlockDepth++
 	stmts, err := ctx.parseBody(true)
+	p.modeBlockDepth--
 	if err != nil {
 		return nil, err
 	}

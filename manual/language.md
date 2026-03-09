@@ -2297,9 +2297,22 @@ locked {
 }
 ```
 
-`break` is not yet supported in mode block *expressions* (`let x =
-unlocked { ... }`). A future `break <value>` form will enable early exit
-with a value in expression contexts.
+In mode block *expressions* and continuation block *expressions*,
+`break <value>` provides early exit while producing a value:
+
+```doit
+let me = unlocked {
+    if some_condition {
+        break get_self     # exits the block early, producing a value
+    }
+    notify "still going"
+    get_self               # tail expression: the normal exit value
+}
+```
+
+The break value must match the arity of the expression block (one value
+for a single-return block). A bare `break` without a value is not valid
+in expression blocks — use `break <value>` to produce the required value.
 
 ## Localization
 

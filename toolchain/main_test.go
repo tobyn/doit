@@ -2302,15 +2302,37 @@ behavior a { f }`
 		}
 	})
 
-	t.Run("break_in_mode_block_expr_no_enclosing", func(t *testing.T) {
-		// break inside a mode block expression (not statement) without an enclosing
-		// breakable construct should error — break-with-value is not yet supported
+	t.Run("break_in_mode_block_expr_bare_no_tail", func(t *testing.T) {
+		// bare break in a mode block expression without a tail expression
+		// should error — the block must produce a value
 		src := `behavior a { let x = unlocked { break } }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "'break' outside of loop, exec block, or mode block") {
+		if !strings.Contains(err.Error(), "last item in mode block expression must be a value-producing expression") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("break_with_value_outside_expression_block", func(t *testing.T) {
+		src := `behavior a { loop { break 42 } }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "break with value outside of expression block") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("break_with_value_arity_mismatch", func(t *testing.T) {
+		src := `behavior a { let x = unlocked { if true { break 1, 2 }; 0 } }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "break has 2 value(s) but expression block expects 1") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

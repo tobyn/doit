@@ -620,6 +620,21 @@ Loops declared *inside* an exec block can use `break` and labeled
 `break` normally — these compile to the standard `@break` placeholder
 mechanism without needing `jump`/`label`.
 
+In **expression-form** continuation blocks, `break <value>` provides
+early exit while producing a value:
+
+```doit
+let result = check(x) {
+    big {
+        if x > 100 {
+            break 99      # exits the block early with value 99
+        }
+        x                 # tail expression: the normal exit value
+    }
+    small { 0 }
+}
+```
+
 #### Collapsed form
 
 When a function has a single continuation you care about, you can omit
