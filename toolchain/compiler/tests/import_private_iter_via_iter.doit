@@ -1,0 +1,10 @@
+# AI-generated test
+# Public iter calls private iter transitively through import
+import iter_with_private_iter from "./libs/import_iter_scope_lib"
+
+behavior import_private_iter_via_iter {
+    @name "Import Private Iter Via Iter"
+    for val in iter_with_private_iter() {
+        notify "looping"
+    }
+}

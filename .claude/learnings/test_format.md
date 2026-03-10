@@ -15,7 +15,9 @@ behavior ID passed to the compiler. For example, `multi_behavior__second.doit` c
 Tests are in the root `main_test.go`. `TestCompile` compiles each test case, encodes via `Compile`,
 decodes, and compares against the JSON file. `TestCompileErrors` tests error cases (e.g., multiple
 behaviors without `-b`, nonexistent behavior ID, no behaviors) using `compiler.CompileString`
-directly.
+directly. `TestCompile` uses `os.DirFS(testDir)` as the source FS, so test `.doit` files can use
+`import` statements to import from other files in `compiler/tests/`. Library files for import
+tests live in `compiler/tests/libs/` to avoid being picked up by the `*.doit` test glob.
 
 The JSON in the JSON file may differ from a JSON rendering of the compiled code in trivial
 ways (e.g., whitespace, object key ordering). Do not rely on the JSON strings to be the

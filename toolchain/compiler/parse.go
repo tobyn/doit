@@ -3151,7 +3151,7 @@ func (p *parser) tryEvalCall(fn *fnDef, posArgs []any, kwArgs map[string]any) ([
 		}
 	}
 
-	// Merge transitive function scope (same pattern as expandCall)
+	// Merge transitive function and iterator scope (same pattern as expandCall)
 	var savedFns map[string]*fnDef
 	if fn.scope != nil {
 		savedFns = map[string]*fnDef{}
@@ -3162,13 +3162,28 @@ func (p *parser) tryEvalCall(fn *fnDef, posArgs []any, kwArgs map[string]any) ([
 			}
 		}
 	}
+	var savedIters map[string]*iterDef
+	if fn.iterScope != nil {
+		savedIters = map[string]*iterDef{}
+		for name, def := range fn.iterScope {
+			if _, exists := p.iters[name]; !exists {
+				p.iters[name] = def
+				savedIters[name] = def
+			}
+		}
+	}
 
 	status, ok := p.tryEvalStmts(fn.astBody, env)
 
-	// Restore function scope
+	// Restore function and iterator scope
 	if savedFns != nil {
 		for name := range savedFns {
 			delete(p.fns, name)
+		}
+	}
+	if savedIters != nil {
+		for name := range savedIters {
+			delete(p.iters, name)
 		}
 	}
 
@@ -6226,15 +6241,25 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 		return nil
 	}
 
-	// Temporarily merge the function's scope into p.fns so that transitive
-	// dependencies (functions called by this fn but not explicitly imported
-	// by the caller) are available during body expansion.
+	// Temporarily merge the function's scope into p.fns (and p.iters) so
+	// that transitive dependencies (functions/iterators called by this fn
+	// but not explicitly imported by the caller) are available during body
+	// expansion.
 	var scopeAdded []string
 	if fn.scope != nil {
 		for k, v := range fn.scope {
 			if _, exists := p.fns[k]; !exists {
 				p.fns[k] = v
 				scopeAdded = append(scopeAdded, k)
+			}
+		}
+	}
+	var iterScopeAdded []string
+	if fn.iterScope != nil {
+		for k, v := range fn.iterScope {
+			if _, exists := p.iters[k]; !exists {
+				p.iters[k] = v
+				iterScopeAdded = append(iterScopeAdded, k)
 			}
 		}
 	}
@@ -6271,6 +6296,9 @@ func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retV
 	// Remove temporarily added scope entries
 	for _, k := range scopeAdded {
 		delete(p.fns, k)
+	}
+	for _, k := range iterScopeAdded {
+		delete(p.iters, k)
 	}
 
 	if err != nil {

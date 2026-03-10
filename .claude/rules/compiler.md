@@ -56,8 +56,12 @@ see `.claude/learnings/test_format.md`.
   enforcement, `resolveInstructionFrame`.
 - **`import.go`** — Import system: parsing, path resolution,
   `processImports`, collision checking, `resolveFnName` for
-  namespace-qualified lookup.
-- **`tests/`** — Test case pairs (`.doit` + `.json`).
+  namespace-qualified lookup. Builds `scope` (fn map) and `iterScope`
+  (iter map) for transitive dependency resolution and assigns both to
+  exported functions and iterators with AST bodies.
+- **`tests/`** — Test case pairs (`.doit` + `.json`). Library files
+  for import tests live in `tests/libs/` (not picked up by the test
+  glob).
 
 ## Compiler Pipeline
 
@@ -122,7 +126,12 @@ promoted to `fnDef.frame` for fast single-frame expansion in
 **Call expansion**: `expandCall` inlines function calls. For promoted
 wrappers, it calls `resolveInstructionFrame`. For AST-based functions,
 it calls `emitFnBody`. Patches `@return` placeholders to jump past
-the expansion afterward.
+the expansion afterward. Temporarily merges `fn.scope` (functions) and
+`fn.iterScope` (iterators) into `p.fns`/`p.iters` for transitive
+dependency resolution during body expansion; cleaned up afterward.
+`tryEvalCall` does the same for compile-time evaluation.
+`emitYieldIter` and `emitStateMachineIter` merge `it.scope` and
+`it.iterScope` for iterator body emission.
 
 **Brace-delimited blocks**: Two categories. **Statement blocks**
 (behavior/function/if/while/loop bodies) contain statement sequences.

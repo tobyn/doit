@@ -1,0 +1,35 @@
+# AI-generated test
+# Library for transitive iterator scope tests
+
+# Private iterator — only visible in this file
+private iter two_values() -> v {
+    yield 1
+    yield 2
+}
+
+# Private function — only visible in this file
+private fn say_hello() {
+    notify "hello"
+}
+
+# Public function that calls the private iterator
+fn use_private_iter() {
+    for x in two_values() {
+        notify "got"
+    }
+}
+
+# Public iterator that calls the private function
+iter iter_with_private_fn() -> val {
+    say_hello
+    for c, idx in each_component() {
+        yield c
+    }
+}
+
+# Public iterator that calls the private iterator
+iter iter_with_private_iter() -> val {
+    for v in two_values() {
+        yield v
+    }
+}

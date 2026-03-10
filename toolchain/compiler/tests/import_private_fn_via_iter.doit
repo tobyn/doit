@@ -1,0 +1,10 @@
+# AI-generated test
+# Public iter calls private fn transitively through import
+import iter_with_private_fn from "./libs/import_iter_scope_lib"
+
+behavior import_private_fn_via_iter {
+    @name "Import Private Fn Via Iter"
+    for val in iter_with_private_fn() {
+        notify "looping"
+    }
+}

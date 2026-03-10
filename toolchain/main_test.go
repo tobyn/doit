@@ -5874,7 +5874,12 @@ func TestUpdateGolden(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			encoded, err := Compile(f, stdlib, behaviorID, locale, nil, "")
+			// Derive sourceFS and sourcePath for import resolution.
+			absPath, _ := filepath.Abs(doitFile)
+			testDir := filepath.Dir(absPath)
+			testSourceFS := os.DirFS(testDir)
+			testSourcePath := filepath.Base(absPath)
+			encoded, err := Compile(f, stdlib, behaviorID, locale, testSourceFS, testSourcePath)
 			if err != nil {
 				t.Fatalf("Compile error: %v", err)
 			}

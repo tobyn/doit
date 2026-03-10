@@ -404,6 +404,16 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		}
 	}
 
+	// Build iterScope: all non-stdlib iterators available in this file.
+	// Same rationale as scope — iterators called transitively need to be
+	// reachable during emission.
+	iterScope := map[string]*iterDef{}
+	for name, it := range ip.iters {
+		if p.stdlibIters[name] == nil {
+			iterScope[name] = it
+		}
+	}
+
 	// Extract only file-declared functions
 	resultFns := map[string]*fnDef{}
 	for name, fn := range ip.fns {
@@ -412,6 +422,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		}
 		if fn.astBody != nil && fn.scope == nil {
 			fn.scope = scope
+			fn.iterScope = iterScope
 		}
 		resultFns[name] = fn
 	}
@@ -419,9 +430,14 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 	// Extract only file-declared iters
 	resultIters := map[string]*iterDef{}
 	for name, it := range ip.iters {
-		if fileDeclSet[name] {
-			resultIters[name] = it
+		if !fileDeclSet[name] {
+			continue
 		}
+		if it.astBody != nil && it.scope == nil {
+			it.scope = scope
+			it.iterScope = iterScope
+		}
+		resultIters[name] = it
 	}
 
 	// Extract only file-declared consts

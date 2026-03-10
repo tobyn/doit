@@ -1,0 +1,8 @@
+# AI-generated test
+# Public fn calls private iter transitively through import
+import use_private_iter from "./libs/import_iter_scope_lib"
+
+behavior import_private_iter_via_fn {
+    @name "Import Private Iter Via Fn"
+    use_private_iter
+}

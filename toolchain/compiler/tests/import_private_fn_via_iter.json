@@ -1,0 +1,23 @@
+{
+  "0": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "1": {
+    "0": "c",
+    "1": "idx",
+    "2": 5,
+    "op": "for_component"
+  },
+  "2": {
+    "0": "c",
+    "1": "val",
+    "op": "set_reg"
+  },
+  "3": {
+    "next": false,
+    "op": "notify",
+    "txt": "looping"
+  },
+  "name": "Import Private Fn Via Iter"
+}

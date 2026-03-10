@@ -2023,6 +2023,28 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 		return err
 	}
 
+	// Temporarily merge the iterator's scope into p.fns and p.iters so
+	// that transitive dependencies are available during yield expression
+	// emission.
+	var scopeAdded []string
+	if it.scope != nil {
+		for k, v := range it.scope {
+			if _, exists := p.fns[k]; !exists {
+				p.fns[k] = v
+				scopeAdded = append(scopeAdded, k)
+			}
+		}
+	}
+	var iterScopeAdded []string
+	if it.iterScope != nil {
+		for k, v := range it.iterScope {
+			if _, exists := p.iters[k]; !exists {
+				p.iters[k] = v
+				iterScopeAdded = append(iterScopeAdded, k)
+			}
+		}
+	}
+
 	N := len(it.astBody)
 
 	// Allocate state variable
@@ -2141,6 +2163,14 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 		}
 		ctx.b.emit(dispatchJump)
 		dispatchJump["next"] = emitJumpFallthroughError(ctx.b, dispatchVar)
+	}
+
+	// Remove temporarily added scope entries
+	for _, k := range scopeAdded {
+		delete(p.fns, k)
+	}
+	for _, k := range iterScopeAdded {
+		delete(p.iters, k)
 	}
 
 	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)
@@ -2351,6 +2381,27 @@ func (p *parser) emitYieldIter(s *ForStmt, it *iterDef, ctx *emitContext, commen
 		return err
 	}
 
+	// Temporarily merge the iterator's scope into p.fns and p.iters so
+	// that transitive dependencies are available during body expansion.
+	var scopeAdded []string
+	if it.scope != nil {
+		for k, v := range it.scope {
+			if _, exists := p.fns[k]; !exists {
+				p.fns[k] = v
+				scopeAdded = append(scopeAdded, k)
+			}
+		}
+	}
+	var iterScopeAdded []string
+	if it.iterScope != nil {
+		for k, v := range it.iterScope {
+			if _, exists := p.iters[k]; !exists {
+				p.iters[k] = v
+				iterScopeAdded = append(iterScopeAdded, k)
+			}
+		}
+	}
+
 	// Pre-scan for output variables (like expandCall does)
 	collectASTOutputVars(it.astBody, paramMap, ctx.usedVars)
 
@@ -2362,6 +2413,14 @@ func (p *parser) emitYieldIter(s *ForStmt, it *iterDef, ctx *emitContext, commen
 	if err := p.emitFnBody(rewritten, ctx.b, paramMap, ctx.usedVars, comment, 0); err != nil {
 		ctx.popScope()
 		return err
+	}
+
+	// Remove temporarily added scope entries
+	for _, k := range scopeAdded {
+		delete(p.fns, k)
+	}
+	for _, k := range iterScopeAdded {
+		delete(p.iters, k)
 	}
 
 	patchJumpBreakPlaceholders(ctx.b, origLen, s.Label)

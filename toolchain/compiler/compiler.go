@@ -348,8 +348,9 @@ type iterDef struct {
 	astBody  []Stmt         // body (may contain yield/for)
 	frame    map[string]any // promoted instruction frame (stdlib)
 	doneSlot string         // instruction exec slot key for exhaustion (0-based ref key)
-	private  bool           // true for private iter
-	scope    map[string]*fnDef // functions available when this iter was defined
+	private   bool                // true for private iter
+	scope     map[string]*fnDef  // functions available when this iter was defined
+	iterScope map[string]*iterDef // iterators available when this iter was defined
 }
 
 // execBinding marks an instruction block slot as wired to a continuation.
@@ -368,8 +369,9 @@ type fnDef struct {
 	execNames    []string        // ordered continuation names from exec(...)
 	execDetached map[string]bool // which continuations are detached (derived from instruction block)
 	execContArgs map[string]int  // continuation name → arg count (pure-logic data dispatch)
-	private      bool            // true for private fn (not visible as import)
-	scope        map[string]*fnDef // functions available when this fn was defined (for imports)
+	private      bool                // true for private fn (not visible as import)
+	scope        map[string]*fnDef  // functions available when this fn was defined (for imports)
+	iterScope    map[string]*iterDef // iterators available when this fn was defined (for imports)
 }
 
 // positionalCount returns the number of positional params.
