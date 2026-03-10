@@ -1,0 +1,25 @@
+{
+    "0": {
+        "0": 4,
+        "2": 1,
+        "3": {
+            "num": 0
+        },
+        "op": "check_number"
+    },
+    "1": {
+        "0": 1,
+        "op": "notify",
+        "txt": "assert_value.doit:6 a must be positive"
+    },
+    "2": {
+        "op": "exit"
+    },
+    "name": "Assert Value",
+    "parameters": [
+        false
+    ],
+    "pnames": [
+        "A"
+    ]
+}

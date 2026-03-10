@@ -22,18 +22,20 @@ import (
 // produces a compile error). sourcePath is the path of the source file
 // within sourceFS, used to resolve relative import paths.
 // The returned warnings slice contains non-fatal compiler warnings (nil if none).
-func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (*codec.Object, []string, error) {
+// When releaseMode is true, assert statements are omitted from the output.
+func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string, releaseMode ...bool) (*codec.Object, []string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, nil, err
 	}
-	return CompileString(string(data), stdlib, behaviorID, locale, sourceFS, sourcePath)
+	return CompileString(string(data), stdlib, behaviorID, locale, sourceFS, sourcePath, releaseMode...)
 }
 
 // CompileString compiles doit source into a codec Object.
 // sourceFS and sourcePath provide file system context for resolving imports.
 // The returned warnings slice contains non-fatal compiler warnings (nil if none).
-func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (*codec.Object, []string, error) {
+// When releaseMode is true, assert statements are omitted from the output.
+func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string, releaseMode ...bool) (*codec.Object, []string, error) {
 	stdlibFns, stdlibIters, stdlibEnums, err := parseStdlib(stdlib)
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdlib: %w", err)
@@ -61,6 +63,8 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		sourceOffset = len(preludeText)
 	}
 
+	release := len(releaseMode) > 0 && releaseMode[0]
+
 	p := &parser{
 		scanner:    scanner{src: src, locale: locale, sourceOffset: sourceOffset},
 		fns:        map[string]*fnDef{},
@@ -77,6 +81,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		stdlibFns:   stdlibFns,
 		stdlibEnums: stdlibEnums,
 		stdlibIters: stdlibIters,
+		releaseMode: release,
 	}
 	obj, err := p.parseFile()
 	if err != nil {

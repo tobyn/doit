@@ -33,13 +33,10 @@ register types.
   tests in `codec/`. Only integration wiring tests stay in `main`.
 - **Error message quality** — review compiler errors for clarity and
   source locations. Important for new users at 1.0.
-- **Assert + debug/release modes** — `assert` statement that checks
-  a condition at runtime: `assert expr, "message"` with optional value
-  `assert expr, "message", val`. In debug mode, emits a truthy check
-  that proceeds on success or shows a notification with the error
-  message (and value) then exits on failure. In release mode, all
-  `assert` statements are omitted entirely. Requires a compiler flag
-  for mode selection.
+- ~~**Assert + debug/release modes**~~ — Done. `assert` statement
+  with expression and block forms, optional message and `value:`
+  keyword arg. `--release` flag omits assert statements entirely.
+  Notification includes `file:line` prefix.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,

@@ -46,14 +46,18 @@ func TestCompile(t *testing.T) {
 			}
 			defer f.Close()
 
-			// Check for a "# locale: <tag>" directive on the second line.
+			// Check for directives in early comment lines.
 			locale := ""
+			release := false
 			scanner := bufio.NewScanner(f)
 			lineNum := 0
-			for scanner.Scan() && lineNum < 2 {
+			for scanner.Scan() && lineNum < 5 {
 				line := scanner.Text()
 				if after, ok := strings.CutPrefix(line, "# locale: "); ok {
 					locale = strings.TrimSpace(after)
+				}
+				if strings.TrimSpace(line) == "# release" {
+					release = true
 				}
 				lineNum++
 			}
@@ -61,7 +65,12 @@ func TestCompile(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			encoded, err := Compile(f, stdlib, behaviorID, locale, nil, "")
+			// Derive sourceFS and sourcePath for import resolution and assert file paths.
+			absPath, _ := filepath.Abs(doitFile)
+			testDir := filepath.Dir(absPath)
+			testSourceFS := os.DirFS(testDir)
+			testSourcePath := filepath.Base(absPath)
+			encoded, err := Compile(f, stdlib, behaviorID, locale, testSourceFS, testSourcePath, release)
 			if err != nil {
 				t.Fatalf("Compile error: %v", err)
 			}
@@ -3994,6 +4003,56 @@ behavior a {
 		}
 		if !strings.Contains(err.Error(), "must be a behavior parameter") {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("assert_string_condition", func(t *testing.T) {
+		// assert("hello") — string as the only arg in parens, no block → condition is a string → error
+		src := `behavior a { @name "A" assert("hello") }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		// String literals can't be conditions (error comes from expression parser)
+	})
+
+	t.Run("assert_message_no_block", func(t *testing.T) {
+		src := `behavior a { @name "A" assert "hello" }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "assert with message but no condition") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("assert_empty_block", func(t *testing.T) {
+		src := `behavior a { @name "A" assert {} }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "empty assert block") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("assert_release_omits_block_body", func(t *testing.T) {
+		// In release mode, assert block body side effects are also omitted
+		src := `behavior a { @name "A" @param in x "X" assert { let y = $x; y > 0 } notify "done" }`
+		obj, _, err := compiler.CompileString(src, stdlib, "", "", nil, "", true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		v := obj.Value.(map[string]any)
+		// Only the notify frame should remain
+		if _, has := v["1"]; has {
+			t.Fatalf("expected only 1 frame (notify), but got extra frames")
+		}
+		f0 := v["0"].(map[string]any)
+		if f0["op"] != "notify" {
+			t.Fatalf("expected frame 0 to be notify, got %v", f0["op"])
 		}
 	})
 

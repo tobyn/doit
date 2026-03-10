@@ -62,6 +62,7 @@ type token struct {
 // Keywords lists all reserved keywords in the doit language.
 var Keywords = map[string]bool{
 	"as":          true,
+	"assert":      true,
 	"behavior":    true,
 	"break":       true,
 	"const":       true,
@@ -193,6 +194,7 @@ type parser struct {
 	loopLabels      map[string]bool // labels of enclosing loops
 	outerLoopLabels map[string]bool // labels of loops beyond exec block boundaries
 	warnings    []string         // compiler warnings (non-fatal)
+	releaseMode bool             // true when compiling with --release (omits assert)
 
 	// callExprParser is set by behavior/fn body contexts to enable
 	// function call parsing in boolean primary position (e.g., d || my_fn x).

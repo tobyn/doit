@@ -54,9 +54,9 @@ func main() {
 // encoded string. The locale parameter is a BCP 47 tag for resolving localized
 // @name blocks; if empty, the first entry is used. sourceFS and sourcePath
 // provide file system context for resolving imports; pass nil and "" when
-// imports are not needed.
-func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string) (string, error) {
-	obj, _, err := compiler.Compile(r, stdlib, behaviorID, locale, sourceFS, sourcePath)
+// imports are not needed. When releaseMode is true, assert statements are omitted.
+func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string, releaseMode ...bool) (string, error) {
+	obj, _, err := compiler.Compile(r, stdlib, behaviorID, locale, sourceFS, sourcePath, releaseMode...)
 	if err != nil {
 		return "", err
 	}
@@ -77,6 +77,7 @@ func cmdCompile(args []string) (err error) {
 	errorLongFlag := flags.Bool("error", false, "treat warnings as errors")
 	localeFlag := flags.String("l", "", "locale for @name resolution")
 	localeLongFlag := flags.String("locale", "", "locale for @name resolution")
+	releaseFlag := flags.Bool("release", false, "compile in release mode (omit asserts)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -125,7 +126,7 @@ func cmdCompile(args []string) (err error) {
 	}
 
 	if *jsonFlag || *jsonLongFlag {
-		obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale, sourceFS, sourcePath)
+		obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale, sourceFS, sourcePath, *releaseFlag)
 		if compileErr != nil {
 			err = compileErr
 			return
@@ -144,7 +145,7 @@ func cmdCompile(args []string) (err error) {
 		return
 	}
 
-	obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale, sourceFS, sourcePath)
+	obj, warnings, compileErr := compiler.Compile(r, stdlib, *behaviorID, locale, sourceFS, sourcePath, *releaseFlag)
 	if compileErr != nil {
 		err = compileErr
 		return

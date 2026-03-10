@@ -1510,6 +1510,8 @@ func collectASTOutputVars(stmts []Stmt, paramMap map[string]any, usedVars map[st
 			collectASTOutputVars(s.Body, paramMap, usedVars)
 		case *OnEventStmt:
 			collectASTOutputVars(s.Body, paramMap, usedVars)
+		case *AssertStmt:
+			collectASTOutputVars(s.Body, paramMap, usedVars)
 		}
 	}
 }
@@ -2283,6 +2285,13 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			callComment := inheritComment(s.Comment, comment)
 			ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
 			if err := p.emitWaitStmt(s, ctx, callComment); err != nil {
+				return err
+			}
+
+		case *AssertStmt:
+			callComment := inheritComment(s.Comment, comment)
+			ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
+			if err := p.emitAssertStmt(s, ctx, callComment); err != nil {
 				return err
 			}
 
@@ -3512,6 +3521,8 @@ func (p *parser) tryEvalStmts(stmts []Stmt, env map[string]any) (*constEvalStatu
 		case *InstructionStmt:
 			return nil, false // bail: runtime-only
 		case *WaitStmt:
+			return nil, false // bail: runtime-only
+		case *AssertStmt:
 			return nil, false // bail: runtime-only
 		default:
 			return nil, false
@@ -5164,6 +5175,15 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 				return nil, err
 			}
 			astBody = append(astBody, stmt)
+
+		case "assert":
+			stmt, err := p.parseAssertStmt(p.fnParseCtx(ctx), comment, tok.pos)
+			if err != nil {
+				return nil, err
+			}
+			if !p.releaseMode {
+				astBody = append(astBody, stmt)
+			}
 
 		case "break":
 			if p.loopDepth == 0 && p.execBlockDepth == 0 && p.modeBlockDepth == 0 {

@@ -1,0 +1,32 @@
+{
+    "0": {
+        "0": 1,
+        "1": {
+            "num": 1
+        },
+        "2": "x",
+        "op": "add"
+    },
+    "1": {
+        "0": 5,
+        "2": "x",
+        "3": {
+            "num": 10
+        },
+        "op": "check_number"
+    },
+    "2": {
+        "op": "notify",
+        "txt": "assert_block.doit:6 check a"
+    },
+    "3": {
+        "op": "exit"
+    },
+    "name": "Assert Block",
+    "parameters": [
+        false
+    ],
+    "pnames": [
+        "A"
+    ]
+}

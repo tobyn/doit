@@ -1,0 +1,7 @@
+# AI-generated test
+# Assert expression form with message
+behavior assert_message {
+    @name "Assert Msg"
+    @param in x "X"
+    assert $x, "x must be truthy"
+}

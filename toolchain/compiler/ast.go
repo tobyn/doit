@@ -231,6 +231,19 @@ type OnEventStmt struct {
 	Comment string
 }
 
+// AssertStmt is a debug-mode assertion: `assert <cond>` or `assert { ...; <cond> }`.
+// In release mode, assert statements (including block body side effects) are omitted.
+type AssertStmt struct {
+	Condition     Expr   // boolean condition (inline or block tail)
+	Body          []Stmt // block body statements (nil for expression form)
+	Message       string // user message ("" → use ConditionText)
+	Value         Expr   // optional value expression for notify
+	ConditionText string // source text of condition for auto-message
+	File          string // source file path
+	Line          int    // line number of assert keyword
+	Comment       string
+}
+
 // --- Expression nodes ---
 
 // LiteralExpr is a compile-time value: number, string, null, or resolved
@@ -375,6 +388,7 @@ func (*JumpStmt) stmtNode()          {}
 func (*LastStmt) stmtNode()          {}
 func (*WaitStmt) stmtNode()           {}
 func (*OnEventStmt) stmtNode()        {}
+func (*AssertStmt) stmtNode()         {}
 func (*exprTailStmt) stmtNode()       {}
 
 func (*LiteralExpr) exprNode()      {}

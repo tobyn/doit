@@ -1973,6 +1973,55 @@ use `wait 1`.
 
 `wait` works in both behavior bodies and function bodies.
 
+### `assert`
+
+Runtime debug assertion. In debug mode (the default), `assert` checks a
+condition at runtime. If the condition is false, a notification is
+displayed and the behavior exits. In release mode (`--release` flag),
+`assert` statements are omitted entirely — including any side effects in
+block form bodies.
+
+**Expression form** — the condition is inline:
+
+```doit
+assert $health > 0
+assert $count == 5, "expected five"
+assert $value, "must be truthy", value: $value
+```
+
+**Block form** — the condition is the tail expression of the block:
+
+```doit
+assert {
+    let x = $a + $b
+    x > 10
+}
+
+assert "total check", value: $a {
+    let total = $a + $b
+    total > 100
+}
+```
+
+The optional `"message"` string replaces the default auto-generated
+message. The optional `value:` keyword argument attaches a value to
+the notification, making it visible in the game's notification display.
+
+When an assertion fails, the notification text includes the source file
+and line number: `file.doit:12 Assertion failed: $health > 0`. If a
+custom message is provided, it replaces the `Assertion failed: ...`
+portion.
+
+`assert` is NOT terminal — code after an assert is reachable.
+
+`assert` works in both behavior bodies and function bodies.
+
+Compile with `--release` to strip all assertions:
+
+```sh
+doit compile --release myfile.doit
+```
+
 ### `exit`
 
 Immediately stops execution of the behavior. Unlike reaching the end of

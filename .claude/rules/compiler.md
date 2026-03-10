@@ -15,10 +15,12 @@ see `.claude/learnings/test_format.md`.
 
 ## Architecture
 
-- **`ast.go`** — `Stmt` interface (25 types, including `OnEventStmt`)
-  and `Expr` interface (15 types). `BreakStmt` has `Values []Expr`
-  for break-with-value. `isTerminalStmt`/`terminalKeyword` for
-  unreachable code detection.
+- **`ast.go`** — `Stmt` interface (26 types, including `OnEventStmt`
+  and `AssertStmt`) and `Expr` interface (15 types). `BreakStmt` has
+  `Values []Expr` for break-with-value. `AssertStmt` has `Condition`,
+  `Body`, `Message`, `Value`, `ConditionText`, `File`, `Line`.
+  `isTerminalStmt`/`terminalKeyword` for unreachable code detection
+  (`AssertStmt` is NOT terminal).
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
   types, `Keywords` map, `skipToCloseBrace`. The `scanner` has a
   `sourceOffset` field (byte offset of user source after prepended
@@ -29,7 +31,7 @@ see `.claude/learnings/test_format.md`.
   tracking (`loopDepth`, `execBlockDepth`, `modeBlockDepth`),
   `callExprParser` callback, `breakRetVals []any` (target registers
   for break-with-value in expression-form blocks; nil outside),
-  and `warnings []string`.
+  `warnings []string`, and `releaseMode bool` (omits assert statements).
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
   types (`symbolSet`, `fnDef`, `iterDef`, `paramDef` (with `isParam`
   field), `symbolTable`, `constDef`, `deferredEvent`,
@@ -325,3 +327,19 @@ requires the caller to pass a behavior parameter; validated by
 `param`-flagged argument can only receive another `param`-flagged
 argument or a behavior parameter. Radio band expressions must be
 compile-time evaluable (resolved via `tryEvalExpr`).
+
+**Assert statements**: `assert` provides runtime condition checking.
+Parsed by `parseAssertStmt` (codegen.go) with two forms: expression
+form (`assert <cond>, "msg", value: <expr>`) and block form
+(`assert "msg" { ...; <cond> }`). Emitted by `emitAssertStmt`
+(codegen.go): pre-resolves optional `value:` expression, emits block
+body if present, resolves boolean condition, emits check frames with
+true branch past the error handler and false branch into it, then
+emits `notify` + `exit` pair. The notify text format is
+`file:line message`. Source text of the condition is captured during
+parsing for auto-generated messages. `AssertStmt` is NOT terminal.
+In release mode (`parser.releaseMode`), assert statements are parsed
+for validation but not appended to the statement list — block body
+side effects are also omitted. `Compile`/`CompileString` accept a
+variadic `releaseMode ...bool` parameter. The `--release` CLI flag
+threads through to the parser.

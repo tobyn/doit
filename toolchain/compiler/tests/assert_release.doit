@@ -1,0 +1,9 @@
+# AI-generated test
+# release
+# Assert omitted in release mode
+behavior assert_release {
+    @name "Assert Release"
+    @param in a "A"
+    assert $a > 5
+    notify "still here"
+}

@@ -1,0 +1,10 @@
+# AI-generated test
+# Assert block form: assert { ...; cond }
+behavior assert_block {
+    @name "Assert Block"
+    @param in a "A"
+    assert "check a" {
+        let x = $a + 1
+        x > 10
+    }
+}

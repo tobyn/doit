@@ -2460,6 +2460,15 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 			return nil, false, err
 		}
 		return []Stmt{waitStmt}, true, nil
+	case "assert":
+		assertStmt, err := p.parseAssertStmt(p.bhvParseCtx(syms), p.docComment, tok.pos)
+		if err != nil {
+			return nil, false, err
+		}
+		if p.releaseMode {
+			return []Stmt{}, true, nil // omit in release mode
+		}
+		return []Stmt{assertStmt}, true, nil
 	case "exit":
 		return []Stmt{&ExitStmt{Comment: comment}}, true, nil
 	case "restart":
@@ -2787,8 +2796,10 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 		}
 		if handled {
 			stmts = append(stmts, parsed...)
-			if last := stmts[len(stmts)-1]; isTerminalStmt(last) {
-				terminal = last
+			if len(parsed) > 0 {
+				if last := stmts[len(stmts)-1]; isTerminalStmt(last) {
+					terminal = last
+				}
 			}
 			continue
 		}
@@ -3312,6 +3323,11 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 
 		case *WaitStmt:
 			if err := p.emitWaitStmt(s, ctx, s.Comment); err != nil {
+				return 0, err
+			}
+
+		case *AssertStmt:
+			if err := p.emitAssertStmt(s, ctx, s.Comment); err != nil {
 				return 0, err
 			}
 

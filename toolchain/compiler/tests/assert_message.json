@@ -1,0 +1,22 @@
+{
+    "0": {
+        "0": 4,
+        "1": 1,
+        "2": false,
+        "op": "compare_register"
+    },
+    "1": {
+        "op": "notify",
+        "txt": "assert_message.doit:6 x must be truthy"
+    },
+    "2": {
+        "op": "exit"
+    },
+    "name": "Assert Msg",
+    "parameters": [
+        false
+    ],
+    "pnames": [
+        "X"
+    ]
+}

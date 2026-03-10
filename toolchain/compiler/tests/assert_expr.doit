@@ -1,0 +1,7 @@
+# AI-generated test
+# Assert expression form: assert <cond>
+behavior assert_expr {
+    @name "Assert Expr"
+    @param in a "A"
+    assert $a > 5
+}
