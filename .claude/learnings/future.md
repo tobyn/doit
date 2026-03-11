@@ -75,6 +75,9 @@ register types.
   instruction. Top-level mode block exit defaults to locked for the
   restore (backward compatible with standalone behaviors while
   preparing for `call` subroutines).
+- **Optional parens on zero-arg branching calls** — Allow
+  `sequence { ... }` without empty parens. See "Optional parens on
+  zero-arg branching calls" section above for disambiguation rule.
 
 ## Reactive block (`watch` / `react`)
 
