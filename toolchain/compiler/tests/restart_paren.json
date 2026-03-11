@@ -1,0 +1,10 @@
+{
+  "0": {
+    "op": "notify",
+    "txt": "hello"
+  },
+  "1": {
+    "op": "restart"
+  },
+  "name": "a"
+}

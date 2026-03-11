@@ -4478,6 +4478,51 @@ func TestCompileWarnings(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("label_empty_parens", func(t *testing.T) {
+		src := `behavior a { label() }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error for label with empty parens")
+		}
+	})
+
+	t.Run("jump_empty_parens", func(t *testing.T) {
+		src := `behavior a { jump() }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error for jump with empty parens")
+		}
+	})
+
+	t.Run("exit_with_arg", func(t *testing.T) {
+		src := `behavior a { exit(1) }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error for exit with argument")
+		}
+	})
+
+	t.Run("restart_with_arg", func(t *testing.T) {
+		src := `behavior a { restart(1) }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error for restart with argument")
+		}
+	})
+
+	t.Run("last_with_arg", func(t *testing.T) {
+		src := `behavior a {
+			sequence() {
+				first { last(1) }
+				done { notify "done" }
+			}
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error for last with argument")
+		}
+	})
 }
 
 func TestImports(t *testing.T) {

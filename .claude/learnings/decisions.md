@@ -20,11 +20,30 @@ Separately, `@break`, `@return`, and `@exec_<name>` are
 appear in intermediate frames and are patched to real jump targets
 before finalization.
 
+## Consistent invocation syntax
+
+Language constructs that take arguments should follow function call
+syntax by default: paren-optional, comma-separated positional args,
+`key: value` keyword args. Diverge only with justification.
+
+This applies to keywords like `label`, `jump`, `assert`, and even
+zero-arg keywords like `exit`, `restart`, `last` (which accept
+optional empty parens: `exit()`). The goal is learnability — once
+you know function call syntax, you know how to use keywords too.
+
+Constructs with legitimate divergence:
+- `on` — event handler semantics are structurally different
+  (parameter binding + block body, not a call)
+- `for...in` — iterator consumption syntax, not invocation
+- `wait` — single expression, not a call (though it could
+  accept parens for consistency)
+
 ## `exit` keyword
 
 `exit` is a language keyword (not a stdlib function). It emits
 `{"op": "exit"}` — a terminal instruction. The old `exit()` stdlib
-stub was removed.
+stub was removed. Accepts optional empty parens (`exit()`) for
+consistency with function call syntax.
 
 ## `last` keyword
 
@@ -33,7 +52,7 @@ stub was removed.
 iterator. Mirrors the `exit` pattern exactly: dedicated AST node
 (`LastStmt`), marked terminal (triggers unreachable code warnings),
 no "next" field in output. No location restrictions — allowed
-anywhere, same as `exit`.
+anywhere, same as `exit`. Accepts optional empty parens (`last()`).
 
 ## Unreachable code detection
 
@@ -408,16 +427,18 @@ adding branching capability directly to `instruction`.
 ## `jump` and `label` — named labels and keyword promotion
 
 Both `label` and `jump` are **compiler keywords** (label was promoted
-from stdlib). Both accept two forms:
+from stdlib). Both accept two forms, with optional parens per the
+consistent invocation syntax principle:
 
-- **Named**: `label 'foo` / `jump 'foo` — the `'` sigil triggers
-  compiler-managed label resolution. The compiler lazily allocates a
-  `compilerLabel(n)` value the first time a name is seen (whether in
-  `label` or `jump`) and reuses it for all subsequent references to the
-  same name. Labels are behavior-scoped (flat, like the VM instruction
-  list).
-- **Expression**: `label expr` / `jump expr` — evaluated at runtime,
-  no compiler validation. Useful for computed-goto state machines.
+- **Named**: `label 'foo` / `jump 'foo` (or `label('foo)` /
+  `jump('foo)`) — the `'` sigil triggers compiler-managed label
+  resolution. The compiler lazily allocates a `compilerLabel(n)` value
+  the first time a name is seen (whether in `label` or `jump`) and
+  reuses it for all subsequent references to the same name. Labels are
+  behavior-scoped (flat, like the VM instruction list).
+- **Expression**: `label expr` / `jump expr` (or `label(expr)` /
+  `jump(expr)`) — evaluated at runtime, no compiler validation.
+  Useful for computed-goto state machines.
 - **No string literals**: String arguments are a compile error on both
   keywords. Strings caused a silent bug (VM reads them as variable
   names, matches on emptiness). Users needing raw string slots can use

@@ -79,6 +79,41 @@ register types.
   `sequence { ... }` without empty parens. See "Optional parens on
   zero-arg branching calls" section above for disambiguation rule.
 
+## Lint mode
+
+A `--lint` flag (or separate `doit lint` subcommand) that checks for
+suboptimal syntax and valid-but-sketchy patterns. Not errors — the
+code compiles and runs — but style/quality warnings the user can opt
+into.
+
+### Candidate checks
+
+- **Unnecessary parens on zero-arg keywords**: `exit()`, `last()`,
+  `restart()` are valid but the parens add nothing. Suggest the
+  bare keyword form.
+- **Unnecessary parens on zero-arg function calls**: Non-branching
+  functions with no arguments don't need `()`. (Branching zero-arg
+  calls may need parens for disambiguation — see "Optional parens on
+  zero-arg branching calls" section.)
+- **Unused variables**: Declared but never read.
+- **Shadowed variables**: Inner scope re-declares a name from outer
+  scope (currently a compiler warning — could move to lint-only to
+  reduce noise for users who shadow intentionally).
+- **Redundant mode transitions**: `locked { locked { ... } }` or
+  entering a mode you're already in.
+- **Dead code after terminal statements**: Currently a compiler
+  warning — could also surface as a lint finding with more context.
+- **Expression-form blocks with no continuation**: Using an expression
+  block result but ignoring it.
+
+### Design notes
+
+- Lint should be low-noise by default. Better to miss a finding than
+  to nag about idiomatic code.
+- Individual checks should be toggleable (e.g., `--lint=no-unused`).
+- Lint findings are warnings, never errors — they don't affect
+  compilation.
+
 ## Reactive block (`watch` / `react`)
 
 Many behaviors are driven by parameter values and radio signals from

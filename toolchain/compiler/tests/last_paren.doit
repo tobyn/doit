@@ -1,0 +1,14 @@
+# AI-generated test
+# Tests `last()` with parens inside a sequence branch
+behavior last_paren {
+    @name "Last Paren"
+    sequence() {
+        first {
+            notify "step 1"
+            last()
+        }
+        second { notify "step 2" }
+        done { notify "done" }
+    }
+    notify "after"
+}

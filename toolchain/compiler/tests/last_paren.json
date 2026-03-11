@@ -1,0 +1,30 @@
+{
+  "0": {
+    "0": 2,
+    "1": 4,
+    "4": 5,
+    "op": "sequence"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "step 1"
+  },
+  "2": {
+    "next": false,
+    "op": "last"
+  },
+  "3": {
+    "next": false,
+    "op": "notify",
+    "txt": "step 2"
+  },
+  "4": {
+    "op": "notify",
+    "txt": "done"
+  },
+  "5": {
+    "op": "notify",
+    "txt": "after"
+  },
+  "name": "Last Paren"
+}

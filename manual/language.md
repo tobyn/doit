@@ -2055,7 +2055,8 @@ doit compile --release myfile.doit
 
 Immediately stops execution of the behavior. Unlike reaching the end of
 a behavior (which restarts from the beginning), `exit` terminates
-permanently — the behavior controller will not restart.
+permanently — the behavior controller will not restart. Optional empty
+parens are accepted: `exit()`.
 
 ```doit
 behavior patrol {
@@ -2090,7 +2091,8 @@ behavior patrol {
 ```
 
 `restart` is terminal — the compiler warns about unreachable code after
-it. It works in both behavior bodies and function bodies.
+it. It works in both behavior bodies and function bodies. Optional empty
+parens are accepted: `restart()`.
 
 ### `label` and `jump`
 
@@ -2098,13 +2100,14 @@ it. It works in both behavior bodies and function bodies.
 `label`. The game scans all instructions in the behavior for a `label`
 whose value matches the jump expression.
 
-**Named form** — the compiler manages label identity via the `'name` sigil:
+**Named form** — the compiler manages label identity via the `'name` sigil.
+Parentheses are optional:
 
 ```doit
 behavior a {
-    label 'start
+    label 'start       # or: label('start)
     notify "hello"
-    jump 'start
+    jump 'start        # or: jump('start)
 }
 ```
 
@@ -2120,14 +2123,14 @@ Named label scope is behavior-wide: a `jump` can reference a `label`
 that appears earlier or later in the behavior (as long as it is not
 skipped as unreachable code).
 
-**Expression form** — for dynamic or computed targets:
+**Expression form** — for dynamic or computed targets (parens also optional):
 
 ```doit
 behavior a {
     let target = 1
-    label target
+    label target       # or: label(target)
     notify "looping"
-    jump target
+    jump target        # or: jump(target)
 }
 ```
 
@@ -2184,7 +2187,8 @@ my_for_comp(entity) {
 ```
 
 `last` is terminal — no code after it in the same block will execute
-(the compiler warns about unreachable code after `last`).
+(the compiler warns about unreachable code after `last`). Optional empty
+parens are accepted: `last()`.
 
 > **Note:** In `for ... in` loops, `break` automatically handles
 > iterator termination — you don't need `last` there. `last` is for

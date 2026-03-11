@@ -5260,9 +5260,15 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			astBody = append(astBody, &BreakStmt{Label: label, Values: values, CrossBoundary: crossBoundary, Comment: comment})
 
 		case "exit":
+			if err := p.consumeOptionalEmptyParens(); err != nil {
+				return nil, err
+			}
 			astBody = append(astBody, &ExitStmt{Comment: comment})
 
 		case "restart":
+			if err := p.consumeOptionalEmptyParens(); err != nil {
+				return nil, err
+			}
 			astBody = append(astBody, &RestartStmt{Comment: comment})
 
 		case "label":
@@ -5280,6 +5286,9 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			astBody = append(astBody, stmt)
 
 		case "last":
+			if err := p.consumeOptionalEmptyParens(); err != nil {
+				return nil, err
+			}
 			astBody = append(astBody, &LastStmt{Comment: comment})
 
 		case "fn", "iter", "private":

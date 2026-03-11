@@ -1737,42 +1737,88 @@ func (p *parser) emitWhileStmt(s *WhileStmt, ctx *emitContext, comment string) e
 	return nil
 }
 
-// parseLabelStmt parses `label 'name` or `label <expr>`.
-func (p *parser) parseLabelStmt(ctx *parseContext, comment string) (*LabelStmt, error) {
-	peek, err := p.next()
+// consumeOptionalOpenParen peeks for '(' and, if found, reads the next token.
+// Returns (true, nextToken, nil) when parens are present, or (false, nextToken, nil)
+// when absent. The caller must call p.expect(tokRParen) after parsing args if paren is true.
+func (p *parser) consumeOptionalOpenParen() (bool, token, error) {
+	tok, err := p.next()
 	if err != nil {
-		return nil, err
+		return false, tok, err
 	}
-	if peek.kind == tokLabel {
-		return &LabelStmt{Name: peek.val, Comment: comment}, nil
+	if tok.kind == tokLParen {
+		next, err := p.next()
+		return true, next, err
 	}
-	if peek.kind == tokString {
-		return nil, p.errorf(peek.pos, "string literals not allowed; use 'name for named labels or a numeric/variable expression")
-	}
-	expr, err := p.parseSimpleExpr(peek, ctx.resolve, "label expression after 'label'")
-	if err != nil {
-		return nil, err
-	}
-	return &LabelStmt{Label: expr, Comment: comment}, nil
+	return false, tok, nil
 }
 
-// parseJumpStmt parses `jump 'name` or `jump <expr>`.
-func (p *parser) parseJumpStmt(ctx *parseContext, comment string) (*JumpStmt, error) {
+// consumeOptionalEmptyParens peeks for '()' after a zero-arg keyword.
+// Consumes both tokens if found, otherwise ungets the peeked token.
+func (p *parser) consumeOptionalEmptyParens() error {
 	peek, err := p.next()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if peek.kind == tokLabel {
-		return &JumpStmt{Name: peek.val, Comment: comment}, nil
+	if peek.kind != tokLParen {
+		p.unget(peek)
+		return nil
 	}
-	if peek.kind == tokString {
-		return nil, p.errorf(peek.pos, "string literals not allowed; use 'name for named labels or a numeric/variable expression")
+	if _, err := p.expect(tokRParen); err != nil {
+		return err
 	}
-	expr, err := p.parseSimpleExpr(peek, ctx.resolve, "label expression after 'jump'")
+	return nil
+}
+
+// parseLabelStmt parses `label 'name` or `label <expr>`, with optional parens.
+func (p *parser) parseLabelStmt(ctx *parseContext, comment string) (*LabelStmt, error) {
+	paren, peek, err := p.consumeOptionalOpenParen()
 	if err != nil {
 		return nil, err
 	}
-	return &JumpStmt{Label: expr, Comment: comment}, nil
+	var stmt *LabelStmt
+	if peek.kind == tokLabel {
+		stmt = &LabelStmt{Name: peek.val, Comment: comment}
+	} else if peek.kind == tokString {
+		return nil, p.errorf(peek.pos, "string literals not allowed; use 'name for named labels or a numeric/variable expression")
+	} else {
+		expr, err := p.parseSimpleExpr(peek, ctx.resolve, "label expression after 'label'")
+		if err != nil {
+			return nil, err
+		}
+		stmt = &LabelStmt{Label: expr, Comment: comment}
+	}
+	if paren {
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+	}
+	return stmt, nil
+}
+
+// parseJumpStmt parses `jump 'name` or `jump <expr>`, with optional parens.
+func (p *parser) parseJumpStmt(ctx *parseContext, comment string) (*JumpStmt, error) {
+	paren, peek, err := p.consumeOptionalOpenParen()
+	if err != nil {
+		return nil, err
+	}
+	var stmt *JumpStmt
+	if peek.kind == tokLabel {
+		stmt = &JumpStmt{Name: peek.val, Comment: comment}
+	} else if peek.kind == tokString {
+		return nil, p.errorf(peek.pos, "string literals not allowed; use 'name for named labels or a numeric/variable expression")
+	} else {
+		expr, err := p.parseSimpleExpr(peek, ctx.resolve, "label expression after 'jump'")
+		if err != nil {
+			return nil, err
+		}
+		stmt = &JumpStmt{Label: expr, Comment: comment}
+	}
+	if paren {
+		if _, err := p.expect(tokRParen); err != nil {
+			return nil, err
+		}
+	}
+	return stmt, nil
 }
 
 // emitLabelStmt emits a label statement (not terminal — execution continues past it).

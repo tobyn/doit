@@ -2484,8 +2484,14 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		}
 		return []Stmt{assertStmt}, true, nil
 	case "exit":
+		if err := p.consumeOptionalEmptyParens(); err != nil {
+			return nil, false, err
+		}
 		return []Stmt{&ExitStmt{Comment: comment}}, true, nil
 	case "restart":
+		if err := p.consumeOptionalEmptyParens(); err != nil {
+			return nil, false, err
+		}
 		return []Stmt{&RestartStmt{Comment: comment}}, true, nil
 	case "label":
 		labelStmt, err := p.parseLabelStmt(p.bhvParseCtx(syms), comment)
@@ -2500,6 +2506,9 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 		}
 		return []Stmt{jumpStmt}, true, nil
 	case "last":
+		if err := p.consumeOptionalEmptyParens(); err != nil {
+			return nil, false, err
+		}
 		return []Stmt{&LastStmt{Comment: comment}}, true, nil
 	case "on":
 		return nil, false, p.errorf(tok.pos, "'on' event handlers can only appear at the top level of a behavior or function body")
