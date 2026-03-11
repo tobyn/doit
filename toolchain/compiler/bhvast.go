@@ -170,6 +170,9 @@ func (p *parser) parseArithPrimary(resolve operandResolver) (Expr, error) {
 		if tok.val == "infinity" {
 			return &LiteralExpr{Value: map[string]any{"num": -2147483648}}, nil
 		}
+		if tok.val == "not_equal" {
+			return &LiteralExpr{Value: map[string]any{"num": -2147483647}}, nil
+		}
 		if isConstructor(tok.val) {
 			return p.parseArithConstructor(tok, resolve)
 		}
@@ -1304,15 +1307,17 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 	}
 
 	if rhsTok.kind == tokIdent {
-		// Boolean/null/infinity keyword literals: true, false, null, infinity.
+		// Boolean/null/infinity/not_equal keyword literals: true, false, null, infinity, not_equal.
 		// Handle before function lookup so these are treated as literals,
 		// not as unknown functions or variable names.
-		if rhsTok.val == "null" || rhsTok.val == "false" || rhsTok.val == "true" || rhsTok.val == "infinity" {
+		if rhsTok.val == "null" || rhsTok.val == "false" || rhsTok.val == "true" || rhsTok.val == "infinity" || rhsTok.val == "not_equal" {
 			var litVal any
 			if rhsTok.val == "true" {
 				litVal = map[string]any{"num": 1}
 			} else if rhsTok.val == "infinity" {
 				litVal = map[string]any{"num": -2147483648}
+			} else if rhsTok.val == "not_equal" {
+				litVal = map[string]any{"num": -2147483647}
 			} else {
 				litVal = false
 			}
@@ -1656,15 +1661,17 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		}
 
 		if rhsTok.kind == tokIdent {
-			// Boolean/null/infinity keyword literals: true, false, null, infinity.
+			// Boolean/null/infinity/not_equal keyword literals: true, false, null, infinity, not_equal.
 			// Handle before function lookup so these are treated as literals,
 			// not as unknown functions or variable names.
-			if rhsTok.val == "null" || rhsTok.val == "false" || rhsTok.val == "true" || rhsTok.val == "infinity" {
+			if rhsTok.val == "null" || rhsTok.val == "false" || rhsTok.val == "true" || rhsTok.val == "infinity" || rhsTok.val == "not_equal" {
 				var litVal any
 				if rhsTok.val == "true" {
 					litVal = map[string]any{"num": 1}
 				} else if rhsTok.val == "infinity" {
 					litVal = map[string]any{"num": -2147483648}
+				} else if rhsTok.val == "not_equal" {
+					litVal = map[string]any{"num": -2147483647}
 				} else {
 					litVal = false
 				}
@@ -2846,7 +2853,7 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				return stmts, nil
 			}
 
-			// null/true/false/infinity as tail expression
+			// null/true/false/infinity/not_equal as tail expression
 			if tok.val == "null" || tok.val == "false" {
 				if _, err := p.expect(tokRBrace); err != nil {
 					return nil, err
@@ -2854,10 +2861,12 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 				stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
 				return stmts, nil
 			}
-			if tok.val == "true" || tok.val == "infinity" {
+			if tok.val == "true" || tok.val == "infinity" || tok.val == "not_equal" {
 				litVal := map[string]any{"num": 1}
 				if tok.val == "infinity" {
 					litVal = map[string]any{"num": -2147483648}
+				} else if tok.val == "not_equal" {
+					litVal = map[string]any{"num": -2147483647}
 				}
 				if _, err := p.expect(tokRBrace); err != nil {
 					return nil, err

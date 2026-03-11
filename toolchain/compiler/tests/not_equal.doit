@@ -1,0 +1,7 @@
+# AI-generated test
+# not_equal literal at behavior level
+behavior not_equal {
+    @name "Not Equal"
+    let ne = not_equal
+    set_number not_equal, 5
+}

@@ -316,7 +316,7 @@ expressions, but not runtime variables or forward references.
 
 Constant values are evaluated at compile time. Supported expressions include
 number literals, string literals, boolean literals (`true`, `false`),
-`null`, `infinity`, type constructors (`Item`, `Component`, `Technology`,
+`null`, `infinity`, `not_equal`, type constructors (`Item`, `Component`, `Technology`,
 `Value`, `Coordinate`, `Range`), the `&` operator, arithmetic (`+`, `-`,
 `*`, `/`, `%`),
 comparisons (`>`, `<`, `>=`, `<=`, `==`, `!=`), boolean operators
@@ -764,7 +764,7 @@ let x = 5
 ```
 
 The right-hand side of `var` and `let` can be a number literal, a boolean
-literal (`true`, `false`, `null`, `infinity`), another variable, a function call that
+literal (`true`, `false`, `null`, `infinity`, `not_equal`), another variable, a function call that
 has a return value, a type constructor expression, an
 [arithmetic expression](#arithmetic-expressions), a
 [comparison expression](#comparison-expressions), a
@@ -896,7 +896,7 @@ x = if a > 5 { a } else { b }
 ```
 
 The right-hand side of `=` can be a number literal, a boolean literal
-(`true`, `false`, `null`, `infinity`), another variable, a function call with a
+(`true`, `false`, `null`, `infinity`, `not_equal`), another variable, a function call with a
 return value, a type constructor expression, an
 [arithmetic expression](#arithmetic-expressions), a
 [comparison expression](#comparison-expressions), a
@@ -1083,6 +1083,21 @@ set_number infinity, 5
 In the VM, `infinity` compiles to `{"num": -2147483648}` (INT32_MIN). It
 can be used anywhere a value is expected, just like `true`, `false`, and
 `null`. `infinity` is a reserved keyword.
+
+## Not Equal
+
+The `not_equal` keyword represents the VM's "not equal" sentinel value:
+
+```doit
+let ne = not_equal
+set_number not_equal, 5
+```
+
+In the VM, `not_equal` compiles to `{"num": -2147483647}` (INT32_MIN + 1).
+It is the smallest value in the VM's number ordering — smaller than all
+normal numbers and smaller than `infinity` (which is the largest). It can
+be used anywhere a value is expected, just like `infinity`. `not_equal` is
+a reserved keyword.
 
 ## Strings
 

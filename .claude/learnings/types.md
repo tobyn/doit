@@ -100,7 +100,19 @@ The VM's infinity value, represented as INT32_MIN (`-2147483648`).
 Literal syntax: `infinity` → `{"num": -2147483648}`. A reserved
 keyword. Can be used anywhere a value is expected (variable init,
 function arguments, comparisons, etc.). Truthy (it's a non-empty
-register value).
+register value). Largest value in the VM's number ordering — larger
+than all normal numbers.
+
+### Not Equal
+
+The VM's "not equal" sentinel value, represented as INT32_MIN + 1
+(`-2147483647`). Literal syntax: `not_equal` → `{"num": -2147483647}`.
+A reserved keyword. Can be used anywhere a value is expected, just
+like `infinity`. Truthy. Smallest value in the VM's number ordering —
+smaller than all normal numbers and smaller than infinity. Any
+arithmetic involving a sentinel (infinity or not_equal) in either
+operand produces infinity. The VM number line:
+`not_equal < -2147483646 < ... < 0 < ... < infinity`
 
 ### Null
 

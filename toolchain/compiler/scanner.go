@@ -79,6 +79,7 @@ var Keywords = map[string]bool{
 	"import":      true,
 	"in":          true,
 	"infinity":    true,
+	"not_equal":   true,
 	"inout":       true,
 	"instruction":          true,
 	"jump":        true,

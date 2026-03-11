@@ -1,0 +1,11 @@
+# AI-generated test
+# not_equal literal in function body
+fn use_not_equal() {
+    let x = not_equal
+    notify "done"
+}
+
+behavior not_equal_fn {
+    @name "Not Equal Fn"
+    use_not_equal
+}

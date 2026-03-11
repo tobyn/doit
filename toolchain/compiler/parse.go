@@ -1105,7 +1105,7 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 		if innerTok.kind == tokNumber {
 			num, _ := strconv.Atoi(innerTok.val)
 			base = &LiteralExpr{Value: map[string]any{"num": -num}}
-		} else if innerTok.kind == tokIdent && !isConstructor(innerTok.val) && innerTok.val != "null" && innerTok.val != "false" && innerTok.val != "true" && innerTok.val != "infinity" {
+		} else if innerTok.kind == tokIdent && !isConstructor(innerTok.val) && innerTok.val != "null" && innerTok.val != "false" && innerTok.val != "true" && innerTok.val != "infinity" && innerTok.val != "not_equal" {
 			base = &ArithExpr{
 				Op:  tokMinus,
 				LHS: &LiteralExpr{Value: map[string]any{"num": 0}},
@@ -1130,6 +1130,8 @@ func (p *parser) parseFnBodyExpr() (Expr, error) {
 			base = &LiteralExpr{Value: map[string]any{"num": 1}}
 		} else if tok.val == "infinity" {
 			base = &LiteralExpr{Value: map[string]any{"num": -2147483648}}
+		} else if tok.val == "not_equal" {
+			base = &LiteralExpr{Value: map[string]any{"num": -2147483647}}
 		} else if isConstructor(tok.val) {
 			ctor, err := p.parseFnBodyConstructorExpr(tok)
 			if err != nil {
@@ -5386,10 +5388,12 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 						astBody = append(astBody, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
 						return astBody, nil
 					}
-					if tok.val == "true" || tok.val == "infinity" {
+					if tok.val == "true" || tok.val == "infinity" || tok.val == "not_equal" {
 						litVal := map[string]any{"num": 1}
 						if tok.val == "infinity" {
 							litVal = map[string]any{"num": -2147483648}
+						} else if tok.val == "not_equal" {
+							litVal = map[string]any{"num": -2147483647}
 						}
 						if _, err := p.expect(tokRBrace); err != nil {
 							return nil, err
