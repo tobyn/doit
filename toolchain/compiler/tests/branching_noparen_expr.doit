@@ -1,0 +1,10 @@
+# AI-generated test
+# Tests expression-form zero-arg branching call without parens
+behavior branching_noparen_expr {
+    @name "Branching Noparen Expr"
+    let season = is_daynight {
+        day { 1 }
+        night { 2 }
+    }
+    notify "result", value: season
+}

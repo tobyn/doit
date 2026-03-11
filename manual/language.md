@@ -1752,7 +1752,7 @@ to escape the block at the VM level:
 
 ```doit
 'outer: loop {
-    for_component() {
+    for_component {
         body { comp, idx ->
             if comp {
                 break 'outer   # exits the outer loop
@@ -1883,7 +1883,7 @@ iterator, so `for i in Range(5)` and
 [Functions](functions.md#iterators)):
 
 ```doit
-for comp, idx in each_component() {
+for comp, idx in each_component {
     notify "component", value: comp
 }
 ```
@@ -1893,7 +1893,7 @@ you need — you don't have to bind all of them (prefix matching):
 
 ```doit
 # each_component yields (comp, idx); bind only comp
-for comp in each_component() {
+for comp in each_component {
     notify "component", value: comp
 }
 ```
@@ -1923,7 +1923,7 @@ for item in each_inventory_item() {
     notify "item", value: item
 }
 
-'outer: for comp in each_component() {
+'outer: for comp in each_component {
     for i in Range(3) {
         if i == 1 {
             break 'outer

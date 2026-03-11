@@ -1,0 +1,11 @@
+# AI-generated test
+# Tests zero-arg iterator without parens in for...in
+behavior for_iter_noparen {
+    @name "For Iter Basic"
+
+    for comp, idx in each_component {
+        notify "looping"
+    }
+
+    notify "done"
+}

@@ -1,0 +1,28 @@
+{
+  "0": {
+    "0": 2,
+    "1": 3,
+    "op": "is_daynight"
+  },
+  "1": {
+    "1": {
+      "num": 1
+    },
+    "2": "season",
+    "next": 4,
+    "op": "set_number"
+  },
+  "2": {
+    "1": {
+      "num": 2
+    },
+    "2": "season",
+    "op": "set_number"
+  },
+  "3": {
+    "0": "season",
+    "op": "notify",
+    "txt": "result"
+  },
+  "name": "Branching Noparen Expr"
+}

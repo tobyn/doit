@@ -31,6 +31,11 @@ zero-arg keywords like `exit`, `restart`, `last` (which accept
 optional empty parens: `exit()`). The goal is learnability — once
 you know function call syntax, you know how to use keywords too.
 
+Zero-arg branching functions (`sequence`, `for_component`, etc.) and
+zero-arg iterators (`each_component`, etc.) naturally work without
+parens — the parser's peek-based disambiguation handles this correctly
+with no code changes needed.
+
 Constructs with legitimate divergence:
 - `on` — event handler semantics are structurally different
   (parameter binding + block body, not a call)

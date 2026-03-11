@@ -3,16 +3,6 @@
 Ideas to revisit later. These are not committed designs — just things
 worth thinking about when the time is right.
 
-## Optional parens on zero-arg branching calls
-
-Zero-argument branching functions like `sequence()`, `for_component()`,
-and `each_component()` require empty parens today. The parser could be
-extended to allow `sequence { first { ... } done { ... } }` without
-parens, matching how zero-arg non-branching calls already work. The
-disambiguation rule would be: if the token after the identifier is `{`
-and the function has exec continuations, treat `{` as the start of
-continuation blocks rather than a statement block.
-
 ## Optional static type checking (post-release priority)
 
 Add optional type annotations that the compiler checks at compile time.
@@ -25,27 +15,14 @@ register types.
 
 ## 1.0 burndown
 
-- ~~**Namespace qualification parity**~~ — Fixed. `for...in` now
-  supports namespace-qualified iterators (`for v in lib.my_iter()`).
-  Audit confirmed no other gaps: functions, constants, enums, and
-  iterators all resolve through `resolveFnName` in all contexts.
 - **Move tests into packages** — compiler tests in `compiler/`, codec
   tests in `codec/`. Only integration wiring tests stay in `main`.
 - **Error message quality** — review compiler errors for clarity and
   source locations. Important for new users at 1.0.
-- ~~**Assert + debug/release modes**~~ — Done. `assert` statement
-  with expression and block forms, optional message and `value:`
-  keyword arg. `--release` flag omits assert statements entirely.
-  Notification includes `file:line` prefix.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
-- ~~**Desynced 1.0 stdlib update**~~ — Done. New stdlib instructions,
-  removed `unpackage_all`/`package_all`, "Path Blocked" exec branches,
-  `BitwiseMode` expansion, `wait 0` behavior change, behavior
-  properties (`@keepvars`, `@keeparrays`, `@param` defaults),
-  faction register syntax (`%name`). `instructions.lua` updated to 1.0.
 - **`call` keyword + `load_behavior` + `dependencies` format** —
   `call` needs to become a language keyword for inter-behavior calls
   (the game instruction requires a dependency index that can't be a
@@ -55,29 +32,6 @@ register types.
   at root, preferred over legacy `subs`). See detailed analysis in
   "Subroutine calls instead of inlining" and "`call` keyword for
   inter-behavior calls" sections below.
-- ~~**Event instructions**~~ — Done. `on $param { handler }` for
-  parameter-change events, `on radio(band) -> signal { handler }` for
-  radio events. `param` modifier on function args enforces behavior
-  parameter at call sites. Events deferred and emitted after main flow.
-- ~~**Locked/unlocked block parity: `break`**~~ — Done. Mode blocks
-  are now breakable constructs. Unlabeled `break` exits the innermost
-  mode block (or loop/exec block). Labeled `break 'label` passes
-  through to target outer loops. Both statement-form and expression-form.
-- ~~**Break with value**~~ — Done. `break <expr>` for early exit from
-  expression-form blocks (mode block expressions, continuation block
-  expressions). `BreakStmt.Values []Expr` carries break values;
-  `p.breakRetVals` tracks target registers. The `emitBhvIfBreak`
-  optimization handles the if/break-with-value pattern. Validation
-  rejects break-with-value outside expression blocks and arity
-  mismatches.
-- ~~**Initial mode = unknown**~~ — Done. Behaviors now start in
-  `modeUnknown`. The first mode block always emits its transition
-  instruction. Top-level mode block exit defaults to locked for the
-  restore (backward compatible with standalone behaviors while
-  preparing for `call` subroutines).
-- **Optional parens on zero-arg branching calls** — Allow
-  `sequence { ... }` without empty parens. See "Optional parens on
-  zero-arg branching calls" section above for disambiguation rule.
 
 ## Lint mode
 
@@ -91,10 +45,8 @@ into.
 - **Unnecessary parens on zero-arg keywords**: `exit()`, `last()`,
   `restart()` are valid but the parens add nothing. Suggest the
   bare keyword form.
-- **Unnecessary parens on zero-arg function calls**: Non-branching
-  functions with no arguments don't need `()`. (Branching zero-arg
-  calls may need parens for disambiguation — see "Optional parens on
-  zero-arg branching calls" section.)
+- **Unnecessary parens on zero-arg function calls**: Functions with
+  no arguments don't need `()` (branching and non-branching alike).
 - **Unused variables**: Declared but never read.
 - **Shadowed variables**: Inner scope re-declares a name from outer
   scope (currently a compiler warning — could move to lint-only to

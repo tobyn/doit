@@ -752,12 +752,12 @@ check_number(health, 50) {
 }
 
 # Failable getter — success on fall-through, exec on failure
-let item = get_inventory_item() {
+let item = get_inventory_item {
     no_items { notify "empty" }
 }
 
 # Iterator — detached body, bridging done
-for_component() {
+for_component {
     body { comp, idx ->
         notify "component", value: comp
     }
@@ -771,7 +771,7 @@ mine(resource) {
 }
 
 # Sequence — executes steps in order, then done
-sequence() {
+sequence {
     first { domove waypoint_a }
     second { dopickup resource }
     done { notify "finished" }
@@ -812,7 +812,7 @@ declares the output variables yielded each iteration:
 
 ```doit
 iter active_components() -> comp {
-    for c, idx in each_component() {
+    for c, idx in each_component {
         if c != null {
             yield c
         }
@@ -827,7 +827,7 @@ number of yield values must exactly match the number of declared outputs:
 
 ```doit
 iter pair_components() -> comp, idx {
-    for c, i in each_component() {
+    for c, i in each_component {
         yield c, i    # must yield exactly 2 values
     }
 }
@@ -887,7 +887,7 @@ The standard library defines iterators backed by game instructions. These
 use a simplified `instruction` block with `done: N` syntax:
 
 ```doit
-iter each_component() -> comp, idx {
+iter each_component() -> comp, idx {  # parens required in declaration
     instruction "for_component" {
         0: comp
         1: idx
@@ -904,7 +904,7 @@ Output names from `->` map directly to numbered instruction slots.
 Call iterators with `for ... in`:
 
 ```doit
-for comp, idx in each_component() {
+for comp, idx in each_component {
     notify "component", value: comp
 }
 
@@ -919,7 +919,7 @@ Like functions, iterators can be declared `private`:
 
 ```doit
 private iter my_filter() -> val {
-    for c in each_component() {
+    for c in each_component {
         if c != null {
             yield c
         }
