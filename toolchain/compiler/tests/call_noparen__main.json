@@ -1,0 +1,19 @@
+{
+  "0": {
+    "op": "call",
+    "sub": 1,
+    "1": {"num": 42}
+  },
+  "dependencies": [
+    {
+      "0": {
+        "op": "notify",
+        "txt": 1
+      },
+      "name": "helper",
+      "parameters": [false],
+      "pnames": ["x"]
+    }
+  ],
+  "name": "main"
+}

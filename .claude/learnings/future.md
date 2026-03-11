@@ -23,15 +23,11 @@ register types.
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
-- **`call` keyword + `load_behavior` + `dependencies` format** —
-  `call` needs to become a language keyword for inter-behavior calls
-  (the game instruction requires a dependency index that can't be a
-  stdlib parameter). `load_behavior` (remotely loads a behavior onto
-  an adjacent unit) needs the same behavior-reference mechanism.
-  The codec needs to handle the new `dependencies` format (flat array
-  at root, preferred over legacy `subs`). See detailed analysis in
-  "Subroutine calls instead of inlining" and "`call` keyword for
-  inter-behavior calls" sections below.
+- ~~**`call` keyword + `dependencies` format**~~ — Done. See
+  `decisions.md` for design details.
+- **`load_behavior` keyword** — Remotely loads a behavior onto an
+  adjacent unit. Uses the same behavior-reference and `dependencies`
+  mechanism as `call`. Separate from `call` implementation.
 
 ## Lint mode
 
@@ -245,35 +241,11 @@ and iterators. This is low priority but worth keeping in mind as a
 someday feature. The infrastructure (`call` instruction, dependency
 arrays, self-call via `"sub": -1`) is fully understood.
 
-## `call` keyword for inter-behavior calls
+## `call` keyword for inter-behavior calls — IMPLEMENTED
 
-The `call` game instruction can't live in the stdlib because it needs
-the dependency index of the callee, which can't be expressed as a
-literal parameter. Instead, `call` should become a language keyword
-with syntax for invoking behaviors defined in doit code.
-
-The language already has the building blocks: behavior IDs (from file
-names or declarations) and parameter definitions with directions
-(in/out). A `call` keyword would let users explicitly invoke another
-compiled behavior as a subroutine, with the compiler resolving the
-callee to a dependency index and wiring parameter slots.
-
-The main win is **user-driven recursion** — a behavior can `call`
-itself (via `"sub": -1`) without the compiler needing to auto-detect
-or optimize recursion. Users who need recursion opt into it explicitly,
-accepting the trade-offs (behavior list pollution, debugging blind
-spots — see "Subroutine calls instead of inlining" above).
-
-This also opens the door to multi-behavior projects where behaviors
-call each other, though the UX trade-offs (every callee appears as a
-separate behavior in the player's list) mean it should be an explicit
-choice rather than a default compilation strategy.
-
-The `load_behavior` instruction (new in 1.0) also belongs here — it
-remotely loads a behavior onto an adjacent unit, requiring the same
-behavior-reference mechanism that `call` needs.
-
-1.0 burndown item. The `call` stub has been removed from the stdlib.
+Implemented. See `decisions.md` "call keyword" section for the design.
+The `load_behavior` instruction remains a separate burndown item — it
+will reuse the same behavior-reference and dependency mechanism.
 
 ## Visual layout (nx/ny fields)
 

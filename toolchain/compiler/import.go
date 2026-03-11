@@ -359,6 +359,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		iters:       map[string]*iterDef{},
 		consts:      map[string]*constDef{},
 		enums:       map[string]*enumDef{},
+		bhvs:        map[string]*bhvDef{},
 		prelude:     p.prelude,
 		loopLabels:  map[string]bool{},
 		sourceFS:    p.sourceFS,
@@ -456,7 +457,15 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		}
 	}
 
-	return &symbolSet{fns: resultFns, iters: resultIters, consts: resultConsts, enums: resultEnums}, nil
+	// Extract only file-declared behaviors
+	resultBhvs := map[string]*bhvDef{}
+	for name, b := range ip.bhvs {
+		if fileDeclSet[name] {
+			resultBhvs[name] = b
+		}
+	}
+
+	return &symbolSet{fns: resultFns, iters: resultIters, consts: resultConsts, enums: resultEnums, bhvs: resultBhvs}, nil
 }
 
 // collectImportedFns collects function and constant definitions from an imported file.
@@ -480,7 +489,7 @@ func (p *parser) processImports() error {
 	p.importedNames = map[string]bool{}
 
 	// Wrap the parser's own maps so symbolSet methods can merge into them
-	dst := &symbolSet{fns: p.fns, iters: p.iters, consts: p.consts, enums: p.enums}
+	dst := &symbolSet{fns: p.fns, iters: p.iters, consts: p.consts, enums: p.enums, bhvs: p.bhvs}
 
 	for _, stmt := range p.imports {
 		filePath, fsys, err := p.resolveImportPath(stmt.Path, stmt.Pos)
@@ -524,6 +533,9 @@ func (p *parser) processImports() error {
 			}
 			if e, ok := imported.enums[imp.Name]; ok {
 				p.enums[imp.Alias] = e
+			}
+			if b, ok := imported.bhvs[imp.Name]; ok {
+				p.bhvs[imp.Alias] = b
 			}
 			p.namedImports[imp.Alias] = true
 			p.importedNames[imp.Alias] = true
@@ -607,6 +619,11 @@ func (p *parser) resolveFnName(tok token) (string, *fnDef, error) {
 	// Then enums
 	if e, ok := ns.enums[memberTok.val]; ok {
 		p.enums[qualName] = e
+		return qualName, nil, nil
+	}
+	// Then behaviors
+	if b, ok := ns.bhvs[memberTok.val]; ok {
+		p.bhvs[qualName] = b
 		return qualName, nil, nil
 	}
 	return "", nil, p.errorf(memberTok.pos, "%q not found in namespace %q", memberTok.val, tok.val)

@@ -65,6 +65,7 @@ var Keywords = map[string]bool{
 	"assert":      true,
 	"behavior":    true,
 	"break":       true,
+	"call":        true,
 	"const":       true,
 	"continue":    true,
 	"else":        true,
@@ -201,6 +202,13 @@ type parser struct {
 	// callExprParser is set by behavior/fn body contexts to enable
 	// function call parsing in boolean primary position (e.g., d || my_fn x).
 	callExprParser func(callee *fnDef, calleeTok token) (Expr, error)
+
+	// Behavior call support
+	bhvs             map[string]*bhvDef   // behavior definitions (from this file + imports)
+	dependencies     []map[string]any     // accumulated compiled dependencies for root behavior
+	depIndex         map[string]int       // behavior ID → 1-based dependency index (dedup)
+	depCompiling     map[string]bool      // behaviors currently being compiled (cycle detection)
+	selfBehaviorID   string               // behavior currently being compiled (for self-recursion)
 }
 
 // warnf appends a formatted warning message with line:column prefix.

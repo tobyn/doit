@@ -1195,6 +1195,29 @@ func (p *parser) parseBhvVarInit(nameTok token, mutable bool, syms *symbolTable)
 		return []Stmt{&LetStmt{Name: nameTok.val, Mutable: mutable, Value: result, Comment: comment}}, nil
 	}
 
+	// Behavior call expression RHS: let x = call foo(param: 5)
+	if rhsTok.kind == tokIdent && rhsTok.val == "call" {
+		callNameTok, err := p.expect(tokIdent)
+		if err != nil {
+			return nil, err
+		}
+		name, bhv, err := p.resolveCallBehaviorName(callNameTok)
+		if err != nil {
+			return nil, err
+		}
+		args, err := p.parseCallBehaviorArgs(bhv, resolve, callNameTok.pos)
+		if err != nil {
+			return nil, err
+		}
+		syms.declareVarWarn(nameTok.val, mutable, p, nameTok.pos)
+		return []Stmt{&LetStmt{
+			Name:    nameTok.val,
+			Mutable: mutable,
+			Value:   &CallBehaviorExpr{BehaviorName: name, Args: args, Pos: callNameTok.pos},
+			Comment: comment,
+		}}, nil
+	}
+
 	// If-expression RHS: let x = if cond { ... } else { ... }
 	// Supports continuation: let x = if cond { a } else { b } + 1
 	if rhsTok.kind == tokIdent && rhsTok.val == "if" {
@@ -2510,6 +2533,25 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 			return nil, false, err
 		}
 		return []Stmt{&LastStmt{Comment: comment}}, true, nil
+	case "call":
+		nameTok, err := p.expect(tokIdent)
+		if err != nil {
+			return nil, false, err
+		}
+		name, bhv, err := p.resolveCallBehaviorName(nameTok)
+		if err != nil {
+			return nil, false, err
+		}
+		args, err := p.parseCallBehaviorArgs(bhv, p.bhvResolver(syms), nameTok.pos)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{&CallBehaviorStmt{
+			BehaviorName: name,
+			Args:         args,
+			Comment:      comment,
+			Pos:          nameTok.pos,
+		}}, true, nil
 	case "on":
 		return nil, false, p.errorf(tok.pos, "'on' event handlers can only appear at the top level of a behavior or function body")
 	case "return":
@@ -3029,6 +3071,12 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 			return nil, err
 		}
 		return tmp, nil
+	case *CallBehaviorExpr:
+		tmp := allocUniqueVar("@bhvcall", syms.usedVars)
+		if err := p.emitBhvCallBehaviorExpr(e, []any{tmp}, syms, b, comment); err != nil {
+			return nil, err
+		}
+		return tmp, nil
 	default:
 		return nil, fmt.Errorf("unsupported expression type %T in emitBhvExprGetValue", expr)
 	}
@@ -3130,6 +3178,8 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 	case *IfExpr:
 		ctx := p.bhvEmitCtx(b, syms)
 		return p.emitIfExpr(e, []any{target}, ctx, comment)
+	case *CallBehaviorExpr:
+		return p.emitBhvCallBehaviorExpr(e, []any{target}, syms, b, comment)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitBhvExprTo", expr)
 }
@@ -3780,8 +3830,13 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 				}
 			}
 			return nil
+		case *CallBehaviorExpr:
+			return p.emitBhvCallBehaviorExpr(v, retVals, syms, b, s.Comment)
 		}
 		return fmt.Errorf("unsupported multi-return value type %T", s.Value)
+
+	case *CallBehaviorStmt:
+		return p.emitBhvCallBehavior(s, b, syms)
 	}
 
 	return fmt.Errorf("unsupported statement type %T", stmt)

@@ -1,0 +1,13 @@
+# AI-generated test
+behavior helper {
+    @param in x
+    notify $x
+}
+
+fn do_work(a) {
+    call helper(x: a)
+}
+
+behavior main {
+    do_work 99
+}

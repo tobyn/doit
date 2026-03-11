@@ -244,6 +244,27 @@ type AssertStmt struct {
 	Comment       string
 }
 
+// CallBehaviorStmt is a behavior subroutine call: `call foo(x: 5, result: out r)`
+type CallBehaviorStmt struct {
+	BehaviorName string                  // resolved callee behavior ID
+	Args         map[string]*CallBhvArg  // keyword name → argument
+	Comment      string
+	Pos          int // source position (for diagnostics)
+}
+
+// CallBhvArg is a single argument in a behavior call.
+type CallBhvArg struct {
+	Direction string // "out" or "inout", or "" for in
+	Value     Expr   // the expression (for out/inout, must be an lvalue)
+}
+
+// CallBehaviorExpr is a behavior call used as an expression to capture out params.
+type CallBehaviorExpr struct {
+	BehaviorName string                  // resolved callee behavior ID
+	Args         map[string]*CallBhvArg  // keyword name → argument
+	Pos          int                     // source position (for diagnostics)
+}
+
 // --- Expression nodes ---
 
 // LiteralExpr is a compile-time value: number, string, null, or resolved
@@ -389,6 +410,7 @@ func (*LastStmt) stmtNode()          {}
 func (*WaitStmt) stmtNode()           {}
 func (*OnEventStmt) stmtNode()        {}
 func (*AssertStmt) stmtNode()         {}
+func (*CallBehaviorStmt) stmtNode()   {}
 func (*exprTailStmt) stmtNode()       {}
 
 func (*LiteralExpr) exprNode()      {}
@@ -406,6 +428,7 @@ func (*AmpersandExpr) exprNode()    {}
 func (*ExprListExpr) exprNode()     {}
 func (*ModeBlockExpr) exprNode()    {}
 func (*IfExpr) exprNode()           {}
+func (*CallBehaviorExpr) exprNode() {}
 
 // isTerminalStmt reports whether a statement terminates control flow
 // (exit, restart, jump, last, break, or return), making any following code unreachable.

@@ -1,0 +1,9 @@
+# AI-generated test
+behavior helper {
+    @param in x
+    notify $x
+}
+
+behavior main {
+    call helper x: 42
+}

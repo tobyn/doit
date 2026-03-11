@@ -4056,6 +4056,63 @@ behavior a {
 		}
 	})
 
+	// --- call keyword error tests ---
+
+	t.Run("call_unknown_behavior", func(t *testing.T) {
+		src := `behavior a { call nonexistent(x: 5) }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown behavior") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("call_unknown_param", func(t *testing.T) {
+		src := "behavior helper { @param in x; notify $x }\nbehavior a { call helper(wrong: 5) }"
+		_, _, err := compiler.CompileString(src, stdlib, "a", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "unknown parameter") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("call_duplicate_arg", func(t *testing.T) {
+		src := "behavior helper { @param in x; notify $x }\nbehavior a { call helper(x: 5, x: 6) }"
+		_, _, err := compiler.CompileString(src, stdlib, "a", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "duplicate argument") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("call_wrong_direction", func(t *testing.T) {
+		src := "behavior helper { @param out x; notify $x }\nbehavior a { call helper(x: 5) }"
+		_, _, err := compiler.CompileString(src, stdlib, "a", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "must be passed with") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("call_in_param_as_out", func(t *testing.T) {
+		src := "behavior helper { @param in x; notify $x }\nbehavior a { @param out r; call helper(x: out $r) }"
+		_, _, err := compiler.CompileString(src, stdlib, "a", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "is 'in' but was passed as") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

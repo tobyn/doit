@@ -18,7 +18,7 @@ World" in-game and sends a notification with the message "Hello, World!".
 
 ## Manual
 
-- [Language](language.md) — Program structure, imports, variables, control flow, and events
+- [Language](language.md) — Program structure, imports, variables, control flow, behavior calls, and events
 - [Functions](functions.md) — Calling and defining functions, the standard library
 - [The `instruction` Intrinsic](instruction.md) — Emitting arbitrary game instructions
 - [Toolchain](toolchain.md) — Using the `doit` CLI

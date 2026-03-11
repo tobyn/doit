@@ -1,0 +1,11 @@
+# AI-generated test
+behavior helper {
+    @param in x
+    @param out result
+    notify $x
+}
+
+behavior main {
+    @param out r
+    call helper(x: 42, result: out $r)
+}

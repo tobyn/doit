@@ -1,0 +1,14 @@
+{
+  "0": {
+    "op": "notify",
+    "txt": 1
+  },
+  "1": {
+    "op": "call",
+    "sub": -1,
+    "1": {"num": 5}
+  },
+  "name": "main",
+  "parameters": [false],
+  "pnames": ["x"]
+}

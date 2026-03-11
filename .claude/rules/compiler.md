@@ -15,8 +15,9 @@ see `.claude/learnings/test_format.md`.
 
 ## Architecture
 
-- **`ast.go`** — `Stmt` interface (26 types, including `OnEventStmt`
-  and `AssertStmt`) and `Expr` interface (15 types). `BreakStmt` has
+- **`ast.go`** — `Stmt` interface (27 types, including `OnEventStmt`,
+  `AssertStmt`, and `CallBehaviorStmt`) and `Expr` interface (16 types,
+  including `CallBehaviorExpr`). `BreakStmt` has
   `Values []Expr` for break-with-value. `AssertStmt` has `Condition`,
   `Body`, `Message`, `Value`, `ConditionText`, `File`, `Line`.
   `isTerminalStmt`/`terminalKeyword` for unreachable code detection
@@ -31,13 +32,18 @@ see `.claude/learnings/test_format.md`.
   tracking (`loopDepth`, `execBlockDepth`, `modeBlockDepth`),
   `callExprParser` callback, `breakRetVals []any` (target registers
   for break-with-value in expression-form blocks; nil outside),
-  `warnings []string`, and `releaseMode bool` (omits assert statements).
+  `warnings []string`, `releaseMode bool` (omits assert statements),
+  and behavior call fields: `bhvs` (behavior definitions from this
+  file + imports), `dependencies` (accumulated compiled sub-behaviors),
+  `depIndex` (dedup cache), `depCompiling` (cycle detection),
+  `selfBehaviorID` (for self-recursion detection).
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
-  types (`symbolSet`, `fnDef`, `iterDef`, `paramDef` (with `isParam`
-  field), `symbolTable`, `constDef`, `deferredEvent`,
-  `enumDef`), `frameBuilder`/`frameRef` abstraction, `emitContext`
-  struct, `execMode` tracking (initial `modeUnknown`), slot constants for `check_number`,
-  `compare_register`, and `value_type`.
+  types (`symbolSet` (includes `bhvs` map for behavior definitions),
+  `fnDef`, `iterDef`, `bhvDef`, `paramDef` (with `isParam` field),
+  `symbolTable`, `constDef`, `deferredEvent`, `enumDef`),
+  `frameBuilder`/`frameRef` abstraction, `emitContext` struct,
+  `execMode` tracking (initial `modeUnknown`), slot constants for
+  `check_number`, `compare_register`, and `value_type`.
 - **`parse.go`** — Stdlib parsing, file-level parsing, function and iterator
   definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing and emission
   (`emitFnBody`), instruction parsing (`parseInstruction`), call
@@ -48,7 +54,12 @@ see `.claude/learnings/test_format.md`.
   `parseArithExpr` chain, `parseBoolExpr`/`parseBoolChain`,
   `maybeExprContinuation`. Behavior-level emitters:
   `emitBehaviorStmts`, `emitBhvStmtSimple`, `emitBhvCallStmt`.
-- **`codegen.go`** — `parseBehaviorBody` (two-phase parse+emit),
+- **`codegen.go`** — `parseBehaviorBody` (two-phase parse+emit,
+  attaches `dependencies` array), behavior call support
+  (`resolveCallBehaviorName`, `parseCallBehaviorArgs`,
+  `resolveCallSub`, `compileDependency`, `resolveBhvCallArgValue`,
+  `emitBhvCallBehavior`, `emitBhvCallBehaviorExpr`,
+  `emitFnBodyCallBehavior`, `emitFnBodyCallBehaviorExpr`),
   unified control flow emitters via `emitContext` (`emitIfStmt`,
   `emitWhileStmt`, `emitLoopStmt`, `emitForStmt`, `emitWaitStmt`,
   `emitIfExpr`, `emitModeBlockExpr`), single-expression emitters

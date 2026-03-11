@@ -2227,6 +2227,144 @@ behavior a {
 
 The `-e` / `--error` compiler flag promotes warnings to errors.
 
+## Behavior Calls
+
+The `call` keyword invokes another behavior as a subroutine. The called
+behavior runs to completion, then control returns to the caller. This uses
+the VM's native `call` instruction — the callee gets its own variable
+namespace and parameter registers.
+
+```doit
+behavior helper {
+    @param in x
+    notify $x
+}
+
+behavior main {
+    call helper(x: 42)
+}
+```
+
+### Syntax
+
+Arguments are passed as keyword arguments mapped to the callee's `@param`
+names. Parentheses are optional (consistent with function call syntax):
+
+```doit
+call helper(x: 42)          # with parens
+call helper x: 42            # without parens
+```
+
+Parameter directions must be annotated at the call site:
+
+- **`in` params**: `name: expr` (direction annotation omitted — `in` is the default)
+- **`out` params**: `name: out var`
+- **`inout` params**: `name: inout var`
+
+Omitted parameters pass null. Omitting an `out` or `inout` parameter discards
+the output (not an error).
+
+```doit
+behavior worker {
+    @param in target
+    @param out result
+    # ...
+}
+
+behavior main {
+    var r
+    call worker(target: 5, result: out r)
+    notify $r
+}
+```
+
+### Expression Form (Return Values)
+
+`let` or `var` declarations can capture unbound `out` parameters as return
+values:
+
+```doit
+behavior compute {
+    @param in a
+    @param out sum
+    @param out product
+    # ...
+}
+
+behavior main {
+    let s, p = call compute(a: 5)
+    # s gets "sum", p gets "product"
+}
+```
+
+The compiler scans the callee's `out` parameters in declaration order, skips
+any that are explicitly bound at the call site, and maps the remaining ones
+to the left-hand side bindings. Binding fewer than available is allowed (prefix
+matching); binding more is a compile error.
+
+### Self-Recursion
+
+A behavior can call itself. The compiler detects this and emits `"sub": -1`
+(the VM's self-call mechanism):
+
+```doit
+behavior countdown {
+    @param inout n
+    if $n > 0 {
+        $n--
+        call countdown(n: inout $n)
+    }
+}
+```
+
+### Cross-Behavior Calls and Transitive Dependencies
+
+Behaviors in the same file or imported from other files can call each other.
+The compiler compiles callees on demand and collects them into a flat
+`dependencies` array in the root behavior's output:
+
+```doit
+import { worker } from "worker.doit"
+
+behavior main {
+    call worker(x: 5)    # worker is compiled as a dependency
+}
+```
+
+If `worker` calls another behavior `helper`, that becomes an additional
+dependency — transitive dependencies are resolved automatically. Circular
+dependencies (A calls B, B calls A) are a compile error; use self-recursion
+for recursive patterns.
+
+### In Function Bodies
+
+`call` works inside `fn` bodies the same way it does at behavior level:
+
+```doit
+behavior helper {
+    @param in x
+    notify $x
+}
+
+fn do_work(a) {
+    call helper(x: a)
+}
+
+behavior main {
+    do_work 99
+}
+```
+
+### Trade-offs
+
+- **Behavior list**: Every behavior called via `call` appears as a separate
+  entry in the player's behavior list. Use `call` deliberately — it's not a
+  replacement for `fn` (which inlines and leaves no extra behaviors).
+- **Debugging**: The game's step-through debugger cannot see inside `call`
+  boundaries. Inlined `fn` calls are fully visible.
+- **Instruction budget**: `call` does not save instruction budget — the VM
+  still executes every instruction in the callee.
+
 ## Execution Mode
 
 Desynced's behavior VM has two execution modes: **locked** (one instruction

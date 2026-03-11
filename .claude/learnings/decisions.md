@@ -500,3 +500,52 @@ bindings where register names must match binding names) and
 `declareVarScoped` (shadow renaming, for user `var`/`let`
 declarations). The `$` character is safe because it's not valid in
 doit identifiers, similar to the `@` prefix convention.
+
+## `call` keyword for inter-behavior calls
+
+`call` invokes another behavior as a subroutine via the VM's `call`
+instruction. Behaviors share the function/const/enum namespace and
+are importable like functions.
+
+### Syntax
+
+Keyword args mapped to callee's named `@param` parameters. Paren-optional
+per the consistent invocation syntax principle.
+
+- `in` params: `name: expr`
+- `out` params: `name: out var` (explicit binding)
+- `inout` params: `name: inout var`
+- Unbound `in`/`inout` → null input / discarded output (not an error)
+
+### Expression form (return values)
+
+`let r = call foo(x: 5)` captures unbound `out` params as return
+values. Scans callee's `out` params left-to-right in declaration
+order, skips explicitly bound ones, maps remaining to lvalues.
+More lvalues than unbound out params → compile error. Fewer → OK
+(prefix matching).
+
+### Compiled output
+
+- `{"op": "call", "sub": N, "0": val, "1": val, ...}`
+- `"sub"` is 1-based index into `dependencies` array, or `-1` for
+  self-recursion
+- Slot `"0"` = first `@param`, `"1"` = second, etc.
+- `dependencies` is a flat array at root behavior level; each entry
+  is a complete compiled behavior without its own dependencies
+
+### Dependency compilation
+
+On-demand recursive compilation. When emission hits `call B(...)`,
+compile B immediately via `parseBehaviorBody(B)`. If B calls C,
+C is compiled during B's compilation. A `depIndex` cache prevents
+recompilation. Cycle detection: if B is currently being compiled
+and we hit `call B(...)`, that's self-recursion (`"sub": -1`). If A
+is compiling B which tries to compile A, that's a circular dependency
+error.
+
+### Parameter directions in callee output
+
+`false` for `in`, `true` for `out`/`inout` in the callee's
+`parameters` array. Standalone behaviors emit all `true` (backward
+compatible). Only subroutine callees need the distinction.

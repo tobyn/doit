@@ -1,0 +1,6 @@
+# AI-generated test
+behavior main {
+    @param in x
+    notify $x
+    call main(x: 5)
+}

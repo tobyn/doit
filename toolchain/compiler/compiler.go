@@ -73,6 +73,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		loopLabels: map[string]bool{},
 		consts:     map[string]*constDef{},
 		enums:      map[string]*enumDef{},
+		bhvs:       map[string]*bhvDef{},
 		prelude:    preludeText,
 		sourceFS:    sourceFS,
 		sourcePath:  sourcePath,
@@ -221,14 +222,24 @@ type enumDef struct {
 	private bool           // true for private enum (not visible as import)
 }
 
+// bhvDef holds the metadata for a behavior that can be called via `call`.
+type bhvDef struct {
+	params     []paramDef // from @param declarations
+	sourceFS   fs.FS      // nil = same file as caller
+	sourcePath string     // file path within sourceFS (empty = same file)
+	sourceText string     // cached source (for cross-file compilation)
+	prelude    string     // prelude text to prepend (for cross-file compilation)
+}
+
 // symbolSet groups the top-level declaration maps (functions, iterators,
-// constants, enums) that share a namespace. Used by the import system and
-// namespace storage to operate on all uniformly.
+// constants, enums, behaviors) that share a namespace. Used by the import
+// system and namespace storage to operate on all uniformly.
 type symbolSet struct {
 	fns    map[string]*fnDef
 	iters  map[string]*iterDef
 	consts map[string]*constDef
 	enums  map[string]*enumDef
+	bhvs   map[string]*bhvDef
 }
 
 // newSymbolSet creates an empty symbolSet.
@@ -238,6 +249,7 @@ func newSymbolSet() *symbolSet {
 		iters:  map[string]*iterDef{},
 		consts: map[string]*constDef{},
 		enums:  map[string]*enumDef{},
+		bhvs:   map[string]*bhvDef{},
 	}
 }
 
@@ -253,6 +265,9 @@ func (s *symbolSet) has(name string) bool {
 		return true
 	}
 	if _, ok := s.enums[name]; ok {
+		return true
+	}
+	if _, ok := s.bhvs[name]; ok {
 		return true
 	}
 	return false
@@ -272,6 +287,7 @@ func (s *symbolSet) isPrivate(name string) bool {
 	if e, ok := s.enums[name]; ok {
 		return e.private
 	}
+	// behaviors are never private (for now)
 	return false
 }
 
@@ -297,6 +313,9 @@ func (s *symbolSet) mergeNonPrivate(src *symbolSet) {
 			s.enums[name] = e
 		}
 	}
+	for name, b := range src.bhvs {
+		s.bhvs[name] = b
+	}
 }
 
 // clone returns a shallow copy of the symbolSet (maps are cloned).
@@ -306,6 +325,7 @@ func (s *symbolSet) clone() *symbolSet {
 		iters:  maps.Clone(s.iters),
 		consts: maps.Clone(s.consts),
 		enums:  maps.Clone(s.enums),
+		bhvs:   maps.Clone(s.bhvs),
 	}
 }
 
@@ -315,6 +335,7 @@ func (s *symbolSet) deleteAll(name string) {
 	delete(s.iters, name)
 	delete(s.consts, name)
 	delete(s.enums, name)
+	delete(s.bhvs, name)
 }
 
 // addNonPrivateNames adds all non-private symbol names to the provided set.
@@ -338,6 +359,9 @@ func (s *symbolSet) addNonPrivateNames(names map[string]bool) {
 		if !e.private {
 			names[name] = true
 		}
+	}
+	for name := range s.bhvs {
+		names[name] = true
 	}
 }
 

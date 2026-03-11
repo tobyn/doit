@@ -1780,6 +1780,8 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 	case *IfExpr:
 		ctx := p.fnEmitCtx(b, paramMap, usedVars, comment, pos)
 		return p.emitIfExpr(e, []any{target}, ctx, comment)
+	case *CallBehaviorExpr:
+		return p.emitFnBodyCallBehaviorExpr(e, []any{target}, b, paramMap, usedVars, comment)
 	}
 	return fmt.Errorf("unsupported expression type %T in emitExprTo", expr)
 }
@@ -2375,6 +2377,12 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			f := map[string]any{"op": "last"}
 			setComment(f, callComment)
 			b.emit(f)
+
+		case *CallBehaviorStmt:
+			callComment := inheritComment(s.Comment, comment)
+			if err := p.emitFnBodyCallBehavior(s, b, paramMap, usedVars, callComment); err != nil {
+				return err
+			}
 
 		case *OnEventStmt:
 			// Defer event emission until after main flow.
@@ -3819,6 +3827,13 @@ func (p *parser) parseFile() (*codec.Object, error) {
 				return nil, err
 			}
 			if idTok.val == p.target {
+				// Initialize dependency tracking for call keyword
+				if p.depIndex == nil {
+					p.dependencies = nil
+					p.depIndex = map[string]int{}
+					p.depCompiling = map[string]bool{}
+					p.selfBehaviorID = p.target
+				}
 				return p.parseBehaviorBody(idTok.val)
 			}
 			// Skip non-matching behavior
@@ -3897,6 +3912,116 @@ func (p *parser) collectUserFns() error {
 	return p.collectDecls(false)
 }
 
+// scanBehaviorParams scans @param declarations from a behavior body to extract
+// parameter metadata. Consumes the opening { and everything up to the matching }.
+// Returns the parameter definitions without building a full symbol table.
+func (p *parser) scanBehaviorParams() ([]paramDef, error) {
+	if _, err := p.expect(tokLBrace); err != nil {
+		return nil, err
+	}
+	var params []paramDef
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind == tokRBrace {
+			return params, nil
+		}
+		if tok.kind == tokEOF {
+			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+		if tok.kind != tokAt {
+			// Not an attribute — done scanning params, skip the rest
+			p.unget(tok)
+			if err := p.skipToCloseBrace(); err != nil {
+				return nil, err
+			}
+			return params, nil
+		}
+		attr, err := p.expect(tokIdent)
+		if err != nil {
+			return nil, err
+		}
+		if attr.val != "param" {
+			// Skip non-param attributes (@name, @keepvars, @keeparrays)
+			// by consuming tokens until the next @ or non-attribute token
+			for {
+				peek, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if peek.kind == tokAt || peek.kind == tokRBrace || peek.kind == tokEOF {
+					p.unget(peek)
+					break
+				}
+				if peek.kind == tokLBrace {
+					// Nested brace block (localize, etc.) — skip it entirely
+					if err := p.skipToCloseBrace(); err != nil {
+						return nil, err
+					}
+					continue
+				}
+				// Also stop at identifiers that could be statements
+				if peek.kind == tokIdent {
+					if Keywords[peek.val] && peek.val != "localize" && peek.val != "in" && peek.val != "out" && peek.val != "inout" && peek.val != "true" && peek.val != "false" {
+						p.unget(peek)
+						break
+					}
+				}
+			}
+			continue
+		}
+		// Parse @param direction name ["display"] [= default]
+		dirTok, err := p.expect(tokIdent)
+		if err != nil {
+			return nil, err
+		}
+		switch dirTok.val {
+		case "in", "out", "inout":
+			// valid
+		default:
+			return nil, p.errorf(dirTok.pos, "expected parameter direction (in, out, inout), got %q", dirTok.val)
+		}
+		nameTok, err := p.expect(tokIdent)
+		if err != nil {
+			return nil, err
+		}
+		params = append(params, paramDef{
+			name:      nameTok.val,
+			keyword:   nameTok.val,
+			direction: dirTok.val,
+		})
+		// Skip optional display name and default value
+		for {
+			peek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if peek.kind == tokAt || peek.kind == tokRBrace || peek.kind == tokEOF {
+				p.unget(peek)
+				break
+			}
+			if peek.kind == tokIdent && peek.val == "localize" {
+				// Skip the localize block
+				if _, err := p.expect(tokLBrace); err != nil {
+					return nil, err
+				}
+				if err := p.skipToCloseBrace(); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			if peek.kind == tokIdent {
+				if Keywords[peek.val] && peek.val != "true" && peek.val != "false" && peek.val != "in" && peek.val != "out" && peek.val != "inout" {
+					p.unget(peek)
+					break
+				}
+			}
+		}
+	}
+}
+
 // collectDecls scans top-level declarations (behavior, fn, const, private).
 // When isImport is true, behavior IDs are skipped and no collision checking
 // is performed. When false, behavior IDs are collected and same-file names
@@ -3922,8 +4047,22 @@ func (p *parser) collectDecls(isImport bool) error {
 			if !isImport {
 				p.behaviorIDs = append(p.behaviorIDs, idTok.val)
 			}
-			if err := p.skipBraceBlock(); err != nil {
+			params, err := p.scanBehaviorParams()
+			if err != nil {
 				return err
+			}
+			if p.bhvs == nil {
+				p.bhvs = map[string]*bhvDef{}
+			}
+			p.bhvs[idTok.val] = &bhvDef{
+				params:     params,
+				sourceFS:   p.sourceFS,
+				sourcePath: p.sourcePath,
+				sourceText: p.src,
+				prelude:    p.prelude,
+			}
+			if isImport {
+				p.fileDecls = append(p.fileDecls, idTok.val)
 			}
 		case "private":
 			fnTok, err := p.expect(tokIdent)
@@ -5291,6 +5430,26 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 			}
 			astBody = append(astBody, &LastStmt{Comment: comment})
 
+		case "call":
+			callNameTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			name, bhv, err := p.resolveCallBehaviorName(callNameTok)
+			if err != nil {
+				return nil, err
+			}
+			args, err := p.parseCallBehaviorArgs(bhv, ctx.resolve, callNameTok.pos)
+			if err != nil {
+				return nil, err
+			}
+			astBody = append(astBody, &CallBehaviorStmt{
+				BehaviorName: name,
+				Args:         args,
+				Comment:      comment,
+				Pos:          callNameTok.pos,
+			})
+
 		case "fn", "iter", "private":
 			return nil, p.errorf(tok.pos, "function definitions cannot be nested")
 
@@ -5832,6 +5991,23 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 			return final, nil
 		}
 		return result, nil
+	}
+
+	// Behavior call expression RHS: let x = call foo(param: 5)
+	if rhsTok.kind == tokIdent && rhsTok.val == "call" {
+		callNameTok, err := p.expect(tokIdent)
+		if err != nil {
+			return nil, err
+		}
+		name, bhv, err := p.resolveCallBehaviorName(callNameTok)
+		if err != nil {
+			return nil, err
+		}
+		args, err := p.parseCallBehaviorArgs(bhv, ctx.resolve, callNameTok.pos)
+		if err != nil {
+			return nil, err
+		}
+		return &CallBehaviorExpr{BehaviorName: name, Args: args, Pos: callNameTok.pos}, nil
 	}
 
 	// If-expression RHS

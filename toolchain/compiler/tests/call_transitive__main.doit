@@ -1,0 +1,14 @@
+# AI-generated test
+behavior leaf {
+    @param in x
+    notify $x
+}
+
+behavior middle {
+    @param in y
+    call leaf(x: $y)
+}
+
+behavior main {
+    call middle(y: 99)
+}
