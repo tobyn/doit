@@ -1,0 +1,7 @@
+# AI-generated test
+# Infinity literal at behavior level
+behavior infinity {
+    @name "Infinity"
+    let inf = infinity
+    set_number infinity, 5
+}

@@ -94,6 +94,14 @@ is not distinguishable from `Coordinate` at runtime (`is Range` is not
 supported). The `&` operator is not supported on Range values (it would
 overwrite the step stored in the num field).
 
+### Infinity
+
+The VM's infinity value, represented as INT32_MIN (`-2147483648`).
+Literal syntax: `infinity` → `{"num": -2147483648}`. A reserved
+keyword. Can be used anywhere a value is expected (variable init,
+function arguments, comparisons, etc.). Truthy (it's a non-empty
+register value).
+
 ### Null
 
 The empty value. Literal syntax: `null`. Null is universal — it is a

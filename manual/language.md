@@ -315,9 +315,10 @@ declarations. A constant may reference earlier constants and literal
 expressions, but not runtime variables or forward references.
 
 Constant values are evaluated at compile time. Supported expressions include
-number literals, string literals, boolean literals (`true`, `false`), `null`,
-type constructors (`Item`, `Component`, `Technology`, `Value`, `Coordinate`,
-`Range`), the `&` operator, arithmetic (`+`, `-`, `*`, `/`, `%`),
+number literals, string literals, boolean literals (`true`, `false`),
+`null`, `infinity`, type constructors (`Item`, `Component`, `Technology`,
+`Value`, `Coordinate`, `Range`), the `&` operator, arithmetic (`+`, `-`,
+`*`, `/`, `%`),
 comparisons (`>`, `<`, `>=`, `<=`, `==`, `!=`), boolean operators
 (`&&`, `||`, `!`), type checks (`is`), and `localize` blocks.
 
@@ -763,7 +764,7 @@ let x = 5
 ```
 
 The right-hand side of `var` and `let` can be a number literal, a boolean
-literal (`true`, `false`, `null`), another variable, a function call that
+literal (`true`, `false`, `null`, `infinity`), another variable, a function call that
 has a return value, a type constructor expression, an
 [arithmetic expression](#arithmetic-expressions), a
 [comparison expression](#comparison-expressions), a
@@ -895,7 +896,7 @@ x = if a > 5 { a } else { b }
 ```
 
 The right-hand side of `=` can be a number literal, a boolean literal
-(`true`, `false`, `null`), another variable, a function call with a
+(`true`, `false`, `null`, `infinity`), another variable, a function call with a
 return value, a type constructor expression, an
 [arithmetic expression](#arithmetic-expressions), a
 [comparison expression](#comparison-expressions), a
@@ -1069,6 +1070,19 @@ initialization, function arguments, comparisons, and return values.
 
 `true` and `false` are reserved keywords and cannot be used as variable
 names.
+
+## Infinity
+
+The `infinity` keyword represents the VM's infinity value:
+
+```doit
+let inf = infinity
+set_number infinity, 5
+```
+
+In the VM, `infinity` compiles to `{"num": -2147483648}` (INT32_MIN). It
+can be used anywhere a value is expected, just like `true`, `false`, and
+`null`. `infinity` is a reserved keyword.
 
 ## Strings
 

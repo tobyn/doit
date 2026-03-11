@@ -1,0 +1,11 @@
+# AI-generated test
+# Infinity literal in function body
+fn use_infinity() {
+    let x = infinity
+    notify "done"
+}
+
+behavior infinity_fn {
+    @name "Infinity Fn"
+    use_infinity
+}
