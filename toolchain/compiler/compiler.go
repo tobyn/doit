@@ -180,10 +180,11 @@ func setComment(frame map[string]any, comment string) {
 // --- Shared types ---
 
 type paramDef struct {
-	name      string // variable name used in the function body
-	keyword   string // "" for positional, keyword name for keyword params
-	direction string // "" or "in", "out", "inout"; "" defaults to "in"
-	isParam   bool   // true for param modifier (requires behavior parameter at call site)
+	name       string // variable name used in the function body
+	keyword    string // "" for positional, keyword name for keyword params
+	direction  string // "" or "in", "out", "inout"; "" defaults to "in"
+	isParam    bool   // true for param modifier (requires behavior parameter at call site)
+	isBehavior bool   // true for behavior modifier (requires behavior reference at call site)
 }
 
 // effectiveDirection returns the direction of the parameter, defaulting to "in".
@@ -448,6 +449,11 @@ func (f *fnDef) keywordByName(keyword string) *paramDef {
 // returnSlot marks an instruction output slot as a return value.
 // The int is the 1-based return index (@1 = first return value).
 type returnSlot int
+
+// behaviorRef marks a resolved behavior dependency reference.
+// The int is the value for the "sub" field: 1-based index into
+// dependencies, or -1 for self-recursion.
+type behaviorRef int
 
 // returnCount returns the number of return values the function produces.
 // For instruction-based functions, this is the count of returnSlot markers.

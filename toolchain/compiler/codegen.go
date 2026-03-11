@@ -52,10 +52,18 @@ func resolveInstructionFrame(frame map[string]any, retVals []any, paramMap map[s
 			}
 			continue
 		}
+		if br, ok := v.(behaviorRef); ok {
+			instr[nativeKey] = int(br)
+			continue
+		}
 		if s, ok := v.(string); ok && k != "op" {
 			if paramMap != nil {
 				if arg, ok := paramMap[s]; ok {
-					instr[nativeKey] = arg
+					if br, ok := arg.(behaviorRef); ok {
+						instr[nativeKey] = int(br)
+					} else {
+						instr[nativeKey] = arg
+					}
 					continue
 				}
 			}
@@ -164,6 +172,51 @@ func (p *parser) checkCallDirections(fn *fnDef, fnName string, args []any, kwArg
 			}
 			return p.errorf(pos, "argument to param parameter %q of %s must be a behavior parameter",
 				pd.name, fnName)
+		}
+		// Check behavior modifier: argument must be a behavior name
+		if pd.isBehavior {
+			if name, ok := argVal.(string); ok {
+				if _, isBhv := p.bhvs[name]; isBhv {
+					continue // valid behavior reference
+				}
+			}
+			return p.errorf(pos, "argument to behavior parameter %q of %s must be a behavior reference",
+				pd.name, fnName)
+		}
+	}
+	return nil
+}
+
+// resolveBehaviorArgs resolves behavior-flagged arguments from behavior names
+// to behaviorRef values by compiling dependencies. Modifies args/kwArgs in place.
+func (p *parser) resolveBehaviorArgs(fn *fnDef, args []any, kwArgs map[string]any, pos int) error {
+	posIdx := 0
+	for _, pd := range fn.params {
+		if !pd.isBehavior {
+			if pd.keyword == "" {
+				posIdx++
+			}
+			continue
+		}
+		if pd.keyword == "" {
+			if posIdx < len(args) {
+				if name, ok := args[posIdx].(string); ok {
+					sub, err := p.resolveCallSub(name, pos)
+					if err != nil {
+						return err
+					}
+					args[posIdx] = behaviorRef(sub)
+				}
+			}
+			posIdx++
+		} else if kwArgs != nil {
+			if name, ok := kwArgs[pd.keyword].(string); ok {
+				sub, err := p.resolveCallSub(name, pos)
+				if err != nil {
+					return err
+				}
+				kwArgs[pd.keyword] = behaviorRef(sub)
+			}
 		}
 	}
 	return nil

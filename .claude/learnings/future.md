@@ -23,12 +23,6 @@ register types.
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
-- ~~**`call` keyword + `dependencies` format**~~ — Done. See
-  `decisions.md` for design details.
-- **`load_behavior` keyword** — Remotely loads a behavior onto an
-  adjacent unit. Uses the same behavior-reference and `dependencies`
-  mechanism as `call`. Separate from `call` implementation.
-
 ## Lint mode
 
 A `--lint` flag (or separate `doit lint` subcommand) that checks for

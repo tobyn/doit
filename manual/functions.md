@@ -311,6 +311,32 @@ At the call site, the argument must be a `$parameter` reference. The modifier
 propagates transitively — a `param` argument must come from another `param`
 parameter or directly from a behavior parameter.
 
+### The `behavior` modifier
+
+The `behavior` modifier requires the caller to pass a behavior reference. The
+compiler compiles the referenced behavior as a dependency and emits the
+dependency index. This is used by `load_behavior` to load a behavior onto
+another unit:
+
+```doit
+fn deploy(behavior bhv, target) {
+    load_behavior bhv, target
+}
+
+behavior worker { notify "working" }
+
+behavior main {
+    deploy worker, $goto
+}
+```
+
+At the call site, the argument must be a behavior name (from the same file or
+imported). The modifier cannot combine with `out`, `inout`, or `param` — a
+behavior reference is a compile-time constant, not a runtime value.
+
+The modifier propagates transitively — a `behavior` argument can be passed to
+another `behavior` parameter in nested function calls.
+
 ### The `return` statement
 
 The `return` statement declares the function's return value:

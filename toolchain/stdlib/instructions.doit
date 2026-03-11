@@ -1431,6 +1431,21 @@ fn lookat(target) {
     }
 }
 
+# Load and run a behavior on an external unit.
+#   bhv [behavior] - the behavior to load
+#   unit [in] - the target unit (adjacent or self)
+#   component_index [in] - component index if multiple behavior components equipped
+#   "Failed" [branch] - where to continue if loading failed
+fn load_behavior(behavior bhv, unit, component_index component_index) exec(failed) {
+    # frame: {"op": "load_behavior", "sub": bhv [behavior], "1": unit [in], "2": component_index [in], "3": "Failed" [exec]}
+    instruction "load_behavior" {
+        sub: bhv
+        1: unit
+        2: component_index
+        exec 3: failed
+    }
+}
+
 # Construct carrier bots for delivering orders.
 #   carriers [in] - type and count of carriers to make
 #   "If Working" [branch] - where to continue if the unit started working

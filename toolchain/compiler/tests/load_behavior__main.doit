@@ -1,0 +1,10 @@
+# AI-generated test
+behavior helper {
+    @param in x
+    notify $x
+}
+
+behavior main {
+    @param in target "Target"
+    load_behavior helper, $target
+}

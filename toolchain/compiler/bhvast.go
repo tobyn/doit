@@ -78,12 +78,15 @@ func (p *parser) bhvEmitCtx(b *frameBuilder, syms *symbolTable) *emitContext {
 			return resolveInstructionFrame(frame, retVals, nil, nil, comment)
 		},
 		expandCallExpr: func(ce *CallExpr, retVals []any, comment string) error {
-			resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(ce.Args, ce.KwArgs, syms, b)
+			fn := p.fns[ce.Name]
+			resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(ce.Args, ce.KwArgs, syms, b, fn)
 			if err != nil {
 				return err
 			}
-			fn := p.fns[ce.Name]
 			if err := p.checkCallDirections(fn, ce.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+				return err
+			}
+			if err := p.resolveBehaviorArgs(fn, resolvedArgs, resolvedKwArgs, 0); err != nil {
 				return err
 			}
 			return p.expandCall(ce.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, comment, syms.usedVars)
@@ -609,6 +612,10 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		}
 		if _, ok := p.enums[tok.val]; ok {
 			return nil, p.errorf(tok.pos, "enum %q requires '::' member access (e.g., %s::Member)", tok.val, tok.val)
+		}
+		// Behavior names pass through as identifiers (for behavior parameters)
+		if _, ok := p.bhvs[tok.val]; ok {
+			return &IdentExpr{Name: tok.val}, nil
 		}
 		if tok.val == "Unit" {
 			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
@@ -3016,11 +3023,15 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 		return tmp, nil
 	case *CallExpr:
 		tmp := allocUniqueVar("@call", syms.usedVars)
-		resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(e.Args, e.KwArgs, syms, b)
+		fn := p.fns[e.Name]
+		resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(e.Args, e.KwArgs, syms, b, fn)
 		if err != nil {
 			return nil, err
 		}
-		if err := p.checkCallDirections(p.fns[e.Name], e.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+		if err := p.checkCallDirections(fn, e.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+			return nil, err
+		}
+		if err := p.resolveBehaviorArgs(fn, resolvedArgs, resolvedKwArgs, 0); err != nil {
 			return nil, err
 		}
 		if e.Blocks != nil {
@@ -3083,9 +3094,41 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 }
 
 // emitBhvCallExprArgs resolves AST Expr args to values for expandCall.
-func (p *parser) emitBhvCallExprArgs(args []Expr, kwArgs map[string]Expr, syms *symbolTable, b *frameBuilder) ([]any, map[string]any, error) {
+func (p *parser) emitBhvCallExprArgs(args []Expr, kwArgs map[string]Expr, syms *symbolTable, b *frameBuilder, fn ...*fnDef) ([]any, map[string]any, error) {
+	// Build behavior param index for skipping normal resolution
+	var behaviorPosIdx map[int]bool
+	var behaviorKwIdx map[string]bool
+	if len(fn) > 0 && fn[0] != nil {
+		posIdx := 0
+		for _, pd := range fn[0].params {
+			if pd.isBehavior {
+				if pd.keyword == "" {
+					if behaviorPosIdx == nil {
+						behaviorPosIdx = map[int]bool{}
+					}
+					behaviorPosIdx[posIdx] = true
+				} else {
+					if behaviorKwIdx == nil {
+						behaviorKwIdx = map[string]bool{}
+					}
+					behaviorKwIdx[pd.keyword] = true
+				}
+			}
+			if pd.keyword == "" {
+				posIdx++
+			}
+		}
+	}
+
 	resolvedArgs := make([]any, len(args))
 	for i, arg := range args {
+		if behaviorPosIdx != nil && behaviorPosIdx[i] {
+			// Behavior parameter: resolve as behavior name string
+			if ident, ok := arg.(*IdentExpr); ok {
+				resolvedArgs[i] = ident.Name
+				continue
+			}
+		}
 		val, err := p.emitBhvExprGetValue(arg, syms, b, "")
 		if err != nil {
 			return nil, nil, err
@@ -3094,6 +3137,13 @@ func (p *parser) emitBhvCallExprArgs(args []Expr, kwArgs map[string]Expr, syms *
 	}
 	resolvedKwArgs := map[string]any{}
 	for kw, arg := range kwArgs {
+		if behaviorKwIdx != nil && behaviorKwIdx[kw] {
+			// Behavior parameter: resolve as behavior name string
+			if ident, ok := arg.(*IdentExpr); ok {
+				resolvedKwArgs[kw] = ident.Name
+				continue
+			}
+		}
 		val, err := p.emitBhvExprGetValue(arg, syms, b, "")
 		if err != nil {
 			return nil, nil, err
@@ -3128,11 +3178,15 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 	case *ArithExpr:
 		return p.emitBhvArithTo(e, target, syms, b, comment)
 	case *CallExpr:
-		resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(e.Args, e.KwArgs, syms, b)
+		fn := p.fns[e.Name]
+		resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(e.Args, e.KwArgs, syms, b, fn)
 		if err != nil {
 			return err
 		}
-		if err := p.checkCallDirections(p.fns[e.Name], e.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+		if err := p.checkCallDirections(fn, e.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+			return err
+		}
+		if err := p.resolveBehaviorArgs(fn, resolvedArgs, resolvedKwArgs, 0); err != nil {
 			return err
 		}
 		if e.Blocks != nil {
@@ -3640,12 +3694,15 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		return nil
 
 	case *CallStmt:
-		resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(s.Args, s.KwArgs, syms, b)
+		fn := p.fns[s.Name]
+		resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(s.Args, s.KwArgs, syms, b, fn)
 		if err != nil {
 			return err
 		}
-		fn := p.fns[s.Name]
 		if err := p.checkCallDirections(fn, s.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+			return err
+		}
+		if err := p.resolveBehaviorArgs(fn, resolvedArgs, resolvedKwArgs, 0); err != nil {
 			return err
 		}
 		if s.Blocks != nil {
@@ -3733,12 +3790,15 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 		}
 		switch v := s.Value.(type) {
 		case *CallExpr:
-			resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(v.Args, v.KwArgs, syms, b)
+			fn := p.fns[v.Name]
+			resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(v.Args, v.KwArgs, syms, b, fn)
 			if err != nil {
 				return err
 			}
-			fn := p.fns[v.Name]
 			if err := p.checkCallDirections(fn, v.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+				return err
+			}
+			if err := p.resolveBehaviorArgs(fn, resolvedArgs, resolvedKwArgs, 0); err != nil {
 				return err
 			}
 			return p.expandCall(v.Name, resolvedArgs, resolvedKwArgs, retVals, b, 0, s.Comment, syms.usedVars)
@@ -3769,11 +3829,14 @@ func (p *parser) emitBhvStmtSimple(stmt Stmt, b *frameBuilder, syms *symbolTable
 						callArity = remaining
 					}
 					callRetVals := retVals[bindIdx : bindIdx+callArity]
-					resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(e.Args, e.KwArgs, syms, b)
+					resolvedArgs, resolvedKwArgs, err := p.emitBhvCallExprArgs(e.Args, e.KwArgs, syms, b, fn)
 					if err != nil {
 						return err
 					}
 					if err := p.checkCallDirections(fn, e.Name, resolvedArgs, resolvedKwArgs, syms, 0); err != nil {
+						return err
+					}
+					if err := p.resolveBehaviorArgs(fn, resolvedArgs, resolvedKwArgs, 0); err != nil {
 						return err
 					}
 					if err := p.expandCall(e.Name, resolvedArgs, resolvedKwArgs, callRetVals, b, 0, s.Comment, syms.usedVars); err != nil {

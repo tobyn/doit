@@ -4113,6 +4113,44 @@ behavior a {
 		}
 	})
 
+	t.Run("behavior_param_not_a_behavior", func(t *testing.T) {
+		src := `
+		fn deploy(behavior bhv, target) { load_behavior bhv, target }
+		behavior a { var x = 5; deploy x, $goto }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "must be a behavior reference") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("behavior_param_out_direction", func(t *testing.T) {
+		src := `fn bad(out behavior bhv) { }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "behavior parameter cannot be out") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("behavior_param_fn_body_not_behavior", func(t *testing.T) {
+		src := `
+		fn deploy(behavior bhv, target) { load_behavior bhv, target }
+		fn wrapper(target) { deploy target, target }
+		behavior a { wrapper $goto }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "must be a behavior reference") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

@@ -2365,6 +2365,36 @@ behavior main {
 - **Instruction budget**: `call` does not save instruction budget — the VM
   still executes every instruction in the callee.
 
+### Loading Behaviors Remotely
+
+`load_behavior` loads a compiled behavior onto an adjacent unit. It uses the
+same dependency compilation mechanism as `call`:
+
+```doit
+behavior worker {
+    @param in target
+    domove $target
+}
+
+behavior main {
+    load_behavior worker, $goto
+}
+```
+
+`load_behavior` is a stdlib function, not a keyword. Its first parameter uses
+the [`behavior` modifier](functions.md#the-behavior-modifier), which tells the
+compiler to compile the referenced behavior as a dependency.
+
+The optional `component_index` keyword argument specifies which behavior
+component to target when the unit has multiple equipped. The `failed` exec
+branch fires if the behavior cannot be loaded:
+
+```doit
+load_behavior worker, $goto {
+    failed { notify "load failed" }
+}
+```
+
 ## Execution Mode
 
 Desynced's behavior VM has two execution modes: **locked** (one instruction

@@ -1387,7 +1387,7 @@ func (p *parser) parseFnBodyCallArgs(callee *fnDef, calleeTok token, ctx *fnBody
 		}
 	}
 
-	if err := p.checkFnBodyCallDirectionsExpr(callee, calleeTok.val, args, kwArgs, paramDirs, letVars, calleeTok.pos, ctx.paramFlags); err != nil {
+	if err := p.checkFnBodyCallDirectionsExpr(callee, calleeTok.val, args, kwArgs, paramDirs, letVars, calleeTok.pos, ctx.paramFlags, ctx.behaviorFlags); err != nil {
 		return nil, nil, err
 	}
 
@@ -1413,11 +1413,7 @@ func fnBodyExprDir(expr Expr, paramDirs map[string]string, fnVars map[string]fnV
 }
 
 // checkFnBodyCallDirectionsExpr checks direction compatibility for AST-typed args.
-func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string, args []Expr, kwArgs map[string]Expr, paramDirs map[string]string, letVars map[string]fnVarInfo, pos int, paramFlags ...map[string]bool) error {
-	var pFlags map[string]bool
-	if len(paramFlags) > 0 {
-		pFlags = paramFlags[0]
-	}
+func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string, args []Expr, kwArgs map[string]Expr, paramDirs map[string]string, letVars map[string]fnVarInfo, pos int, pFlags map[string]bool, bFlags map[string]bool) error {
 	posIdx := 0
 	for _, pd := range callee.params {
 		calleeDir := pd.effectiveDirection()
@@ -1442,14 +1438,27 @@ func (p *parser) checkFnBodyCallDirectionsExpr(callee *fnDef, calleeName string,
 				}
 			}
 		}
+		if argExpr == nil {
+			continue
+		}
 		// Check param modifier: argument must be a param-flagged parameter
-		if pd.isParam && argExpr != nil {
+		if pd.isParam {
 			if ident, ok := argExpr.(*IdentExpr); ok {
 				if pFlags != nil && pFlags[ident.Name] {
 					continue // transitively param
 				}
 			}
 			return p.errorf(pos, "argument to param parameter %q of %s must be a behavior parameter",
+				pd.name, calleeName)
+		}
+		// Check behavior modifier: argument must be a behavior-flagged parameter
+		if pd.isBehavior {
+			if ident, ok := argExpr.(*IdentExpr); ok {
+				if bFlags != nil && bFlags[ident.Name] {
+					continue // transitively behavior
+				}
+			}
+			return p.errorf(pos, "argument to behavior parameter %q of %s must be a behavior reference",
 				pd.name, calleeName)
 		}
 	}
@@ -2515,10 +2524,20 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			}
 		}
 
-		// Check for param modifier
+		// Check for param or behavior modifier
 		isParamMod := false
+		isBehaviorMod := false
 		if tok.val == "param" {
 			isParamMod = true
+			tok, err = p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+		} else if tok.val == "behavior" {
+			isBehaviorMod = true
+			if direction == "out" || direction == "inout" {
+				return nil, p.errorf(tok.pos, "behavior parameter cannot be %s", direction)
+			}
 			tok, err = p.expect(tokIdent)
 			if err != nil {
 				return nil, err
@@ -2534,7 +2553,7 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			// keyword param: tok is keyword, peek is variable name
 			seenKeyword = true
 			params = append(params, paramDef{
-				name: peek.val, keyword: tok.val, direction: direction, isParam: isParamMod,
+				name: peek.val, keyword: tok.val, direction: direction, isParam: isParamMod, isBehavior: isBehaviorMod,
 			})
 		} else {
 			// positional param
@@ -2542,7 +2561,7 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 			if seenKeyword {
 				return nil, p.errorf(tok.pos, "positional parameter after keyword parameter")
 			}
-			params = append(params, paramDef{name: tok.val, direction: direction, isParam: isParamMod})
+			params = append(params, paramDef{name: tok.val, direction: direction, isParam: isParamMod, isBehavior: isBehaviorMod})
 		}
 	}
 	return params, nil
@@ -4152,14 +4171,15 @@ type fnVarInfo struct {
 }
 
 type fnBodyContext struct {
-	paramDirs    map[string]string    // param name -> effective direction
-	paramFlags   map[string]bool      // param name -> true if param modifier (requires behavior parameter)
-	fnVarInfo    map[string]fnVarInfo // name -> var info (mutability, depth, used tracking)
-	fnScopeDepth int                  // current nesting depth (0 = fn top-level)
-	resolve      operandResolver
-	execNames    []string // continuation names from exec(...) declaration (nil if none)
-	inIter       bool     // true when parsing an iter body
-	iterOutputs  []string // output names from iter -> declaration
+	paramDirs     map[string]string    // param name -> effective direction
+	paramFlags    map[string]bool      // param name -> true if param modifier (requires behavior parameter)
+	behaviorFlags map[string]bool      // param name -> true if behavior modifier (requires behavior reference)
+	fnVarInfo     map[string]fnVarInfo // name -> var info (mutability, depth, used tracking)
+	fnScopeDepth  int                  // current nesting depth (0 = fn top-level)
+	resolve       operandResolver
+	execNames     []string // continuation names from exec(...) declaration (nil if none)
+	inIter        bool     // true when parsing an iter body
+	iterOutputs   []string // output names from iter -> declaration
 }
 
 // pushFnScope saves the current fnVarInfo map and increments scope depth.
@@ -4326,19 +4346,24 @@ func (p *parser) parseUserFn() (string, error) {
 	}
 
 	// Build direction and param flag maps for enforcement in fn body
-	paramDirs := map[string]string{} // param name -> effective direction
-	paramFlags := map[string]bool{}  // param name -> true if param modifier
+	paramDirs := map[string]string{}    // param name -> effective direction
+	paramFlags := map[string]bool{}     // param name -> true if param modifier
+	behaviorFlags := map[string]bool{}  // param name -> true if behavior modifier
 	for _, pd := range params {
 		paramDirs[pd.name] = pd.effectiveDirection()
 		if pd.isParam {
 			paramFlags[pd.name] = true
 		}
+		if pd.isBehavior {
+			behaviorFlags[pd.name] = true
+		}
 	}
 	ctx := &fnBodyContext{
-		paramDirs:  paramDirs,
-		paramFlags: paramFlags,
-		fnVarInfo:  map[string]fnVarInfo{},
-		execNames:  execNames,
+		paramDirs:     paramDirs,
+		paramFlags:    paramFlags,
+		behaviorFlags: behaviorFlags,
+		fnVarInfo:     map[string]fnVarInfo{},
+		execNames:     execNames,
 	}
 	ctx.resolve = p.fnBodyResolver(ctx)
 

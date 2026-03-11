@@ -549,3 +549,28 @@ error.
 `false` for `in`, `true` for `out`/`inout` in the callee's
 `parameters` array. Standalone behaviors emit all `true` (backward
 compatible). Only subroutine callees need the distinction.
+
+## `behavior` parameter modifier
+
+The `behavior` modifier on function parameters (analogous to `param`)
+marks a parameter as requiring a behavior reference at the call site.
+This enables stdlib functions like `load_behavior` to accept behavior
+references and pass them through to `instruction` blocks.
+
+### Design
+
+- `fn load_behavior(behavior bhv, unit) { instruction "load_behavior" { sub: bhv; ... } }`
+- At behavior-level call sites, the argument must be a known behavior
+  name (from this file or imports). The compiler compiles it as a
+  dependency and emits the dependency index.
+- Propagates transitively through function inlining (like `param`):
+  `fn wrapper(behavior b, u) { load_behavior b, u }` — the `behavior`
+  flag flows through `paramMap` as a `behaviorRef` value.
+- Cannot combine with `out` or `inout` (behaviors are compile-time
+  constants, not runtime l-values).
+- Cannot combine with `param` (a behavior reference is not a parameter
+  register).
+- The `behaviorRef` type wraps the dependency index (or -1 for self)
+  and is unwrapped to a plain integer by `resolveInstructionFrame`.
+- Behavior names pass through `resolveBhvOperand` as `IdentExpr` nodes
+  (checked against `p.bhvs` before the unknown-identifier error).

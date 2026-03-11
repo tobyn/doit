@@ -39,7 +39,8 @@ see `.claude/learnings/test_format.md`.
   `selfBehaviorID` (for self-recursion detection).
 - **`compiler.go`** — Public API (`Compile`/`CompileString`), shared
   types (`symbolSet` (includes `bhvs` map for behavior definitions),
-  `fnDef`, `iterDef`, `bhvDef`, `paramDef` (with `isParam` field),
+  `fnDef`, `iterDef`, `bhvDef`, `paramDef` (with `isParam` and
+  `isBehavior` fields), `behaviorRef` (dependency index wrapper),
   `symbolTable`, `constDef`, `deferredEvent`, `enumDef`),
   `frameBuilder`/`frameRef` abstraction, `emitContext` struct,
   `execMode` tracking (initial `modeUnknown`), slot constants for
