@@ -6,7 +6,7 @@
   "1": {
     "op": "call",
     "sub": -1,
-    "1": {"num": 5}
+    "0": {"num": 5}
   },
   "name": "main",
   "parameters": [false],

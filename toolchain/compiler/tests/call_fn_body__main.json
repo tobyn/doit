@@ -2,7 +2,7 @@
   "0": {
     "op": "call",
     "sub": 1,
-    "1": {"num": 99}
+    "0": {"num": 99}
   },
   "dependencies": [
     {

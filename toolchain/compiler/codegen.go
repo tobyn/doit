@@ -4435,9 +4435,9 @@ func (p *parser) emitBhvCallBehavior(stmt *CallBehaviorStmt, b *frameBuilder, sy
 
 	f := map[string]any{"op": "call", "sub": sub}
 
-	// Wire numbered slots to args (1-based, matching callee's parameter numbering)
+	// Wire numbered slots to args (0-based, matching instruction slot numbering)
 	for i, param := range bhv.params {
-		slotKey := strconv.Itoa(i + 1) // 1-based
+		slotKey := strconv.Itoa(i) // 0-based
 		arg, ok := stmt.Args[param.keyword]
 		if !ok {
 			continue // omitted param
@@ -4473,7 +4473,7 @@ func (p *parser) emitBhvCallBehaviorExpr(expr *CallBehaviorExpr, retVals []any, 
 	// Collect unbound out params for return value mapping
 	retIdx := 0
 	for i, param := range bhv.params {
-		slotKey := strconv.Itoa(i + 1) // 1-based
+		slotKey := strconv.Itoa(i) // 0-based
 		arg, ok := expr.Args[param.keyword]
 		if ok {
 			val, err := p.resolveBhvCallArgValue(arg.Value, syms, b)
@@ -4511,7 +4511,7 @@ func (p *parser) emitFnBodyCallBehavior(stmt *CallBehaviorStmt, b *frameBuilder,
 	f := map[string]any{"op": "call", "sub": sub}
 
 	for i, param := range bhv.params {
-		slotKey := strconv.Itoa(i + 1) // 1-based
+		slotKey := strconv.Itoa(i) // 0-based
 		arg, ok := stmt.Args[param.keyword]
 		if !ok {
 			continue
@@ -4543,7 +4543,7 @@ func (p *parser) emitFnBodyCallBehaviorExpr(expr *CallBehaviorExpr, retVals []an
 
 	retIdx := 0
 	for i, param := range bhv.params {
-		slotKey := strconv.Itoa(i + 1)
+		slotKey := strconv.Itoa(i) // 0-based
 		arg, ok := expr.Args[param.keyword]
 		if ok {
 			val, err := p.emitExprGetValue(arg.Value, b, paramMap, usedVars, "", expr.Pos)
