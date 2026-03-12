@@ -4,6 +4,7 @@ behavior a {
         wait 10
     }
     on radio(Item("metalbar")) -> signal {
+        var x = signal
         notify "radio event"
     }
 }

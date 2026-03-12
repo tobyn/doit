@@ -2617,6 +2617,10 @@ func (p *parser) parseBhvOnEvent(syms *symbolTable, comment string) (*OnEventStm
 		} else {
 			p.unget(peek)
 		}
+		// Declare signal variable before parsing the body so it's visible inside
+		if signal != "" {
+			syms.declareVar(signal, false)
+		}
 		if _, err := p.expect(tokLBrace); err != nil {
 			return nil, err
 		}

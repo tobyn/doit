@@ -15,6 +15,11 @@
     "op": "event_radio"
   },
   "2": {
+    "0": "signal",
+    "1": "x",
+    "op": "set_reg"
+  },
+  "3": {
     "next": false,
     "op": "notify",
     "txt": "radio event"
