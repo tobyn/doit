@@ -2120,8 +2120,9 @@ Named labels are the recommended form. The compiler:
   instead of undefined behavior
 
 Named label scope is behavior-wide: a `jump` can reference a `label`
-that appears earlier or later in the behavior (as long as it is not
-skipped as unreachable code).
+that appears earlier or later in the behavior. Labels are exempt from
+unreachable-code pruning — a `label` after `exit` is still emitted
+as a valid jump target.
 
 **Expression form** — for dynamic or computed targets (parens also optional):
 

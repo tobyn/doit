@@ -303,6 +303,11 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 			stmts = append(stmts, onStmt)
 			continue
 		}
+		// Allow `label` after terminal statements — labels are jump
+		// targets and must be emitted even if not reachable by fallthrough.
+		if terminal != nil && tok.kind == tokIdent && tok.val == "label" {
+			terminal = nil
+		}
 		if terminal != nil {
 			p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
 			p.unget(tok)

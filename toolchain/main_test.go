@@ -3890,6 +3890,33 @@ behavior a {
 		}
 	})
 
+	t.Run("label_after_exit", func(t *testing.T) {
+		src := `behavior a {
+			exit
+			label 'target
+			notify "reached"
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("label after exit should compile: %v", err)
+		}
+	})
+
+	t.Run("jump_to_label_after_exit", func(t *testing.T) {
+		src := `behavior a {
+			@param inout trigger
+			on $trigger { jump 'target }
+			exit
+			label 'target
+			notify "reached"
+			exit
+		}`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("jump to label after exit should compile: %v", err)
+		}
+	})
+
 	t.Run("faction_register_missing_ident", func(t *testing.T) {
 		src := `behavior a { @name "A" var x = % }`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")

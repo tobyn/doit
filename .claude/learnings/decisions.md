@@ -64,6 +64,14 @@ anywhere, same as `exit`. Accepts optional empty parens (`last()`).
 Code after `exit`, `last`, `break`, or `return` is unreachable. The
 compiler warns and skips remaining statements in the block.
 
+**Label exemption**: `label` statements are exempt from unreachable-code
+pruning. A `label` after a terminal statement (e.g., `exit`) resets the
+terminal flag and resumes normal parsing. This is necessary because labels
+are jump targets — they must be emitted even if not reachable by
+fallthrough. The exemption is implemented in all three parser locations:
+behavior bodies (`codegen.go`), inner blocks (`bhvast.go`), and function
+bodies (`parse.go`).
+
 **Break label syntax**: Labels use a `'` sigil (`'outer`), making
 them syntactically distinct via `tokLabel`. No disambiguation
 heuristic needed — `break 'label` is unambiguous.

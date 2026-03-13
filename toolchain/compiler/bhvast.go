@@ -2680,6 +2680,11 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 		if tok.kind == tokEOF {
 			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
 		}
+		// Allow `label` after terminal statements — labels are jump
+		// targets and must be parsed even if not reachable by fallthrough.
+		if terminal != nil && tok.kind == tokIdent && tok.val == "label" {
+			terminal = nil
+		}
 		if terminal != nil {
 			p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
 			p.unget(tok)
