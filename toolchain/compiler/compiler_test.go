@@ -3982,10 +3982,7 @@ behavior a {
 			}
 		}`
 		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "top level") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

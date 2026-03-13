@@ -1,0 +1,36 @@
+{
+  "0": {
+    "1": 1,
+    "2": false,
+    "next": 3,
+    "op": "compare_register"
+  },
+  "1": {
+    "op": "notify",
+    "txt": "after event in if"
+  },
+  "2": {
+    "0": {
+      "num": 10
+    },
+    "next": 3,
+    "op": "wait"
+  },
+  "3": {
+    "next": 5,
+    "op": "event_parameter",
+    "pnum": 1
+  },
+  "4": {
+    "next": 2,
+    "op": "notify",
+    "txt": "inside if"
+  },
+  "name": "a",
+  "parameters": [
+    true
+  ],
+  "pnames": [
+    "Trigger"
+  ]
+}

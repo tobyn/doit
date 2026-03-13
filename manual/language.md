@@ -714,6 +714,8 @@ a variable that receives the new signal value.
 - When an event fires, all execution context is destroyed (loops, iterators,
   call stacks). The handler runs from a clean state.
 - Multiple events on the same behavior are allowed.
+- Events can appear inside any block (`if`, `loop`, `while`, etc.), not just
+  at the top level.
 
 ### Handler Continuation
 

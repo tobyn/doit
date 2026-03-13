@@ -624,6 +624,7 @@ finishes.
 - **Groups**: Multiple consecutive events (including events from
   inlined function calls that emit zero frames) naturally share
   the same `frameAtDeferral` value and thus the same continuation.
-- **Nested blocks**: Events are currently restricted to top-level
-  behavior/function bodies. Lifting this restriction is a separate
-  burndown item.
+- **Nested blocks**: Events can appear inside any block (`if`,
+  `loop`, `while`, etc.). The `frameAtDeferral` mechanism handles
+  this naturally — the continuation points to whatever frame was
+  about to be emitted inside the block.

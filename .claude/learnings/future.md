@@ -23,9 +23,11 @@ register types.
   them. They waste instruction slots in the compiled behavior.
   Visible in the sanity check output: five unreferenced label frames
   with `v_letter_L` and negative numbers.
-- **Events in nested blocks** — `on` blocks are currently restricted
-  to the top level of behavior and function bodies. Lift this
-  restriction so events can appear inside `if`, `loop`, etc.
+- **Function/behavior parsing parity** — the two-context design
+  (bhvast.go vs parse.go) means features can drift out of sync.
+  Audit both paths for missing or inconsistent support (e.g., new
+  statement types, expression forms, or modifiers supported in one
+  context but not the other).
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,

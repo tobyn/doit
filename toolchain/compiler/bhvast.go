@@ -2599,7 +2599,11 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 			Pos:          nameTok.pos,
 		}}, true, nil
 	case "on":
-		return nil, false, p.errorf(tok.pos, "'on' event handlers can only appear at the top level of a behavior or function body")
+		onStmt, err := p.parseBhvOnEvent(syms, comment)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{onStmt}, true, nil
 	case "return":
 		return nil, false, p.errorf(tok.pos, "'return' can only be used inside function bodies")
 	case "fn", "private":
@@ -2718,6 +2722,16 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 		}
 		if tok.kind == tokEOF {
 			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+		// Allow `on` event handlers after terminal statements —
+		// events are disconnected from the main flow.
+		if terminal != nil && tok.kind == tokIdent && tok.val == "on" {
+			onStmt, err := p.parseBhvOnEvent(syms, p.docComment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, onStmt)
+			continue
 		}
 		// Allow `label` after terminal statements — labels are jump
 		// targets and must be parsed even if not reachable by fallthrough.

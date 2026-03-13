@@ -1,0 +1,16 @@
+# AI-generated test
+behavior a {
+    @param inout trigger "Trigger"
+
+    if $trigger {
+        on $trigger {
+            notify "inside if"
+        }
+
+        notify "after event in if"
+    }
+
+    loop {
+        wait 10
+    }
+}
