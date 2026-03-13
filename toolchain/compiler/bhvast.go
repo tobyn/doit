@@ -3593,8 +3593,9 @@ func (p *parser) emitBehaviorStmts(stmts []Stmt, b *frameBuilder, syms *symbolTa
 		case *OnEventStmt:
 			// Defer event emission until after main flow
 			b.deferredEvents = append(b.deferredEvents, deferredEvent{
-				stmt: s,
-				syms: syms,
+				stmt:            s,
+				syms:            syms,
+				frameAtDeferral: frameRef(b.pos()),
 			})
 
 		default:

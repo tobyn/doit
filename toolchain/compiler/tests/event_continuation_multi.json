@@ -1,0 +1,44 @@
+{
+  "0": {
+    "next": false,
+    "op": "notify",
+    "txt": "resume here"
+  },
+  "1": {
+    "next": 3,
+    "op": "event_parameter",
+    "pnum": 1
+  },
+  "2": {
+    "next": 1,
+    "op": "notify",
+    "txt": "first"
+  },
+  "3": {
+    "next": 5,
+    "op": "event_parameter",
+    "pnum": 1
+  },
+  "4": {
+    "next": 1,
+    "op": "notify",
+    "txt": "fn handler"
+  },
+  "5": {
+    "next": 7,
+    "op": "event_parameter",
+    "pnum": 1
+  },
+  "6": {
+    "next": false,
+    "op": "notify",
+    "txt": "last"
+  },
+  "name": "a",
+  "parameters": [
+    true
+  ],
+  "pnames": [
+    "Trigger"
+  ]
+}

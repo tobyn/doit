@@ -323,20 +323,27 @@ callback on `emitContext` for frame resolution, then reuses the shared
 iterator helpers. `ForStmt` carries `IterInstrFrame` and `IterInstrDone`
 fields for this form.
 
-**Event system**: `on` keyword declares event handlers that are
-disconnected from the main flow. Two forms: `on $param { body }` for
-parameter-change events (`event_parameter`) and `on radio(band) -> sig
-{ body }` for radio-band events (`event_radio`). Parsed by
-`parseBhvOnEvent` (bhvast.go) at behavior level and
-`parseFnBodyOnEvent` (parse.go) in function bodies. `OnEventStmt` AST
-node carries `Kind`, `Param`, `Band`, `Signal`, `Body`, `Comment`.
-Events are collected into `frameBuilder.deferredEvents` during emission
-(both behavior-level and inlined fn body events). After all main-flow
-frames are emitted, `emitDeferredEvents` (codegen.go) emits them as
-disconnected chains: patches the last main-flow frame with
-`"next": false` if it would fall through, then emits
-`event_parameter`/`event_radio` setup frames followed by handler body
-frames. Handler bodies end with `"next": false` (restart behavior).
+**Event system**: `on` keyword declares event handlers as separate
+entry points outside the main flow. Two forms: `on $param { body }`
+for parameter-change events (`event_parameter`) and
+`on radio(band) -> sig { body }` for radio-band events
+(`event_radio`). Parsed by `parseBhvOnEvent` (bhvast.go) at behavior
+level and `parseFnBodyOnEvent` (parse.go) in function bodies.
+`OnEventStmt` AST node carries `Kind`, `Param`, `Band`, `Signal`,
+`Body`, `Comment`. Events are collected into
+`frameBuilder.deferredEvents` during emission (both behavior-level and
+inlined fn body events), with `frameAtDeferral` recording `b.pos()` at
+deferral time. After all main-flow frames are emitted,
+`emitDeferredEvents` (codegen.go) emits them: patches the last
+main-flow frame with `"next": false` if it would fall through, then
+emits `event_parameter`/`event_radio` setup frames followed by handler
+body frames. Handler continuation depends on placement:
+`frameAtDeferral < mainEnd` means the handler's final frame gets
+`"next"` pointing to the continuation frame (the frame that was about
+to be emitted when the event was deferred); otherwise it gets
+`"next": false` (restart behavior). This means event placement in
+source code determines where execution resumes after the handler — no
+superfluous bridge frames are needed.
 The `param` modifier on function parameters (`paramDef.isParam`)
 requires the caller to pass a behavior parameter; validated by
 `checkCallDirections` (behavior level) and

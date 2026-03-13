@@ -606,3 +606,24 @@ the typed value (stripping the number). Inverse of the `&` operator.
   only runs on the returned expression. If an identifier matches both
   a namespace and a variable, the namespace takes priority (existing
   behavior).
+
+## Event handler continuation
+
+Event handlers are interrupts — their setup frames exist outside the
+main control flow and all handlers can fire at any time. Where the
+handler is placed in source code determines what happens when it
+finishes.
+
+- **`frameAtDeferral`**: Each deferred event records `b.pos()` at
+  deferral time. This is the frame index that the next non-event
+  statement will emit into — the natural continuation point.
+- **Continuation vs restart**: In `emitDeferredEvents`, if
+  `frameAtDeferral < mainEnd`, the handler's final frame gets
+  `"next"` pointing to `frameAtDeferral`. Otherwise it gets
+  `"next": false` (restart). No bridge frames needed.
+- **Groups**: Multiple consecutive events (including events from
+  inlined function calls that emit zero frames) naturally share
+  the same `frameAtDeferral` value and thus the same continuation.
+- **Nested blocks**: Events are currently restricted to top-level
+  behavior/function bodies. Lifting this restriction is a separate
+  burndown item.

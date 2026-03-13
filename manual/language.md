@@ -662,9 +662,9 @@ direction keyword — see [Direction annotations](functions.md#direction-annotat
 ## Events
 
 Events let a behavior respond to changes in parameter values or radio band
-signals. Event handlers are disconnected from the main flow — the compiler
-places them after the main flow's terminal instruction. When an event fires,
-it destroys all current execution context and jumps to the handler.
+signals. Event handlers are separate entry points — the compiler places them
+outside the main flow. When an event fires, it destroys all current execution
+context and jumps to the handler.
 
 ### Parameter Events
 
@@ -713,8 +713,54 @@ a variable that receives the new signal value.
   `wait`).
 - When an event fires, all execution context is destroyed (loops, iterators,
   call stacks). The handler runs from a clean state.
-- After the handler completes, the behavior restarts from the beginning.
 - Multiple events on the same behavior are allowed.
+
+### Handler Continuation
+
+Where you place an event handler in the source code determines what happens
+when the handler finishes. If there is non-event code after the handler,
+execution resumes at that code. If the handler is at the end of the behavior
+(or only followed by more event handlers), the behavior restarts from the
+beginning.
+
+```doit
+behavior sensor {
+    @param inout trigger "Trigger"
+
+    on $trigger {
+        notify "handled"
+    }
+
+    # After the handler finishes, execution resumes here
+    notify "resuming"
+
+    loop { wait 10 }
+}
+```
+
+Multiple consecutive event handlers (including events added by function calls)
+share the same continuation point — the first non-event statement after the
+group:
+
+```doit
+behavior multi {
+    @param inout trigger "Trigger"
+
+    on $trigger {
+        notify "first handler"
+    }
+
+    setup_more_events $trigger
+
+    # All handlers above resume here
+    notify "resuming"
+
+    # This handler is at the end — behavior restarts
+    on $trigger {
+        notify "final handler"
+    }
+}
+```
 
 ### Events in Functions
 

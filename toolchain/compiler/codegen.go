@@ -504,14 +504,17 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 
 // emitDeferredEvents emits all deferred event handlers after the main flow.
 // It patches the last main-flow frame to prevent fall-through into event area,
-// then emits each event setup + handler chain.
+// then emits each event setup + handler chain. Each handler's final frame is
+// connected to its continuation point: if the event was deferred before the
+// end of the main flow, the handler resumes at the frame that was about to be
+// emitted at deferral time; otherwise the handler restarts the behavior.
 func (p *parser) emitDeferredEvents(b *frameBuilder, syms *symbolTable) error {
 	// Ensure no fall-through from main flow into event area.
 	// If the last main-flow frame would fall through (no explicit "next"),
 	// patch it with "next": false (restart).
-	mainEnd := b.pos()
+	mainEnd := frameRef(b.pos())
 	if mainEnd > 0 {
-		lastFrame := b.get(mainEnd - 1)
+		lastFrame := b.get(int(mainEnd) - 1)
 		if _, hasNext := lastFrame["next"]; !hasNext {
 			lastFrame["next"] = false
 		}
@@ -520,6 +523,15 @@ func (p *parser) emitDeferredEvents(b *frameBuilder, syms *symbolTable) error {
 	for _, de := range b.deferredEvents {
 		evt := de.stmt
 		fromFnBody := de.paramMap != nil
+
+		// Determine handler continuation: if the event was deferred before
+		// the end of the main flow, resume there; otherwise restart.
+		var continuation any // frameRef or false
+		if de.frameAtDeferral < mainEnd {
+			continuation = de.frameAtDeferral
+		} else {
+			continuation = false
+		}
 
 		switch evt.Kind {
 		case "parameter":
@@ -565,8 +577,7 @@ func (p *parser) emitDeferredEvents(b *frameBuilder, syms *symbolTable) error {
 				}
 			}
 
-			// Ensure handler ends with "next": false (restart)
-			p.patchHandlerEnd(b)
+			p.patchHandlerEnd(b, continuation)
 
 		case "radio":
 			// Evaluate band expression at compile time
@@ -610,20 +621,21 @@ func (p *parser) emitDeferredEvents(b *frameBuilder, syms *symbolTable) error {
 				}
 			}
 
-			// Ensure handler ends with "next": false
-			p.patchHandlerEnd(b)
+			p.patchHandlerEnd(b, continuation)
 		}
 	}
 	return nil
 }
 
-// patchHandlerEnd ensures the last emitted frame has "next": false.
-func (p *parser) patchHandlerEnd(b *frameBuilder) {
+// patchHandlerEnd sets "next" on the last emitted frame if it doesn't already
+// have one. continuation is either a frameRef (resume at that frame) or false
+// (restart the behavior).
+func (p *parser) patchHandlerEnd(b *frameBuilder, continuation any) {
 	endPos := b.pos()
 	if endPos > 0 {
 		lastHandler := b.get(endPos - 1)
 		if _, hasNext := lastHandler["next"]; !hasNext {
-			lastHandler["next"] = false
+			lastHandler["next"] = continuation
 		}
 	}
 }

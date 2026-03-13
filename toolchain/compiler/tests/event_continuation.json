@@ -1,24 +1,28 @@
 {
   "0": {
+    "op": "notify",
+    "txt": "after event"
+  },
+  "1": {
     "0": {
       "num": 10
     },
-    "next": 1,
+    "next": 2,
     "op": "wait"
   },
-  "1": {
-    "next": 3,
+  "2": {
+    "next": 4,
     "op": "event_parameter",
     "pnum": 1
   },
-  "2": {
+  "3": {
     "next": 1,
     "op": "notify",
-    "txt": "changed"
+    "txt": "handled"
   },
   "name": "a",
   "parameters": [
-    false
+    true
   ],
   "pnames": [
     "Trigger"

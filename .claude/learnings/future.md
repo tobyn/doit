@@ -23,9 +23,9 @@ register types.
   them. They waste instruction slots in the compiled behavior.
   Visible in the sanity check output: five unreferenced label frames
   with `v_letter_L` and negative numbers.
-- **Event handlers in control flow** — event handlers (`on` blocks)
-  are currently emitted as disconnected chains. Allow connecting them
-  into the main control flow.
+- **Events in nested blocks** — `on` blocks are currently restricted
+  to the top level of behavior and function bodies. Lift this
+  restriction so events can appear inside `if`, `loop`, etc.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
@@ -123,8 +123,7 @@ hello"`). The syntax for this hasn't been decided yet.
 
 ## AST optimizations
 
-Constant folding is now implemented (arithmetic, comparisons, boolean
-chains, negation). Remaining optimization ideas:
+Remaining optimization ideas beyond constant folding:
 
 - **Dead code elimination**: Remove unreachable statements after
   `return`/`break`.
@@ -241,12 +240,6 @@ its only unique capability is enabling recursion — for both functions
 and iterators. This is low priority but worth keeping in mind as a
 someday feature. The infrastructure (`call` instruction, dependency
 arrays, self-call via `"sub": -1`) is fully understood.
-
-## `call` keyword for inter-behavior calls — IMPLEMENTED
-
-Implemented. See `decisions.md` "call keyword" section for the design.
-The `load_behavior` instruction remains a separate burndown item — it
-will reuse the same behavior-reference and dependency mechanism.
 
 ## Visual layout (nx/ny fields)
 

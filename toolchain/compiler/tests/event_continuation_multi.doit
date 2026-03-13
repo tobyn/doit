@@ -1,0 +1,24 @@
+# AI-generated test
+fn more_events(param trigger) {
+    on trigger {
+        notify "fn handler"
+    }
+}
+
+behavior a {
+    @param inout trigger "Trigger"
+
+    # These two events (inline + from function) share a continuation
+    on $trigger {
+        notify "first"
+    }
+
+    more_events $trigger
+
+    notify "resume here"
+
+    # This event is at the end — no continuation (restart)
+    on $trigger {
+        notify "last"
+    }
+}

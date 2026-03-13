@@ -2462,8 +2462,9 @@ func (p *parser) emitFnBodyCore(stmts []Stmt, b *frameBuilder, paramMap map[stri
 			// Defer event emission until after main flow.
 			// Resolve the param through paramMap for inlined function context.
 			b.deferredEvents = append(b.deferredEvents, deferredEvent{
-				stmt:     s,
-				paramMap: maps.Clone(paramMap),
+				stmt:            s,
+				paramMap:        maps.Clone(paramMap),
+				frameAtDeferral: frameRef(b.pos()),
 			})
 
 		case *ReturnStmt:

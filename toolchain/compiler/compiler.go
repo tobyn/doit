@@ -988,9 +988,10 @@ func (b *frameBuilder) finalize(value map[string]any) {
 // after the main flow. Both behavior-level and inlined function events use
 // this struct.
 type deferredEvent struct {
-	stmt     *OnEventStmt
-	paramMap map[string]any  // resolved param mappings (nil for behavior-level)
-	syms     *symbolTable    // behavior-level symbol table
+	stmt            *OnEventStmt
+	paramMap        map[string]any // resolved param mappings (nil for behavior-level)
+	syms            *symbolTable   // behavior-level symbol table
+	frameAtDeferral frameRef       // b.pos() when the event was deferred
 }
 
 // emitContext abstracts the differences between behavior-level and fn body
