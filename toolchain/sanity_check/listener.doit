@@ -2,27 +2,28 @@
 # Sanity Check — Listener Behavior (Unit B: the receiver)
 # ============================================================
 #
-# This behavior tests events, radio events, and faction registers
-# from the perspective of a second unit.
+# This behavior tests radio reception and cross-unit faction
+# registers from the perspective of a second unit.
 #
 # Parameters:
-#   Result (out)        — test count for Unit B
-#   Trigger (inout)     — parameter event trigger (change this to fire event)
+#   Result (inout)      — test count for Unit B
+#   Failed (out)        — test number that failed (0 = all passed)
 #
 # Instructions:
 #   1. Load this behavior onto Unit B
 #   2. Run it — it will wait for Unit A to set up faction registers
 #      and radio transmission, then verify
 #
-# Expected Result: 6
+# Expected Result: 5
 # ============================================================
 
 behavior listener {
     @name "Sanity Listener"
-    @param out result "Result"
-    @param inout trigger "Trigger"
+    @param inout result "Result"
+    @param out failed "Failed"
 
-    var step = 0
+    $result = 0
+    $failed = 0
 
     # ----------------------------------------------------------
     # Test 1: Faction register written by Unit A
@@ -32,56 +33,33 @@ behavior listener {
     wait 50
 
     var fr1 = %sanity_test_val
-    if fr1 == 777 { step++ }   # 1
+    if fr1 == 777 { $result += 1 } else { $failed = 1; exit }   # 1
 
     # ----------------------------------------------------------
     # Test 2: Faction register counter written by Unit A
     # ----------------------------------------------------------
     var fr2 = %sanity_test_counter
-    if fr2 == 15 { step++ }    # 2
+    if fr2 == 15 { $result += 1 } else { $failed = 2; exit }    # 2
 
     # ----------------------------------------------------------
     # Test 3: Faction register flag
     # ----------------------------------------------------------
-    if %sanity_test_flag == 42 { step++ }   # 3
+    if %sanity_test_flag == 42 { $result += 1 } else { $failed = 3; exit }   # 3
 
     # ----------------------------------------------------------
     # Test 4: get_self returns this unit (not Unit A)
     # ----------------------------------------------------------
     let me = get_self
-    if me is Unit { step++ }   # 4
+    if me is Unit { $result += 1 } else { $failed = 4; exit }   # 4
 
     # ----------------------------------------------------------
     # Test 5: Read radio signal via read_radio
     # ----------------------------------------------------------
     # Unit A's transmitter should be broadcasting 123 on Item("metalbar") band.
     let radio_val = read_radio Item("metalbar")
-    if radio_val == 123 { step++ }  # 5
+    if radio_val == 123 { $result += 1 } else { $failed = 5; exit }  # 5
 
-    # ----------------------------------------------------------
-    # Test 6: Event handlers compile and register
-    # ----------------------------------------------------------
-    # Since step 5 already verified radio reception, count this
-    # as testing that the behavior compiles with event handlers.
-    step++   # 6
-
-    # Write result
-    $result = set_reg step
-
-    # ----------------------------------------------------------
-    # Stay alive for event handlers
-    # ----------------------------------------------------------
-    loop {
-        wait 10
-    }
-
-    # Parameter event handler — fires when Trigger changes
-    on $trigger {
-        notify "param event fired"
-    }
-
-    # Radio event handler — fires when signal changes on this band
-    on radio(Item("metalbar")) {
-        notify "radio event"
-    }
+    # Signal completion to Unit A via faction register
+    %sanity_listener_result = $result
+    exit
 }

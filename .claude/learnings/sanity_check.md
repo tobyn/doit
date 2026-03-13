@@ -2,7 +2,7 @@
 
 End-to-end verification that the compiler produces correct game behavior.
 The developer imports compiled base62 into Desynced and reports the output
-parameter value.
+parameter values.
 
 **Do not record run-specific results here.** No test counts, pass/fail
 status, or bugs-found-and-fixed per run. That's changelog noise that
@@ -21,11 +21,12 @@ All source files live in `toolchain/sanity_check/` (checked into the
 repo):
 
 - **`sanity_check/lib.doit`** — Library file imported by the test behavior.
-- **`sanity_check/test.doit`** — Main sanity check behavior.
+- **`sanity_check/test.doit`** — Main sanity check behavior (plus a
+  small `call_helper` behavior for testing `call`).
 - **`sanity_check/listener.doit`** — Listener behavior for multi-unit tests.
 
-Compiled output (`.b62` files) go to `scratch/` (gitignored). Recreate
-`scratch/` if it doesn't exist.
+Compiled output (`.b62` files) go in `toolchain/sanity_check/` itself
+(`.b62` and `.json` are gitignored there).
 
 These files are **persistent and incremental** — do not delete or
 rewrite them from scratch. New features get new tests appended;
@@ -59,9 +60,13 @@ what needs testing.
 
 ```sh
 cd toolchain
-go run . compile ../toolchain/sanity_check/test.doit > ../scratch/test.b62
-go run . compile ../toolchain/sanity_check/listener.doit > ../scratch/listener.b62
+go run . compile -b sanity_check sanity_check/test.doit > sanity_check/test.b62
+go run . compile sanity_check/listener.doit > sanity_check/listener.b62
 ```
+
+Note: `test.doit` contains a second behavior (`call_helper`) used by
+the `call` test — it's embedded automatically during compilation, no
+separate compile needed. The `-b` flag selects the main behavior.
 
 If compilation fails, fix the test code (not the compiler) unless the
 error reveals a compiler bug.
@@ -69,69 +74,42 @@ error reveals a compiler bug.
 ### 4. Ask the developer to test
 
 Tell the developer:
-- The base62 strings are in `scratch/test.b62` and `scratch/listener.b62`
-- What to set the input parameters to
-- What the expected Result values are
+- The base62 strings are in `toolchain/sanity_check/`
+- Unit A needs a radio transmitter with its band and value registers
+  linked to the Radio Band and Radio Value output parameters
+- Unit B just needs the listener behavior loaded
+- Start both behaviors, then change the Trigger parameter on Unit A
+  to any value at some point during the run
+- Expected results (check the file headers for current values):
+  - Unit A: Result = expected count, Failed = 0
+  - Unit B: Result = expected count, Failed = 0
 
 ### 5. Interpret the result
 
-- **Result matches expected** — sanity check passes. Done.
-- **Result is less than expected** — the result IS the number of
-  passing tests. Use diagnostics (see below) to isolate failures.
-- **Result is 0 or null** — likely a very early failure or a problem
-  with parameter assignment. Start with a minimal diagnostic (e.g.,
-  just set Result = 42 and exit) to verify basics work.
+Both behaviors have two output parameters:
+- **Result** — number of tests that passed (incremented live during
+  execution, doubles as a progress meter)
+- **Failed** — the test number that failed, or 0 if all passed
+
+Interpreting:
+- **Failed = 0, Result = expected** — all tests pass. Done.
+- **Failed = N** — test N failed. The behavior exited immediately
+  at that test. Look up test N in the source to identify the feature.
+- **Result = expected - 1, Failed = 0** — all synchronous tests
+  passed but the parameter event (Trigger) didn't fire. The developer
+  forgot to change the Trigger parameter, or event binding is broken.
 
 ## Diagnostic Techniques
 
-Each round-trip with the developer is expensive — they have to import
-a behavior, run it, and report the result. Maximize the information
-gained per round-trip.
-
-### Bitmask diagnostics (preferred)
-
-Use **bitmask encoding** to identify multiple failures in a single
-behavior. Assign each test a power of 2:
-
-```
-var step = 0
-if <test A passes> { step += 1 }
-if <test B passes> { step += 2 }
-if <test C passes> { step += 4 }
-if <test D passes> { step += 8 }
-$result = set_reg step
-exit
-```
-
-Decode the result as binary: each 0 bit is a failing test. Example
-with 4 tests: result 13 (1101) = test B fails; result 7 (0111) =
-test D fails; result 15 (1111) = all pass.
-
-This is the primary diagnostic tool. Use it whenever the candidate
-set is small enough (up to ~10 tests per behavior to stay within
-integer precision). Prefer fewer diagnostics with more bits over
-many diagnostics with one test each.
-
-### Binary search narrowing
-
-When the failure set is too large for a single bitmask behavior (the
-main test has dozens of tests), use halving to narrow down first:
-
-1. Split the tests into halves. Create two behaviors, each with one
-   half, using `step++` counting.
-2. The developer tests both. The results reveal which half(s) contain
-   failures and how many.
-3. Continue halving until the candidate set is <=10 tests, then switch
-   to bitmask diagnostics to identify exact failures.
-
-Goal: reach bitmask diagnostics as fast as possible. Halving is just
-the funnel to get there.
+The `Failed` parameter identifies failing tests immediately, so most
+diagnostics from earlier are no longer needed. These techniques are
+still useful for investigating *why* a test fails.
 
 ### Value capture diagnostics
 
 When a test fails and the cause is unclear (wrong expectation vs
-compiler bug), output the **actual computed value** instead of a
-pass/fail flag:
+compiler bug), temporarily replace the test's assertion with output
+of the **actual computed value**:
 
 ```
 var actual = 0
@@ -163,8 +141,6 @@ to mentally parse raw JSON:
 ### General diagnostic principles
 
 - Diagnostic files go in `scratch/` (diag1.doit, diag2.doit, ...).
-- Batch diagnostics when possible — compile and present multiple
-  behaviors per round so the developer can test them in one session.
 - A failing test in the main behavior that passes in isolation
   suggests an interaction effect (variable collision, instruction
   budget, execution order), not a standalone bug.
@@ -176,12 +152,22 @@ Each test follows this pattern in `test.doit`:
 ```
 # N: short description of what's being tested
 <setup code>
-if <expected condition> { step++ }
+if <expected condition> { $result += 1 } else { $failed = N; exit }
 ```
 
-Tests should be independent — each test's variables should not depend on
-side effects from previous tests (except `step` itself). Use fresh
-variable names per test to avoid collisions.
+Important rules:
+- **Hardcode the test number** in `$failed = N`. Do not derive it
+  from `$result` — async events (like the parameter event handler)
+  can increment `$result` at unpredictable times, so it doesn't
+  reliably reflect position.
+- **Use `unlocked { }` blocks** for pure-computation tests. Group
+  them by section. Leave tests that interact with game state (faction
+  registers, unit registers, radio, get_self, stdlib calls) in normal
+  mode.
+- **Keep loops small** inside unlocked blocks to stay within the
+  instruction budget. 3 iterations is enough to verify loop mechanics.
+- Tests should be independent — each test's variables should not
+  depend on side effects from previous tests.
 
 **Test language constructs, not game instructions.** Verify values using
 language-level operations — comparisons (`>`, `==`), arithmetic (`+`),
@@ -191,12 +177,18 @@ semantics we may not fully understand. For example, to verify
 item <= 5` (numeric comparison), not `get_resource_num` (game
 instruction with unknown semantics).
 
-The behavior ends with:
+## Multi-Unit Communication
 
-```
-$result = set_reg step
-exit
-```
+The test and listener behaviors communicate via faction registers:
+
+- **Unit A → Unit B**: Unit A writes `%sanity_test_val`,
+  `%sanity_test_counter`, `%sanity_test_flag` during its tests.
+  The listener waits 50 ticks then reads them.
+- **Unit B → Unit A**: The listener writes `%sanity_listener_result`
+  with its pass count. Unit A polls this in a loop (20 × 5 ticks)
+  and breaks early when it arrives.
+
+This eliminates manual bridging — both behaviors run autonomously.
 
 ## Library Patterns
 

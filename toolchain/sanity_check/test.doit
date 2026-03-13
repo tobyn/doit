@@ -8,132 +8,155 @@ import * from "./lib"
 #   Result (out)       — final test count
 #   Radio Band (out)   — linked to radio transmitter band register
 #   Radio Value (out)  — linked to radio transmitter value register
-#   Listener OK (in)   — set by you after Unit B reports success
+#   Trigger (inout)    — change to fire parameter event (test 107)
 #
-# Expected Result: 106 (if Listener OK is set), 105 (if not)
+# Expected Result: 107 (with trigger), 106 (without)
 # ============================================================
 
 behavior sanity_check {
     @name "Sanity Check"
-    @param out result "Result"
+    @param inout result "Result"
+    @param out failed "Failed"
+    @param inout trigger "Trigger"
     @param out radio_band "Radio Band"
     @param out radio_value "Radio Value"
-    @param in listener_ok "Listener OK"
 
-    var step = 0
+    $result = 0
+    $failed = 0
+    %sanity_listener_result = 0
+
+    # 107: parameter event — fires when Trigger is changed (any time during run)
+    on $trigger {
+        $result += 1
+        jump 'start
+    }
+
+    # We're waiting here for the parameter event to be triggered and jump past us
+    wait 100
+    $failed = 107
+    exit
+    label 'start
 
     # ----------------------------------------------------------
     # Section 1: Constants and imports
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 1: imported constant
-    if MAGIC == 42 { step++ }
+    if MAGIC == 42 { $result += 1 } else { $failed = 1; exit }
 
     # 2: imported type constructor constant
-    if METAL == Item("metalbar") { step++ }
+    if METAL == Item("metalbar") { $result += 1 } else { $failed = 2; exit }
 
     # 3: composite constant (& operator)
-    if METAL_STACK >= 10 && METAL_STACK <= 10 { step++ }
+    if METAL_STACK >= 10 && METAL_STACK <= 10 { $result += 1 } else { $failed = 3; exit }
 
     # 4: coordinate constant
-    if ORIGIN is Coordinate { step++ }
+    if ORIGIN is Coordinate { $result += 1 } else { $failed = 4; exit }
 
     # 5: computed constant (constant folding)
-    if COMPUTED == 22 { step++ }
+    if COMPUTED == 22 { $result += 1 } else { $failed = 5; exit }
 
     # 6: enum values
-    if Color::Red == 0 && Color::Green == 1 && Color::Blue == 2 { step++ }
+    if Color::Red == 0 && Color::Green == 1 && Color::Blue == 2 { $result += 1 } else { $failed = 6; exit }
 
     # 7: enum with explicit values
-    if Priority::Low == 0 && Priority::Medium == 5 && Priority::High == 6 && Priority::Critical == 100 { step++ }
+    if Priority::Low == 0 && Priority::Medium == 5 && Priority::High == 6 && Priority::Critical == 100 { $result += 1 } else { $failed = 7; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 2: Basic function calls
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 8: zero-arg function
-    if get_magic() == 42 { step++ }
+    if get_magic() == 42 { $result += 1 } else { $failed = 8; exit }
 
     # 9: private fn via public wrapper (transitive privacy)
-    if get_secret() == 99 { step++ }
+    if get_secret() == 99 { $result += 1 } else { $failed = 9; exit }
 
     # 10: arithmetic functions
-    if adder(3, 4) == 7 { step++ }
+    if adder(3, 4) == 7 { $result += 1 } else { $failed = 10; exit }
 
     # 11: subtraction
-    if sub_fn(10, 3) == 7 { step++ }
+    if sub_fn(10, 3) == 7 { $result += 1 } else { $failed = 11; exit }
 
     # 12: multiplication
-    if mul_fn(4, 5) == 20 { step++ }
+    if mul_fn(4, 5) == 20 { $result += 1 } else { $failed = 12; exit }
 
     # 13: division
-    if div_fn(20, 4) == 5 { step++ }
+    if div_fn(20, 4) == 5 { $result += 1 } else { $failed = 13; exit }
 
     # 14: modulo
-    if mod_fn(17, 5) == 2 { step++ }
+    if mod_fn(17, 5) == 2 { $result += 1 } else { $failed = 14; exit }
 
     # 15: negation
-    if negate(7) == -7 { step++ }
+    if negate(7) == -7 { $result += 1 } else { $failed = 15; exit }
 
     # 16: clamp (below range)
-    if clamp(1, 5, 10) == 5 { step++ }
+    if clamp(1, 5, 10) == 5 { $result += 1 } else { $failed = 16; exit }
 
     # 17: clamp (above range)
-    if clamp(15, 5, 10) == 10 { step++ }
+    if clamp(15, 5, 10) == 10 { $result += 1 } else { $failed = 17; exit }
 
     # 18: clamp (in range)
-    if clamp(7, 5, 10) == 7 { step++ }
+    if clamp(7, 5, 10) == 7 { $result += 1 } else { $failed = 18; exit }
 
     # 19: sum_to (while loop)
-    if sum_to(5) == 15 { step++ }
+    if sum_to(3) == 6 { $result += 1 } else { $failed = 19; exit }
 
     # 20: factorial
-    if factorial(5) == 120 { step++ }
+    if factorial(3) == 6 { $result += 1 } else { $failed = 20; exit }
 
     # 21: transitive call (double calls adder)
-    if double(6) == 12 { step++ }
+    if double(6) == 12 { $result += 1 } else { $failed = 21; exit }
 
     # 22: multiple return values
     let a22, b22 = swap(3, 7)
-    if a22 == 7 && b22 == 3 { step++ }
+    if a22 == 7 && b22 == 3 { $result += 1 } else { $failed = 22; exit }
 
     # 23: out parameter
     var out23 = 0
     writer out out23
-    if out23 is Unit { step++ }
+    if out23 is Unit { $result += 1 } else { $failed = 23; exit }
 
     # 24: inout parameter
     var val24 = 5
     incrementer inout val24
-    if val24 == 6 { step++ }
+    if val24 == 6 { $result += 1 } else { $failed = 24; exit }
 
     # 25: early return (abs_val)
-    if abs_val(-8) == 8 && abs_val(3) == 3 { step++ }
+    if abs_val(-8) == 8 && abs_val(3) == 3 { $result += 1 } else { $failed = 25; exit }
 
     # 26: boolean return
-    if is_positive(5) && !is_positive(-1) { step++ }
+    if is_positive(5) && !is_positive(-1) { $result += 1 } else { $failed = 26; exit }
 
     # 27: boolean AND return
-    if both_positive(3, 4) && !both_positive(-1, 4) { step++ }
+    if both_positive(3, 4) && !both_positive(-1, 4) { $result += 1 } else { $failed = 27; exit }
 
     # 28: boolean OR return
-    if either_positive(-1, 4) && !either_positive(-1, -2) { step++ }
+    if either_positive(-1, 4) && !either_positive(-1, -2) { $result += 1 } else { $failed = 28; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 3: Arithmetic and expressions
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 29: basic arithmetic
     let sum29 = 3 + 4
-    if sum29 == 7 { step++ }
+    if sum29 == 7 { $result += 1 } else { $failed = 29; exit }
 
     # 30: PEMDAS
     let pemdas30 = 2 + 3 * 4
-    if pemdas30 == 14 { step++ }
+    if pemdas30 == 14 { $result += 1 } else { $failed = 30; exit }
 
     # 31: parenthesized override
     let paren31 = (2 + 3) * 4
-    if paren31 == 20 { step++ }
+    if paren31 == 20 { $result += 1 } else { $failed = 31; exit }
 
     # 32: compound assignment
     var comp32 = 10
@@ -141,99 +164,105 @@ behavior sanity_check {
     comp32 -= 2
     comp32 *= 3
     comp32 /= 13
-    if comp32 == 3 { step++ }
+    if comp32 == 3 { $result += 1 } else { $failed = 32; exit }
 
     # 33: increment/decrement
     var inc33 = 0
     inc33++
     inc33++
     inc33--
-    if inc33 == 1 { step++ }
+    if inc33 == 1 { $result += 1 } else { $failed = 33; exit }
 
     # 34: unary minus on variable
     var neg34 = 5
     let neg34b = -neg34
-    if neg34b == -5 { step++ }
+    if neg34b == -5 { $result += 1 } else { $failed = 34; exit }
 
     # 35: modulo operator
     let mod35 = 17 % 5
-    if mod35 == 2 { step++ }
+    if mod35 == 2 { $result += 1 } else { $failed = 35; exit }
 
     # 36: constant folding in arithmetic
     let fold36 = 2 * 3 + 4 * 5
-    if fold36 == 26 { step++ }
+    if fold36 == 26 { $result += 1 } else { $failed = 36; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 4: Comparisons and boolean logic
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 37: comparison operators
-    if 5 > 3 && 3 < 5 && 5 >= 5 && 5 <= 5 { step++ }
+    if 5 > 3 && 3 < 5 && 5 >= 5 && 5 <= 5 { $result += 1 } else { $failed = 37; exit }
 
     # 38: equality and inequality
     let eq38a = 5
     let eq38b = 5
-    if eq38a == eq38b && eq38a != 3 { step++ }
+    if eq38a == eq38b && eq38a != 3 { $result += 1 } else { $failed = 38; exit }
 
     # 39: boolean chain (&&)
     var val39 = 7
     let bc39 = val39 > 0 && val39 < 100 && val39 != 50
-    if bc39 { step++ }
+    if bc39 { $result += 1 } else { $failed = 39; exit }
 
     # 40: boolean chain (||)
     var val40 = -5
     let bc40 = val40 > 100 || val40 < 0
-    if bc40 { step++ }
+    if bc40 { $result += 1 } else { $failed = 40; exit }
 
     # 41: mixed && and || precedence
     var a41 = 10
     let r41 = a41 > 5 && a41 < 20 || a41 == 100
-    if r41 { step++ }
+    if r41 { $result += 1 } else { $failed = 41; exit }
 
     # 42: negation operator
     var f42 = null
-    if !f42 { step++ }
+    if !f42 { $result += 1 } else { $failed = 42; exit }
 
     # 43: double negation
     var t43 = 1
-    if !!t43 { step++ }
+    if !!t43 { $result += 1 } else { $failed = 43; exit }
 
     # 44: parenthesized boolean
     var a44 = 3
     let r44 = (a44 > 1 || a44 < -1) && a44 < 10
-    if r44 { step++ }
+    if r44 { $result += 1 } else { $failed = 44; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 5: Type constructors and type checks
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 45: Item constructor
     let item45 = Item("metalbar")
-    if item45 is Item { step++ }
+    if item45 is Item { $result += 1 } else { $failed = 45; exit }
 
     # 46: Component constructor
     let comp46 = Component("behavior")
-    if comp46 is Component { step++ }
+    if comp46 is Component { $result += 1 } else { $failed = 46; exit }
 
     # 47: Technology constructor
     let tech47 = Technology("signals2")
-    if tech47 is Technology { step++ }
+    if tech47 is Technology { $result += 1 } else { $failed = 47; exit }
 
     # 48: Value constructor
     let val48 = Value("pentagon")
-    if val48 is Value { step++ }
+    if val48 is Value { $result += 1 } else { $failed = 48; exit }
 
     # 49: Coordinate constructor (literal)
     let coord49 = Coordinate(3, 7)
-    if coord49 is Coordinate { step++ }
+    if coord49 is Coordinate { $result += 1 } else { $failed = 49; exit }
 
     # 50: & operator — composite value
     let stack50 = Item("metalbar") & 5
-    if stack50 is Item && stack50 >= 5 && stack50 <= 5 { step++ }
+    if stack50 is Item && stack50 >= 5 && stack50 <= 5 { $result += 1 } else { $failed = 50; exit }
 
     # 51: !is (negated type check)
     let num51 = 42
-    if num51 !is Unit && num51 !is Item { step++ }
+    if num51 !is Unit && num51 !is Item { $result += 1 } else { $failed = 51; exit }
 
     # 52: value_type branching
     let vt52 = Item("circuit")
@@ -246,43 +275,49 @@ behavior sanity_check {
         coord { 0 }
         no_match { 0 }
     }
-    if vt52_ok { step++ }
+    if vt52_ok { $result += 1 } else { $failed = 52; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 6: Variables and scoping
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 53: block scoping
     var scope53 = 1
     if true {
         let scope53 = 99
     }
-    if scope53 == 1 { step++ }
+    if scope53 == 1 { $result += 1 } else { $failed = 53; exit }
 
     # 54: shadowing
     let shd54 = 5
     let shd54_a = shd54
     let shd54 = 10
-    if shd54_a == 5 && shd54 == 10 { step++ }
+    if shd54_a == 5 && shd54 == 10 { $result += 1 } else { $failed = 54; exit }
 
     # 55: multi-binding expression list
     let mb55a, mb55b, mb55c = 1, 2, 3
-    if mb55a == 1 && mb55b == 2 && mb55c == 3 { step++ }
+    if mb55a == 1 && mb55b == 2 && mb55c == 3 { $result += 1 } else { $failed = 55; exit }
 
     # 56: null vs 0 distinction
     var zero56 = 0
     var empty56 = null
-    if zero56 && !empty56 { step++ }
+    if zero56 && !empty56 { $result += 1 } else { $failed = 56; exit }
 
     # 57: boolean literals
     let t57 = true
     let f57 = false
-    if t57 && !f57 { step++ }
+    if t57 && !f57 { $result += 1 } else { $failed = 57; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 7: Control flow
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 58: if/else if/else
     var r58 = 0
     var v58 = 5
@@ -293,16 +328,16 @@ behavior sanity_check {
     } else {
         r58 = 3
     }
-    if r58 == 2 { step++ }
+    if r58 == 2 { $result += 1 } else { $failed = 58; exit }
 
     # 59: while loop
     var sum59 = 0
     var i59 = 1
-    while i59 <= 5 {
+    while i59 <= 3 {
         sum59 += i59
         i59++
     }
-    if sum59 == 15 { step++ }
+    if sum59 == 6 { $result += 1 } else { $failed = 59; exit }
 
     # 60: loop with break
     var cnt60 = 0
@@ -310,41 +345,41 @@ behavior sanity_check {
         cnt60++
         if cnt60 >= 3 { break }
     }
-    if cnt60 == 3 { step++ }
+    if cnt60 == 3 { $result += 1 } else { $failed = 60; exit }
 
     # 61: counted loop
     var cnt61 = 0
-    loop 5 {
+    loop 3 {
         cnt61++
     }
-    if cnt61 == 5 { step++ }
+    if cnt61 == 3 { $result += 1 } else { $failed = 61; exit }
 
     # 62: for with Range
     var sum62 = 0
-    for i in Range(1, 5) {
+    for i in Range(1, 3) {
         sum62 += i
     }
-    if sum62 == 15 { step++ }
+    if sum62 == 6 { $result += 1 } else { $failed = 62; exit }
 
     # 63: for with Range(start, stop, step)
     var sum63 = 0
-    for i in Range(0, 10, 2) {
+    for i in Range(0, 4, 2) {
         sum63 += i
     }
-    if sum63 == 30 { step++ }
+    if sum63 == 6 { $result += 1 } else { $failed = 63; exit }
 
     # 64: for with negative step
     var sum64 = 0
-    for i in Range(5, 1, -1) {
+    for i in Range(3, 1, -1) {
         sum64 += i
     }
-    if sum64 == 15 { step++ }
+    if sum64 == 6 { $result += 1 } else { $failed = 64; exit }
 
     # 65: labeled break
     var r65 = 0
     'outer65: loop {
         var j = 0
-        while j < 10 {
+        while j < 5 {
             if j == 3 {
                 r65 = j
                 break 'outer65
@@ -352,59 +387,65 @@ behavior sanity_check {
             j++
         }
     }
-    if r65 == 3 { step++ }
+    if r65 == 3 { $result += 1 } else { $failed = 65; exit }
 
     # 66: continue
     var sum66 = 0
-    for i in Range(1, 5) {
+    for i in Range(1, 4) {
         if i == 3 { continue }
         sum66 += i
     }
-    if sum66 == 12 { step++ }
+    if sum66 == 7 { $result += 1 } else { $failed = 66; exit }
 
     # 67: nested for loops
     var sum67 = 0
-    for i in Range(1, 3) {
+    for i in Range(1, 2) {
         for j in Range(1, 2) {
             sum67 += 1
         }
     }
-    if sum67 == 6 { step++ }
+    if sum67 == 4 { $result += 1 } else { $failed = 67; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 8: If-expressions and mode block expressions
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 68: basic if-expression
     var v68 = 7
     let r68 = if v68 > 5 { 1 } else { 0 }
-    if r68 == 1 { step++ }
+    if r68 == 1 { $result += 1 } else { $failed = 68; exit }
 
     # 69: if-expression without else (null)
     var v69 = 1
     let r69 = if v69 > 100 { 99 }
-    if !r69 { step++ }
+    if !r69 { $result += 1 } else { $failed = 69; exit }
 
     # 70: if-expression with else if
     var v70 = 5
     let r70 = if v70 > 10 { 3 } else if v70 > 3 { 2 } else { 1 }
-    if r70 == 2 { step++ }
+    if r70 == 2 { $result += 1 } else { $failed = 70; exit }
 
     # 71: mode block expression
     let me71 = unlocked { get_self }
-    if me71 is Unit { step++ }
+    if me71 is Unit { $result += 1 } else { $failed = 71; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 9: Branching functions and continuations
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 72: pure-logic branching (classify)
     var r72 = 0
     classify(10) {
         big { r72 = 1 }
         small { r72 = 0 }
     }
-    if r72 == 1 { step++ }
+    if r72 == 1 { $result += 1 } else { $failed = 72; exit }
 
     # 73: branching with data
     var r73 = 0
@@ -412,14 +453,14 @@ behavior sanity_check {
         big { v, flag -> r73 = flag }
         small { v, flag -> r73 = 0 }
     }
-    if r73 == 1 { step++ }
+    if r73 == 1 { $result += 1 } else { $failed = 73; exit }
 
     # 74: expression-form branching
     let r74 = classify(10) {
         big { 1 }
         small { 0 }
     }
-    if r74 == 1 { step++ }
+    if r74 == 1 { $result += 1 } else { $failed = 74; exit }
 
     # 75: stdlib branching — check_number
     var v75 = 10
@@ -429,7 +470,7 @@ behavior sanity_check {
         smaller { r75 = 2 }
         equal { r75 = 3 }
     }
-    if r75 == 1 { step++ }
+    if r75 == 1 { $result += 1 } else { $failed = 75; exit }
 
     # 76: stdlib branching — compare_register
     let a76 = Item("metalbar")
@@ -439,44 +480,51 @@ behavior sanity_check {
         different { r76 = 0 }
         equal { r76 = 1 }
     }
-    if r76 == 1 { step++ }
+    if r76 == 1 { $result += 1 } else { $failed = 76; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 10: Iterators (user-defined)
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 77: static sequence iterator
     var sum77 = 0
     for v in countdown() {
         sum77 += v
     }
-    if sum77 == 6 { step++ }
+    if sum77 == 6 { $result += 1 } else { $failed = 77; exit }
 
     # 78: parameterized iterator
     var cnt78 = 0
     for v in repeat_val(42, 3) {
         cnt78++
     }
-    if cnt78 == 3 { step++ }
+    if cnt78 == 3 { $result += 1 } else { $failed = 78; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 11: Library functions with control flow
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 79: count_range (for loop in function)
-    if count_range(1, 5) == 5 { step++ }
+    if count_range(1, 3) == 3 { $result += 1 } else { $failed = 79; exit }
 
     # 80: find_threshold (loop/break in function)
-    if find_threshold(1) == 10 { step++ }
+    if find_threshold(1) == 10 { $result += 1 } else { $failed = 80; exit }
 
     # 81: nested_break_test (labeled break in function)
-    if nested_break_test() == 2 { step++ }
+    if nested_break_test() == 2 { $result += 1 } else { $failed = 81; exit }
 
     # 82: sum_skip_three (continue in function)
-    if sum_skip_three(5) == 12 { step++ }
+    if sum_skip_three(4) == 7 { $result += 1 } else { $failed = 82; exit }
 
     # 83: pick (if-expression in function)
-    if pick(10) == 10 && pick(2) == 0 { step++ }
+    if pick(10) == 10 && pick(2) == 0 { $result += 1 } else { $failed = 83; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 12: Faction registers
@@ -485,18 +533,18 @@ behavior sanity_check {
     # 84: write and read a faction register
     %sanity_test_val = 777
     var fr84 = %sanity_test_val
-    if fr84 == 777 { step++ }
+    if fr84 == 777 { $result += 1 } else { $failed = 84; exit }
 
     # 85: faction register arithmetic
     %sanity_test_counter = 0
     %sanity_test_counter += 10
     %sanity_test_counter += 5
     var fr85 = %sanity_test_counter
-    if fr85 == 15 { step++ }
+    if fr85 == 15 { $result += 1 } else { $failed = 85; exit }
 
     # 86: faction register in condition
     %sanity_test_flag = 42
-    if %sanity_test_flag > 40 { step++ }
+    if %sanity_test_flag > 40 { $result += 1 } else { $failed = 86; exit }
 
     # ----------------------------------------------------------
     # Section 13: Unit registers
@@ -504,11 +552,11 @@ behavior sanity_check {
 
     # 87: $signal write/read
     $signal = Item("metalbar") & 7
-    if $signal is Item && $signal >= 7 && $signal <= 7 { step++ }
+    if $signal is Item && $signal >= 7 && $signal <= 7 { $result += 1 } else { $failed = 87; exit }
 
     # 88: $visual write/read
     $visual = Value("pentagon")
-    if $visual is Value { step++ }
+    if $visual is Value { $result += 1 } else { $failed = 88; exit }
 
     # ----------------------------------------------------------
     # Section 14: Radio transmission setup
@@ -525,13 +573,16 @@ behavior sanity_check {
     # Section 15: Special values
     # ----------------------------------------------------------
 
+
+    unlocked {
     # 89: infinity keyword
     let inf89 = infinity
-    if inf89 > 999999 { step++ }
+    if inf89 > 999999 { $result += 1 } else { $failed = 89; exit }
 
-    # 92: not_equal keyword
+    # 90: not_equal keyword
     let ne90 = not_equal
-    if ne90 < -999999 { step++ }
+    if ne90 < -999999 { $result += 1 } else { $failed = 90; exit }
+    }
 
     # ----------------------------------------------------------
     # Section 16: Stdlib functions
@@ -539,51 +590,51 @@ behavior sanity_check {
 
     # 91: get_self
     let me91 = get_self
-    if me91 is Unit { step++ }
+    if me91 is Unit { $result += 1 } else { $failed = 91; exit }
 
     # 92: get_location
     let loc92 = get_location me91
-    if loc92 is Coordinate { step++ }
+    if loc92 is Coordinate { $result += 1 } else { $failed = 92; exit }
 
     # 93: separate_coordinate / combine_coordinate
     let x93, y93 = separate_coordinate loc92
     let recombined93 = combine_coordinate x93, y93
-    if recombined93 is Coordinate { step++ }
+    if recombined93 is Coordinate { $result += 1 } else { $failed = 93; exit }
 
     # 94: separate_register — slot 1 = num, slot 2 = unit/value
     let num94, _, id94 = separate_register Item("metalbar") & 8
-    if num94 == 8 && id94 is Item { step++ }
+    if num94 == 8 && id94 is Item { $result += 1 } else { $failed = 94; exit }
 
     # 95: combine_register round-trip
     let composite95 = Item("metalbar") & 5
     let n95 = separate_register composite95
-    if n95 == 5 { step++ }
+    if n95 == 5 { $result += 1 } else { $failed = 95; exit }
 
     # 96: random_number (just verify it produces something in range)
     let rnd96 = random_number 1, 100
-    if rnd96 >= 1 && rnd96 <= 100 { step++ }
+    if rnd96 >= 1 && rnd96 <= 100 { $result += 1 } else { $failed = 96; exit }
 
     # 97: bitwise_op (AND)
     let bw97 = bitwise_op 15, b: 6, mode: BitwiseMode::And
-    if bw97 == 6 { step++ }
+    if bw97 == 6 { $result += 1 } else { $failed = 97; exit }
 
     # 98: bitwise_op (OR)
     let bw98 = bitwise_op 5, b: 3, mode: BitwiseMode::Or
-    if bw98 == 7 { step++ }
+    if bw98 == 7 { $result += 1 } else { $failed = 98; exit }
 
     # ----------------------------------------------------------
     # Section 17: Doc comments, assert, misc
     # ----------------------------------------------------------
 
     # 99: assert (debug mode — should not exit)
-    assert step > 0
-    step++   # 99: if assert didn't exit, we get here
+    assert $result > 0
+    $result += 1   # 99: if assert didn't exit, we get here
 
     # 100: Coordinate with runtime variables
     var cx100 = 3
     var cy100 = 7
     let dyn100 = Coordinate(cx100, cy100)
-    if dyn100 is Coordinate { step++ }
+    if dyn100 is Coordinate { $result += 1 } else { $failed = 100; exit }
 
     # 101: Range stored in variable
     let r101 = Range(3)
@@ -591,21 +642,21 @@ behavior sanity_check {
     for i in r101 {
         sum101 += i
     }
-    if sum101 == 6 { step++ }
+    if sum101 == 6 { $result += 1 } else { $failed = 101; exit }
 
     # 102: nested function calls in arguments
     let nested102 = set_reg get_self
-    if nested102 is Unit { step++ }
+    if nested102 is Unit { $result += 1 } else { $failed = 102; exit }
 
     # 103: arithmetic in function arguments
     var v103 = 3
     let r103 = adder(v103 + 1, v103 * 2)
-    if r103 == 10 { step++ }
+    if r103 == 10 { $result += 1 } else { $failed = 103; exit }
 
     # 104: comparison as expression assigned to var
     var v104 = 7
     let cmp104 = v104 > 5
-    if cmp104 { step++ }
+    if cmp104 { $result += 1 } else { $failed = 104; exit }
 
     # ----------------------------------------------------------
     # Section 18: Behavior call (call keyword)
@@ -613,23 +664,26 @@ behavior sanity_check {
 
     # 105: call a helper behavior and get output
     let call_result = call call_helper(input: 10)
-    if call_result == 20 { step++ }
+    if call_result == 20 { $result += 1 } else { $failed = 105; exit }
 
     # ----------------------------------------------------------
     # Section 19: Wait for listener result
     # ----------------------------------------------------------
-    # The radio was set in section 14. Now we wait a significant
-    # time for you to confirm the listener got the signal.
-    # Set Listener OK to any truthy value once Unit B shows success.
+    # Poll the faction register that the listener writes on completion.
+    # Wait up to 20 intervals of 5 ticks, break early if it arrives.
 
-    wait 100
-    if $listener_ok { step++ }   # 106
+    loop 20 {
+        wait 5
+        if %sanity_listener_result >= 5 { break }
+    }
+
+    # 106: listener reported all tests passed
+    if %sanity_listener_result >= 5 { $result += 1 } else { $failed = 106; exit }
 
     # ----------------------------------------------------------
-    # Done — write result
+    # Done
     # ----------------------------------------------------------
 
-    $result = set_reg step
     exit
 }
 
