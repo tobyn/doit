@@ -39,7 +39,7 @@ Each test case is a pair of files sharing the same base name in `codec/tests/`:
 - **`.encoded`** — A Base62-encoded string in the format 'DS' + type + encoded value
 - **`.decoded`** — A file consisting of type + '\n' + JSON encoded value
 
-Tests are in the root `main_test.go`. Each test case produces two subtests:
+Tests are in `codec/codec_test.go` (package `codec_test`). Each test case produces two subtests:
 - The string in the `.encoded` file is decoded, and the type and value are
   compared with the data in the `.decoded` file
 - The decoded information is re-encoded and decoded again, and the comparison
@@ -63,7 +63,7 @@ are decremented by 1 on decode (incremented by 1 on encode) to convert
 between Lua's 1-based indexing and 0-based JSON keys. Integer data
 **values** (e.g., frame references) are stored as-is without adjustment.
 
-`TestDecodeErrors` in `main_test.go` covers invalid-input cases for the
-decoder (empty input, malformed prefix, bad checksums, corrupted data, etc.).
+`TestDecodeErrors` in `codec/codec_test.go` covers invalid-input cases for
+the decoder (empty input, malformed prefix, bad checksums, corrupted data, etc.).
 When adding new codec functionality, include error case tests for each
 explicit error path, not just happy-path roundtrip cases.

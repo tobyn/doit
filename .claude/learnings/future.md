@@ -15,10 +15,20 @@ register types.
 
 ## 1.0 burndown
 
-- **Move tests into packages** — compiler tests in `compiler/`, codec
-  tests in `codec/`. Only integration wiring tests stay in `main`.
 - **Error message quality** — review compiler errors for clarity and
   source locations. Important for new users at 1.0.
+- **Eliminate orphan label frames** — the compiler emits `label`
+  frames (with compiler-generated negative values) as landing pads
+  for cross-boundary `jump` instructions, but nothing references
+  them. They waste instruction slots in the compiled behavior.
+  Visible in the sanity check output: five unreferenced label frames
+  with `v_letter_L` and negative numbers.
+- **Event handlers in control flow** — event handlers (`on` blocks)
+  are currently emitted as disconnected chains. Allow connecting them
+  into the main control flow.
+- **Dot syntax for register components** — `a.value` and `a.number`
+  syntax for extracting the value and number portions of a register,
+  instead of requiring `separate_register`.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,

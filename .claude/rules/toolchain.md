@@ -13,11 +13,11 @@ toolchain. The module compiles into a single toolchain binary.
 All commands run from the `toolchain/` directory:
 
 ```sh
-go build -o doit                # Build (use doit.exe on Windows)
-go test ./...                   # Run all tests
-go test -run TestCompile        # Run compile tests only
-go test -run TestCompileErrors  # Run compiler error case tests only
-go test -run TestCodec          # Run codec tests only
+go build -o doit                  # Build (use doit.exe on Windows)
+go test ./...                     # Run all tests
+go test ./compiler                # Run compiler tests only
+go test ./compiler -run TestCompileErrors  # Run compiler error case tests only
+go test ./codec                   # Run codec tests only
 
 # Validate against reference JS codec (requires Node.js):
 node codec/refcodec.js decode file.b62   # decode with reference
@@ -27,15 +27,16 @@ node codec/refcodec.js encode file.json  # encode with reference
 ## Architecture
 
 - **`main.go`** — Toolchain CLI's entry point; also exposes `Compile` for
-  use by tests
-- **`main_test.go`** — Integration tests for all subcommands, using test
-  cases from `compiler/tests/` and `codec/tests/`
+  use by integration tests
+- **`main_test.go`** — Integration smoke test (compile-encode-decode
+  pipeline) and CLI flag tests
 - **`stdlib/`** — The standard library, embedded into the binary at build
   time
 - **`codec/`** — Encodes and decodes the Base62 strings used by the game to
-  represent blueprints and behaviors
+  represent blueprints and behaviors. Tests live in `codec/codec_test.go`.
 - **`compiler/`** — Compiles the doit language into the structured
-  representation supported by the `codec` package
+  representation supported by the `codec` package. Tests live in
+  `compiler/compiler_test.go`, using test cases from `compiler/tests/`.
 
 ## Toolchain functionality
 

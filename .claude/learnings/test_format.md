@@ -12,23 +12,27 @@ For multi-behavior test cases, the file name uses the `__` convention: the part 
 behavior ID passed to the compiler. For example, `multi_behavior__second.doit` compiles the
 `second` behavior and compares against `multi_behavior__second.json`.
 
-Tests are in the root `main_test.go`. `TestCompile` compiles each test case, encodes via `Compile`,
-decodes, and compares against the JSON file. `TestCompileErrors` tests error cases (e.g., multiple
-behaviors without `-b`, nonexistent behavior ID, no behaviors) using `compiler.CompileString`
-directly. `TestCompile` uses `os.DirFS(testDir)` as the source FS, so test `.doit` files can use
-`import` statements to import from other files in `compiler/tests/`. Library files for import
-tests live in `compiler/tests/libs/` to avoid being picked up by the `*.doit` test glob.
+Tests are in `compiler/compiler_test.go` (package `compiler_test`).
+`TestCompile` compiles each test case via `compiler.Compile` and compares
+the resulting object against the JSON file. `TestCompileErrors` tests error
+cases (e.g., multiple behaviors without `-b`, nonexistent behavior ID, no
+behaviors) using `compiler.CompileString`. `TestCompile` uses
+`os.DirFS(testDir)` as the source FS, so test `.doit` files can use
+`import` statements to import from other files in `compiler/tests/`.
+Library files for import tests live in `compiler/tests/libs/` to avoid
+being picked up by the `*.doit` test glob. A small integration smoke test
+in `main_test.go` verifies the full compile-encode-decode pipeline.
 
 The JSON in the JSON file may differ from a JSON rendering of the compiled code in trivial
 ways (e.g., whitespace, object key ordering). Do not rely on the JSON strings to be the
 same. The compiler may also emit frames in a different order than the handwritten expected
-output — the test comparison uses graph-isomorphism (`matchBehaviors` in `main_test.go`)
-to verify structural equivalence regardless of frame numbering.
+output — the test comparison uses graph-isomorphism (`matchBehaviors` in
+`compiler/compiler_test.go`) to verify structural equivalence regardless
+of frame numbering.
 
 The `.json` test files can be regenerated from their `.doit` sources using
 `TestUpdateGolden` (run with `DOIT_UPDATE_GOLDEN=1`). This compiles each
-`.doit` file through the full encode/decode round-trip and writes the result
-as JSON. `TestUpdateGolden` is a permanent fixture in `main_test.go`.
+`.doit` file and writes the resulting object as JSON.
 
 ## Numbering conventions
 
@@ -77,7 +81,8 @@ and should not be modified programmatically.
 ## Error case coverage
 
 New language features must include error case tests in `TestCompileErrors`
-(or `TestDecodeErrors` for codec changes), not just happy-path `.doit`/`.json`
+(in `compiler/compiler_test.go`) or `TestDecodeErrors` (in
+`codec/codec_test.go`) for codec changes, not just happy-path `.doit`/`.json`
 pairs. Cover at minimum: invalid syntax the user is likely to write by
 mistake, and each explicit error path added by the implementation. For
 example, keyword arguments added tests for unknown keywords, duplicate
