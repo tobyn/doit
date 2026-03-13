@@ -582,3 +582,27 @@ references and pass them through to `instruction` blocks.
   and is unwrapped to a plain integer by `resolveInstructionFrame`.
 - Behavior names pass through `resolveBhvOperand` as `IdentExpr` nodes
   (checked against `p.bhvs` before the unknown-identifier error).
+
+## Dot access for register components
+
+`expr.number` extracts the numeric component, `expr.value` extracts
+the typed value (stripping the number). Inverse of the `&` operator.
+
+- **AST**: `DotAccessExpr{Value Expr, Field string}`. Field is
+  `"number"` or `"value"`.
+- **Parsing**: `maybeParseDotAccess` runs after `parseArithPrimary`
+  (in `parseArithTerm`) and after constructor/other expressions in
+  `parseBhvArgExpr`. Binds tighter than any binary operator. Loops
+  to support chaining (e.g., `(x & 5).value.number`).
+- **Emission**: Emits `separate_register` directly (slot 1 for
+  `.number`, slot 2 for `.value`). Does not use `expandCall` — just
+  builds the frame directly with only the needed output slot populated.
+- **Compile-time folding**: `tryResolveDotAccessLiteral` handles
+  `LiteralExpr` and `ConstructorExpr` inputs. Extracts/strips the
+  `"num"` key from the map. Pure number `.value` → null; typed value
+  without number `.number` → null.
+- **Namespace disambiguation**: Not an issue — `resolveFnName` handles
+  namespace dot before `parseArithPrimary` returns; `maybeParseDotAccess`
+  only runs on the returned expression. If an identifier matches both
+  a namespace and a variable, the namespace takes priority (existing
+  behavior).

@@ -341,6 +341,12 @@ type AmpersandExpr struct {
 	Num   Expr
 }
 
+// DotAccessExpr extracts a register component: `a.number` or `a.value`
+type DotAccessExpr struct {
+	Value Expr
+	Field string // "number" or "value"
+}
+
 // ExprListExpr is a comma-separated list of expressions: `1, my_fn args, 3`
 type ExprListExpr struct {
 	Exprs []Expr // each is arity 1, except CallExpr (arity = returnCount)
@@ -425,6 +431,7 @@ func (*BoolChainExpr) exprNode()    {}
 func (*NotExpr) exprNode()          {}
 func (*ConstructorExpr) exprNode()  {}
 func (*AmpersandExpr) exprNode()    {}
+func (*DotAccessExpr) exprNode()    {}
 func (*ExprListExpr) exprNode()     {}
 func (*ModeBlockExpr) exprNode()    {}
 func (*IfExpr) exprNode()           {}

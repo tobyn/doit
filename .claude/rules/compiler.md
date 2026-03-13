@@ -16,8 +16,8 @@ see `.claude/learnings/test_format.md`.
 ## Architecture
 
 - **`ast.go`** — `Stmt` interface (27 types, including `OnEventStmt`,
-  `AssertStmt`, and `CallBehaviorStmt`) and `Expr` interface (16 types,
-  including `CallBehaviorExpr`). `BreakStmt` has
+  `AssertStmt`, and `CallBehaviorStmt`) and `Expr` interface (17 types,
+  including `CallBehaviorExpr` and `DotAccessExpr`). `BreakStmt` has
   `Values []Expr` for break-with-value. `AssertStmt` has `Condition`,
   `Body`, `Message`, `Value`, `ConditionText`, `File`, `Line`.
   `isTerminalStmt`/`terminalKeyword` for unreachable code detection

@@ -25,6 +25,8 @@ Function arguments accept several value types:
 | `localize { ... }` | `localize { en "Hi" ja "こんにちは" }` | Locale-aware string |
 | Type constructor | `Item("metalbar")` | Typed game value (see below) |
 | `&` operator | `Item("metalbar") & 5` | Value with numeric component |
+| `.number` | `x.number` | Numeric component of a register |
+| `.value` | `x.value` | Typed value of a register |
 
 ```doit
 var x = 5
@@ -83,6 +85,35 @@ Value("pentagon") & count      # runtime: emits set_number
 When both sides are compile-time literals, the result is a compile-time literal.
 When either side is a variable, the compiler emits a `set_number` instruction.
 This works in both behavior bodies and function bodies.
+
+### The `.number` and `.value` accessors
+
+The `.number` and `.value` postfix operators extract the two components of a
+register composite — the reverse of the `&` operator:
+
+```doit
+var composite = Item("metalbar") & 5
+var n = composite.number     # 5 (the numeric component)
+var v = composite.value      # Item("metalbar") (the typed value)
+
+# On a pure number, .number returns the number, .value returns null
+var x = 42
+notify x.number              # 42
+notify x.value               # null
+
+# On a typed value with no number, .number returns null
+notify Item("metalbar").number   # null
+notify Item("metalbar").value    # Item("metalbar")
+```
+
+`.number` extracts the numeric component and `.value` extracts the typed value
+(stripping the numeric component). When applied to compile-time literals or
+constructors, the result is folded at compile time. When applied to runtime
+values, the compiler emits a `separate_register` instruction.
+
+The accessors bind tighter than any binary operator, so `a.number + 1` parses
+as `(a.number) + 1`. They work on any expression, including function call
+results and parenthesized expressions.
 
 ## The Standard Library
 

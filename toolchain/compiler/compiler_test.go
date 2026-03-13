@@ -4172,6 +4172,29 @@ behavior a {
 		}
 	})
 
+	t.Run("dot_access_invalid_field", func(t *testing.T) {
+		src := `behavior a { var x = 1; notify x.foo }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected 'number' or 'value'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("dot_access_invalid_field_in_fn_body", func(t *testing.T) {
+		src := `fn f(v) { var x = v.xyz }
+		behavior a { f 1 }`
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "expected 'number' or 'value'") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestCompileWarnings(t *testing.T) {

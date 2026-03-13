@@ -1,0 +1,11 @@
+# AI-generated test
+# .number and .value on literals fold at compile time
+behavior dot_access_literal {
+    @name "Dot Access Literal"
+    # number from a pure number: stays as number
+    notify "Num", value: 42 .number
+    # value from Item constructor: extracts typed value
+    notify "Val", value: Item("metalbar").value
+    # number from Item constructor: no numeric component → null
+    notify "None", value: Item("metalbar").number
+}

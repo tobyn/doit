@@ -1,0 +1,31 @@
+{
+  "0": {
+    "0": {
+      "id": "metalbar",
+      "num": 5
+    },
+    "1": "x",
+    "op": "set_reg"
+  },
+  "1": {
+    "0": "x",
+    "1": "@dot",
+    "op": "separate_register"
+  },
+  "2": {
+    "0": "@dot",
+    "op": "notify",
+    "txt": "Num"
+  },
+  "3": {
+    "0": "x",
+    "2": "@dot_2",
+    "op": "separate_register"
+  },
+  "4": {
+    "0": "@dot_2",
+    "op": "notify",
+    "txt": "Val"
+  },
+  "name": "Dot Access Runtime"
+}

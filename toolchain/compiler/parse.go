@@ -1011,6 +1011,8 @@ func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int)
 			return err
 		}
 		return p.checkFnBodyExprDeclared(e.Num, ctx, pos)
+	case *DotAccessExpr:
+		return p.checkFnBodyExprDeclared(e.Value, ctx, pos)
 	case *ConstructorExpr:
 		for _, arg := range e.Args {
 			if err := p.checkFnBodyExprDeclared(arg, ctx, pos); err != nil {
@@ -1667,6 +1669,70 @@ func tryResolveAmpersandLiteral(amp *AmpersandExpr) (any, bool) {
 	return result, true
 }
 
+// tryResolveDotAccessLiteral attempts to resolve a DotAccessExpr to a
+// compile-time literal. Returns (nil, false) if the operand is not compile-time.
+func tryResolveDotAccessLiteral(dot *DotAccessExpr) (any, bool) {
+	var m map[string]any
+	switch v := dot.Value.(type) {
+	case *LiteralExpr:
+		switch val := v.Value.(type) {
+		case map[string]any:
+			m = val
+		case bool:
+			// null/false literal — both .number and .value return null
+			if !val {
+				return false, true
+			}
+			return nil, false
+		default:
+			return nil, false
+		}
+	case *ConstructorExpr:
+		resolved, ok := tryResolveConstructorLiteral(v)
+		if !ok {
+			return nil, false
+		}
+		if rm, ok := resolved.(map[string]any); ok {
+			m = rm
+		} else {
+			return nil, false
+		}
+	default:
+		return nil, false
+	}
+	if dot.Field == "number" {
+		if num, has := m["num"]; has {
+			return map[string]any{"num": num}, true
+		}
+		return false, true // no numeric component → null
+	}
+	// "value": strip the numeric component
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		if k != "num" {
+			result[k] = v
+		}
+	}
+	if len(result) == 0 {
+		return false, true // pure number → value is null
+	}
+	return result, true
+}
+
+// emitDotAccessFrame emits a separate_register instruction extracting
+// the requested field (.number → slot 1, .value → slot 2) into target.
+func emitDotAccessFrame(field string, src, target any, b *frameBuilder, comment string) error {
+	f := map[string]any{"op": "separate_register", "0": src}
+	if field == "number" {
+		f["1"] = target
+	} else {
+		f["2"] = target
+	}
+	setComment(f, comment)
+	b.emit(f)
+	return nil
+}
+
 // emitExprGetValue emits an expression and returns the resolved value.
 // For simple literals/idents, returns without emitting. For compile-time
 // constructors/ampersands, returns the literal. For runtime expressions,
@@ -1692,6 +1758,15 @@ func (p *parser) emitExprGetValue(expr Expr, b *frameBuilder, paramMap map[strin
 		}
 		tempName := allocUniqueVar("@ctor", usedVars)
 		if err := p.emitAmpersandTo(e, tempName, b, paramMap, usedVars, comment, pos); err != nil {
+			return nil, err
+		}
+		return tempName, nil
+	case *DotAccessExpr:
+		if val, ok := tryResolveDotAccessLiteral(e); ok {
+			return val, nil
+		}
+		tempName := allocUniqueVar("@dot", usedVars)
+		if err := p.emitDotAccessTo(e, tempName, b, paramMap, usedVars, comment, pos); err != nil {
 			return nil, err
 		}
 		return tempName, nil
@@ -1741,6 +1816,8 @@ func (p *parser) emitExprTo(expr Expr, target any, b *frameBuilder, paramMap map
 		return p.emitConstructorTo(e, target, b, paramMap, usedVars, comment, pos)
 	case *AmpersandExpr:
 		return p.emitAmpersandTo(e, target, b, paramMap, usedVars, comment, pos)
+	case *DotAccessExpr:
+		return p.emitDotAccessTo(e, target, b, paramMap, usedVars, comment, pos)
 	case *LiteralExpr:
 		f := map[string]any{"op": "set_reg", "0": e.Value, "1": target}
 		setComment(f, comment)
@@ -1830,6 +1907,21 @@ func (p *parser) emitAmpersandTo(amp *AmpersandExpr, target any, b *frameBuilder
 		return err
 	}
 	return p.expandCall("set_number", []any{baseVal, numVal}, nil, []any{target}, b, pos, comment, usedVars)
+}
+
+// emitDotAccessTo emits a .number or .value access writing the result to target.
+func (p *parser) emitDotAccessTo(dot *DotAccessExpr, target any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string, pos int) error {
+	if val, ok := tryResolveDotAccessLiteral(dot); ok {
+		f := map[string]any{"op": "set_reg", "0": val, "1": target}
+		setComment(f, comment)
+		b.emit(f)
+		return nil
+	}
+	srcVal, err := p.emitExprGetValue(dot.Value, b, paramMap, usedVars, "", pos)
+	if err != nil {
+		return err
+	}
+	return emitDotAccessFrame(dot.Field, srcVal, target, b, comment)
 }
 
 // emitFnArithTo emits an arithmetic expression writing the result to target.
@@ -2895,6 +2987,20 @@ func (p *parser) tryEvalExpr(expr Expr, env map[string]any) (any, bool) {
 			Num:   &LiteralExpr{Value: rhs},
 		}
 		val, ok := tryResolveAmpersandLiteral(resolved)
+		if !ok {
+			return nil, false
+		}
+		return val, true
+	case *DotAccessExpr:
+		inner, ok := p.tryEvalExpr(e.Value, env)
+		if !ok {
+			return nil, false
+		}
+		resolved := &DotAccessExpr{
+			Value: &LiteralExpr{Value: inner},
+			Field: e.Field,
+		}
+		val, ok := tryResolveDotAccessLiteral(resolved)
 		if !ok {
 			return nil, false
 		}

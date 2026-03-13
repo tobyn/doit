@@ -1,0 +1,8 @@
+# AI-generated test
+# .number and .value on variables emit separate_register at runtime
+behavior dot_access_runtime {
+    @name "Dot Access Runtime"
+    var x = Item("metalbar") & 5
+    notify "Num", value: x.number
+    notify "Val", value: x.value
+}

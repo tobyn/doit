@@ -148,9 +148,10 @@ Every VM register holds a (typed_value, number) composite:
 - An Item with count is: `{"id": "metalbar", "num": 5}`
 - A Coordinate with number is: `{"coord": {"x": 1, "y": 2}, "num": 3}`
 
-The numeric component is accessible via instructions like `get_number`.
-This composite nature doesn't change the type list — it's a property of
-how the VM stores register values.
+The numeric component is accessible via `.number` and the typed value
+via `.value` (postfix dot access). These emit `separate_register`
+at runtime and fold at compile time for literals. The `&` operator
+is the reverse — it combines a typed value with a numeric component.
 
 ### The `&` Operator
 

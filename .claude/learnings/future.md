@@ -26,9 +26,6 @@ register types.
 - **Event handlers in control flow** — event handlers (`on` blocks)
   are currently emitted as disconnected chains. Allow connecting them
   into the main control flow.
-- **Dot syntax for register components** — `a.value` and `a.number`
-  syntax for extracting the value and number portions of a register,
-  instead of requiring `separate_register`.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,

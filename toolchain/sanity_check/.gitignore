@@ -1,2 +1,6 @@
 *.b62
 *.json
+*.doit
+!test.doit
+!lib.doit
+!listener.doit

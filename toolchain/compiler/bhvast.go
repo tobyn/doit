@@ -344,7 +344,36 @@ func (p *parser) parseArithTerm(resolve operandResolver) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
+	lhs, err = p.maybeParseDotAccess(lhs)
+	if err != nil {
+		return nil, err
+	}
 	return p.parseArithTermFrom(lhs, resolve)
+}
+
+// maybeParseDotAccess checks for postfix .number or .value accessor and
+// wraps the expression in a DotAccessExpr if found. Loops to support
+// chaining (e.g., expr.value.number).
+func (p *parser) maybeParseDotAccess(expr Expr) (Expr, error) {
+	for {
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind != tokDot {
+			p.unget(peek)
+			return expr, nil
+		}
+		// Must be followed by "number" or "value"
+		memberTok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if memberTok.kind != tokIdent || (memberTok.val != "number" && memberTok.val != "value") {
+			return nil, p.errorf(memberTok.pos, "expected 'number' or 'value' after '.', got %s", memberTok.describe())
+		}
+		expr = &DotAccessExpr{Value: expr, Field: memberTok.val}
+	}
 }
 
 // parseArithTermFrom parses `(* | / primary)*` from an already-parsed first.
@@ -383,6 +412,10 @@ func (p *parser) parseArithTermFrom(first Expr, resolve operandResolver) (Expr, 
 			p.restore(saved)
 		}
 		rhs, err := p.parseArithPrimary(resolve)
+		if err != nil {
+			return nil, err
+		}
+		rhs, err = p.maybeParseDotAccess(rhs)
 		if err != nil {
 			return nil, err
 		}
@@ -916,6 +949,12 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 		}
 	default:
 		return nil, p.errorf(tok.pos, "expected argument value, got %s", tok.describe())
+	}
+
+	// Check for .number / .value accessor
+	base, err = p.maybeParseDotAccess(base)
+	if err != nil {
+		return nil, err
 	}
 
 	// Check for & operator
@@ -3030,6 +3069,15 @@ func (p *parser) emitBhvExprGetValue(expr Expr, syms *symbolTable, b *frameBuild
 			return nil, err
 		}
 		return tmp, nil
+	case *DotAccessExpr:
+		if val, ok := tryResolveDotAccessLiteral(e); ok {
+			return val, nil
+		}
+		tmp := allocUniqueVar("@dot", syms.usedVars)
+		if err := p.emitBhvDotAccessTo(e, tmp, syms, b, comment); err != nil {
+			return nil, err
+		}
+		return tmp, nil
 	case *CallExpr:
 		tmp := allocUniqueVar("@call", syms.usedVars)
 		fn := p.fns[e.Name]
@@ -3225,6 +3273,8 @@ func (p *parser) emitBhvExprTo(expr Expr, target any, syms *symbolTable, b *fram
 		return p.emitBhvConstructorTo(e, target, syms, b, comment)
 	case *AmpersandExpr:
 		return p.emitBhvAmpersandTo(e, target, syms, b, comment)
+	case *DotAccessExpr:
+		return p.emitBhvDotAccessTo(e, target, syms, b, comment)
 	case *CompareExpr:
 		return p.emitBhvBoolExprTo(expr, target, syms, b, comment)
 	case *TypeCheckExpr:
@@ -3313,6 +3363,21 @@ func (p *parser) emitBhvAmpersandTo(amp *AmpersandExpr, target any, syms *symbol
 		return err
 	}
 	return p.expandCall("set_number", []any{baseVal, numVal}, nil, []any{target}, b, 0, comment, syms.usedVars)
+}
+
+// emitBhvDotAccessTo emits a .number or .value access to target.
+func (p *parser) emitBhvDotAccessTo(dot *DotAccessExpr, target any, syms *symbolTable, b *frameBuilder, comment string) error {
+	if val, ok := tryResolveDotAccessLiteral(dot); ok {
+		f := map[string]any{"op": "set_reg", "0": val, "1": target}
+		setComment(f, comment)
+		b.emit(f)
+		return nil
+	}
+	srcVal, err := p.emitBhvExprGetValue(dot.Value, syms, b, "")
+	if err != nil {
+		return err
+	}
+	return emitDotAccessFrame(dot.Field, srcVal, target, b, comment)
 }
 
 // emitBhvBoolExprTo emits a boolean expression (comparison/typecheck/truthy/chain)

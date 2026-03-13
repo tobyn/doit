@@ -1,0 +1,22 @@
+{
+  "0": {
+    "0": {
+      "num": 42
+    },
+    "op": "notify",
+    "txt": "Num"
+  },
+  "1": {
+    "0": {
+      "id": "metalbar"
+    },
+    "op": "notify",
+    "txt": "Val"
+  },
+  "2": {
+    "0": false,
+    "op": "notify",
+    "txt": "None"
+  },
+  "name": "Dot Access Literal"
+}
