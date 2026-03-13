@@ -1,0 +1,6 @@
+# Halt the behavior with a message. Displays txt (and optional value) via
+# notify, then exits. Use for fatal/unrecoverable error conditions.
+fn abort(txt, value value) {
+    notify txt, value
+    exit
+}
