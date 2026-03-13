@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"fmt"
-	"io/fs"
 	"maps"
 	"reflect"
 	"strconv"
@@ -680,32 +679,6 @@ func (p *parser) expandInstructionBlocks(instrIdx int, blocks []*ContinuationBlo
 	}
 
 	return nil
-}
-
-// --- Stdlib ---
-
-func parseStdlib(stdlib fs.FS) (map[string]*fnDef, map[string]*iterDef, map[string]*enumDef, error) {
-	matches, err := fs.Glob(stdlib, "*.doit")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	fns := map[string]*fnDef{}
-	iters := map[string]*iterDef{}
-	enums := map[string]*enumDef{}
-	for _, p := range matches {
-		if p == "prelude.doit" {
-			continue
-		}
-		data, err := fs.ReadFile(stdlib, p)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if err := parseStdlibFile(string(data), fns, iters, enums); err != nil {
-			return nil, nil, nil, fmt.Errorf("%s: %w", p, err)
-		}
-	}
-	return fns, iters, enums, nil
 }
 
 func isDirection(val string) bool {
@@ -2567,48 +2540,6 @@ func (p *parser) parseParamList() ([]paramDef, error) {
 	return params, nil
 }
 
-func parseStdlibFile(src string, fns map[string]*fnDef, iters map[string]*iterDef, enums map[string]*enumDef) error {
-	p := &parser{scanner: scanner{src: src}, fns: fns, iters: iters, enums: enums}
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return err
-		}
-		if tok.kind == tokEOF {
-			return nil
-		}
-		if tok.kind == tokIdent && tok.val == "skip" {
-			// Consume "skip prelude" directive
-			next, err := p.expect(tokIdent)
-			if err != nil {
-				return err
-			}
-			if next.val != "prelude" {
-				return p.errorf(next.pos, "expected 'prelude' after 'skip', got %s", next.describe())
-			}
-			continue
-		}
-		if tok.kind == tokIdent && tok.val == "enum" {
-			if _, err := p.parseEnumDecl(false); err != nil {
-				return err
-			}
-			continue
-		}
-		if tok.kind == tokIdent && tok.val == "iter" {
-			if _, err := p.parseIterDecl(false); err != nil {
-				return err
-			}
-			continue
-		}
-		if tok.kind != tokIdent || tok.val != "fn" {
-			return p.errorf(tok.pos, "expected 'fn', 'iter', 'enum', or 'skip', got %s", tok.describe())
-		}
-		if _, err := p.parseUserFn(); err != nil {
-			return err
-		}
-	}
-}
-
 // --- Two-pass file parsing ---
 
 func (p *parser) parseBehaviorID() (token, error) {
@@ -2626,14 +2557,14 @@ func (p *parser) parseBehaviorID() (token, error) {
 
 // checkDeclName checks that name doesn't collide with any existing function,
 // constant, or enum declaration. kind is the type of the new declaration
-// ("function", "constant", or "enum"). For functions, stdlib and imported
-// names are excluded (user functions may override both).
+// ("function", "constant", or "enum"). For functions, imported names are
+// excluded (user functions may override imports).
 func (p *parser) checkDeclName(name, kind string, pos int) error {
 	if _, ok := p.fns[name]; ok {
 		if kind == "function" {
-			// Functions can override stdlib and imports; only duplicate
+			// Functions can override imports; only duplicate
 			// same-file user fns are errors.
-			if p.stdlibFns[name] == nil && !p.importedNames[name] {
+			if !p.importedNames[name] {
 				return p.errorf(pos, "duplicate function %q", name)
 			}
 		} else {

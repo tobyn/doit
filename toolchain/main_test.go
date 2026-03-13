@@ -637,8 +637,8 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("return_slot_at0", func(t *testing.T) {
-		stdlibSrc := "fn bad() { instruction \"test\" { 0: @0 } }"
-		err := compiler.TestParseStdlibFile(stdlibSrc)
+		src := "skip prelude\nfn bad() { instruction \"test\" { 0: @0 } }\nbehavior a { bad() }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -648,16 +648,16 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("return_slot_multiple", func(t *testing.T) {
-		stdlibSrc := "fn multi() { return instruction \"test\" { 0: @1  1: @2 } }"
-		err := compiler.TestParseStdlibFile(stdlibSrc)
+		src := "skip prelude\nfn multi() { return instruction \"test\" { 0: @1  1: @2 } }\nbehavior a { multi() }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("return_slot_gap", func(t *testing.T) {
-		stdlibSrc := "fn bad() { instruction \"test\" { 0: @1  1: @3 } }"
-		err := compiler.TestParseStdlibFile(stdlibSrc)
+		src := "skip prelude\nfn bad() { instruction \"test\" { 0: @1  1: @3 } }\nbehavior a { bad() }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -667,8 +667,8 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("return_slot_no_at1", func(t *testing.T) {
-		stdlibSrc := "fn bad() { instruction \"test\" { 0: @2 } }"
-		err := compiler.TestParseStdlibFile(stdlibSrc)
+		src := "skip prelude\nfn bad() { instruction \"test\" { 0: @2 } }\nbehavior a { bad() }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -678,17 +678,16 @@ func TestCompileErrors(t *testing.T) {
 	})
 
 	t.Run("return_instruction_syntax", func(t *testing.T) {
-		stdlibSrc := "fn my_get() { return instruction \"get_self\" { 0: @1 } }"
-		err := compiler.TestParseStdlibFile(stdlibSrc)
+		src := "skip prelude\nfn my_get() { return instruction \"get_self\" { 0: @1 } }\nbehavior a { my_get() }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("return_variable_in_stdlib", func(t *testing.T) {
-		// After unification, return <ident> is valid fn body syntax
-		stdlibSrc := "fn wrapper(foo) { return foo }"
-		err := compiler.TestParseStdlibFile(stdlibSrc)
+		src := "skip prelude\nfn wrapper(foo) { return foo }\nbehavior a { wrapper(1) }"
+		_, _, err := compiler.CompileString(src, stdlib, "", "", nil, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

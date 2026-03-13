@@ -149,12 +149,12 @@ combo indexing. Affected functions expose mode via keyword parameters
 instruction block. When the keyword arg is omitted, the `c` field is
 dropped from the compiled output and the game uses its default.
 
-`parseStdlibFile` handles `fn`, `iter`, `enum`, and `skip` declarations.
-`parseStdlib` skips `prelude.doit` (it contains `import`, which
-`parseStdlibFile` can't handle). Stdlib symbols are cached in
-`stdlibFns`/`stdlibIters`/`stdlibEnums` and made available to user
-code through the prelude's glob import rather than by pre-populating
-working maps. Iterator instructions have two stdlib representations:
+Stdlib files are parsed through the normal import path — there is no
+separate stdlib pre-parsing step. The prelude's glob imports bring
+stdlib symbols into user code. Stdlib files that need cross-file
+references (e.g., `helpers.doit` using `notify`) use `skip prelude`
+with explicit `import` statements. Iterator instructions have two
+stdlib representations:
 `each_*` iters in `iterators.doit` (for `for...in`) and `for_*` fns
 in `instructions.doit` (for exec-block calls).
 

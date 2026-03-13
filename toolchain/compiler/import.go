@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 	"io/fs"
+	"maps"
 	"path"
 	"strings"
 )
@@ -38,6 +39,17 @@ func (p *parser) parseImports() error {
 		if tok.kind == tokEOF {
 			p.unget(tok)
 			return nil
+		}
+		// Skip past "skip prelude" directives
+		if tok.kind == tokIdent && tok.val == "skip" {
+			next, err := p.expect(tokIdent)
+			if err != nil {
+				return err
+			}
+			if next.val != "prelude" {
+				return p.errorf(next.pos, "expected 'prelude' after 'skip', got %s", next.describe())
+			}
+			continue
 		}
 		if tok.kind != tokIdent || tok.val != "import" {
 			p.unget(tok)
@@ -366,9 +378,6 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		sourcePath:  filePath,
 		sourceDir:   sourceDir,
 		stdlibFS:    p.stdlibFS,
-		stdlibFns:   p.stdlibFns,
-		stdlibIters: p.stdlibIters,
-		stdlibEnums: p.stdlibEnums,
 		importStack: append(append([]string{}, p.importStack...), filePath),
 	}
 
@@ -393,27 +402,16 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 		fileDeclSet[name] = true
 	}
 
-	// Build scope: all non-stdlib functions available in this file.
+	// Build scope: all functions available in this file.
 	// Functions with bodies need this scope so that transitive dependencies
 	// (functions they call but the importer didn't explicitly import) are
-	// available during expandCall inlining. Stdlib functions are excluded
-	// since they're universally available through the prelude.
-	scope := map[string]*fnDef{}
-	for name, fn := range ip.fns {
-		if p.stdlibFns[name] == nil {
-			scope[name] = fn
-		}
-	}
+	// available during expandCall inlining.
+	scope := maps.Clone(ip.fns)
 
-	// Build iterScope: all non-stdlib iterators available in this file.
+	// Build iterScope: all iterators available in this file.
 	// Same rationale as scope — iterators called transitively need to be
 	// reachable during emission.
-	iterScope := map[string]*iterDef{}
-	for name, it := range ip.iters {
-		if p.stdlibIters[name] == nil {
-			iterScope[name] = it
-		}
-	}
+	iterScope := maps.Clone(ip.iters)
 
 	// Extract only file-declared functions
 	resultFns := map[string]*fnDef{}

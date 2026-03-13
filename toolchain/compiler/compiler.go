@@ -36,10 +36,6 @@ func Compile(r io.Reader, stdlib fs.FS, behaviorID, locale string, sourceFS fs.F
 // The returned warnings slice contains non-fatal compiler warnings (nil if none).
 // When releaseMode is true, assert statements are omitted from the output.
 func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS fs.FS, sourcePath string, releaseMode ...bool) (*codec.Object, []string, error) {
-	stdlibFns, stdlibIters, stdlibEnums, err := parseStdlib(stdlib)
-	if err != nil {
-		return nil, nil, fmt.Errorf("stdlib: %w", err)
-	}
 	sourceDir := ""
 	if sourcePath != "" {
 		sourceDir = path.Dir(sourcePath)
@@ -79,9 +75,6 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 		sourcePath:  sourcePath,
 		sourceDir:   sourceDir,
 		stdlibFS:    stdlib,
-		stdlibFns:   stdlibFns,
-		stdlibEnums: stdlibEnums,
-		stdlibIters: stdlibIters,
 		releaseMode: release,
 	}
 	obj, err := p.parseFile()
@@ -103,11 +96,6 @@ func hasSkipPrelude(src string) bool {
 		return false
 	}
 	return true
-}
-
-// TestParseStdlibFile is a test helper that parses a stdlib source string.
-func TestParseStdlibFile(src string) error {
-	return parseStdlibFile(src, map[string]*fnDef{}, map[string]*iterDef{}, map[string]*enumDef{})
 }
 
 // TestParseLocalePrefix is a test helper that exposes parseLocalePrefix.

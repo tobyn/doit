@@ -45,7 +45,7 @@ see `.claude/learnings/test_format.md`.
   `frameBuilder`/`frameRef` abstraction, `emitContext` struct,
   `execMode` tracking (initial `modeUnknown`), slot constants for
   `check_number`, `compare_register`, and `value_type`.
-- **`parse.go`** — Stdlib parsing, file-level parsing, function and iterator
+- **`parse.go`** — File-level parsing, function and iterator
   definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing and emission
   (`emitFnBody`), instruction parsing (`parseInstruction`), call
   expansion (`expandCall`), `resolveInstructionFrame`, enum/const
@@ -81,22 +81,19 @@ The compiler is a recursive-descent parser (`parser` struct embeds
 `scanner`). Both function bodies and behavior bodies use an AST
 approach: parse into `[]Stmt` with `Expr` nodes, then emit frames.
 
-1. **Stdlib parsing** — `parseStdlib` parses `*.doit` files from the
-   stdlib FS (skipping `prelude.doit`). `parseStdlibFile` handles
-   `fn`, `iter`, `enum`, and `skip` declarations. Results are cached
-   in `stdlibFns`/`stdlibIters`/`stdlibEnums`.
-2. **Prelude prepend** — `CompileString` reads `prelude.doit` and
+1. **Prelude prepend** — `CompileString` reads `prelude.doit` and
    prepends it to the source unless `hasSkipPrelude(src)` is true.
-   The parser is created with **empty** working maps (not cloned from
-   stdlib). The prelude's `import * from "std:instructions"` brings
-   stdlib symbols in through the normal import path.
-3. **Import processing** — `processImports` resolves paths, reads
+   The parser is created with **empty** working maps. The prelude's
+   imports (e.g., `import * from "std:instructions"`) bring stdlib
+   symbols in through the normal import path — there is no separate
+   stdlib pre-parsing step.
+2. **Import processing** — `processImports` resolves paths, reads
    imported files, merges symbols into the namespace. Imported files
    also get the prelude prepended (unless they have `skip prelude`).
-4. **User source compilation** — Two passes: first collects
+3. **User source compilation** — Two passes: first collects
    declarations (`collectDecls`), then compiles the selected behavior
    via `parseBehaviorBody`.
-5. **Noop bridge elimination** — `eliminateNoopBridges` removes
+4. **Noop bridge elimination** — `eliminateNoopBridges` removes
    `set_reg false, false` frames that serve only as control-flow
    redirects. Runs after all emission/patching and
    `validateNamedLabels`, before `finalize`. Five phases: identify

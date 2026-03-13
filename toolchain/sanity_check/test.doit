@@ -1,0 +1,642 @@
+import * from "./lib"
+
+# ============================================================
+# Sanity Check — Main Test Behavior (Unit A: the sender)
+# ============================================================
+#
+# Parameters:
+#   Result (out)       — final test count
+#   Radio Band (out)   — linked to radio transmitter band register
+#   Radio Value (out)  — linked to radio transmitter value register
+#   Listener OK (in)   — set by you after Unit B reports success
+#
+# Expected Result: 106 (if Listener OK is set), 105 (if not)
+# ============================================================
+
+behavior sanity_check {
+    @name "Sanity Check"
+    @param out result "Result"
+    @param out radio_band "Radio Band"
+    @param out radio_value "Radio Value"
+    @param in listener_ok "Listener OK"
+
+    var step = 0
+
+    # ----------------------------------------------------------
+    # Section 1: Constants and imports
+    # ----------------------------------------------------------
+
+    # 1: imported constant
+    if MAGIC == 42 { step++ }
+
+    # 2: imported type constructor constant
+    if METAL == Item("metalbar") { step++ }
+
+    # 3: composite constant (& operator)
+    if METAL_STACK >= 10 && METAL_STACK <= 10 { step++ }
+
+    # 4: coordinate constant
+    if ORIGIN is Coordinate { step++ }
+
+    # 5: computed constant (constant folding)
+    if COMPUTED == 22 { step++ }
+
+    # 6: enum values
+    if Color::Red == 0 && Color::Green == 1 && Color::Blue == 2 { step++ }
+
+    # 7: enum with explicit values
+    if Priority::Low == 0 && Priority::Medium == 5 && Priority::High == 6 && Priority::Critical == 100 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 2: Basic function calls
+    # ----------------------------------------------------------
+
+    # 8: zero-arg function
+    if get_magic() == 42 { step++ }
+
+    # 9: private fn via public wrapper (transitive privacy)
+    if get_secret() == 99 { step++ }
+
+    # 10: arithmetic functions
+    if adder(3, 4) == 7 { step++ }
+
+    # 11: subtraction
+    if sub_fn(10, 3) == 7 { step++ }
+
+    # 12: multiplication
+    if mul_fn(4, 5) == 20 { step++ }
+
+    # 13: division
+    if div_fn(20, 4) == 5 { step++ }
+
+    # 14: modulo
+    if mod_fn(17, 5) == 2 { step++ }
+
+    # 15: negation
+    if negate(7) == -7 { step++ }
+
+    # 16: clamp (below range)
+    if clamp(1, 5, 10) == 5 { step++ }
+
+    # 17: clamp (above range)
+    if clamp(15, 5, 10) == 10 { step++ }
+
+    # 18: clamp (in range)
+    if clamp(7, 5, 10) == 7 { step++ }
+
+    # 19: sum_to (while loop)
+    if sum_to(5) == 15 { step++ }
+
+    # 20: factorial
+    if factorial(5) == 120 { step++ }
+
+    # 21: transitive call (double calls adder)
+    if double(6) == 12 { step++ }
+
+    # 22: multiple return values
+    let a22, b22 = swap(3, 7)
+    if a22 == 7 && b22 == 3 { step++ }
+
+    # 23: out parameter
+    var out23 = 0
+    writer out out23
+    if out23 is Unit { step++ }
+
+    # 24: inout parameter
+    var val24 = 5
+    incrementer inout val24
+    if val24 == 6 { step++ }
+
+    # 25: early return (abs_val)
+    if abs_val(-8) == 8 && abs_val(3) == 3 { step++ }
+
+    # 26: boolean return
+    if is_positive(5) && !is_positive(-1) { step++ }
+
+    # 27: boolean AND return
+    if both_positive(3, 4) && !both_positive(-1, 4) { step++ }
+
+    # 28: boolean OR return
+    if either_positive(-1, 4) && !either_positive(-1, -2) { step++ }
+
+    # ----------------------------------------------------------
+    # Section 3: Arithmetic and expressions
+    # ----------------------------------------------------------
+
+    # 29: basic arithmetic
+    let sum29 = 3 + 4
+    if sum29 == 7 { step++ }
+
+    # 30: PEMDAS
+    let pemdas30 = 2 + 3 * 4
+    if pemdas30 == 14 { step++ }
+
+    # 31: parenthesized override
+    let paren31 = (2 + 3) * 4
+    if paren31 == 20 { step++ }
+
+    # 32: compound assignment
+    var comp32 = 10
+    comp32 += 5
+    comp32 -= 2
+    comp32 *= 3
+    comp32 /= 13
+    if comp32 == 3 { step++ }
+
+    # 33: increment/decrement
+    var inc33 = 0
+    inc33++
+    inc33++
+    inc33--
+    if inc33 == 1 { step++ }
+
+    # 34: unary minus on variable
+    var neg34 = 5
+    let neg34b = -neg34
+    if neg34b == -5 { step++ }
+
+    # 35: modulo operator
+    let mod35 = 17 % 5
+    if mod35 == 2 { step++ }
+
+    # 36: constant folding in arithmetic
+    let fold36 = 2 * 3 + 4 * 5
+    if fold36 == 26 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 4: Comparisons and boolean logic
+    # ----------------------------------------------------------
+
+    # 37: comparison operators
+    if 5 > 3 && 3 < 5 && 5 >= 5 && 5 <= 5 { step++ }
+
+    # 38: equality and inequality
+    let eq38a = 5
+    let eq38b = 5
+    if eq38a == eq38b && eq38a != 3 { step++ }
+
+    # 39: boolean chain (&&)
+    var val39 = 7
+    let bc39 = val39 > 0 && val39 < 100 && val39 != 50
+    if bc39 { step++ }
+
+    # 40: boolean chain (||)
+    var val40 = -5
+    let bc40 = val40 > 100 || val40 < 0
+    if bc40 { step++ }
+
+    # 41: mixed && and || precedence
+    var a41 = 10
+    let r41 = a41 > 5 && a41 < 20 || a41 == 100
+    if r41 { step++ }
+
+    # 42: negation operator
+    var f42 = null
+    if !f42 { step++ }
+
+    # 43: double negation
+    var t43 = 1
+    if !!t43 { step++ }
+
+    # 44: parenthesized boolean
+    var a44 = 3
+    let r44 = (a44 > 1 || a44 < -1) && a44 < 10
+    if r44 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 5: Type constructors and type checks
+    # ----------------------------------------------------------
+
+    # 45: Item constructor
+    let item45 = Item("metalbar")
+    if item45 is Item { step++ }
+
+    # 46: Component constructor
+    let comp46 = Component("behavior")
+    if comp46 is Component { step++ }
+
+    # 47: Technology constructor
+    let tech47 = Technology("signals2")
+    if tech47 is Technology { step++ }
+
+    # 48: Value constructor
+    let val48 = Value("pentagon")
+    if val48 is Value { step++ }
+
+    # 49: Coordinate constructor (literal)
+    let coord49 = Coordinate(3, 7)
+    if coord49 is Coordinate { step++ }
+
+    # 50: & operator — composite value
+    let stack50 = Item("metalbar") & 5
+    if stack50 is Item && stack50 >= 5 && stack50 <= 5 { step++ }
+
+    # 51: !is (negated type check)
+    let num51 = 42
+    if num51 !is Unit && num51 !is Item { step++ }
+
+    # 52: value_type branching
+    let vt52 = Item("circuit")
+    let vt52_ok = value_type(vt52) {
+        item { 1 }
+        unit { 0 }
+        component { 0 }
+        tech { 0 }
+        value { 0 }
+        coord { 0 }
+        no_match { 0 }
+    }
+    if vt52_ok { step++ }
+
+    # ----------------------------------------------------------
+    # Section 6: Variables and scoping
+    # ----------------------------------------------------------
+
+    # 53: block scoping
+    var scope53 = 1
+    if true {
+        let scope53 = 99
+    }
+    if scope53 == 1 { step++ }
+
+    # 54: shadowing
+    let shd54 = 5
+    let shd54_a = shd54
+    let shd54 = 10
+    if shd54_a == 5 && shd54 == 10 { step++ }
+
+    # 55: multi-binding expression list
+    let mb55a, mb55b, mb55c = 1, 2, 3
+    if mb55a == 1 && mb55b == 2 && mb55c == 3 { step++ }
+
+    # 56: null vs 0 distinction
+    var zero56 = 0
+    var empty56 = null
+    if zero56 && !empty56 { step++ }
+
+    # 57: boolean literals
+    let t57 = true
+    let f57 = false
+    if t57 && !f57 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 7: Control flow
+    # ----------------------------------------------------------
+
+    # 58: if/else if/else
+    var r58 = 0
+    var v58 = 5
+    if v58 > 10 {
+        r58 = 1
+    } else if v58 > 3 {
+        r58 = 2
+    } else {
+        r58 = 3
+    }
+    if r58 == 2 { step++ }
+
+    # 59: while loop
+    var sum59 = 0
+    var i59 = 1
+    while i59 <= 5 {
+        sum59 += i59
+        i59++
+    }
+    if sum59 == 15 { step++ }
+
+    # 60: loop with break
+    var cnt60 = 0
+    loop {
+        cnt60++
+        if cnt60 >= 3 { break }
+    }
+    if cnt60 == 3 { step++ }
+
+    # 61: counted loop
+    var cnt61 = 0
+    loop 5 {
+        cnt61++
+    }
+    if cnt61 == 5 { step++ }
+
+    # 62: for with Range
+    var sum62 = 0
+    for i in Range(1, 5) {
+        sum62 += i
+    }
+    if sum62 == 15 { step++ }
+
+    # 63: for with Range(start, stop, step)
+    var sum63 = 0
+    for i in Range(0, 10, 2) {
+        sum63 += i
+    }
+    if sum63 == 30 { step++ }
+
+    # 64: for with negative step
+    var sum64 = 0
+    for i in Range(5, 1, -1) {
+        sum64 += i
+    }
+    if sum64 == 15 { step++ }
+
+    # 65: labeled break
+    var r65 = 0
+    'outer65: loop {
+        var j = 0
+        while j < 10 {
+            if j == 3 {
+                r65 = j
+                break 'outer65
+            }
+            j++
+        }
+    }
+    if r65 == 3 { step++ }
+
+    # 66: continue
+    var sum66 = 0
+    for i in Range(1, 5) {
+        if i == 3 { continue }
+        sum66 += i
+    }
+    if sum66 == 12 { step++ }
+
+    # 67: nested for loops
+    var sum67 = 0
+    for i in Range(1, 3) {
+        for j in Range(1, 2) {
+            sum67 += 1
+        }
+    }
+    if sum67 == 6 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 8: If-expressions and mode block expressions
+    # ----------------------------------------------------------
+
+    # 68: basic if-expression
+    var v68 = 7
+    let r68 = if v68 > 5 { 1 } else { 0 }
+    if r68 == 1 { step++ }
+
+    # 69: if-expression without else (null)
+    var v69 = 1
+    let r69 = if v69 > 100 { 99 }
+    if !r69 { step++ }
+
+    # 70: if-expression with else if
+    var v70 = 5
+    let r70 = if v70 > 10 { 3 } else if v70 > 3 { 2 } else { 1 }
+    if r70 == 2 { step++ }
+
+    # 71: mode block expression
+    let me71 = unlocked { get_self }
+    if me71 is Unit { step++ }
+
+    # ----------------------------------------------------------
+    # Section 9: Branching functions and continuations
+    # ----------------------------------------------------------
+
+    # 72: pure-logic branching (classify)
+    var r72 = 0
+    classify(10) {
+        big { r72 = 1 }
+        small { r72 = 0 }
+    }
+    if r72 == 1 { step++ }
+
+    # 73: branching with data
+    var r73 = 0
+    classify_data(10) {
+        big { v, flag -> r73 = flag }
+        small { v, flag -> r73 = 0 }
+    }
+    if r73 == 1 { step++ }
+
+    # 74: expression-form branching
+    let r74 = classify(10) {
+        big { 1 }
+        small { 0 }
+    }
+    if r74 == 1 { step++ }
+
+    # 75: stdlib branching — check_number
+    var v75 = 10
+    var r75 = 0
+    check_number(v75, 5) {
+        larger { r75 = 1 }
+        smaller { r75 = 2 }
+        equal { r75 = 3 }
+    }
+    if r75 == 1 { step++ }
+
+    # 76: stdlib branching — compare_register
+    let a76 = Item("metalbar")
+    let b76 = Item("metalbar")
+    var r76 = 0
+    compare_register(a76, b76) {
+        different { r76 = 0 }
+        equal { r76 = 1 }
+    }
+    if r76 == 1 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 10: Iterators (user-defined)
+    # ----------------------------------------------------------
+
+    # 77: static sequence iterator
+    var sum77 = 0
+    for v in countdown() {
+        sum77 += v
+    }
+    if sum77 == 6 { step++ }
+
+    # 78: parameterized iterator
+    var cnt78 = 0
+    for v in repeat_val(42, 3) {
+        cnt78++
+    }
+    if cnt78 == 3 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 11: Library functions with control flow
+    # ----------------------------------------------------------
+
+    # 79: count_range (for loop in function)
+    if count_range(1, 5) == 5 { step++ }
+
+    # 80: find_threshold (loop/break in function)
+    if find_threshold(1) == 10 { step++ }
+
+    # 81: nested_break_test (labeled break in function)
+    if nested_break_test() == 2 { step++ }
+
+    # 82: sum_skip_three (continue in function)
+    if sum_skip_three(5) == 12 { step++ }
+
+    # 83: pick (if-expression in function)
+    if pick(10) == 10 && pick(2) == 0 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 12: Faction registers
+    # ----------------------------------------------------------
+
+    # 84: write and read a faction register
+    %sanity_test_val = 777
+    var fr84 = %sanity_test_val
+    if fr84 == 777 { step++ }
+
+    # 85: faction register arithmetic
+    %sanity_test_counter = 0
+    %sanity_test_counter += 10
+    %sanity_test_counter += 5
+    var fr85 = %sanity_test_counter
+    if fr85 == 15 { step++ }
+
+    # 86: faction register in condition
+    %sanity_test_flag = 42
+    if %sanity_test_flag > 40 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 13: Unit registers
+    # ----------------------------------------------------------
+
+    # 87: $signal write/read
+    $signal = Item("metalbar") & 7
+    if $signal is Item && $signal >= 7 && $signal <= 7 { step++ }
+
+    # 88: $visual write/read
+    $visual = Value("pentagon")
+    if $visual is Value { step++ }
+
+    # ----------------------------------------------------------
+    # Section 14: Radio transmission setup
+    # ----------------------------------------------------------
+    # We set the radio band and value via output parameters
+    # (linked to the radio transmitter component).
+    # The listener behavior on Unit B will verify reception.
+
+    # Set radio band and value (no step increment — these are output params)
+    $radio_band = Item("metalbar")
+    $radio_value = 123
+
+    # ----------------------------------------------------------
+    # Section 15: Special values
+    # ----------------------------------------------------------
+
+    # 89: infinity keyword
+    let inf89 = infinity
+    if inf89 > 999999 { step++ }
+
+    # 92: not_equal keyword
+    let ne90 = not_equal
+    if ne90 < -999999 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 16: Stdlib functions
+    # ----------------------------------------------------------
+
+    # 91: get_self
+    let me91 = get_self
+    if me91 is Unit { step++ }
+
+    # 92: get_location
+    let loc92 = get_location me91
+    if loc92 is Coordinate { step++ }
+
+    # 93: separate_coordinate / combine_coordinate
+    let x93, y93 = separate_coordinate loc92
+    let recombined93 = combine_coordinate x93, y93
+    if recombined93 is Coordinate { step++ }
+
+    # 94: separate_register — slot 1 = num, slot 2 = unit/value
+    let num94, _, id94 = separate_register Item("metalbar") & 8
+    if num94 == 8 && id94 is Item { step++ }
+
+    # 95: combine_register round-trip
+    let composite95 = Item("metalbar") & 5
+    let n95 = separate_register composite95
+    if n95 == 5 { step++ }
+
+    # 96: random_number (just verify it produces something in range)
+    let rnd96 = random_number 1, 100
+    if rnd96 >= 1 && rnd96 <= 100 { step++ }
+
+    # 97: bitwise_op (AND)
+    let bw97 = bitwise_op 15, b: 6, mode: BitwiseMode::And
+    if bw97 == 6 { step++ }
+
+    # 98: bitwise_op (OR)
+    let bw98 = bitwise_op 5, b: 3, mode: BitwiseMode::Or
+    if bw98 == 7 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 17: Doc comments, assert, misc
+    # ----------------------------------------------------------
+
+    # 99: assert (debug mode — should not exit)
+    assert step > 0
+    step++   # 99: if assert didn't exit, we get here
+
+    # 100: Coordinate with runtime variables
+    var cx100 = 3
+    var cy100 = 7
+    let dyn100 = Coordinate(cx100, cy100)
+    if dyn100 is Coordinate { step++ }
+
+    # 101: Range stored in variable
+    let r101 = Range(3)
+    var sum101 = 0
+    for i in r101 {
+        sum101 += i
+    }
+    if sum101 == 6 { step++ }
+
+    # 102: nested function calls in arguments
+    let nested102 = set_reg get_self
+    if nested102 is Unit { step++ }
+
+    # 103: arithmetic in function arguments
+    var v103 = 3
+    let r103 = adder(v103 + 1, v103 * 2)
+    if r103 == 10 { step++ }
+
+    # 104: comparison as expression assigned to var
+    var v104 = 7
+    let cmp104 = v104 > 5
+    if cmp104 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 18: Behavior call (call keyword)
+    # ----------------------------------------------------------
+
+    # 105: call a helper behavior and get output
+    let call_result = call call_helper(input: 10)
+    if call_result == 20 { step++ }
+
+    # ----------------------------------------------------------
+    # Section 19: Wait for listener result
+    # ----------------------------------------------------------
+    # The radio was set in section 14. Now we wait a significant
+    # time for you to confirm the listener got the signal.
+    # Set Listener OK to any truthy value once Unit B shows success.
+
+    wait 100
+    if $listener_ok { step++ }   # 106
+
+    # ----------------------------------------------------------
+    # Done — write result
+    # ----------------------------------------------------------
+
+    $result = set_reg step
+    exit
+}
+
+# Helper behavior for call keyword test
+behavior call_helper {
+    @name "Call Helper"
+    @param in input
+    @param out output
+    $output = adder($input, $input)
+}

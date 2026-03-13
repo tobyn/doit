@@ -17,36 +17,50 @@ the procedure below.
 
 ## Test Artifacts
 
-All artifacts live in `scratch/` (gitignored, may not exist — recreate
-if needed):
+All source files live in `toolchain/sanity_check/` (checked into the
+repo):
 
-- **`scratch/lib.doit`** — Library file imported by the test behavior.
-- **`scratch/test.doit`** — Main sanity check behavior.
-- **`scratch/test.b62`** — Compiled base62 of `test.doit`.
+- **`sanity_check/lib.doit`** — Library file imported by the test behavior.
+- **`sanity_check/test.doit`** — Main sanity check behavior.
+- **`sanity_check/listener.doit`** — Listener behavior for multi-unit tests.
 
-Delete any existing sanity check artifacts before starting. Each sanity
-check is written from scratch.
+Compiled output (`.b62` files) go to `scratch/` (gitignored). Recreate
+`scratch/` if it doesn't exist.
+
+These files are **persistent and incremental** — do not delete or
+rewrite them from scratch. New features get new tests appended;
+removed features get their tests deleted.
 
 ## Procedure
 
-### 1. Learn the language
+### 1. Review what's changed
 
-Read `manual/language.md` and `manual/functions.md` to understand the
-full set of language features and standard library functions available.
-This ensures the test exercises the current state of the language, not
-a stale snapshot from a previous session.
+Check what language features have been added or modified since the
+last sanity check update:
 
-### 2. Write the test behavior
+```sh
+git log --oneline toolchain/sanity_check/
+git log --oneline manual/
+```
 
-Write `scratch/lib.doit` and `scratch/test.doit` from scratch,
-exercising as many language constructs as possible. Follow the patterns
-described in "Writing New Tests" and "Library Patterns" below.
+Read the manual pages for any new or changed features to understand
+what needs testing.
+
+### 2. Update test artifacts
+
+- **New features**: Append new numbered tests to `test.doit` (or
+  `listener.doit` if multi-unit). Add any needed library functions
+  to `lib.doit`. Update the expected result count in the file header.
+- **Changed features**: Update existing tests if semantics changed.
+- **Removed features**: Delete tests for removed features. Renumber
+  if desired, but gaps are fine.
 
 ### 3. Compile
 
 ```sh
 cd toolchain
-go run . compile ../scratch/test.doit > ../scratch/test.b62
+go run . compile ../toolchain/sanity_check/test.doit > ../scratch/test.b62
+go run . compile ../toolchain/sanity_check/listener.doit > ../scratch/listener.b62
 ```
 
 If compilation fails, fix the test code (not the compiler) unless the
@@ -55,16 +69,16 @@ error reveals a compiler bug.
 ### 4. Ask the developer to test
 
 Tell the developer:
-- The base62 string is in `scratch/test.b62`
+- The base62 strings are in `scratch/test.b62` and `scratch/listener.b62`
 - What to set the input parameters to
-- What the expected Result value is
+- What the expected Result values are
 
 ### 5. Interpret the result
 
-- **Result matches expected** → sanity check passes. Done.
-- **Result is less than expected** → the result IS the number of
+- **Result matches expected** — sanity check passes. Done.
+- **Result is less than expected** — the result IS the number of
   passing tests. Use diagnostics (see below) to isolate failures.
-- **Result is 0 or null** → likely a very early failure or a problem
+- **Result is 0 or null** — likely a very early failure or a problem
   with parameter assignment. Start with a minimal diagnostic (e.g.,
   just set Result = 42 and exit) to verify basics work.
 
@@ -107,7 +121,7 @@ main test has dozens of tests), use halving to narrow down first:
    half, using `step++` counting.
 2. The developer tests both. The results reveal which half(s) contain
    failures and how many.
-3. Continue halving until the candidate set is ≤10 tests, then switch
+3. Continue halving until the candidate set is <=10 tests, then switch
    to bitmask diagnostics to identify exact failures.
 
 Goal: reach bitmask diagnostics as fast as possible. Halving is just
@@ -141,15 +155,14 @@ to mentally parse raw JSON:
 |-------|----------------------------|--------------------------------|
 | 1     | set_number step = 0        |                                |
 | 2     | set_number a = 0           |                                |
-| 3     | compare_register a, false  | different→4, equal(next)→5     |
+| 3     | compare_register a, false  | different->4, equal(next)->5   |
 | 4     | add step += 1              |                                |
 | 5     | ...                        |                                |
 ```
 
 ### General diagnostic principles
 
-- Do not overwrite existing diagnostic files — use incrementing
-  numbers (diag1, diag2, ...).
+- Diagnostic files go in `scratch/` (diag1.doit, diag2.doit, ...).
 - Batch diagnostics when possible — compile and present multiple
   behaviors per round so the developer can test them in one session.
 - A failing test in the main behavior that passes in isolation
@@ -198,4 +211,3 @@ exit
 
 See `in_game_testing.md` for general guidelines (parameters for I/O,
 exit at end, compiled output to scratch/, avoiding `2>&1`).
-

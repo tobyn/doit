@@ -1,0 +1,236 @@
+# Sanity check library — exercises imports, functions, constants, enums,
+# iterators, and transitive calls.
+
+# --- Constants ---
+
+const MAGIC = 42
+const METAL = Item("metalbar")
+const METAL_STACK = METAL & 10
+const ORIGIN = Coordinate(0, 0)
+const GREETING = "lib hello"
+const COMPUTED = 3 * 7 + 1     # 22, constant folding
+
+# --- Enums ---
+
+enum Color { Red, Green, Blue }
+enum Priority { Low, Medium = 5, High, Critical = 100 }
+
+# --- Private constant (not importable) ---
+
+private const INTERNAL_VAL = 99
+
+# --- Private function (accessed indirectly) ---
+
+private fn secret() {
+    return INTERNAL_VAL
+}
+
+# --- Public functions ---
+
+fn get_magic() {
+    return MAGIC
+}
+
+fn get_secret() {
+    return secret()
+}
+
+fn adder(a, b) {
+    return a + b
+}
+
+fn sub_fn(a, b) {
+    return a - b
+}
+
+fn mul_fn(a, b) {
+    return a * b
+}
+
+fn div_fn(a, b) {
+    return a / b
+}
+
+fn mod_fn(a, b) {
+    return a % b
+}
+
+fn negate(a) {
+    return -a
+}
+
+fn clamp(val, lo, hi) {
+    if val < lo { return lo }
+    else if val > hi { return hi }
+    return val
+}
+
+fn sum_to(n) {
+    var total = 0
+    var i = 1
+    while i <= n {
+        total += i
+        i++
+    }
+    return total
+}
+
+fn factorial(n) {
+    var result = 1
+    var i = 2
+    while i <= n {
+        result *= i
+        i++
+    }
+    return result
+}
+
+# Transitive call: double calls adder
+fn double(x) {
+    return adder(x, x)
+}
+
+# Multiple return values
+fn swap(a, b) {
+    return b, a
+}
+
+# out parameter
+fn writer(out target) {
+    let target = get_self
+}
+
+# inout parameter
+fn incrementer(inout val) {
+    val += 1
+}
+
+# Function with early return
+fn abs_val(x) {
+    if x >= 0 { return x }
+    return -x
+}
+
+# Boolean return
+fn is_positive(x) {
+    return x > 0
+}
+
+fn both_positive(a, b) {
+    return a > 0 && b > 0
+}
+
+fn either_positive(a, b) {
+    return a > 0 || b > 0
+}
+
+# Branching function (pure-logic)
+fn classify(a) exec(big, small) {
+    if a > 5 {
+        return big
+    }
+    return small
+}
+
+# Branching with data
+fn classify_data(a) exec(big, small) {
+    if a > 5 {
+        return big(a, 1)
+    }
+    return small(a, 0)
+}
+
+# Iterator: static sequence
+iter countdown() -> val {
+    yield 3
+    yield 2
+    yield 1
+}
+
+# Iterator: filtering
+iter positive_components() -> comp {
+    for c, idx in each_component {
+        if c != null {
+            yield c
+        }
+    }
+}
+
+# Iterator with parameter
+iter repeat_val(v, n) -> val {
+    for i in Range(1, n) {
+        yield v
+    }
+}
+
+# Function using for loop
+fn count_range(start, stop) {
+    var total = 0
+    for i in Range(start, stop) {
+        total += 1
+    }
+    return total
+}
+
+# Function with loop/break
+fn find_threshold(start) {
+    var x = start
+    loop {
+        if x >= 10 {
+            break
+        }
+        x += 3
+    }
+    return x
+}
+
+# Function with labeled break
+fn nested_break_test() {
+    var result = 0
+    'outer: loop {
+        var j = 0
+        while j < 5 {
+            if j == 2 {
+                result = j
+                break 'outer
+            }
+            j++
+        }
+    }
+    return result
+}
+
+# Function with continue
+fn sum_skip_three(n) {
+    var total = 0
+    for i in Range(1, n) {
+        if i == 3 {
+            continue
+        }
+        total += i
+    }
+    return total
+}
+
+# If-expression
+fn pick(a) {
+    return if a > 5 { a } else { 0 }
+}
+
+# Mode block in function
+fn fast_get_self() {
+    return unlocked { get_self }
+}
+
+# Function with wait
+fn wait_and_return(ticks) {
+    wait ticks
+    return 1
+}
+
+# param modifier — for event setup
+fn setup_param_event(param trigger, out result) {
+    on trigger {
+        let result = 1
+    }
+}
