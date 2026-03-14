@@ -1956,37 +1956,59 @@ func (p *parser) resolveFnBoolTree(expr Expr, b *frameBuilder, paramMap map[stri
 }
 
 // fnParseCtx constructs a parseContext for fn body parsing.
-func (p *parser) fnParseCtx(ctx *fnBodyContext) *parseContext {
+func (p *parser) fnParseCtx(fnCtx *fnBodyContext) *parseContext {
 	type fnScopeState struct {
 		info  map[string]fnVarInfo
 		depth int
 	}
 	var scopeStack []fnScopeState
-	return &parseContext{
-		resolve: ctx.resolve,
-		parseBody: func(exprTail bool) ([]Stmt, error) {
-			if exprTail {
-				return p.parseFnBodyStmtsInner(ctx, true)
-			}
-			return p.parseFnBodyStmts(ctx)
-		},
+	mode := modeFunction
+	if fnCtx.inIter {
+		mode = modeIterator
+	}
+	pctx := &parseContext{
+		mode:    mode,
+		resolve: fnCtx.resolve,
 		pushScope: func() {
-			info, depth := ctx.pushFnScope()
+			info, depth := fnCtx.pushFnScope()
 			scopeStack = append(scopeStack, fnScopeState{info, depth})
 		},
 		popScope: func() {
 			n := len(scopeStack) - 1
 			s := scopeStack[n]
-			ctx.popFnScope(s.info, s.depth)
+			fnCtx.popFnScope(s.info, s.depth)
 			scopeStack = scopeStack[:n]
 		},
 		declareIterVar: func(name string) {
-			ctx.declareFnVarWarn(name, false, p, 0)
+			fnCtx.declareFnVarWarn(name, false, p, 0)
 		},
 		parseConstructor: func(nameTok token) (Expr, error) {
 			return p.parseFnBodyConstructorExpr(nameTok)
 		},
+		parseLetVar: func(mutable bool, comment string) ([]Stmt, error) {
+			return p.parseFnBodyLetVar(fnCtx, mutable, comment)
+		},
+		parseOnEvent: func(comment string) (*OnEventStmt, error) {
+			return p.parseFnBodyOnEvent(fnCtx, comment)
+		},
+		parseDefaultStmt: func(tok token, comment string, exprTail bool) ([]Stmt, bool, error) {
+			return p.parseFnDefaultStmtUnified(tok, fnCtx, comment, exprTail)
+		},
+		checkInstrDirs: func(frame map[string]any, pos int) error {
+			return p.checkFnBodyInstructionDirections(frame, fnCtx.paramDirs, pos)
+		},
+		parseLocalBlocks: func(frame map[string]any) ([]*ContinuationBlock, error) {
+			return p.maybeParseFnBodyLocalBlocks(frame, fnCtx)
+		},
+		parseValueExpr: func() (Expr, error) {
+			return p.parseFnBodyReturnItem(fnCtx)
+		},
+		fnCtx: fnCtx,
 	}
+	pctx.parseBody = func(exprTail bool) ([]Stmt, error) {
+		return p.parseStmtBlock(pctx, exprTail)
+	}
+	return pctx
 }
 
 // fnEmitCtx constructs an emitContext for fn body emission.
@@ -5097,639 +5119,16 @@ func (p *parser) parseFnBodyOnEvent(ctx *fnBodyContext, comment string) (*OnEven
 }
 
 // parseFnBodyStmts parses fn body statements until '}'. The opening '{'
-// has been consumed. Returns the parsed statements.
+// has been consumed. Delegates to the unified parseStmtBlock.
 func (p *parser) parseFnBodyStmts(ctx *fnBodyContext) ([]Stmt, error) {
-	return p.parseFnBodyStmtsInner(ctx, false)
+	return p.parseStmtBlock(p.fnParseCtx(ctx), false)
 }
 
 // parseFnBodyStmtsInner parses fn body statements until '}'. If exprTail is
 // true, the last item may be a bare expression (wrapped in exprTailStmt).
+// Delegates to the unified parseStmtBlock.
 func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stmt, error) {
-	savedInfo, savedDepth := ctx.pushFnScope()
-	defer ctx.popFnScope(savedInfo, savedDepth)
-	var astBody []Stmt
-	var terminal Stmt // non-nil when the last statement was terminal
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if tok.kind == tokRBrace {
-			break
-		}
-		if terminal != nil {
-			hasPath := (tok.kind == tokIdent && (tok.val == "on" || tok.val == "label")) ||
-				p.blockContainsReachabilityPath()
-			if hasPath {
-				terminal = nil
-			} else {
-				p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
-				p.unget(tok)
-				if err := p.skipToCloseBrace(); err != nil {
-					return nil, err
-				}
-				break
-			}
-		}
-		if tok.kind == tokLabel {
-			label := tok.val
-			if p.loopLabels[label] {
-				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
-			}
-			if _, err := p.expect(tokColon); err != nil {
-				return nil, err
-			}
-			kw, err := p.expect(tokIdent)
-			if err != nil {
-				return nil, err
-			}
-			labelComment := p.docComment
-			switch kw.val {
-			case "loop":
-				loopStmt, err := p.parseLoopStmt(p.fnParseCtx(ctx), labelComment, label)
-				if err != nil {
-					return nil, err
-				}
-				astBody = append(astBody, loopStmt)
-			case "while":
-				whileStmt, err := p.parseWhileStmt(p.fnParseCtx(ctx), labelComment, label)
-				if err != nil {
-					return nil, err
-				}
-				astBody = append(astBody, whileStmt)
-			case "for":
-				forStmt, err := p.parseForStmt(p.fnParseCtx(ctx), labelComment, label)
-				if err != nil {
-					return nil, err
-				}
-				astBody = append(astBody, forStmt)
-			default:
-				return nil, p.errorf(kw.pos, "expected 'loop', 'while', or 'for' after label, got %s", kw.describe())
-			}
-			continue
-		}
-		if tok.kind == tokPercent {
-			next, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if next.kind != tokIdent {
-				return nil, p.errorf(tok.pos, "expected identifier after '%%'")
-			}
-			tok = token{tokIdent, "%" + next.val, tok.pos}
-		}
-		if tok.kind != tokIdent {
-			if exprTail && tok.kind == tokNumber {
-				num, _ := strconv.Atoi(tok.val)
-				numExpr := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
-				result, err := p.parseArithExprFromFull(numExpr, ctx.resolve)
-				if err != nil {
-					return nil, err
-				}
-				if _, err := p.expect(tokRBrace); err != nil {
-					return nil, err
-				}
-				astBody = append(astBody, &exprTailStmt{Expr: result})
-				return astBody, nil
-			}
-			if exprTail && tok.kind == tokLParen {
-				p.unget(tok)
-				expr, err := p.parseBoolExpr(ctx.resolve)
-				if err != nil {
-					return nil, err
-				}
-				if truthy, ok := expr.(*TruthyExpr); ok {
-					expr = truthy.Value
-				}
-				if _, err := p.expect(tokRBrace); err != nil {
-					return nil, err
-				}
-				astBody = append(astBody, &exprTailStmt{Expr: expr})
-				return astBody, nil
-			}
-			return nil, p.errorf(tok.pos, "expected statement or '}', got %s", tok.describe())
-		}
-		comment := p.docComment
-
-		switch tok.val {
-		case "locked", "unlocked":
-			if _, err := p.expect(tokLBrace); err != nil {
-				return nil, err
-			}
-			p.modeBlockDepth++
-			body, err := p.parseFnBodyStmts(ctx)
-			p.modeBlockDepth--
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, &ModeBlockStmt{
-				Unlock:  tok.val == "unlocked",
-				Body:    body,
-				Comment: comment,
-			})
-
-		case "on":
-			onStmt, err := p.parseFnBodyOnEvent(ctx, comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, onStmt)
-
-		case "instruction":
-			frame, err := p.parseInstruction()
-			if err != nil {
-				return nil, err
-			}
-			if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, tok.pos); err != nil {
-				return nil, err
-			}
-			var blocks []*ContinuationBlock
-			if hasLocalExecBindings(frame) {
-				blocks, err = p.maybeParseFnBodyLocalBlocks(frame, ctx)
-				if err != nil {
-					return nil, err
-				}
-			}
-			astBody = append(astBody, &InstructionStmt{Frame: frame, Blocks: blocks, Comment: comment})
-
-		case "return":
-			retPeek, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if retPeek.kind == tokIdent && retPeek.val == "instruction" {
-				frame, err := p.parseInstruction()
-				if err != nil {
-					return nil, err
-				}
-				if err := p.checkFnBodyInstructionDirections(frame, ctx.paramDirs, retPeek.pos); err != nil {
-					return nil, err
-				}
-				var blocks []*ContinuationBlock
-				if hasLocalExecBindings(frame) {
-					blocks, err = p.maybeParseFnBodyLocalBlocksExpr(frame, ctx)
-					if err != nil {
-						return nil, err
-					}
-				}
-				astBody = append(astBody, &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame, Blocks: blocks}}, Comment: comment})
-			} else if retPeek.kind == tokIdent && ctx.isExecName(retPeek.val) {
-				// Continuation dispatch: return <cont_name> or return <cont_name>(args...)
-				contName := retPeek.val
-				var contArgs []Expr
-				peek, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if peek.kind == tokLParen {
-					// Check for empty arg list: return cont()
-					emptyCheck, err := p.next()
-					if err != nil {
-						return nil, err
-					}
-					if emptyCheck.kind == tokRParen {
-						return nil, p.errorf(peek.pos, "empty continuation arg list; use 'return %s' without parentheses for control-only dispatch", contName)
-					}
-					p.unget(emptyCheck)
-					// Parse data args (full expression language)
-					for {
-						arg, err := p.parseFnBodyReturnItem(ctx)
-						if err != nil {
-							return nil, err
-						}
-						contArgs = append(contArgs, arg)
-						sep, err := p.next()
-						if err != nil {
-							return nil, err
-						}
-						if sep.kind == tokRParen {
-							break
-						}
-						if sep.kind != tokComma {
-							return nil, p.errorf(sep.pos, "expected ',' or ')' in continuation args, got %v", sep.kind)
-						}
-					}
-				} else {
-					p.unget(peek)
-				}
-				astBody = append(astBody, &ReturnStmt{Continuation: contName, ContinuationArgs: contArgs, Comment: comment})
-			} else {
-				p.unget(retPeek)
-				var values []Expr
-				for {
-					item, err := p.parseFnBodyReturnItem(ctx)
-					if err != nil {
-						return nil, err
-					}
-					values = append(values, item)
-					sep, err := p.next()
-					if err != nil {
-						return nil, err
-					}
-					if sep.kind != tokComma {
-						p.unget(sep)
-						break
-					}
-				}
-				astBody = append(astBody, &ReturnStmt{Values: values, Comment: comment})
-			}
-
-		case "let", "var":
-			mutable := tok.val == "var"
-			stmt, err := p.parseFnBodyLetVar(ctx, mutable, comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt...)
-
-		case "if":
-			if exprTail {
-				// Try as if-expression tail
-				ifExpr, err := p.parseIfExpr(p.fnParseCtx(ctx), comment)
-				if err != nil {
-					return nil, err
-				}
-				peek, err := p.next()
-				if err != nil {
-					return nil, err
-				}
-				if peek.kind == tokRBrace {
-					astBody = append(astBody, &exprTailStmt{Expr: ifExpr})
-					return astBody, nil
-				}
-				return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
-			}
-			stmt, err := p.parseIfStmt(p.fnParseCtx(ctx), comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt)
-
-		case "while":
-			stmt, err := p.parseWhileStmt(p.fnParseCtx(ctx), comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt)
-
-		case "loop":
-			stmt, err := p.parseLoopStmt(p.fnParseCtx(ctx), comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt)
-
-		case "for":
-			stmt, err := p.parseForStmt(p.fnParseCtx(ctx), comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt)
-
-		case "yield":
-			if !ctx.inIter {
-				return nil, p.errorf(tok.pos, "'yield' can only be used inside an iter body")
-			}
-			stmt, err := p.parseYieldStmt(ctx, comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt)
-
-		case "wait":
-			stmt, err := p.parseWaitStmt(p.fnParseCtx(ctx), comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt)
-
-		case "assert":
-			stmt, err := p.parseAssertStmt(p.fnParseCtx(ctx), comment, tok.pos)
-			if err != nil {
-				return nil, err
-			}
-			if !p.releaseMode {
-				astBody = append(astBody, stmt)
-			}
-
-		case "break":
-			if p.loopDepth == 0 && p.execBlockDepth == 0 && p.modeBlockDepth == 0 {
-				return nil, p.errorf(tok.pos, "'break' outside of loop, exec block, or mode block")
-			}
-			label := ""
-			crossBoundary := false
-			var values []Expr
-			peek, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if peek.kind == tokLabel {
-				if p.loopLabels[peek.val] {
-					label = peek.val
-				} else if p.outerLoopLabels[peek.val] {
-					label = peek.val
-					crossBoundary = true
-				} else {
-					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
-				}
-			} else if peek.kind != tokRBrace && peek.kind != tokEOF {
-				// Not a label and not end-of-block — try to parse break values.
-				// Use save/restore: if expression parsing fails, this is a bare break.
-				saved := p.save()
-				savedComment := comment
-				p.unget(peek)
-				parseOK := true
-				for {
-					item, err := p.parseFnBodyReturnItem(ctx)
-					if err != nil {
-						parseOK = false
-						break
-					}
-					values = append(values, item)
-					sep, err := p.next()
-					if err != nil {
-						parseOK = false
-						break
-					}
-					if sep.kind != tokComma {
-						p.unget(sep)
-						break
-					}
-				}
-				if !parseOK {
-					// Expression parsing failed — restore and treat as bare break
-					p.restore(saved)
-					comment = savedComment
-					values = nil
-				}
-			} else {
-				p.unget(peek)
-			}
-			astBody = append(astBody, &BreakStmt{Label: label, Values: values, CrossBoundary: crossBoundary, Comment: comment})
-
-		case "exit":
-			if err := p.consumeOptionalEmptyParens(); err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, &ExitStmt{Comment: comment})
-
-		case "restart":
-			if err := p.consumeOptionalEmptyParens(); err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, &RestartStmt{Comment: comment})
-
-		case "label":
-			stmt, err := p.parseLabelStmt(p.fnParseCtx(ctx), comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt)
-
-		case "jump":
-			stmt, err := p.parseJumpStmt(p.fnParseCtx(ctx), comment)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, stmt)
-
-		case "last":
-			if err := p.consumeOptionalEmptyParens(); err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, &LastStmt{Comment: comment})
-
-		case "call":
-			callNameTok, err := p.expect(tokIdent)
-			if err != nil {
-				return nil, err
-			}
-			name, bhv, err := p.resolveCallBehaviorName(callNameTok)
-			if err != nil {
-				return nil, err
-			}
-			args, err := p.parseCallBehaviorArgs(bhv, ctx.resolve, callNameTok.pos)
-			if err != nil {
-				return nil, err
-			}
-			astBody = append(astBody, &CallBehaviorStmt{
-				BehaviorName: name,
-				Args:         args,
-				Comment:      comment,
-				Pos:          callNameTok.pos,
-			})
-
-		case "fn", "iter", "private":
-			return nil, p.errorf(tok.pos, "function definitions cannot be nested")
-
-		case "behavior":
-			return nil, p.errorf(tok.pos, "behavior definitions cannot be nested")
-
-		case "else":
-			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
-
-		case "continue":
-			if p.loopDepth == 0 {
-				return nil, p.errorf(tok.pos, "'continue' outside of loop")
-			}
-			astBody = append(astBody, &ContinueStmt{Comment: comment})
-
-		default:
-			// Check for assignment, compound assignment, ++/--, or bare call
-			peek, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if peek.kind == tokEquals || isCompoundAssignOp(peek.kind) || peek.kind == tokPlusPlus || peek.kind == tokMinusMinus {
-				if err := p.checkVarName(tok.val, tok.pos); err != nil {
-					return nil, err
-				}
-			}
-			if peek.kind == tokEquals {
-				// Assignment: x = <expr>
-				if err := ctx.canAssign(tok.val, p, tok.pos); err != nil {
-					return nil, err
-				}
-				expr, err := p.parseFnBodyRHSExpr(ctx)
-				if err != nil {
-					return nil, err
-				}
-				astBody = append(astBody, &AssignStmt{Target: tok.val, Value: expr, Comment: comment, Pos: tok.pos})
-			} else if isCompoundAssignOp(peek.kind) {
-				// Compound assignment: x += <expr>
-				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
-					return nil, err
-				}
-				rhs, err := p.parseBoolExpr(ctx.resolve)
-				if err != nil {
-					return nil, err
-				}
-				// Unwrap TruthyExpr for plain arithmetic/value results
-				if truthy, ok := rhs.(*TruthyExpr); ok {
-					rhs = truthy.Value
-				}
-				astBody = append(astBody, &CompoundAssignStmt{Target: tok.val, Op: peek.kind, Value: rhs, Comment: comment, Pos: tok.pos})
-			} else if peek.kind == tokPlusPlus {
-				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
-					return nil, err
-				}
-				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokPlusPlus, Comment: comment, Pos: tok.pos})
-			} else if peek.kind == tokMinusMinus {
-				if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
-					return nil, err
-				}
-				astBody = append(astBody, &IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment, Pos: tok.pos})
-			} else {
-				p.unget(peek)
-				calleeName, callee, calleeErr := p.resolveFnName(tok)
-				if calleeErr != nil {
-					return nil, calleeErr
-				}
-				calleeTok := token{kind: tokIdent, val: calleeName, pos: tok.pos}
-
-				if exprTail {
-					// In exprTail mode, check for expr tail before treating as statement
-					if isConstructor(tok.val) {
-						ctor, err := p.parseFnBodyConstructorExpr(tok)
-						if err != nil {
-							return nil, err
-						}
-						// Check for & after constructor
-						peek2, err := p.next()
-						if err != nil {
-							return nil, err
-						}
-						var tailExpr Expr = ctor
-						if peek2.kind == tokAmpersand {
-							if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
-								return nil, p.errorf(peek2.pos, "'&' cannot be used with Range (it would overwrite the step field)")
-							}
-							numExpr, err := p.parseFnBodyExpr()
-							if err != nil {
-								return nil, err
-							}
-							tailExpr = &AmpersandExpr{Value: ctor, Num: numExpr}
-						} else {
-							p.unget(peek2)
-						}
-						if _, err := p.expect(tokRBrace); err != nil {
-							return nil, err
-						}
-						astBody = append(astBody, &exprTailStmt{Expr: tailExpr})
-						return astBody, nil
-					}
-					if tok.val == "null" || tok.val == "false" {
-						if _, err := p.expect(tokRBrace); err != nil {
-							return nil, err
-						}
-						astBody = append(astBody, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
-						return astBody, nil
-					}
-					if tok.val == "true" || tok.val == "infinity" || tok.val == "not_equal" {
-						litVal := map[string]any{"num": 1}
-						if tok.val == "infinity" {
-							litVal = map[string]any{"num": -2147483648}
-						} else if tok.val == "not_equal" {
-							litVal = map[string]any{"num": -2147483647}
-						}
-						if _, err := p.expect(tokRBrace); err != nil {
-							return nil, err
-						}
-						astBody = append(astBody, &exprTailStmt{Expr: &LiteralExpr{Value: litVal}})
-						return astBody, nil
-					}
-					if callee != nil && (callee.hasReturn() || callee.hasExec()) {
-						args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
-						if err != nil {
-							return nil, err
-						}
-						callExpr := &CallExpr{Name: calleeName, Args: args, KwArgs: kwArgs}
-						if callee.hasExec() {
-							blocks, err := p.maybeParseFnBodyContinuationBlocksExpr(callee, ctx)
-							if err != nil {
-								return nil, err
-							}
-							if blocks != nil {
-								callExpr.Blocks = blocks
-							}
-						}
-						result := Expr(callExpr)
-						result, err = p.parseArithExprFromFull(result, ctx.resolve)
-						if err != nil {
-							return nil, err
-						}
-						final, handled, err := p.maybeExprContinuation(result, ctx.resolve)
-						if err != nil {
-							return nil, err
-						}
-						if handled {
-							result = final
-						}
-						if _, err := p.expect(tokRBrace); err != nil {
-							return nil, err
-						}
-						astBody = append(astBody, &exprTailStmt{Expr: result})
-						return astBody, nil
-					}
-					if callee == nil {
-						// Variable reference as tail
-						resolved, err := ctx.resolve(tok)
-						if err != nil {
-							return nil, err
-						}
-						result, err := p.parseArithExprFromFull(resolved, ctx.resolve)
-						if err != nil {
-							return nil, err
-						}
-						final, handled, err := p.maybeExprContinuation(result, ctx.resolve)
-						if err != nil {
-							return nil, err
-						}
-						if handled {
-							result = final
-						}
-						if _, err := p.expect(tokRBrace); err != nil {
-							return nil, err
-						}
-						astBody = append(astBody, &exprTailStmt{Expr: result})
-						return astBody, nil
-					}
-				}
-
-				// Bare function call
-				if callee == nil {
-					return nil, p.errorf(tok.pos, "unknown function %q", tok.val)
-				}
-				args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
-				if err != nil {
-					return nil, err
-				}
-
-				// Check for continuation blocks after call args
-				var blocks []*ContinuationBlock
-				if callee.hasExec() {
-					blocks, err = p.maybeParseFnBodyContinuationBlocks(callee, ctx)
-					if err != nil {
-						return nil, err
-					}
-				}
-
-				astBody = append(astBody, &CallStmt{
-					Name:    calleeName,
-					Args:    args,
-					KwArgs:  kwArgs,
-					Blocks:  blocks,
-					Comment: comment,
-				})
-			}
-		}
-		if len(astBody) > 0 {
-			if last := astBody[len(astBody)-1]; isTerminalStmt(last) {
-				terminal = last
-			}
-		}
-	}
-	return astBody, nil
+	return p.parseStmtBlock(p.fnParseCtx(ctx), exprTail)
 }
 
 // parseFnBodyLetVar parses a let or var declaration in a fn body.
@@ -6197,6 +5596,209 @@ func (p *parser) parseFnBodyRHSExpr(ctx *fnBodyContext) (Expr, error) {
 		return truthy.Value, nil
 	}
 	return expr, nil
+}
+
+// parseFnDefaultStmtUnified handles the default case (non-keyword identifier)
+// in unified statement parsing for fn body context. When exprTail is true,
+// tries expression-tail forms first; falls through to regular statement parsing
+// otherwise. Returns (stmts, done, err) where done=true means exprTail consumed '}'.
+func (p *parser) parseFnDefaultStmtUnified(tok token, ctx *fnBodyContext, comment string, exprTail bool) ([]Stmt, bool, error) {
+	// Handle _ (discard) — treat as call without capturing result
+	if tok.val == "_" {
+		sep, err := p.next()
+		if err != nil {
+			return nil, false, err
+		}
+		if sep.kind == tokEquals {
+			expr, err := p.parseFnBodyRHSExpr(ctx)
+			if err != nil {
+				return nil, false, err
+			}
+			// Wrap in a CallStmt if it's a call, otherwise AssignStmt with discard
+			if ce, ok := expr.(*CallExpr); ok {
+				return []Stmt{&CallStmt{Name: ce.Name, Args: ce.Args, KwArgs: ce.KwArgs, Blocks: ce.Blocks, Comment: comment}}, false, nil
+			}
+			// For non-call expressions, just evaluate and discard
+			return []Stmt{&AssignStmt{Target: "_", Value: expr, Comment: comment, Pos: tok.pos}}, false, nil
+		}
+		if sep.kind == tokComma {
+			// Multi-return with leading discard: _, b, c = fn args
+			p.unget(sep)
+			p.unget(tok)
+			// Re-parse as let _, ...
+			stmts, err := p.parseFnBodyLetVar(ctx, false, comment)
+			return stmts, false, err
+		}
+		return nil, false, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
+	}
+
+	// Check for assignment, compound assignment, ++/--, or bare call
+	peek, err := p.next()
+	if err != nil {
+		return nil, false, err
+	}
+	if peek.kind == tokEquals || isCompoundAssignOp(peek.kind) || peek.kind == tokPlusPlus || peek.kind == tokMinusMinus {
+		if err := p.checkVarName(tok.val, tok.pos); err != nil {
+			return nil, false, err
+		}
+	}
+	if peek.kind == tokEquals {
+		if err := ctx.canAssign(tok.val, p, tok.pos); err != nil {
+			return nil, false, err
+		}
+		expr, err := p.parseFnBodyRHSExpr(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		return []Stmt{&AssignStmt{Target: tok.val, Value: expr, Comment: comment, Pos: tok.pos}}, false, nil
+	} else if isCompoundAssignOp(peek.kind) {
+		if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
+			return nil, false, err
+		}
+		rhs, err := p.parseBoolExpr(ctx.resolve)
+		if err != nil {
+			return nil, false, err
+		}
+		if truthy, ok := rhs.(*TruthyExpr); ok {
+			rhs = truthy.Value
+		}
+		return []Stmt{&CompoundAssignStmt{Target: tok.val, Op: peek.kind, Value: rhs, Comment: comment, Pos: tok.pos}}, false, nil
+	} else if peek.kind == tokPlusPlus {
+		if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
+			return nil, false, err
+		}
+		return []Stmt{&IncrDecrStmt{Target: tok.val, Op: tokPlusPlus, Comment: comment, Pos: tok.pos}}, false, nil
+	} else if peek.kind == tokMinusMinus {
+		if err := ctx.canCompound(tok.val, p, tok.pos); err != nil {
+			return nil, false, err
+		}
+		return []Stmt{&IncrDecrStmt{Target: tok.val, Op: tokMinusMinus, Comment: comment, Pos: tok.pos}}, false, nil
+	}
+
+	p.unget(peek)
+	calleeName, callee, calleeErr := p.resolveFnName(tok)
+	if calleeErr != nil {
+		return nil, false, calleeErr
+	}
+	calleeTok := token{kind: tokIdent, val: calleeName, pos: tok.pos}
+
+	if exprTail {
+		if isConstructor(tok.val) {
+			ctor, err := p.parseFnBodyConstructorExpr(tok)
+			if err != nil {
+				return nil, false, err
+			}
+			peek2, err := p.next()
+			if err != nil {
+				return nil, false, err
+			}
+			var tailExpr Expr = ctor
+			if peek2.kind == tokAmpersand {
+				if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
+					return nil, false, p.errorf(peek2.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+				}
+				numExpr, err := p.parseFnBodyExpr()
+				if err != nil {
+					return nil, false, err
+				}
+				tailExpr = &AmpersandExpr{Value: ctor, Num: numExpr}
+			} else {
+				p.unget(peek2)
+			}
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: tailExpr}}, true, nil
+		}
+		if tok.val == "null" || tok.val == "false" {
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: &LiteralExpr{Value: false}}}, true, nil
+		}
+		if tok.val == "true" || tok.val == "infinity" || tok.val == "not_equal" {
+			litVal := map[string]any{"num": 1}
+			if tok.val == "infinity" {
+				litVal = map[string]any{"num": -2147483648}
+			} else if tok.val == "not_equal" {
+				litVal = map[string]any{"num": -2147483647}
+			}
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: &LiteralExpr{Value: litVal}}}, true, nil
+		}
+		if callee != nil && (callee.hasReturn() || callee.hasExec()) {
+			args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
+			if err != nil {
+				return nil, false, err
+			}
+			callExpr := &CallExpr{Name: calleeName, Args: args, KwArgs: kwArgs}
+			if callee.hasExec() {
+				blocks, err := p.maybeParseFnBodyContinuationBlocksExpr(callee, ctx)
+				if err != nil {
+					return nil, false, err
+				}
+				if blocks != nil {
+					callExpr.Blocks = blocks
+				}
+			}
+			result := Expr(callExpr)
+			result, err = p.parseArithExprFromFull(result, ctx.resolve)
+			if err != nil {
+				return nil, false, err
+			}
+			final, handled, err := p.maybeExprContinuation(result, ctx.resolve)
+			if err != nil {
+				return nil, false, err
+			}
+			if handled {
+				result = final
+			}
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: result}}, true, nil
+		}
+		if callee == nil {
+			resolved, err := ctx.resolve(tok)
+			if err != nil {
+				return nil, false, err
+			}
+			result, err := p.parseArithExprFromFull(resolved, ctx.resolve)
+			if err != nil {
+				return nil, false, err
+			}
+			final, handled, err := p.maybeExprContinuation(result, ctx.resolve)
+			if err != nil {
+				return nil, false, err
+			}
+			if handled {
+				result = final
+			}
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: result}}, true, nil
+		}
+	}
+
+	// Bare function call
+	if callee == nil {
+		return nil, false, p.errorf(tok.pos, "unknown function %q", tok.val)
+	}
+	args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	var blocks []*ContinuationBlock
+	if callee.hasExec() {
+		blocks, err = p.maybeParseFnBodyContinuationBlocks(callee, ctx)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	return []Stmt{&CallStmt{Name: calleeName, Args: args, KwArgs: kwArgs, Blocks: blocks, Comment: comment}}, false, nil
 }
 
 // checkFnBodyInstructionDirections verifies that non-@N slots in an instruction

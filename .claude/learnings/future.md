@@ -17,11 +17,10 @@ register types.
 
 - **Error message quality** — review compiler errors for clarity and
   source locations. Important for new users at 1.0.
-- **Function/behavior parsing parity** — the two-context design
-  (bhvast.go vs parse.go) means features can drift out of sync.
-  Audit both paths for missing or inconsistent support (e.g., new
-  statement types, expression forms, or modifiers supported in one
-  context but not the other).
+- ~~**Function/behavior parsing parity**~~ — **Done.** Unified into
+  `parseStmtBlock` (codegen.go) with `parseMode` enum. Both
+  `parseBhvStmtBlockInner` and `parseFnBodyStmtsInner` are now thin
+  delegates. Feature drift is structurally eliminated.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,

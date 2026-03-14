@@ -48,9 +48,11 @@ see `.claude/learnings/test_format.md`.
   `fnDef`, `iterDef`, `bhvDef`, `paramDef` (with `isParam` and
   `isBehavior` fields), `behaviorRef` (dependency index wrapper),
   `symbolTable`, `constDef`, `deferredEvent`, `enumDef`),
-  `frameBuilder`/`frameRef` abstraction, `emitContext` struct,
-  `execMode` tracking (initial `modeUnknown`), slot constants for
-  `check_number`, `compare_register`, and `value_type`.
+  `frameBuilder`/`frameRef` abstraction, `parseContext` struct
+  (with `parseMode`: `modeBehavior`/`modeFunction`/`modeIterator`),
+  `emitContext` struct, `execMode` tracking (initial `modeUnknown`),
+  slot constants for `check_number`, `compare_register`, and
+  `value_type`.
 - **`parse.go`** — File-level parsing, function and iterator
   definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing and emission
   (`emitFnBody`), instruction parsing (`parseInstruction`), call
@@ -61,8 +63,9 @@ see `.claude/learnings/test_format.md`.
   `parseArithExpr` chain, `parseBoolExpr`/`parseBoolChain`,
   `maybeExprContinuation`. Behavior-level emitters:
   `emitBehaviorStmts`, `emitBhvStmtSimple`, `emitBhvCallStmt`.
-- **`codegen.go`** — `parseBehaviorBody` (two-phase parse+emit,
-  attaches `dependencies` array), behavior call support
+- **`codegen.go`** — `parseStmtBlock` (unified statement-block
+  parser for all three modes), `parseBehaviorBody` (two-phase
+  parse+emit, attaches `dependencies` array), behavior call support
   (`resolveCallBehaviorName`, `parseCallBehaviorArgs`,
   `resolveCallSub`, `compileDependency`, `resolveBhvCallArgValue`,
   `emitBhvCallBehavior`, `emitBhvCallBehaviorExpr`,
@@ -118,15 +121,29 @@ compiler warnings.
 
 ## Key Patterns
 
-**Two contexts for parsing and emission**: Both parsing and emission
-use context structs with closures to unify behavior-level and fn body
-paths. `parseContext` (compiler.go) drives statement parsers
-(`parseIfStmt`, `parseWhileStmt`, `parseLoopStmt`, `parseForStmt`,
-`parseWaitStmt`, `parseModeBlockExpr`, `parseIfExpr`, etc. in
-codegen.go). `emitContext` (compiler.go) drives control flow emitters.
-Factory functions — `bhvParseCtx`/`bhvEmitCtx` (bhvast.go) and
-`fnParseCtx`/`fnEmitCtx` (parse.go) — build each context with
-closures capturing resolution state.
+**Unified statement parsing**: `parseStmtBlock` (codegen.go) is the
+single statement-block parser used by both behavior bodies and
+function/iterator bodies. It uses `parseContext` (compiler.go) with
+a `parseMode` enum (`modeBehavior`, `modeFunction`, `modeIterator`)
+to gate mode-specific constructs: `return` (function only), `yield`
+(iterator only). Everything else — control flow, assignments,
+expressions, `call`, `on` handlers — is universal across all modes.
+`parseContext` carries closures for context-specific operations:
+`resolve` (operand resolution), `parseBody` (recursive block
+parsing), `pushScope`/`popScope`, `parseLetVar`, `parseOnEvent`,
+`parseDefaultStmt` (assignment/call/exprTail handling),
+`parseValueExpr`, etc. Factory functions — `bhvParseCtx` (bhvast.go)
+and `fnParseCtx` (parse.go) — build each context with closures
+capturing resolution state. Thin delegates (`parseBhvStmtBlockInner`,
+`parseFnBodyStmtsInner`) forward to `parseStmtBlock` for backward
+compatibility with existing call sites. The top-level behavior loop
+(`parseBehaviorBody` in codegen.go) still uses `parseBhvOneStmt`
+directly for attribute handling.
+
+**Two contexts for emission**: `emitContext` (compiler.go) drives
+control flow emitters. Factory functions — `bhvEmitCtx` (bhvast.go)
+and `fnEmitCtx` (parse.go) — build each context with closures
+capturing resolution state.
 
 **Frame building**: `frameBuilder` is an append-based builder.
 `frameRef(int)` values are 0-based internally, converted to 1-based

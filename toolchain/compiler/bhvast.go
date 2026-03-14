@@ -33,11 +33,9 @@ func (p *parser) bhvResolver(syms *symbolTable) operandResolver {
 // bhvParseCtx constructs a parseContext for behavior-level parsing.
 func (p *parser) bhvParseCtx(syms *symbolTable) *parseContext {
 	var scopeStack []map[string]varInfo
-	return &parseContext{
+	ctx := &parseContext{
+		mode:    modeBehavior,
 		resolve: p.bhvResolver(syms),
-		parseBody: func(exprTail bool) ([]Stmt, error) {
-			return p.parseBhvStmtBlockInner(syms, exprTail)
-		},
 		pushScope: func() {
 			scopeStack = append(scopeStack, syms.pushScope())
 		},
@@ -52,7 +50,41 @@ func (p *parser) bhvParseCtx(syms *symbolTable) *parseContext {
 		parseConstructor: func(nameTok token) (Expr, error) {
 			return p.parseBhvConstructorExpr(nameTok, syms)
 		},
+		parseLetVar: func(mutable bool, _ string) ([]Stmt, error) {
+			return p.parseBhvLetVarStmt(mutable, syms)
+		},
+		parseOnEvent: func(comment string) (*OnEventStmt, error) {
+			return p.parseBhvOnEvent(syms, comment)
+		},
+		parseDefaultStmt: func(tok token, _ string, exprTail bool) ([]Stmt, bool, error) {
+			return p.parseBhvDefaultStmtUnified(tok, syms, exprTail)
+		},
+		checkInstrDirs: func(frame map[string]any, pos int) error {
+			return p.checkInstructionDirections(frame, syms, pos)
+		},
+		parseLocalBlocks: func(frame map[string]any) ([]*ContinuationBlock, error) {
+			return p.maybeParseBhvLocalBlocks(frame, syms)
+		},
+		parseValueExpr: func() (Expr, error) {
+			resolve := p.bhvResolver(syms)
+			expr, err := p.parseBoolExpr(resolve)
+			if err != nil {
+				return nil, err
+			}
+			if truthy, ok := expr.(*TruthyExpr); ok {
+				expr = truthy.Value
+			}
+			expr, _, err = p.maybeExprContinuation(expr, resolve)
+			if err != nil {
+				return nil, err
+			}
+			return expr, nil
+		},
 	}
+	ctx.parseBody = func(exprTail bool) ([]Stmt, error) {
+		return p.parseStmtBlock(ctx, exprTail)
+	}
+	return ctx
 }
 
 // bhvEmitCtx constructs an emitContext for behavior-level emission.
@@ -1938,6 +1970,160 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 	return []Stmt{&CallStmt{Name: name, Args: args, KwArgs: kwArgs, Blocks: blocks, Comment: comment}}, nil
 }
 
+// parseBhvDefaultStmtUnified handles the default case (non-keyword identifier)
+// in unified statement parsing. When exprTail is true, tries expression-tail
+// forms first; falls through to regular statement parsing otherwise.
+// Returns (stmts, done, err) where done=true means exprTail consumed '}'.
+func (p *parser) parseBhvDefaultStmtUnified(tok token, syms *symbolTable, exprTail bool) ([]Stmt, bool, error) {
+	// Handle _ (discard) — multi-return or single discard
+	if tok.val == "_" {
+		comment := p.docComment
+		sep, err := p.next()
+		if err != nil {
+			return nil, false, err
+		}
+		if sep.kind == tokComma {
+			parsed, err := p.parseBhvMultiReturn(tok, false, true, syms)
+			if err != nil {
+				return nil, false, err
+			}
+			return parsed, false, nil
+		} else if sep.kind == tokEquals {
+			calleeTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, false, err
+			}
+			name, fn, fnErr := p.resolveFnName(calleeTok)
+			if fnErr != nil {
+				return nil, false, fnErr
+			}
+			if fn == nil {
+				return nil, false, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+			}
+			args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
+			if err != nil {
+				return nil, false, err
+			}
+			var blocks []*ContinuationBlock
+			if fn.hasExec() {
+				blocks, err = p.maybeParseBhvContinuationBlocks(fn, syms)
+				if err != nil {
+					return nil, false, err
+				}
+			}
+			return []Stmt{&CallStmt{
+				Name:    name,
+				Args:    args,
+				KwArgs:  kwArgs,
+				Blocks:  blocks,
+				Comment: comment,
+			}}, false, nil
+		}
+		return nil, false, p.errorf(sep.pos, "expected ',' or '=' after '_', got %s", sep.describe())
+	}
+
+	if exprTail {
+		name, fn, fnErr := p.resolveFnName(tok)
+		if fnErr != nil {
+			return nil, false, fnErr
+		}
+		peek, err := p.next()
+		if err != nil {
+			return nil, false, err
+		}
+		p.unget(peek)
+
+		// Constructor as tail expression
+		if isConstructor(tok.val) {
+			ctor, err := p.parseBhvConstructorExpr(tok, syms)
+			if err != nil {
+				return nil, false, err
+			}
+			if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
+				peek2, err := p.next()
+				if err != nil {
+					return nil, false, err
+				}
+				if peek2.kind == tokAmpersand {
+					return nil, false, p.errorf(peek2.pos, "'&' cannot be used with Range (it would overwrite the step field)")
+				}
+				p.unget(peek2)
+			}
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: ctor}}, true, nil
+		}
+
+		// null/false as tail expression
+		if tok.val == "null" || tok.val == "false" {
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: &LiteralExpr{Value: false}}}, true, nil
+		}
+		// true/infinity/not_equal as tail expression
+		if tok.val == "true" || tok.val == "infinity" || tok.val == "not_equal" {
+			litVal := map[string]any{"num": 1}
+			if tok.val == "infinity" {
+				litVal = map[string]any{"num": -2147483648}
+			} else if tok.val == "not_equal" {
+				litVal = map[string]any{"num": -2147483647}
+			}
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: &LiteralExpr{Value: litVal}}}, true, nil
+		}
+
+		isExprTailCase := false
+		if fn != nil && fn.hasReturn() && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
+			isExprTailCase = true
+		} else if fn == nil && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
+			isExprTailCase = true
+		}
+
+		if isExprTailCase {
+			resolve := p.bhvResolver(syms)
+			var result Expr
+			if fn != nil && fn.hasReturn() {
+				args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
+				if err != nil {
+					return nil, false, err
+				}
+				result = &CallExpr{Name: name, Args: args, KwArgs: kwArgs}
+			} else {
+				resolved, err := resolve(tok)
+				if err != nil {
+					return nil, false, err
+				}
+				result = resolved
+			}
+			result, err = p.parseArithExprFromFull(result, resolve)
+			if err != nil {
+				return nil, false, err
+			}
+			final, handled, err := p.maybeBhvExprContinuation(result, syms)
+			if err != nil {
+				return nil, false, err
+			}
+			if handled {
+				result = final
+			}
+			if _, err := p.expect(tokRBrace); err != nil {
+				return nil, false, err
+			}
+			return []Stmt{&exprTailStmt{Expr: result}}, true, nil
+		}
+	}
+
+	parsed, err := p.parseBhvDefaultStmt(tok, syms)
+	if err != nil {
+		return nil, false, err
+	}
+	return parsed, false, nil
+}
+
 // maybeParseBhvContinuationBlocks peeks for '{' and parses continuation
 // blocks at behavior level. Returns nil if no '{' follows.
 func (p *parser) maybeParseBhvContinuationBlocks(fn *fnDef, syms *symbolTable) ([]*ContinuationBlock, error) {
@@ -2703,342 +2889,11 @@ func (p *parser) parseBhvOnEvent(syms *symbolTable, comment string) (*OnEventStm
 	}, nil
 }
 
-// parseBhvStmtBlockInner parses a brace-delimited block of statements.
-// 'break' is allowed when p.loopDepth > 0. If exprTail is true, the last
-// item may be a bare expression (wrapped in exprTailStmt).
+// parseBhvStmtBlockInner parses a brace-delimited block of statements
+// at behavior level. Delegates to the unified parseStmtBlock.
 func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]Stmt, error) {
 	allowExprTail := len(exprTail) > 0 && exprTail[0]
-	saved := syms.pushScope()
-	defer syms.popScope(saved)
-	var stmts []Stmt
-	var terminal Stmt // non-nil when the last statement was terminal
-	for {
-		tok, err := p.next()
-		if err != nil {
-			return nil, err
-		}
-		if tok.kind == tokRBrace {
-			break
-		}
-		if tok.kind == tokEOF {
-			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
-		}
-		if terminal != nil {
-			// Scan the rest of the block for `on` or `label` — these
-			// create non-linear paths that make code reachable even
-			// after a terminal statement. Check the current token first
-			// (cheap) before scanning ahead (less cheap).
-			hasPath := (tok.kind == tokIdent && (tok.val == "on" || tok.val == "label")) ||
-				p.blockContainsReachabilityPath()
-			if hasPath {
-				terminal = nil
-			} else {
-				p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
-				p.unget(tok)
-				if err := p.skipToCloseBrace(); err != nil {
-					return nil, err
-				}
-				break
-			}
-		}
-		if tok.kind == tokLabel {
-			label := tok.val
-			if p.loopLabels[label] {
-				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
-			}
-			if _, err := p.expect(tokColon); err != nil {
-				return nil, err
-			}
-			kw, err := p.expect(tokIdent)
-			if err != nil {
-				return nil, err
-			}
-			pctx := p.bhvParseCtx(syms)
-			var stmt Stmt
-			switch kw.val {
-			case "loop":
-				stmt, err = p.parseLoopStmt(pctx, p.docComment, label)
-			case "while":
-				stmt, err = p.parseWhileStmt(pctx, p.docComment, label)
-			case "for":
-				stmt, err = p.parseForStmt(pctx, p.docComment, label)
-			default:
-				return nil, p.errorf(kw.pos, "expected 'loop', 'while', or 'for' after label, got %s", kw.describe())
-			}
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, stmt)
-			continue
-		}
-		if tok.kind == tokPercent {
-			next, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if next.kind != tokIdent {
-				return nil, p.errorf(tok.pos, "expected identifier after '%%'")
-			}
-			tok = token{tokIdent, "%" + next.val, tok.pos}
-		}
-		if tok.kind != tokIdent {
-			if allowExprTail && tok.kind == tokNumber {
-				// Number as expression tail in a mode block expression
-				resolve := p.bhvResolver(syms)
-				num, _ := strconv.Atoi(tok.val)
-				numExpr := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
-				result, err := p.parseArithExprFromFull(numExpr, resolve)
-				if err != nil {
-					return nil, err
-				}
-				if _, err := p.expect(tokRBrace); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &exprTailStmt{Expr: result})
-				return stmts, nil
-			}
-			if allowExprTail && tok.kind == tokLParen {
-				// Parenthesized expression tail
-				resolve := p.bhvResolver(syms)
-				p.unget(tok)
-				expr, err := p.parseBoolExpr(resolve)
-				if err != nil {
-					return nil, err
-				}
-				if truthy, ok := expr.(*TruthyExpr); ok {
-					expr = truthy.Value
-				}
-				if _, err := p.expect(tokRBrace); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &exprTailStmt{Expr: expr})
-				return stmts, nil
-			}
-			return nil, p.errorf(tok.pos, "expected statement, got %s", tok.describe())
-		}
-		comment := p.docComment
-
-		// Block-only: break
-		if tok.val == "break" {
-			if p.loopDepth == 0 && p.execBlockDepth == 0 && p.modeBlockDepth == 0 {
-				return nil, p.errorf(tok.pos, "'break' outside of loop, exec block, or mode block")
-			}
-			label := ""
-			crossBoundary := false
-			var values []Expr
-			peek, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			if peek.kind == tokLabel {
-				if p.loopLabels[peek.val] {
-					label = peek.val
-				} else if p.outerLoopLabels[peek.val] {
-					label = peek.val
-					crossBoundary = true
-				} else {
-					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
-				}
-			} else if peek.kind != tokRBrace && peek.kind != tokEOF {
-				// Not a label and not end-of-block — try to parse break values.
-				// Use save/restore: if expression parsing fails, this is a bare break.
-				saved := p.save()
-				savedComment := comment
-				p.unget(peek)
-				resolve := p.bhvResolver(syms)
-				parseOK := true
-				for {
-					expr, err := p.parseBoolExpr(resolve)
-					if err != nil {
-						parseOK = false
-						break
-					}
-					if truthy, ok := expr.(*TruthyExpr); ok {
-						expr = truthy.Value
-					}
-					expr, _, err = p.maybeExprContinuation(expr, resolve)
-					if err != nil {
-						parseOK = false
-						break
-					}
-					values = append(values, expr)
-					sep, err := p.next()
-					if err != nil {
-						parseOK = false
-						break
-					}
-					if sep.kind != tokComma {
-						p.unget(sep)
-						break
-					}
-				}
-				if !parseOK {
-					// Expression parsing failed — restore and treat as bare break
-					p.restore(saved)
-					comment = savedComment
-					values = nil
-				}
-			} else {
-				p.unget(peek)
-			}
-			stmt := &BreakStmt{Label: label, Values: values, CrossBoundary: crossBoundary, Comment: comment}
-			stmts = append(stmts, stmt)
-			terminal = stmt
-			continue
-		}
-
-		// Block-only: continue
-		if tok.val == "continue" {
-			if p.loopDepth == 0 {
-				return nil, p.errorf(tok.pos, "'continue' outside of loop")
-			}
-			stmt := &ContinueStmt{Comment: comment}
-			stmts = append(stmts, stmt)
-			terminal = stmt
-			continue
-		}
-
-		// ExprTail: if-expression (with fallback to statement on parse failure)
-		if allowExprTail && tok.val == "if" {
-			savedState := p.save()
-			savedComment := comment
-			ifExpr, err := p.parseIfExpr(p.bhvParseCtx(syms), savedComment)
-			if err == nil {
-				peek, err := p.next()
-				if err == nil && peek.kind == tokRBrace {
-					stmts = append(stmts, &exprTailStmt{Expr: ifExpr})
-					return stmts, nil
-				}
-				if err == nil {
-					return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
-				}
-			}
-			// If-expression parsing failed — restore and try as statement
-			p.restore(savedState)
-			comment = savedComment
-		}
-
-		// Try shared keyword cases
-		parsed, handled, err := p.parseBhvOneStmt(tok, syms)
-		if err != nil {
-			return nil, err
-		}
-		if handled {
-			stmts = append(stmts, parsed...)
-			if len(parsed) > 0 {
-				if last := stmts[len(stmts)-1]; isTerminalStmt(last) {
-					terminal = last
-				}
-			}
-			continue
-		}
-
-		// Default case: exprTail or regular statement
-		if allowExprTail {
-			name, fn, fnErr := p.resolveFnName(tok)
-			if fnErr != nil {
-				return nil, fnErr
-			}
-			peek, err := p.next()
-			if err != nil {
-				return nil, err
-			}
-			p.unget(peek)
-
-			// Constructor as tail expression
-			if isConstructor(tok.val) {
-				ctor, err := p.parseBhvConstructorExpr(tok, syms)
-				if err != nil {
-					return nil, err
-				}
-				if ctorExpr, ok := ctor.(*ConstructorExpr); ok && ctorExpr.TypeName == "Range" {
-					peek, err := p.next()
-					if err != nil {
-						return nil, err
-					}
-					if peek.kind == tokAmpersand {
-						return nil, p.errorf(peek.pos, "'&' cannot be used with Range (it would overwrite the step field)")
-					}
-					p.unget(peek)
-				}
-				if _, err := p.expect(tokRBrace); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &exprTailStmt{Expr: ctor})
-				return stmts, nil
-			}
-
-			// null/true/false/infinity/not_equal as tail expression
-			if tok.val == "null" || tok.val == "false" {
-				if _, err := p.expect(tokRBrace); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: false}})
-				return stmts, nil
-			}
-			if tok.val == "true" || tok.val == "infinity" || tok.val == "not_equal" {
-				litVal := map[string]any{"num": 1}
-				if tok.val == "infinity" {
-					litVal = map[string]any{"num": -2147483648}
-				} else if tok.val == "not_equal" {
-					litVal = map[string]any{"num": -2147483647}
-				}
-				if _, err := p.expect(tokRBrace); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &exprTailStmt{Expr: &LiteralExpr{Value: litVal}})
-				return stmts, nil
-			}
-
-			isExprTail := false
-			if fn != nil && fn.hasReturn() && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
-				isExprTail = true
-			} else if fn == nil && peek.kind != tokEquals && !isCompoundAssignOp(peek.kind) && peek.kind != tokPlusPlus && peek.kind != tokMinusMinus {
-				isExprTail = true
-			}
-
-			if isExprTail {
-				resolve := p.bhvResolver(syms)
-				var result Expr
-				if fn != nil && fn.hasReturn() {
-					args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
-					if err != nil {
-						return nil, err
-					}
-					result = &CallExpr{Name: name, Args: args, KwArgs: kwArgs}
-				} else {
-					resolved, err := resolve(tok)
-					if err != nil {
-						return nil, err
-					}
-					result = resolved
-				}
-				result, err = p.parseArithExprFromFull(result, resolve)
-				if err != nil {
-					return nil, err
-				}
-				final, handled, err := p.maybeBhvExprContinuation(result, syms)
-				if err != nil {
-					return nil, err
-				}
-				if handled {
-					result = final
-				}
-				if _, err := p.expect(tokRBrace); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &exprTailStmt{Expr: result})
-				return stmts, nil
-			}
-		}
-
-		parsed, err = p.parseBhvDefaultStmt(tok, syms)
-		if err != nil {
-			return nil, err
-		}
-		stmts = append(stmts, parsed...)
-	}
-	return stmts, nil
+	return p.parseStmtBlock(p.bhvParseCtx(syms), allowExprTail)
 }
 
 // -----------------------------------------------------------------------

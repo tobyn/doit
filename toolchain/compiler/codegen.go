@@ -3008,6 +3008,504 @@ func (p *parser) emitIfExpr(e *IfExpr, retVals []any, ctx *emitContext, comment 
 }
 
 // ---------------------------------------------------------------------------
+// Unified statement block parser
+// ---------------------------------------------------------------------------
+
+// parseStmtBlock parses a brace-delimited block of statements using the
+// unified parseContext. It replaces both parseBhvStmtBlockInner and
+// parseFnBodyStmtsInner, handling all statement types with mode-gated
+// access to context-specific constructs (return, yield, attributes).
+func (p *parser) parseStmtBlock(ctx *parseContext, exprTail bool) ([]Stmt, error) {
+	ctx.pushScope()
+	defer ctx.popScope()
+	var stmts []Stmt
+	var terminal Stmt // non-nil when the last statement was terminal
+	for {
+		tok, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if tok.kind == tokRBrace {
+			break
+		}
+		if tok.kind == tokEOF {
+			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
+		}
+
+		// Unreachable code detection
+		if terminal != nil {
+			hasPath := (tok.kind == tokIdent && (tok.val == "on" || tok.val == "label")) ||
+				p.blockContainsReachabilityPath()
+			if hasPath {
+				terminal = nil
+			} else {
+				p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
+				p.unget(tok)
+				if err := p.skipToCloseBrace(); err != nil {
+					return nil, err
+				}
+				break
+			}
+		}
+
+		// Label prefix: 'label: loop/while/for'
+		if tok.kind == tokLabel {
+			label := tok.val
+			if p.loopLabels[label] {
+				return nil, p.errorf(tok.pos, "duplicate loop label %q", label)
+			}
+			if _, err := p.expect(tokColon); err != nil {
+				return nil, err
+			}
+			kw, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			labelComment := p.docComment
+			var stmt Stmt
+			switch kw.val {
+			case "loop":
+				stmt, err = p.parseLoopStmt(ctx, labelComment, label)
+			case "while":
+				stmt, err = p.parseWhileStmt(ctx, labelComment, label)
+			case "for":
+				stmt, err = p.parseForStmt(ctx, labelComment, label)
+			default:
+				return nil, p.errorf(kw.pos, "expected 'loop', 'while', or 'for' after label, got %s", kw.describe())
+			}
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+			continue
+		}
+
+		// % prefix for faction registers
+		if tok.kind == tokPercent {
+			next, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if next.kind != tokIdent {
+				return nil, p.errorf(tok.pos, "expected identifier after '%%'")
+			}
+			tok = token{tokIdent, "%" + next.val, tok.pos}
+		}
+
+		// Non-ident tokens
+		if tok.kind != tokIdent {
+			if exprTail && tok.kind == tokNumber {
+				num, _ := strconv.Atoi(tok.val)
+				numExpr := Expr(&LiteralExpr{Value: map[string]any{"num": num}})
+				result, err := p.parseArithExprFromFull(numExpr, ctx.resolve)
+				if err != nil {
+					return nil, err
+				}
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &exprTailStmt{Expr: result})
+				return stmts, nil
+			}
+			if exprTail && tok.kind == tokLParen {
+				p.unget(tok)
+				expr, err := p.parseBoolExpr(ctx.resolve)
+				if err != nil {
+					return nil, err
+				}
+				if truthy, ok := expr.(*TruthyExpr); ok {
+					expr = truthy.Value
+				}
+				if _, err := p.expect(tokRBrace); err != nil {
+					return nil, err
+				}
+				stmts = append(stmts, &exprTailStmt{Expr: expr})
+				return stmts, nil
+			}
+			return nil, p.errorf(tok.pos, "expected statement or '}', got %s", tok.describe())
+		}
+
+		comment := p.docComment
+
+		// break (before keyword switch — needs special value parsing)
+		if tok.val == "break" {
+			if p.loopDepth == 0 && p.execBlockDepth == 0 && p.modeBlockDepth == 0 {
+				return nil, p.errorf(tok.pos, "'break' outside of loop, exec block, or mode block")
+			}
+			label := ""
+			crossBoundary := false
+			var values []Expr
+			peek, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if peek.kind == tokLabel {
+				if p.loopLabels[peek.val] {
+					label = peek.val
+				} else if p.outerLoopLabels[peek.val] {
+					label = peek.val
+					crossBoundary = true
+				} else {
+					return nil, p.errorf(peek.pos, "unknown loop label %q", peek.val)
+				}
+			} else if peek.kind != tokRBrace && peek.kind != tokEOF {
+				saved := p.save()
+				savedComment := comment
+				p.unget(peek)
+				parseOK := true
+				for {
+					expr, err := ctx.parseValueExpr()
+					if err != nil {
+						parseOK = false
+						break
+					}
+					values = append(values, expr)
+					sep, err := p.next()
+					if err != nil {
+						parseOK = false
+						break
+					}
+					if sep.kind != tokComma {
+						p.unget(sep)
+						break
+					}
+				}
+				if !parseOK {
+					p.restore(saved)
+					comment = savedComment
+					values = nil
+				}
+			} else {
+				p.unget(peek)
+			}
+			stmt := &BreakStmt{Label: label, Values: values, CrossBoundary: crossBoundary, Comment: comment}
+			stmts = append(stmts, stmt)
+			terminal = stmt
+			continue
+		}
+
+		// continue
+		if tok.val == "continue" {
+			if p.loopDepth == 0 {
+				return nil, p.errorf(tok.pos, "'continue' outside of loop")
+			}
+			stmt := &ContinueStmt{Comment: comment}
+			stmts = append(stmts, stmt)
+			terminal = stmt
+			continue
+		}
+
+		// ExprTail if-expression (with save/restore fallback to if-statement)
+		if exprTail && tok.val == "if" {
+			savedState := p.save()
+			savedComment := comment
+			ifExpr, err := p.parseIfExpr(ctx, savedComment)
+			if err == nil {
+				peek, err := p.next()
+				if err == nil && peek.kind == tokRBrace {
+					stmts = append(stmts, &exprTailStmt{Expr: ifExpr})
+					return stmts, nil
+				}
+				if err == nil {
+					return nil, p.errorf(peek.pos, "if-expression can only appear as the last item in an expression block")
+				}
+			}
+			p.restore(savedState)
+			comment = savedComment
+		}
+
+		// Keyword switch
+		switch tok.val {
+		case "instruction":
+			rawFrame, err := p.parseInstruction()
+			if err != nil {
+				return nil, err
+			}
+			if err := ctx.checkInstrDirs(rawFrame, tok.pos); err != nil {
+				return nil, err
+			}
+			var blocks []*ContinuationBlock
+			if hasLocalExecBindings(rawFrame) {
+				blocks, err = ctx.parseLocalBlocks(rawFrame)
+				if err != nil {
+					return nil, err
+				}
+			}
+			stmts = append(stmts, &InstructionStmt{Frame: rawFrame, Blocks: blocks, Comment: comment})
+
+		case "locked", "unlocked":
+			if _, err := p.expect(tokLBrace); err != nil {
+				return nil, err
+			}
+			p.modeBlockDepth++
+			body, err := ctx.parseBody(false)
+			p.modeBlockDepth--
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &ModeBlockStmt{
+				Unlock:  tok.val == "unlocked",
+				Body:    body,
+				Comment: comment,
+			})
+
+		case "on":
+			onStmt, err := ctx.parseOnEvent(comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, onStmt)
+
+		case "var":
+			parsed, err := ctx.parseLetVar(true, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, parsed...)
+
+		case "let":
+			parsed, err := ctx.parseLetVar(false, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, parsed...)
+
+		case "if":
+			stmt, err := p.parseIfStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+
+		case "while":
+			stmt, err := p.parseWhileStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+
+		case "loop":
+			stmt, err := p.parseLoopStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+
+		case "for":
+			stmt, err := p.parseForStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+
+		case "wait":
+			stmt, err := p.parseWaitStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+
+		case "assert":
+			stmt, err := p.parseAssertStmt(ctx, comment, tok.pos)
+			if err != nil {
+				return nil, err
+			}
+			if !p.releaseMode {
+				stmts = append(stmts, stmt)
+			}
+
+		case "exit":
+			if err := p.consumeOptionalEmptyParens(); err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &ExitStmt{Comment: comment})
+
+		case "restart":
+			if err := p.consumeOptionalEmptyParens(); err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &RestartStmt{Comment: comment})
+
+		case "label":
+			stmt, err := p.parseLabelStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+
+		case "jump":
+			stmt, err := p.parseJumpStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+
+		case "last":
+			if err := p.consumeOptionalEmptyParens(); err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &LastStmt{Comment: comment})
+
+		case "call":
+			callNameTok, err := p.expect(tokIdent)
+			if err != nil {
+				return nil, err
+			}
+			name, bhv, err := p.resolveCallBehaviorName(callNameTok)
+			if err != nil {
+				return nil, err
+			}
+			args, err := p.parseCallBehaviorArgs(bhv, ctx.resolve, callNameTok.pos)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, &CallBehaviorStmt{
+				BehaviorName: name,
+				Args:         args,
+				Comment:      comment,
+				Pos:          callNameTok.pos,
+			})
+
+		case "return":
+			if ctx.mode != modeFunction {
+				return nil, p.errorf(tok.pos, "'return' can only be used inside function bodies")
+			}
+			retStmt, err := p.parseReturnStmt(ctx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, retStmt)
+
+		case "yield":
+			if ctx.mode != modeIterator {
+				return nil, p.errorf(tok.pos, "'yield' can only be used inside an iter body")
+			}
+			stmt, err := p.parseYieldStmt(ctx.fnCtx, comment)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, stmt)
+
+		case "fn", "iter", "private":
+			return nil, p.errorf(tok.pos, "function definitions cannot be nested")
+
+		case "behavior":
+			return nil, p.errorf(tok.pos, "behavior definitions cannot be nested")
+
+		case "else":
+			return nil, p.errorf(tok.pos, "'else' without matching 'if'")
+
+		default:
+			parsed, done, err := ctx.parseDefaultStmt(tok, comment, exprTail)
+			if err != nil {
+				return nil, err
+			}
+			stmts = append(stmts, parsed...)
+			if done {
+				return stmts, nil
+			}
+		}
+
+		// Terminal detection
+		if len(stmts) > 0 {
+			if last := stmts[len(stmts)-1]; isTerminalStmt(last) {
+				terminal = last
+			}
+		}
+	}
+	return stmts, nil
+}
+
+// parseReturnStmt parses a return statement in function body context.
+// The 'return' keyword has already been consumed.
+func (p *parser) parseReturnStmt(ctx *parseContext, comment string) (*ReturnStmt, error) {
+	retPeek, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	fnCtx := ctx.fnCtx
+
+	// return instruction { ... }
+	if retPeek.kind == tokIdent && retPeek.val == "instruction" {
+		frame, err := p.parseInstruction()
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.checkInstrDirs(frame, retPeek.pos); err != nil {
+			return nil, err
+		}
+		var blocks []*ContinuationBlock
+		if hasLocalExecBindings(frame) {
+			blocks, err = p.maybeParseFnBodyLocalBlocksExpr(frame, fnCtx)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame, Blocks: blocks}}, Comment: comment}, nil
+	}
+
+	// return <cont_name> or return <cont_name>(args...)
+	if retPeek.kind == tokIdent && fnCtx.isExecName(retPeek.val) {
+		contName := retPeek.val
+		var contArgs []Expr
+		peek, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if peek.kind == tokLParen {
+			emptyCheck, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			if emptyCheck.kind == tokRParen {
+				return nil, p.errorf(peek.pos, "empty continuation arg list; use 'return %s' without parentheses for control-only dispatch", contName)
+			}
+			p.unget(emptyCheck)
+			for {
+				arg, err := p.parseFnBodyReturnItem(fnCtx)
+				if err != nil {
+					return nil, err
+				}
+				contArgs = append(contArgs, arg)
+				sep, err := p.next()
+				if err != nil {
+					return nil, err
+				}
+				if sep.kind == tokRParen {
+					break
+				}
+				if sep.kind != tokComma {
+					return nil, p.errorf(sep.pos, "expected ',' or ')' in continuation args, got %v", sep.kind)
+				}
+			}
+		} else {
+			p.unget(peek)
+		}
+		return &ReturnStmt{Continuation: contName, ContinuationArgs: contArgs, Comment: comment}, nil
+	}
+
+	// return <value>, <value>, ...
+	p.unget(retPeek)
+	var values []Expr
+	for {
+		item, err := p.parseFnBodyReturnItem(fnCtx)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, item)
+		sep, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if sep.kind != tokComma {
+			p.unget(sep)
+			break
+		}
+	}
+	return &ReturnStmt{Values: values, Comment: comment}, nil
+}
+
+// ---------------------------------------------------------------------------
 // Unified statement parsers (via parseContext)
 // ---------------------------------------------------------------------------
 

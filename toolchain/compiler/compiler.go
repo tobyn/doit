@@ -1010,13 +1010,34 @@ type emitContext struct {
 	declareIterVar   func(name string) string
 }
 
+// parseMode identifies the parsing context for statement blocks.
+type parseMode int
+
+const (
+	modeBehavior parseMode = iota // behavior body
+	modeFunction                 // function body
+	modeIterator                 // iterator body
+)
+
 // parseContext abstracts the differences between behavior-level and fn body
 // parsing paths, allowing unified statement parsers.
 type parseContext struct {
+	mode             parseMode
 	resolve          operandResolver
 	parseBody        func(exprTail bool) ([]Stmt, error)
 	pushScope        func()
 	popScope         func()
 	declareIterVar   func(name string)
 	parseConstructor func(nameTok token) (Expr, error)
+
+	// Statement-level callbacks for unified parsing.
+	parseLetVar      func(mutable bool, comment string) ([]Stmt, error)
+	parseOnEvent     func(comment string) (*OnEventStmt, error)
+	parseDefaultStmt func(tok token, comment string, exprTail bool) (stmts []Stmt, done bool, err error)
+	checkInstrDirs   func(frame map[string]any, pos int) error
+	parseLocalBlocks func(frame map[string]any) ([]*ContinuationBlock, error)
+	parseValueExpr   func() (Expr, error) // for break/return values
+
+	// fn-body-specific state (nil in behavior mode).
+	fnCtx *fnBodyContext
 }
