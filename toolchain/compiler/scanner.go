@@ -602,6 +602,38 @@ func (s *scanner) expect(kind tokenKind) (token, error) {
 	return tok, nil
 }
 
+// blockContainsReachabilityPath scans ahead through the current block
+// (without consuming tokens) looking for `on` or `label` at any nesting
+// depth. These keywords create non-linear control flow paths (event handler
+// continuations and jump targets) that make subsequent code reachable even
+// after a terminal statement.
+func (s *scanner) blockContainsReachabilityPath() bool {
+	saved := s.save()
+	defer s.restore(saved)
+	depth := 0
+	for {
+		tok, err := s.next()
+		if err != nil {
+			return false
+		}
+		switch tok.kind {
+		case tokLBrace:
+			depth++
+		case tokRBrace:
+			if depth == 0 {
+				return false // end of current block
+			}
+			depth--
+		case tokEOF:
+			return false
+		case tokIdent:
+			if tok.val == "on" || tok.val == "label" {
+				return true
+			}
+		}
+	}
+}
+
 // skipToCloseBrace consumes tokens until the matching '}' is found,
 // accounting for nested brace pairs. Used to skip unreachable code.
 func (s *scanner) skipToCloseBrace() error {

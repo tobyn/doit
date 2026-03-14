@@ -5117,18 +5117,19 @@ func (p *parser) parseFnBodyStmtsInner(ctx *fnBodyContext, exprTail bool) ([]Stm
 		if tok.kind == tokRBrace {
 			break
 		}
-		// Allow `label` after terminal statements — labels are jump
-		// targets and must be parsed even if not reachable by fallthrough.
-		if terminal != nil && tok.kind == tokIdent && tok.val == "label" {
-			terminal = nil
-		}
 		if terminal != nil {
-			p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
-			p.unget(tok)
-			if err := p.skipToCloseBrace(); err != nil {
-				return nil, err
+			hasPath := (tok.kind == tokIdent && (tok.val == "on" || tok.val == "label")) ||
+				p.blockContainsReachabilityPath()
+			if hasPath {
+				terminal = nil
+			} else {
+				p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
+				p.unget(tok)
+				if err := p.skipToCloseBrace(); err != nil {
+					return nil, err
+				}
+				break
 			}
-			break
 		}
 		if tok.kind == tokLabel {
 			label := tok.val

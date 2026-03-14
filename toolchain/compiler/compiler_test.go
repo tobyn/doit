@@ -4602,6 +4602,84 @@ func TestCompileWarnings(t *testing.T) {
 		}
 	})
 
+	t.Run("no_unreachable_after_exit_with_on_handler", func(t *testing.T) {
+		src := `behavior a {
+			@param inout p "P"
+			exit
+			on $p { notify "handled" }
+			notify "reachable via handler continuation"
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable") {
+				t.Fatalf("expected no unreachable warning when on handler follows exit, got: %s", w)
+			}
+		}
+	})
+
+	t.Run("unreachable_after_exit_no_handler", func(t *testing.T) {
+		src := `behavior a {
+			@param inout p "P"
+			exit
+			notify "truly unreachable"
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable code after 'exit'") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected unreachable warning for code after exit without on handler, got: %v", warnings)
+		}
+	})
+
+	t.Run("no_unreachable_with_on_handler_later_in_block", func(t *testing.T) {
+		// on handler is not immediately after exit — code in between
+		// should still not warn because the handler makes the block reachable
+		src := `behavior a {
+			@param inout p "P"
+			exit
+			notify "setup"
+			on $p { notify "handled" }
+			notify "reachable"
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable") {
+				t.Fatalf("expected no unreachable warning when on handler exists later in block, got: %s", w)
+			}
+		}
+	})
+
+	t.Run("no_unreachable_with_label_later_in_block", func(t *testing.T) {
+		src := `behavior a {
+			exit
+			notify "setup"
+			label 'target
+			notify "reachable via jump"
+		}`
+		_, warnings, err := compiler.CompileString(src, stdlib, "", "", nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "unreachable") {
+				t.Fatalf("expected no unreachable warning when label exists later in block, got: %s", w)
+			}
+		}
+	})
+
 	t.Run("jump_missing_expression", func(t *testing.T) {
 		src := `behavior a {
 			jump

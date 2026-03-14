@@ -21,7 +21,13 @@ see `.claude/learnings/test_format.md`.
   `Values []Expr` for break-with-value. `AssertStmt` has `Condition`,
   `Body`, `Message`, `Value`, `ConditionText`, `File`, `Line`.
   `isTerminalStmt`/`terminalKeyword` for unreachable code detection
-  (`AssertStmt` is NOT terminal).
+  (`AssertStmt` is NOT terminal). After a terminal statement, the
+  parser scans the rest of the block (via
+  `blockContainsReachabilityPath`) for `on` or `label` at any depth.
+  If found, the terminal flag is reset and parsing continues — event
+  handler continuations and jump targets make subsequent code
+  reachable. If not found, the code is warned about and skipped via
+  `skipToCloseBrace`.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
   types, `Keywords` map, `skipToCloseBrace`. The `scanner` has a
   `sourceOffset` field (byte offset of user source after prepended

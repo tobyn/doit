@@ -25,17 +25,15 @@ behavior sanity_check {
     $failed = 0
     %sanity_listener_result = 0
 
-    # 107: parameter event — fires when Trigger is changed (any time during run)
-    on $trigger {
-        $result += 1
-        jump 'start
-    }
-
     # We're waiting here for the parameter event to be triggered and jump past us
     wait 100
     $failed = 107
     exit
-    label 'start
+
+    # 107: parameter event — fires when Trigger is changed (any time during run)
+    on $trigger {
+        $result += 1
+    }
 
     # ----------------------------------------------------------
     # Section 1: Constants and imports

@@ -2723,28 +2723,23 @@ func (p *parser) parseBhvStmtBlockInner(syms *symbolTable, exprTail ...bool) ([]
 		if tok.kind == tokEOF {
 			return nil, p.errorf(tok.pos, "unexpected end of file (missing '}')")
 		}
-		// Allow `on` event handlers after terminal statements —
-		// events are disconnected from the main flow.
-		if terminal != nil && tok.kind == tokIdent && tok.val == "on" {
-			onStmt, err := p.parseBhvOnEvent(syms, p.docComment)
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, onStmt)
-			continue
-		}
-		// Allow `label` after terminal statements — labels are jump
-		// targets and must be parsed even if not reachable by fallthrough.
-		if terminal != nil && tok.kind == tokIdent && tok.val == "label" {
-			terminal = nil
-		}
 		if terminal != nil {
-			p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
-			p.unget(tok)
-			if err := p.skipToCloseBrace(); err != nil {
-				return nil, err
+			// Scan the rest of the block for `on` or `label` — these
+			// create non-linear paths that make code reachable even
+			// after a terminal statement. Check the current token first
+			// (cheap) before scanning ahead (less cheap).
+			hasPath := (tok.kind == tokIdent && (tok.val == "on" || tok.val == "label")) ||
+				p.blockContainsReachabilityPath()
+			if hasPath {
+				terminal = nil
+			} else {
+				p.warnf(tok.pos, "unreachable code after '%s'", terminalKeyword(terminal))
+				p.unget(tok)
+				if err := p.skipToCloseBrace(); err != nil {
+					return nil, err
+				}
+				break
 			}
-			break
 		}
 		if tok.kind == tokLabel {
 			label := tok.val

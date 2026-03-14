@@ -2274,6 +2274,21 @@ behavior a {
 }
 ```
 
+**Exceptions:** If a `label` or `on` event handler appears anywhere later in
+the same block, the warning is suppressed and all code in the block is
+preserved. Labels are jump targets reachable from elsewhere. Event handlers
+register at load time and their [continuation](#handler-continuation) makes
+subsequent code reachable:
+
+```doit
+behavior a {
+    @param inout trigger "Trigger"
+    exit
+    on $trigger { notify "handled" }
+    notify "reachable"             # no warning — handler continues here
+}
+```
+
 The `-e` / `--error` compiler flag promotes warnings to errors.
 
 ## Behavior Calls
