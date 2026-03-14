@@ -17,12 +17,6 @@ register types.
 
 - **Error message quality** — review compiler errors for clarity and
   source locations. Important for new users at 1.0.
-- **Eliminate orphan label frames** — the compiler emits `label`
-  frames (with compiler-generated negative values) as landing pads
-  for cross-boundary `jump` instructions, but nothing references
-  them. They waste instruction slots in the compiled behavior.
-  Visible in the sanity check output: five unreferenced label frames
-  with `v_letter_L` and negative numbers.
 - **Function/behavior parsing parity** — the two-context design
   (bhvast.go vs parse.go) means features can drift out of sync.
   Audit both paths for missing or inconsistent support (e.g., new

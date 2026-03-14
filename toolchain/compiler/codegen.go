@@ -2215,10 +2215,14 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 		lastIdx := ctx.b.pos() - 1
 		ctx.b.frames[lastIdx]["next"] = false
 	} else {
-		// N > 1: single-body yield compilation with jump/label
-		dispatchVar := allocUniqueVar("@jmp", ctx.usedVars)
-		baseLabel := ctx.b.allocLabels(N + 1)
-		bodyLabelNum := baseLabel + N
+		// N > 1: shared body with check_number dispatch
+		// Each yield's assignments route to a shared body via frameRef.
+		// After the body, next=false re-dispatches to for_number.
+		type yieldEnd struct {
+			frameIdx int // last frame of this yield's assignments
+			isCheck  bool // true if the carrier is a check_number (zero-value yield)
+		}
+		var yieldEnds []yieldEnd
 
 		for i := 0; i < N; i++ {
 			yield := it.astBody[i].(*YieldStmt)
@@ -2235,6 +2239,7 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 			}
 
 			// Emit yield value assignments
+			beforeAssign := ctx.b.pos()
 			for j, expr := range yield.Values {
 				if j < len(iterVarRegs) {
 					if err := p.emitExprTo(expr, iterVarRegs[j], ctx.b, iterParamMap, ctx.usedVars, "", 0); err != nil {
@@ -2243,28 +2248,17 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 					}
 				}
 			}
+			hasAssignments := ctx.b.pos() > beforeAssign
 
-			// Set dispatch var to this yield's resume label
-			ctx.b.emit(map[string]any{
-				"op": "set_reg",
-				"0":  compilerLabel(baseLabel + i),
-				"1":  dispatchVar,
-			})
-
-			// Jump to shared body
-			bodyJump := map[string]any{
-				"op": "jump",
-				"0":  compilerLabel(bodyLabelNum),
+			// Record end frame for non-last yields (last falls through to body)
+			if i < N-1 {
+				if hasAssignments {
+					yieldEnds = append(yieldEnds, yieldEnd{ctx.b.pos() - 1, false})
+				} else {
+					// Zero-value yield: use check_number's next (equal) slot
+					yieldEnds = append(yieldEnds, yieldEnd{checkIdx, true})
+				}
 			}
-			ctx.b.emit(bodyJump)
-			bodyJump["next"] = emitJumpFallthroughError(ctx.b, compilerLabel(bodyLabelNum))
-
-			// Resume label (reached after body executes jump @jmp)
-			ctx.b.emit(map[string]any{
-				"op":   "label",
-				"0":    compilerLabel(baseLabel + i),
-				"next": false,
-			})
 
 			// Patch checkLarger to point to the next frame
 			if checkIdx >= 0 {
@@ -2272,25 +2266,24 @@ func (p *parser) emitStateMachineIter(s *ForStmt, it *iterDef, ctx *emitContext,
 			}
 		}
 
-		// Shared body label
-		ctx.b.emit(map[string]any{
-			"op": "label",
-			"0":  compilerLabel(bodyLabelNum),
-		})
-
 		// Emit body ONCE
+		bodyStart := frameRef(ctx.b.pos())
 		if err := ctx.emitBody(s.Body); err != nil {
 			ctx.popScope()
 			return err
 		}
+		lastIdx := ctx.b.pos() - 1
+		ctx.b.frames[lastIdx]["next"] = false
 
-		// Return to resume point
-		dispatchJump := map[string]any{
-			"op": "jump",
-			"0":  dispatchVar,
+		// Patch non-last yield ends to jump to shared body
+		for _, ye := range yieldEnds {
+			if ye.isCheck {
+				// Zero-value yield: route check_number's equal branch to body
+				ctx.b.frames[ye.frameIdx]["next"] = bodyStart
+			} else {
+				ctx.b.frames[ye.frameIdx]["next"] = bodyStart
+			}
 		}
-		ctx.b.emit(dispatchJump)
-		dispatchJump["next"] = emitJumpFallthroughError(ctx.b, dispatchVar)
 	}
 
 	// Remove temporarily added scope entries

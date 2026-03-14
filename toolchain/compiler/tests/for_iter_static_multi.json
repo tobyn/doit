@@ -1,151 +1,63 @@
 {
-  "0": {
     "0": {
-      "num": 0
+        "0": {
+            "num": 0
+        },
+        "1": {
+            "num": 1
+        },
+        "2": {
+            "num": 1
+        },
+        "3": "@sm",
+        "4": 8,
+        "op": "for_number"
     },
     "1": {
-      "num": 1
+        "0": 5,
+        "2": "@sm",
+        "3": {
+            "num": 0
+        },
+        "op": "check_number"
     },
     "2": {
-      "num": 1
+        "0": {
+            "num": 1
+        },
+        "1": "a",
+        "op": "set_reg"
     },
-    "3": "@sm",
-    "4": 22,
-    "op": "for_number"
-  },
-  "1": {
-    "0": 10,
-    "2": "@sm",
     "3": {
-      "num": 0
+        "0": {
+            "num": 10
+        },
+        "1": "b",
+        "next": 7,
+        "op": "set_reg"
     },
-    "op": "check_number"
-  },
-  "2": {
-    "0": {
-      "num": 1
+    "4": {
+        "0": {
+            "num": 2
+        },
+        "1": "a",
+        "op": "set_reg"
     },
-    "1": "a",
-    "op": "set_reg"
-  },
-  "3": {
-    "0": {
-      "num": 10
+    "5": {
+        "0": {
+            "num": 20
+        },
+        "1": "b",
+        "op": "set_reg"
     },
-    "1": "b",
-    "op": "set_reg"
-  },
-  "4": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000001
+    "6": {
+        "next": false,
+        "op": "notify",
+        "txt": "got"
     },
-    "1": "@jmp",
-    "op": "set_reg"
-  },
-  "5": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000003
+    "7": {
+        "op": "notify",
+        "txt": "done"
     },
-    "next": 7,
-    "op": "jump"
-  },
-  "6": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000003
-    },
-    "op": "notify",
-    "txt": "jump: no matching label"
-  },
-  "7": {
-    "op": "exit"
-  },
-  "8": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000001
-    },
-    "next": false,
-    "op": "label"
-  },
-  "9": {
-    "0": {
-      "num": 2
-    },
-    "1": "a",
-    "op": "set_reg"
-  },
-  "10": {
-    "0": {
-      "num": 20
-    },
-    "1": "b",
-    "op": "set_reg"
-  },
-  "11": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000002
-    },
-    "1": "@jmp",
-    "op": "set_reg"
-  },
-  "12": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000003
-    },
-    "next": 14,
-    "op": "jump"
-  },
-  "13": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000003
-    },
-    "op": "notify",
-    "txt": "jump: no matching label"
-  },
-  "14": {
-    "op": "exit"
-  },
-  "15": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000002
-    },
-    "next": false,
-    "op": "label"
-  },
-  "16": {
-    "0": {
-      "id": "v_letter_L",
-      "num": -1000003
-    },
-    "op": "label"
-  },
-  "17": {
-    "op": "notify",
-    "txt": "got"
-  },
-  "18": {
-    "0": "@jmp",
-    "next": 20,
-    "op": "jump"
-  },
-  "19": {
-    "0": "@jmp",
-    "op": "notify",
-    "txt": "jump: no matching label"
-  },
-  "20": {
-    "op": "exit"
-  },
-  "21": {
-    "op": "notify",
-    "txt": "done"
-  },
-  "name": "For Iter Static Multi"
+    "name": "For Iter Static Multi"
 }
