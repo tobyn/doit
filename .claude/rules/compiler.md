@@ -82,10 +82,18 @@ see `.claude/learnings/test_format.md`.
   `emitBhvCallBehavior`, `emitBhvCallBehaviorExpr`,
   `emitFnBodyCallBehavior`, `emitFnBodyCallBehaviorExpr`),
   unified control flow emitters via `emitContext` (`emitIfStmt`,
-  `emitWhileStmt`, `emitLoopStmt`, `emitForStmt`, `emitWaitStmt`,
+  `emitWhileStmt`, `emitLoopStmt`, `emitWaitStmt`,
   `emitIfExpr`, `emitModeBlockExpr`), single-expression emitters
   (`emitComparison`, `emitTypeCheck`, `emitTruthyCheck`), direction
   enforcement, `resolveInstructionFrame`.
+- **`iterators.go`** — All iterator and for-loop code: `emitForStmt`
+  (dispatcher), `emitForIterStmt`, `emitStateMachineIter`,
+  `emitInstructionIter`, `emitInlineIterInstruction`, `emitYieldIter`,
+  `rewriteYieldToBody`, `emitForStmtRange`, `emitForStmtRangeManual`,
+  `emitForStmtRuntime`, `parseForStmt`, `parseIteratorInstruction`,
+  `parseIterCallArgs`, `parseBhvOrFnExpr`, `iterKeywordByName`.
+  Iterator helpers: `buildIterParamMap` (on `emitContext`),
+  `isStaticSequence`, `patchIterDoneSlot`, `patchUnlabeledBreakToLast`.
 - **`import.go`** — Import system: parsing, path resolution,
   `processImports`, collision checking, `resolveFnName` for
   namespace-qualified lookup. Builds `scope` (fn map) and `iterScope`
