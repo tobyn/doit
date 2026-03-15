@@ -1,3 +1,11 @@
+---
+paths:
+  - "toolchain/syntax/**/*"
+  - "toolchain/compiler/scanner.go"
+  - "editors/doit.tmLanguage.json"
+  - "editors/**/*"
+---
+
 # Syntax Sources of Truth
 
 The language's syntax is defined in multiple places that must stay in

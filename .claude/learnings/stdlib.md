@@ -130,9 +130,9 @@ execution continues past it. Both `label` and `jump` accept named labels
 expressions. String literals are disallowed on both keywords (use
 `instruction` intrinsic for raw string slots).
 
-Note: `call` is **not** in the stdlib. It requires the dependency index
-of the callee, which can't be expressed as a parameter. A `call` keyword
-for inter-behavior calls is a 1.0 burndown item (see `future.md`).
+Note: `call` is **not** in the stdlib. It is a language keyword that
+compiles inter-behavior calls with on-demand dependency compilation.
+See `decisions.md` for the full design.
 
 ### Deprecated instructions
 

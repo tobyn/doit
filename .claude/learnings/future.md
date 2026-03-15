@@ -15,9 +15,8 @@ register types.
 
 ## 1.0 burndown
 
-- **Developer tools** — ~~language server~~, ~~syntax highlighting~~
-  done (TextMate grammar, semantic tokenizer, LSP server). Remaining:
-  VS Code extension packaging, JetBrains plugin packaging.
+- **Developer tools** — ~~language server~~, ~~syntax highlighting~~,
+  ~~VS Code extension~~, ~~JetBrains plugin~~, ~~code formatter~~ done.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting (build-time tool using existing tokenizer).
 
@@ -138,14 +137,12 @@ non-continuation contexts. The two features would complement each other.
 
 ## Subroutine calls instead of inlining
 
-Functions are currently always inlined — every call site duplicates the
-function body. The behavior VM has a `call` instruction that supports
-subroutines (see `game.md` Subroutines section for the full call
-mechanism). This could allow true function calls without duplication
-and would also enable recursion. The `call` instruction is fully
-understood — the remaining work is compiler support: emitting
-subroutine behaviors as dependencies, generating `call` instructions
-instead of inlining, and managing the flat dependency list.
+The `call` keyword enables explicit inter-behavior subroutine calls
+(see `decisions.md`). However, **functions** (`fn`) are still always
+inlined — every call site duplicates the function body. The `call`
+infrastructure (dependency compilation, flat dependency array, cycle
+detection, self-recursion) could be extended to compile regular
+functions as subroutines instead of inlining them.
 
 ### Potential wins
 
@@ -223,14 +220,15 @@ Remaining limitations:
   yield statements = N copies of the caller's loop body in compiled
   output. (A single yield inside a loop = 1 copy, executed many times.)
 
-### `call` as the path to recursion
+### `call` for function-as-subroutine compilation
 
 Given the UX downsides (behavior list pollution, debugging blind
 spots) and the fact that `call` doesn't help with instruction budget,
-its only unique capability is enabling recursion — for both functions
-and iterators. This is low priority but worth keeping in mind as a
-someday feature. The infrastructure (`call` instruction, dependency
-arrays, self-call via `"sub": -1`) is fully understood.
+extending `call` to compile regular `fn` as subroutines is low
+priority. The main unique capability would be enabling recursion for
+functions and iterators. The infrastructure is already in place via
+the `call` keyword — the remaining work is making the compiler choose
+subroutine compilation for `fn` calls automatically or via annotation.
 
 ## Visual layout (nx/ny fields)
 

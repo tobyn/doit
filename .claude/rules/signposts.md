@@ -57,6 +57,9 @@ topic is relevant to your current task.
 - **Design decisions** — `.claude/learnings/decisions.md`
   Non-obvious choices and their rationale. Consult when making changes
   to avoid contradicting past decisions.
+- **Compiler architecture** — `.claude/learnings/compiler_architecture.md`
+  Per-file breakdown of the `compiler` package (AST, scanner, codegen,
+  iterators, etc.). Reference for navigating compiler source.
 - **Continuation system** — `.claude/learnings/continuations.md`
   Design rules for the branching/continuation system (exec blocks,
   bridging vs looping, expression form, pure-logic dispatch).
