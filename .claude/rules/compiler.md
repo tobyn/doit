@@ -61,9 +61,25 @@ see `.claude/learnings/test_format.md`.
   helper types and functions (`constEvalStatus`, `extractNum`,
   `isTruthy`, `evalCompare`, `evalTypeCheck`).
 - **`parse.go`** — File-level parsing, function and iterator
-  definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing and emission
-  (`emitFnBody`), instruction parsing (`parseInstruction`), call
-  expansion (`expandCall`), `resolveInstructionFrame`.
+  definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing
+  (`parseFnBodyStmts`, `parseFnBodyLetVar`, `parseFnDefaultStmtUnified`),
+  instruction parsing
+  (`parseInstruction`), call expansion (`expandCall`),
+  `resolveInstructionFrame`.
+- **`fnbody_emit.go`** — AST-based fn body emission. Pre-scan for
+  output variables (`collectASTOutputVars`, `collectExprOutputVars`),
+  literal resolution (`resolveVarName`, `tryResolveConstructorLiteral`,
+  `tryResolveAmpersandLiteral`, `tryResolveDotAccessLiteral`),
+  expression emission (`emitExprGetValue`, `emitExprTo`,
+  `emitConstructorTo`, `emitAmpersandTo`, `emitDotAccessTo`,
+  `emitDotAccessFrame`), arithmetic and boolean emission
+  (`emitFnArithTo`, `emitFnBoolExprTo`, `resolveFnBoolTree`),
+  fn body context factories (`fnParseCtx`, `fnEmitCtx`), instruction
+  emission with
+  local blocks (`emitFnBodyInstructionWithBlocks`,
+  `emitFnBodyInstructionExprWithBlocks`), top-level fn body emission
+  (`emitFnBody`, `emitFnBodyCore`), and helpers (`inheritComment`,
+  `emitCallExprArgs`).
 - **`expr.go`** — Shared expression parsers parameterized by
   `operandResolver`. Arithmetic parsing (`parseArithExpr` chain,
   `parseArithPrimary`, constructors, dot access, compile-time
@@ -162,7 +178,7 @@ expressions, `call`, `on` handlers — is universal across all modes.
 parsing), `pushScope`/`popScope`, `parseLetVar`, `parseOnEvent`,
 `parseDefaultStmt` (assignment/call/exprTail handling),
 `parseValueExpr`, etc. Factory functions — `bhvParseCtx` (bhvast.go)
-and `fnParseCtx` (parse.go) — build each context with closures
+and `fnParseCtx` (fnbody_emit.go) — build each context with closures
 capturing resolution state. Thin delegates (`parseBhvStmtBlockInner`,
 `parseFnBodyStmtsInner`) forward to `parseStmtBlock` for backward
 compatibility with existing call sites. The top-level behavior loop
@@ -171,7 +187,7 @@ directly for attribute handling.
 
 **Two contexts for emission**: `emitContext` (compiler.go) drives
 control flow emitters. Factory functions — `bhvEmitCtx` (bhvast.go)
-and `fnEmitCtx` (parse.go) — build each context with closures
+and `fnEmitCtx` (fnbody_emit.go) — build each context with closures
 capturing resolution state.
 
 **Frame building**: `frameBuilder` is an append-based builder.
@@ -363,7 +379,7 @@ non-local bindings for function-level expansion. Parse helpers
 detect and parse local blocks at each instruction site. Emission helpers
 `emitBhvInstructionWithBlocks`/`emitBhvInstructionExprWithBlocks`
 (bhvast.go) and `emitFnBodyInstructionWithBlocks`/
-`emitFnBodyInstructionExprWithBlocks` (parse.go) emit the instruction
+`emitFnBodyInstructionExprWithBlocks` (fnbody_emit.go) emit the instruction
 frame and expand local blocks.
 
 **`iterator_instruction`**: Keyword for inline iteration in `for...in`
