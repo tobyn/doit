@@ -1,0 +1,5 @@
+node_modules/
+out/
+*.vsix
+# Grammar is copied from editors/ at build time; only package.json is tracked.
+syntaxes/doit.tmLanguage.json

@@ -29,6 +29,9 @@ topic is relevant to your current task.
 - **JetBrains plugin** — `editors/jetbrains/`
   IntelliJ Platform plugin. TextMate grammar + LSP via LSP4IJ.
   Build with `./gradlew buildPlugin` from that directory.
+- **VS Code extension** — `editors/vscode/`
+  TextMate grammar + LSP client via vscode-languageclient.
+  Build with `npm run compile` from that directory.
 
 ## Language reference
 
