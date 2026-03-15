@@ -71,5 +71,6 @@ tasks.named("prepareSandbox") {
         textmateDir.mkdirs()
         file("../doit.tmLanguage.json").copyTo(textmateDir.resolve("doit.tmLanguage.json"), overwrite = true)
         file("src/main/resources/textmate/package.json").copyTo(textmateDir.resolve("package.json"), overwrite = true)
+        file("src/main/resources/textmate/language-configuration.json").copyTo(textmateDir.resolve("language-configuration.json"), overwrite = true)
     }
 }

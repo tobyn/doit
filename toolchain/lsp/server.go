@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/tobyn/doit/toolchain/formatter"
 	"github.com/tobyn/doit/toolchain/syntax"
 )
 
@@ -174,6 +175,10 @@ func (s *Server) handleMessage(msg *jsonrpcMessage) (exit bool, err error) {
 		s.handleDidChange(msg)
 	case "textDocument/didClose":
 		s.handleDidClose(msg)
+	case "textDocument/formatting":
+		s.handleFormatting(msg)
+	case "textDocument/onTypeFormatting":
+		s.handleOnTypeFormatting(msg)
 	case "textDocument/semanticTokens/full":
 		s.handleSemanticTokensFull(msg)
 	default:
@@ -194,6 +199,11 @@ func (s *Server) handleInitialize(msg *jsonrpcMessage) {
 			"textDocumentSync": map[string]any{
 				"openClose": true,
 				"change":    1, // Full sync
+			},
+			"documentFormattingProvider": true,
+			"documentOnTypeFormattingProvider": map[string]any{
+				"firstTriggerCharacter": "\n",
+				"moreTriggerCharacter":  []string{"}"},
 			},
 			"semanticTokensProvider": map[string]any{
 				"legend": map[string]any{
@@ -295,6 +305,195 @@ func (s *Server) handleSemanticTokensFull(msg *jsonrpcMessage) {
 	tokens := syntax.Tokenize(src)
 	data := encodeSemanticTokens(src, tokens)
 	s.sendResponse(msg.ID, map[string]any{"data": data})
+}
+
+// --- Formatting ---
+
+type formattingParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+}
+
+func (s *Server) handleFormatting(msg *jsonrpcMessage) {
+	var params formattingParams
+	if err := json.Unmarshal(msg.Params, &params); err != nil {
+		s.sendError(msg.ID, -32602, "invalid params")
+		return
+	}
+
+	s.docsMu.Lock()
+	src, ok := s.docs[params.TextDocument.URI]
+	s.docsMu.Unlock()
+	if !ok {
+		s.sendResponse(msg.ID, []any{})
+		return
+	}
+
+	formatted, err := formatter.Format(src)
+	if err != nil {
+		s.sendError(msg.ID, -32603, "format error: "+err.Error())
+		return
+	}
+
+	if formatted == src {
+		s.sendResponse(msg.ID, []any{})
+		return
+	}
+
+	// Return a single whole-document replacement edit.
+	endLine, endCol := offsetToLineCol(src, len(src))
+	edits := []map[string]any{{
+		"range": map[string]any{
+			"start": map[string]any{"line": 0, "character": 0},
+			"end":   map[string]any{"line": endLine, "character": endCol},
+		},
+		"newText": formatted,
+	}}
+	s.sendResponse(msg.ID, edits)
+}
+
+// --- On-type formatting ---
+
+type onTypeFormattingParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+	Position struct {
+		Line      int `json:"line"`
+		Character int `json:"character"`
+	} `json:"position"`
+	Ch string `json:"ch"`
+}
+
+func (s *Server) handleOnTypeFormatting(msg *jsonrpcMessage) {
+	var params onTypeFormattingParams
+	if err := json.Unmarshal(msg.Params, &params); err != nil {
+		s.sendError(msg.ID, -32602, "invalid params")
+		return
+	}
+
+	s.docsMu.Lock()
+	src, ok := s.docs[params.TextDocument.URI]
+	s.docsMu.Unlock()
+	if !ok {
+		s.sendResponse(msg.ID, []any{})
+		return
+	}
+
+	line := params.Position.Line
+
+	// Note: onTypeFormatting may arrive BEFORE didChange, so the document
+	// in our map can be stale. We must not rely on the current line's
+	// content. Instead, compute depth from the PREVIOUS line (which is
+	// the same in both old and new documents) and use position.Character
+	// from the request to know the replace range.
+
+	if params.Ch == "\n" {
+		// User typed Enter. Cursor is at (line, character) on the new line.
+		// Compute depth from the line above (where Enter was pressed).
+		prevLine := line - 1
+		if prevLine < 0 {
+			s.sendResponse(msg.ID, []any{})
+			return
+		}
+		prevLineStart := nthLineOffset(src, prevLine)
+		prevLineEnd := prevLineStart
+		for prevLineEnd < len(src) && src[prevLineEnd] != '\n' {
+			prevLineEnd++
+		}
+		depth := braceDepth(src[:prevLineEnd])
+		if depth < 0 {
+			depth = 0
+		}
+
+		desired := strings.Repeat("    ", depth)
+
+		// Replace any auto-indent the editor may have inserted (from
+		// char 0 to cursor position) with the correct indentation.
+		edits := []map[string]any{{
+			"range": map[string]any{
+				"start": map[string]any{"line": line, "character": 0},
+				"end":   map[string]any{"line": line, "character": params.Position.Character},
+			},
+			"newText": desired,
+		}}
+		s.sendResponse(msg.ID, edits)
+		return
+	}
+
+	if params.Ch == "}" {
+		// User typed }. Cursor is at (line, character) right after the }.
+		// Compute depth at the start of this line from lines above it.
+		lineStart := nthLineOffset(src, line)
+		depth := braceDepth(src[:lineStart])
+		depth-- // } closes a level
+		if depth < 0 {
+			depth = 0
+		}
+
+		desired := strings.Repeat("    ", depth)
+
+		// Replace whitespace before the } (columns 0 to character-2,
+		// since character-1 is the } itself).
+		wsEnd := params.Position.Character - 1
+		if wsEnd < 0 {
+			wsEnd = 0
+		}
+
+		edits := []map[string]any{{
+			"range": map[string]any{
+				"start": map[string]any{"line": line, "character": 0},
+				"end":   map[string]any{"line": line, "character": wsEnd},
+			},
+			"newText": desired,
+		}}
+		s.sendResponse(msg.ID, edits)
+		return
+	}
+
+	s.sendResponse(msg.ID, []any{})
+}
+
+// nthLineOffset returns the byte offset of the start of the nth line (0-based).
+func nthLineOffset(src string, line int) int {
+	offset := 0
+	for l := 0; l < line && offset < len(src); offset++ {
+		if src[offset] == '\n' {
+			l++
+		}
+	}
+	return offset
+}
+
+// braceDepth counts unmatched '{' in src, skipping strings and comments.
+func braceDepth(src string) int {
+	depth := 0
+	inString := false
+	for i := 0; i < len(src); i++ {
+		c := src[i]
+		if inString {
+			if c == '"' {
+				inString = false
+			} else if c == '\\' && i+1 < len(src) {
+				i++ // skip escaped character
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = true
+		case '#':
+			for i < len(src) && src[i] != '\n' {
+				i++
+			}
+		case '{':
+			depth++
+		case '}':
+			depth--
+		}
+	}
+	return depth
 }
 
 // encodeSemanticTokens converts absolute token positions to the LSP

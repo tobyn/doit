@@ -5,6 +5,12 @@ paths:
 
 # Go Code Style
 
+## Formatting
+
+All Go source files must be `gofmt`-clean. Run `gofmt -l .` from
+`toolchain/` to check. If any files are listed, run `gofmt -w` on
+them before considering the change done.
+
 ## Error Handling
 
 All errors must be handled, even if the handling is to explicitly discard them. Never leave an error

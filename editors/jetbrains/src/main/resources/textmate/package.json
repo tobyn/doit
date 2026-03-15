@@ -11,7 +11,8 @@
     "languages": [
       {
         "id": "doit",
-        "extensions": [".doit"]
+        "extensions": [".doit"],
+        "configuration": "./language-configuration.json"
       }
     ]
   }

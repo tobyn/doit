@@ -13,6 +13,7 @@ import (
 
 	"github.com/tobyn/doit/toolchain/codec"
 	"github.com/tobyn/doit/toolchain/compiler"
+	"github.com/tobyn/doit/toolchain/formatter"
 	"github.com/tobyn/doit/toolchain/lsp"
 )
 
@@ -37,6 +38,8 @@ func main() {
 		err = cmdDecode(os.Args[2:])
 	case "encode":
 		err = cmdEncode(os.Args[2:])
+	case "fmt":
+		err = cmdFmt(os.Args[2:])
 	case "language-server":
 		err = lsp.Run()
 	case "help":
@@ -337,6 +340,66 @@ func readInput(flags *flag.FlagSet) ([]byte, error) {
 		return io.ReadAll(os.Stdin)
 	}
 	return os.ReadFile(flags.Arg(0))
+}
+
+func cmdFmt(args []string) error {
+	flags := flag.NewFlagSet("fmt", flag.ContinueOnError)
+	writeFlag := flags.Bool("w", false, "write result to source file")
+	listFlag := flags.Bool("l", false, "list files whose formatting differs")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	if *writeFlag && flags.NArg() == 0 {
+		return fmt.Errorf("-w requires at least one file argument")
+	}
+
+	// No files: read stdin, write stdout.
+	if flags.NArg() == 0 {
+		src, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		out, err := formatter.Format(string(src))
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(os.Stdout, out)
+		return err
+	}
+
+	// Process each file.
+	for _, path := range flags.Args() {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		out, err := formatter.Format(string(src))
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+
+		if *listFlag {
+			if out != string(src) {
+				fmt.Println(path)
+			}
+			continue
+		}
+
+		if *writeFlag {
+			if out != string(src) {
+				if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
+		if _, err := io.WriteString(os.Stdout, out); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func writeJSON(v any, outputPath string) error {

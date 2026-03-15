@@ -140,6 +140,293 @@ func TestDocumentLifecycle(t *testing.T) {
 	}
 }
 
+func TestFormattingCapabilityAdvertised(t *testing.T) {
+	resp := sendRequest(t, "initialize", map[string]any{
+		"capabilities": map[string]any{},
+	})
+	caps, ok := resp["capabilities"].(map[string]any)
+	if !ok {
+		t.Fatal("missing capabilities")
+	}
+	fmtProvider, ok := caps["documentFormattingProvider"]
+	if !ok {
+		t.Fatal("documentFormattingProvider not advertised")
+	}
+	if fmtProvider != true {
+		t.Errorf("documentFormattingProvider = %v, want true", fmtProvider)
+	}
+}
+
+func TestFormattingReturnsEdits(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output)
+
+	uri := "file:///test.doit"
+	src := "behavior foo {\nexit\n}\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	writeRequest(&input, 1, "textDocument/formatting", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"options":      map[string]any{"tabSize": 4, "insertSpaces": true},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	// Parse raw response (formatting returns an array, not a map).
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var edits []map[string]any
+	if err := json.Unmarshal(responses[0], &edits); err != nil {
+		t.Fatalf("unmarshal edits: %v (raw: %s)", err, responses[0])
+	}
+	if len(edits) == 0 {
+		t.Fatal("expected formatting edits, got empty array")
+	}
+
+	newText, _ := edits[0]["newText"].(string)
+	want := "behavior foo {\n    exit\n}\n"
+	if newText != want {
+		t.Errorf("formatted text =\n%q\nwant\n%q", newText, want)
+	}
+}
+
+func TestFormattingNoChanges(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output)
+
+	uri := "file:///test.doit"
+	src := "behavior foo {\n    exit\n}\n" // already formatted
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	writeRequest(&input, 1, "textDocument/formatting", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"options":      map[string]any{"tabSize": 4, "insertSpaces": true},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var edits []map[string]any
+	if err := json.Unmarshal(responses[0], &edits); err != nil {
+		t.Fatalf("unmarshal edits: %v", err)
+	}
+	if len(edits) != 0 {
+		t.Errorf("expected no edits for already-formatted file, got %d", len(edits))
+	}
+}
+
+func TestOnTypeFormattingNewline(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output)
+
+	uri := "file:///test.doit"
+	// User typed Enter after the opening brace on line 0.
+	// The document now has a newline and cursor is on line 1.
+	src := "behavior foo {\n\n}\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	writeRequest(&input, 1, "textDocument/onTypeFormatting", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 1, "character": 0},
+		"ch":           "\n",
+		"options":      map[string]any{"tabSize": 4, "insertSpaces": true},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var edits []map[string]any
+	if err := json.Unmarshal(responses[0], &edits); err != nil {
+		t.Fatalf("unmarshal: %v (raw: %s)", err, responses[0])
+	}
+	if len(edits) == 0 {
+		t.Fatal("expected indentation edit, got empty array")
+	}
+	newText, _ := edits[0]["newText"].(string)
+	if newText != "    " {
+		t.Errorf("newText = %q, want %q", newText, "    ")
+	}
+}
+
+func TestOnTypeFormattingWithDidChange(t *testing.T) {
+	// Simulates real flow: didOpen with original content, then didChange
+	// after user types Enter, then onTypeFormatting.
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output)
+
+	uri := "file:///test.doit"
+	original := "behavior foo {\n    exit\n}\n"
+
+	// Step 1: open with original content
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": original},
+	})
+
+	// Step 2: user types Enter after { on line 0. Editor inserts newline.
+	// New document has the blank line at line 1, old line 1 becomes line 2.
+	changed := "behavior foo {\n\n    exit\n}\n"
+	writeNotification(&input, "textDocument/didChange", map[string]any{
+		"textDocument":   map[string]any{"uri": uri},
+		"contentChanges": []map[string]any{{"text": changed}},
+	})
+
+	// Step 3: onTypeFormatting for the new line
+	writeRequest(&input, 1, "textDocument/onTypeFormatting", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 1, "character": 0},
+		"ch":           "\n",
+		"options":      map[string]any{"tabSize": 4, "insertSpaces": true},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var edits []map[string]any
+	if err := json.Unmarshal(responses[0], &edits); err != nil {
+		t.Fatalf("unmarshal: %v (raw: %s)", err, responses[0])
+	}
+	if len(edits) == 0 {
+		t.Fatal("expected indentation edit, got empty array")
+	}
+	newText, _ := edits[0]["newText"].(string)
+	if newText != "    " {
+		t.Errorf("newText = %q, want %q", newText, "    ")
+	}
+}
+
+func TestOnTypeFormattingStaleDoc(t *testing.T) {
+	// Simulates the case where didChange has NOT arrived before onTypeFormatting.
+	// The document still has the old content. The handler should still compute
+	// correct indentation based on the position.
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output)
+
+	uri := "file:///test.doit"
+	// Original doc — user is about to type Enter after { on line 0.
+	// But didChange hasn't arrived yet.
+	original := "behavior foo {\n    exit\n}\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": original},
+	})
+
+	// onTypeFormatting arrives with position on what the CLIENT thinks is line 1
+	// (the new line after Enter), but the SERVER still has old content where
+	// line 1 is "    exit".
+	writeRequest(&input, 1, "textDocument/onTypeFormatting", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 1, "character": 0},
+		"ch":           "\n",
+		"options":      map[string]any{"tabSize": 4, "insertSpaces": true},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var edits []map[string]any
+	if err := json.Unmarshal(responses[0], &edits); err != nil {
+		t.Fatalf("unmarshal: %v (raw: %s)", err, responses[0])
+	}
+
+	// Even with stale doc, we compute depth from line 0 (the previous line)
+	// and return an insert at (1, 0). This works because the previous line
+	// is the same in both old and new documents.
+	if len(edits) == 0 {
+		t.Fatal("expected indentation edit even with stale doc, got empty array")
+	}
+	newText, _ := edits[0]["newText"].(string)
+	if newText != "    " {
+		t.Errorf("newText = %q, want %q", newText, "    ")
+	}
+}
+
+func TestOnTypeFormattingCloseBrace(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output)
+
+	uri := "file:///test.doit"
+	// User typed } on line 2 (wrong indentation — 8 spaces instead of 0).
+	src := "behavior foo {\n    exit\n        }\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	writeRequest(&input, 1, "textDocument/onTypeFormatting", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 2, "character": 9},
+		"ch":           "}",
+		"options":      map[string]any{"tabSize": 4, "insertSpaces": true},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var edits []map[string]any
+	if err := json.Unmarshal(responses[0], &edits); err != nil {
+		t.Fatalf("unmarshal: %v (raw: %s)", err, responses[0])
+	}
+	if len(edits) == 0 {
+		t.Fatal("expected indentation edit, got empty array")
+	}
+	newText, _ := edits[0]["newText"].(string)
+	if newText != "" {
+		t.Errorf("newText = %q, want %q (no indent for top-level close brace)", newText, "")
+	}
+}
+
 func TestShutdownExit(t *testing.T) {
 	var input bytes.Buffer
 	var output bytes.Buffer
@@ -301,6 +588,50 @@ func parseResponses(t *testing.T, data []byte) []map[string]any {
 			continue
 		}
 		results = append(results, result)
+	}
+	return results
+}
+
+// parseRawResponses extracts raw JSON result values from LSP responses.
+// Unlike parseResponses, this preserves the result as json.RawMessage
+// so it works for both array and object results.
+func parseRawResponses(t *testing.T, data []byte) []json.RawMessage {
+	t.Helper()
+	str := string(data)
+	var results []json.RawMessage
+
+	for str != "" {
+		idx := strings.Index(str, "Content-Length:")
+		if idx < 0 {
+			break
+		}
+		str = str[idx:]
+		nlIdx := strings.Index(str, "\r\n")
+		if nlIdx < 0 {
+			break
+		}
+		lenStr := strings.TrimSpace(str[len("Content-Length:"):nlIdx])
+		var cLen int
+		_, _ = fmt.Sscanf(lenStr, "%d", &cLen)
+
+		bodyStart := strings.Index(str, "\r\n\r\n")
+		if bodyStart < 0 {
+			break
+		}
+		bodyStart += 4
+		if bodyStart+cLen > len(str) {
+			break
+		}
+		body := str[bodyStart : bodyStart+cLen]
+		str = str[bodyStart+cLen:]
+
+		var resp struct {
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal([]byte(body), &resp); err != nil {
+			continue
+		}
+		results = append(results, resp.Result)
 	}
 	return results
 }

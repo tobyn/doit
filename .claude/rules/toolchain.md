@@ -43,9 +43,13 @@ node codec/refcodec.js encode file.json  # encode with reference
   `compiler/compiler_test.go`, using test cases from `compiler/tests/`.
   The compiler's `scanner` wraps `syntax.Scanner`, keeping a local
   `token` type with lowercase fields to minimize refactoring churn.
+- **`formatter/`** — Canonical code formatter for doit source. Normalizes
+  indentation (4 spaces), operator spacing, trailing semicolons, and
+  blank lines. Used by both `doit fmt` and the LSP formatting handler.
 - **`lsp/`** — Language Server Protocol server for doit. Communicates
   over stdio JSON-RPC 2.0. Provides semantic token highlighting via
-  the `syntax.Tokenize` function. Invoked as `doit language-server`.
+  the `syntax.Tokenize` function and document formatting via the
+  `formatter` package. Invoked as `doit language-server`.
 
 ## Toolchain functionality
 

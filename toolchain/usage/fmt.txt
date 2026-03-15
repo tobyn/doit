@@ -1,0 +1,16 @@
+Format doit source files.
+
+doit fmt [-w] [-l] [file ...]
+
+Reads doit source from the given files, or stdin if no files are given, and
+prints the canonically formatted version to stdout.
+
+If the `-w` option is given, each file is reformatted in place instead of
+being written to stdout. This option requires at least one file argument.
+
+If the `-l` option is given, only the names of files whose formatting differs
+from the canonical style are printed to stdout. No files are modified.
+
+The formatter normalizes indentation (4 spaces per level), spacing around
+operators, trailing semicolons, and consecutive blank lines. It preserves the
+user's line-break decisions — it does not join or split lines.

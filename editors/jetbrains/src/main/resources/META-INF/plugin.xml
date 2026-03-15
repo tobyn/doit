@@ -42,5 +42,11 @@
         <languageMapping language="doit"
                          serverId="dev.tobyn.doit.lsp"
                          languageId="doit"/>
+        <fileTypeMapping fileType="doit"
+                         serverId="dev.tobyn.doit.lsp"
+                         languageId="doit"/>
+        <fileNamePatternMapping patterns="*.doit"
+                                serverId="dev.tobyn.doit.lsp"
+                                languageId="doit"/>
     </extensions>
 </idea-plugin>

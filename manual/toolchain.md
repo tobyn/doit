@@ -44,6 +44,38 @@ The `--stdlib` option overrides the embedded standard library with one at the
 given path. This is useful for standard library development or for using a
 custom standard library.
 
+## `doit fmt`
+
+Format doit source files.
+
+```
+doit fmt [-w] [-l] [file ...]
+```
+
+Reads doit source from the given files (or stdin if none are given) and prints
+the canonically formatted version to stdout.
+
+The formatter normalizes:
+
+- **Indentation** — 4 spaces per nesting level, based on brace depth
+- **Operator spacing** — consistent spaces around `+`, `-`, `=`, `==`, `&&`,
+  etc.
+- **Trailing semicolons** — removed (mid-line semicolons like `$failed = 1;
+  exit` are preserved)
+- **Consecutive blank lines** — collapsed to at most one
+- **Trailing whitespace** — stripped
+
+The formatter preserves the user's line-break decisions: it does not join or
+split lines.
+
+Use `-w` to format files in place (requires at least one file argument). Use
+`-l` to list files whose formatting differs from the canonical style without
+modifying them.
+
+The same formatting logic is available in editors via the language server's
+`textDocument/formatting` capability. In JetBrains, use **Code → Reformat
+Code**. In VS Code, use **Format Document**.
+
 ## `doit decode`
 
 Decode a Base62 exported string to JSON.
@@ -109,6 +141,8 @@ invoked directly. Editor extensions handle this automatically:
 - **Semantic token highlighting** — classifies tokens as keywords, functions,
   variables, parameters, types, labels, registers, etc. for rich syntax
   coloring.
+- **Document formatting** — canonical code formatting (same as `doit fmt`).
+  Triggered by the editor's "Reformat Code" or "Format Document" command.
 - **Full document sync** — tracks open documents and responds to changes in
   real time.
 
