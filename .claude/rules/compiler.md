@@ -74,13 +74,18 @@ see `.claude/learnings/test_format.md`.
   Context setup (`bhvResolver`, `bhvParseCtx`, `bhvEmitCtx`),
   operand resolution (`resolveBhvOperand`), behavior-level emitters:
   `emitBehaviorStmts`, `emitBhvStmtSimple`, `emitBhvCallStmt`.
+- **`call_behavior.go`** — Behavior subroutine call system (`call`
+  keyword): name resolution (`resolveCallBehaviorName` — direct +
+  namespaced), argument parsing (`parseCallBehaviorArgs` — keyword
+  args with direction validation), dependency compilation
+  (`resolveCallSub`, `compileDependency` — on-demand compilation
+  with cycle detection), and call emission at both behavior level
+  (`resolveBhvCallArgValue`, `emitBhvCallBehavior`,
+  `emitBhvCallBehaviorExpr`) and fn body level
+  (`emitFnBodyCallBehavior`, `emitFnBodyCallBehaviorExpr`).
 - **`codegen.go`** — `parseStmtBlock` (unified statement-block
   parser for all three modes), `parseBehaviorBody` (two-phase
-  parse+emit, attaches `dependencies` array), behavior call support
-  (`resolveCallBehaviorName`, `parseCallBehaviorArgs`,
-  `resolveCallSub`, `compileDependency`, `resolveBhvCallArgValue`,
-  `emitBhvCallBehavior`, `emitBhvCallBehaviorExpr`,
-  `emitFnBodyCallBehavior`, `emitFnBodyCallBehaviorExpr`),
+  parse+emit, attaches `dependencies` array),
   unified control flow emitters via `emitContext` (`emitIfStmt`,
   `emitWhileStmt`, `emitLoopStmt`, `emitWaitStmt`,
   `emitIfExpr`, `emitModeBlockExpr`), single-expression emitters
