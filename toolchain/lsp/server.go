@@ -188,6 +188,8 @@ func (s *Server) handleMessage(msg *jsonrpcMessage) (exit bool, err error) {
 		s.handleDidClose(msg)
 	case "textDocument/documentSymbol":
 		s.handleDocumentSymbol(msg)
+	case "textDocument/hover":
+		s.handleHover(msg)
 	case "textDocument/formatting":
 		s.handleFormatting(msg)
 	case "textDocument/onTypeFormatting":
@@ -215,6 +217,7 @@ func (s *Server) handleInitialize(msg *jsonrpcMessage) {
 			},
 			"documentFormattingProvider": true,
 			"documentSymbolProvider":    true,
+			"hoverProvider":             true,
 			"documentOnTypeFormattingProvider": map[string]any{
 				"firstTriggerCharacter": "\n",
 				"moreTriggerCharacter":  []string{"}"},
@@ -467,6 +470,147 @@ func symbolKindToLSP(kind compiler.SymbolKind) int {
 	default:
 		return 1 // File (fallback)
 	}
+}
+
+// --- Hover ---
+
+type hoverParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+	Position struct {
+		Line      int `json:"line"`
+		Character int `json:"character"`
+	} `json:"position"`
+}
+
+func (s *Server) handleHover(msg *jsonrpcMessage) {
+	var params hoverParams
+	if err := json.Unmarshal(msg.Params, &params); err != nil {
+		s.sendError(msg.ID, -32602, "invalid params")
+		return
+	}
+
+	s.docsMu.Lock()
+	src, ok := s.docs[params.TextDocument.URI]
+	s.docsMu.Unlock()
+	if !ok {
+		s.sendResponse(msg.ID, nil)
+		return
+	}
+
+	// Find the identifier at the cursor position.
+	offset := lineColToOffset(src, params.Position.Line, params.Position.Character)
+	name := identAtOffset(src, offset)
+	if name == "" {
+		s.sendResponse(msg.ID, nil)
+		return
+	}
+
+	// Look up the identifier in symbols.
+	var sourceFS fs.FS
+	var sourcePath string
+	if filePath := uriToPath(params.TextDocument.URI); filePath != "" {
+		sourceFS = os.DirFS(filepath.Dir(filePath))
+		sourcePath = filepath.Base(filePath)
+	}
+
+	symbols, _, _ := compiler.Check(src, s.stdlib, sourceFS, sourcePath)
+
+	for _, sym := range symbols {
+		if sym.Name == name {
+			hover := formatHover(sym)
+			if hover != "" {
+				s.sendResponse(msg.ID, map[string]any{
+					"contents": map[string]any{
+						"kind":  "markdown",
+						"value": hover,
+					},
+				})
+				return
+			}
+		}
+	}
+
+	s.sendResponse(msg.ID, nil)
+}
+
+// formatHover builds a markdown hover string for a symbol.
+func formatHover(sym compiler.Symbol) string {
+	var sb strings.Builder
+
+	// Signature line.
+	switch sym.Kind {
+	case compiler.SymbolBehavior:
+		sb.WriteString("```doit\nbehavior ")
+		sb.WriteString(sym.Name)
+		sb.WriteString("\n```")
+	case compiler.SymbolFunction:
+		sb.WriteString("```doit\nfn ")
+		sb.WriteString(sym.Name)
+		sb.WriteString("\n```")
+	case compiler.SymbolIterator:
+		sb.WriteString("```doit\niter ")
+		sb.WriteString(sym.Name)
+		sb.WriteString("\n```")
+	case compiler.SymbolConstant:
+		sb.WriteString("```doit\nconst ")
+		sb.WriteString(sym.Name)
+		sb.WriteString("\n```")
+	case compiler.SymbolEnum:
+		sb.WriteString("```doit\nenum ")
+		sb.WriteString(sym.Name)
+		sb.WriteString("\n```")
+	}
+
+	if sym.Doc != "" {
+		sb.WriteString("\n\n")
+		sb.WriteString(sym.Doc)
+	}
+
+	return sb.String()
+}
+
+// lineColToOffset converts 0-based line and column to a byte offset.
+func lineColToOffset(src string, line, col int) int {
+	offset := 0
+	for l := 0; l < line && offset < len(src); offset++ {
+		if src[offset] == '\n' {
+			l++
+		}
+	}
+	return offset + col
+}
+
+// identAtOffset extracts the identifier at the given byte offset in src.
+// Returns empty string if offset is not on an identifier character.
+func identAtOffset(src string, offset int) string {
+	if offset < 0 || offset >= len(src) {
+		return ""
+	}
+	if !isIdentChar(src[offset]) {
+		return ""
+	}
+	// Walk backward to start of identifier.
+	start := offset
+	for start > 0 && isIdentChar(src[start-1]) {
+		start--
+	}
+	// Walk forward to end of identifier.
+	end := offset
+	for end < len(src) && isIdentChar(src[end]) {
+		end++
+	}
+	word := src[start:end]
+	// Must start with a letter or underscore (not a digit).
+	if len(word) > 0 && (word[0] >= 'a' && word[0] <= 'z' || word[0] >= 'A' && word[0] <= 'Z' || word[0] == '_') {
+		return word
+	}
+	return ""
+}
+
+func isIdentChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'
 }
 
 // --- Semantic tokens ---

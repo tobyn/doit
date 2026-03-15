@@ -30,9 +30,9 @@ Features to add to the language server, roughly in priority order.
   returns errors, warnings, and symbols.
 - ~~**Document symbols**~~ — done. Uses `compiler.Check` symbols to
   populate `textDocument/documentSymbol`.
-- **Hover** — Resolve the identifier under the cursor against the
-  symbol table, show signature + doc comment. Stdlib doc comments
-  already follow a consistent format.
+- ~~**Hover**~~ — done. Shows declaration kind + doc comment for
+  symbols in the current file. Stdlib/imported symbol hover is not
+  yet supported.
 - **Signature help** — Trigger on `(` and `,`. `paramDef` already has
   name, direction, and keyword status. Just needs cursor-to-call-site
   mapping.

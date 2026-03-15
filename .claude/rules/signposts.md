@@ -30,7 +30,7 @@ topic is relevant to your current task.
 - **Language server** — `toolchain/lsp/server.go`
   LSP server over stdio. Invoked as `doit language-server`.
   Capabilities: semantic tokens, document formatting, diagnostics,
-  document symbols.
+  document symbols, hover.
 - **JetBrains plugin** — `editors/jetbrains/`
   IntelliJ Platform plugin. TextMate grammar + LSP via LSP4IJ.
   Build with `./gradlew buildPlugin` from that directory.

@@ -165,13 +165,13 @@ type parser struct {
 
 // recordSymbol adds a symbol to the symbols list if symbol collection is enabled.
 // pos is the byte offset in the source; it is converted to 0-based line:col.
-func (p *parser) recordSymbol(name string, kind SymbolKind, pos int) {
+func (p *parser) recordSymbol(name string, kind SymbolKind, pos int, doc string) {
 	if !p.collectSymbols {
 		return
 	}
 	line, col := p.posToLineCol(pos)
 	// posToLineCol returns 1-based; convert to 0-based for LSP.
-	p.symbols = append(p.symbols, Symbol{Name: name, Kind: kind, Line: line - 1, Col: col - 1})
+	p.symbols = append(p.symbols, Symbol{Name: name, Kind: kind, Line: line - 1, Col: col - 1, Doc: doc})
 }
 
 // warnf appends a formatted warning message with line:column prefix.

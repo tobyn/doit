@@ -1153,6 +1153,7 @@ func (p *parser) collectDecls(isImport bool) error {
 		if tok.kind != tokIdent {
 			return p.errorf(tok.pos, "expected declaration, got %s", tok.describe())
 		}
+		doc := p.docComment // capture before sub-parsers consume more tokens
 		switch tok.val {
 		case "behavior":
 			idTok, err := p.parseBehaviorID()
@@ -1161,7 +1162,7 @@ func (p *parser) collectDecls(isImport bool) error {
 			}
 			if !isImport {
 				p.behaviorIDs = append(p.behaviorIDs, idTok.val)
-				p.recordSymbol(idTok.val, SymbolBehavior, idTok.pos)
+				p.recordSymbol(idTok.val, SymbolBehavior, idTok.pos, doc)
 			}
 			params, err := p.scanBehaviorParams()
 			if err != nil {
@@ -1194,7 +1195,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				p.fns[name].private = true
 				p.fileDecls = append(p.fileDecls, name)
 				if !isImport {
-					p.recordSymbol(name, SymbolFunction, fnTok.pos)
+					p.recordSymbol(name, SymbolFunction, fnTok.pos, doc)
 				}
 			case "iter":
 				name, err := p.parseIterDecl(true)
@@ -1203,7 +1204,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				}
 				p.fileDecls = append(p.fileDecls, name)
 				if !isImport {
-					p.recordSymbol(name, SymbolIterator, fnTok.pos)
+					p.recordSymbol(name, SymbolIterator, fnTok.pos, doc)
 				}
 			case "const":
 				name, err := p.parseConstDecl(true)
@@ -1212,7 +1213,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				}
 				p.fileDecls = append(p.fileDecls, name)
 				if !isImport {
-					p.recordSymbol(name, SymbolConstant, fnTok.pos)
+					p.recordSymbol(name, SymbolConstant, fnTok.pos, doc)
 				}
 			case "enum":
 				name, err := p.parseEnumDecl(true)
@@ -1221,7 +1222,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				}
 				p.fileDecls = append(p.fileDecls, name)
 				if !isImport {
-					p.recordSymbol(name, SymbolEnum, fnTok.pos)
+					p.recordSymbol(name, SymbolEnum, fnTok.pos, doc)
 				}
 			default:
 				return p.errorf(fnTok.pos, "expected 'fn', 'iter', 'const', or 'enum' after 'private', got %q", fnTok.val)
@@ -1233,7 +1234,7 @@ func (p *parser) collectDecls(isImport bool) error {
 			}
 			p.fileDecls = append(p.fileDecls, name)
 			if !isImport {
-				p.recordSymbol(name, SymbolFunction, tok.pos)
+				p.recordSymbol(name, SymbolFunction, tok.pos, doc)
 			}
 		case "iter":
 			name, err := p.parseIterDecl(false)
@@ -1242,7 +1243,7 @@ func (p *parser) collectDecls(isImport bool) error {
 			}
 			p.fileDecls = append(p.fileDecls, name)
 			if !isImport {
-				p.recordSymbol(name, SymbolIterator, tok.pos)
+				p.recordSymbol(name, SymbolIterator, tok.pos, doc)
 			}
 		case "const":
 			name, err := p.parseConstDecl(false)
@@ -1251,7 +1252,7 @@ func (p *parser) collectDecls(isImport bool) error {
 			}
 			p.fileDecls = append(p.fileDecls, name)
 			if !isImport {
-				p.recordSymbol(name, SymbolConstant, tok.pos)
+				p.recordSymbol(name, SymbolConstant, tok.pos, doc)
 			}
 		case "enum":
 			name, err := p.parseEnumDecl(false)
@@ -1260,7 +1261,7 @@ func (p *parser) collectDecls(isImport bool) error {
 			}
 			p.fileDecls = append(p.fileDecls, name)
 			if !isImport {
-				p.recordSymbol(name, SymbolEnum, tok.pos)
+				p.recordSymbol(name, SymbolEnum, tok.pos, doc)
 			}
 		case "skip":
 			// Consume "skip prelude" directive

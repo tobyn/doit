@@ -622,6 +622,116 @@ func TestDocumentSymbols(t *testing.T) {
 	}
 }
 
+func TestHover(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output, nil)
+
+	uri := "file:///test.doit"
+	// #! doc comment on the const declaration.
+	src := "skip prelude\n#! The maximum count.\nconst MAX = 10\nfn greet() {\n}\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	// Hover over "MAX" on line 2, col 6 (within "MAX").
+	writeRequest(&input, 1, "textDocument/hover", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 2, "character": 6},
+	})
+	// Hover over "greet" on line 3, col 3 (within "greet").
+	writeRequest(&input, 2, "textDocument/hover", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 3, "character": 3},
+	})
+	// Hover over empty space — should return null.
+	writeRequest(&input, 3, "textDocument/hover", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 0, "character": 0},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 3 {
+		t.Fatalf("expected 3 responses, got %d", len(responses))
+	}
+
+	// Response 1: hover on MAX — should have doc comment.
+	var hover1 map[string]any
+	if err := json.Unmarshal(responses[0], &hover1); err != nil {
+		t.Fatalf("unmarshal hover1: %v", err)
+	}
+	contents1, ok := hover1["contents"].(map[string]any)
+	if !ok {
+		t.Fatal("missing contents in hover1")
+	}
+	value1, _ := contents1["value"].(string)
+	if !strings.Contains(value1, "const MAX") {
+		t.Errorf("hover1 value should contain 'const MAX', got: %s", value1)
+	}
+	if !strings.Contains(value1, "The maximum count.") {
+		t.Errorf("hover1 value should contain doc comment, got: %s", value1)
+	}
+
+	// Response 2: hover on greet.
+	var hover2 map[string]any
+	if err := json.Unmarshal(responses[1], &hover2); err != nil {
+		t.Fatalf("unmarshal hover2: %v", err)
+	}
+	contents2, ok := hover2["contents"].(map[string]any)
+	if !ok {
+		t.Fatal("missing contents in hover2")
+	}
+	value2, _ := contents2["value"].(string)
+	if !strings.Contains(value2, "fn greet") {
+		t.Errorf("hover2 value should contain 'fn greet', got: %s", value2)
+	}
+
+	// Response 3: hover on non-identifier — should be null.
+	if responses[2] != nil && string(responses[2]) != "null" {
+		t.Errorf("expected null for non-identifier hover, got: %s", responses[2])
+	}
+}
+
+func TestHoverCapabilityAdvertised(t *testing.T) {
+	resp := sendRequest(t, "initialize", map[string]any{
+		"capabilities": map[string]any{},
+	})
+	caps := resp["capabilities"].(map[string]any)
+	if caps["hoverProvider"] != true {
+		t.Error("hoverProvider not advertised")
+	}
+}
+
+func TestIdentAtOffset(t *testing.T) {
+	src := "let foo = bar(baz)"
+	tests := []struct {
+		offset int
+		want   string
+	}{
+		{0, "let"},
+		{1, "let"},
+		{3, ""},       // space
+		{4, "foo"},
+		{6, "foo"},
+		{8, ""},       // =
+		{10, "bar"},
+		{13, ""},      // (
+		{14, "baz"},
+		{17, ""},      // )
+	}
+	for _, tt := range tests {
+		got := identAtOffset(src, tt.offset)
+		if got != tt.want {
+			t.Errorf("identAtOffset(%d) = %q, want %q", tt.offset, got, tt.want)
+		}
+	}
+}
+
 func TestDocumentSymbolsCapabilityAdvertised(t *testing.T) {
 	resp := sendRequest(t, "initialize", map[string]any{
 		"capabilities": map[string]any{},

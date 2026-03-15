@@ -86,12 +86,13 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 }
 
 // Symbol represents a top-level declaration found during parsing.
-// Used by the LSP for document symbols.
+// Used by the LSP for document symbols and hover.
 type Symbol struct {
 	Name string     // declaration name
 	Kind SymbolKind // declaration type
 	Line int        // 0-based line number in user source
 	Col  int        // 0-based column number in user source
+	Doc  string     // doc comment text (from #! lines), empty if none
 }
 
 // SymbolKind identifies the type of a top-level declaration.
