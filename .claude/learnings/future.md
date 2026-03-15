@@ -15,10 +15,11 @@ register types.
 
 ## 1.0 burndown
 
-- **Developer tools** — language server, syntax highlighting for
-  VS Code and JetBrains IDEs.
+- **Developer tools** — ~~language server~~, ~~syntax highlighting~~
+  done (TextMate grammar, semantic tokenizer, LSP server). Remaining:
+  VS Code extension packaging, JetBrains plugin packaging.
 - **Website** — static marketing/download page, web-hosted manual,
-  syntax highlighting.
+  syntax highlighting (build-time tool using existing tokenizer).
 
 ## Lint mode
 

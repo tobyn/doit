@@ -15,6 +15,16 @@ topic is relevant to your current task.
 - **Therapy** — `.claude/learnings/therapy.md`
   Reorganize project memory to keep context lean and useful.
 
+## Editor integration
+
+- **TextMate grammar** — `editors/doit.tmLanguage.json`
+  Regex-based syntax highlighting grammar for doit. Used by VS Code,
+  JetBrains (via TextMate bundles), and web highlighters (Shiki).
+- **Semantic tokenizer** — `toolchain/compiler/highlight.go`
+  Context-aware token classifier producing LSP semantic types.
+- **Language server** — `toolchain/lsp/server.go`
+  LSP server over stdio. Invoked as `doit language-server`.
+
 ## Language reference
 
 - **Language syntax and usage** — `manual/` (start at `manual/index.md`)

@@ -37,6 +37,13 @@ node codec/refcodec.js encode file.json  # encode with reference
 - **`compiler/`** — Compiles the doit language into the structured
   representation supported by the `codec` package. Tests live in
   `compiler/compiler_test.go`, using test cases from `compiler/tests/`.
+  Also contains `highlight.go` — a semantic tokenizer (`Tokenize`)
+  that classifies source tokens into LSP semantic types (keyword,
+  function, variable, parameter, type, label, register, etc.) using
+  context-aware scanning.
+- **`lsp/`** — Language Server Protocol server for doit. Communicates
+  over stdio JSON-RPC 2.0. Provides semantic token highlighting via
+  the compiler's `Tokenize` function. Invoked as `doit language-server`.
 
 ## Toolchain functionality
 

@@ -87,6 +87,30 @@ treated as a behavior directly.
 Reads from stdin and writes to stdout by default. Use `input_path` to read from
 a file and `-o` to write to a file.
 
+## `doit language-server`
+
+Start the doit language server.
+
+```
+doit language-server
+```
+
+Starts a Language Server Protocol (LSP) server that communicates over
+stdin/stdout using JSON-RPC 2.0. Editors and IDEs use this to provide
+semantic syntax highlighting for doit source files.
+
+The language server is typically launched by an editor extension rather than
+invoked directly. For VS Code, the doit extension (in `editors/vscode/`)
+configures this automatically.
+
+### Supported capabilities
+
+- **Semantic token highlighting** — classifies tokens as keywords, functions,
+  variables, parameters, types, labels, registers, etc. for rich syntax
+  coloring.
+- **Full document sync** — tracks open documents and responds to changes in
+  real time.
+
 ## `doit help`
 
 Print usage information.
