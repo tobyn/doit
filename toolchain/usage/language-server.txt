@@ -1,0 +1,15 @@
+Start the doit language server.
+
+Usage: doit language-server
+
+Starts a Language Server Protocol (LSP) server that communicates
+over stdin/stdout using JSON-RPC 2.0. Editors and IDEs use this
+to provide syntax highlighting, diagnostics, and other language
+features for doit source files.
+
+Supported capabilities:
+  - Semantic token highlighting (textDocument/semanticTokens/full)
+  - Full document sync (textDocument/didOpen, didChange, didClose)
+
+The language server is typically launched by an editor extension
+rather than invoked directly.

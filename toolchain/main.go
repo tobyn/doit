@@ -13,6 +13,7 @@ import (
 
 	"github.com/tobyn/doit/toolchain/codec"
 	"github.com/tobyn/doit/toolchain/compiler"
+	"github.com/tobyn/doit/toolchain/lsp"
 )
 
 //go:embed usage/*.txt
@@ -36,6 +37,8 @@ func main() {
 		err = cmdDecode(os.Args[2:])
 	case "encode":
 		err = cmdEncode(os.Args[2:])
+	case "language-server":
+		err = lsp.Run()
 	case "help":
 		err = cmdHelp(os.Args[2:])
 	default:
