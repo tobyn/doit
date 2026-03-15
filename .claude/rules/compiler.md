@@ -60,6 +60,17 @@ see `.claude/learnings/test_format.md`.
   const call argument parsing (`parseConstCallArgs`/`parseConstArgExpr`),
   helper types and functions (`constEvalStatus`, `extractNum`,
   `isTruthy`, `evalCompare`, `evalTypeCheck`).
+- **`continuations.go`** — Continuation block parsing and expansion.
+  Parsing: `parseContinuationBlocks` (entry point, disambiguates
+  multi-block vs collapsed form), `parseContinuationBlocksMulti`
+  (multi-block form), `tryParseContBlockBindings` (Kotlin-style
+  bindings), `parseExecBindingArgs` (exec binding argument list).
+  Expansion: `expandContinuationBlocks` (emit block bodies, patch
+  exec binding slots), `expandInstructionBlocks` (local instruction
+  block expansion). Helpers: `buildExecBindingMap` (exec binding map
+  from data args), `allocExecOutputRegs` (register allocation for
+  exec data output), `findMaxExecOutputSlot`, `findMaxReturnSlot`,
+  `isDirection`.
 - **`parse.go`** — File-level parsing, function and iterator
   definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing
   (`parseFnBodyStmts`, `parseFnBodyLetVar`, `parseFnDefaultStmtUnified`),
