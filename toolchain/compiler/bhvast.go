@@ -366,7 +366,7 @@ func (p *parser) parseArithConstructor(nameTok token, resolve operandResolver) (
 		}
 		return ctor, nil
 	default:
-		return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
+		return nil, p.errorf(nameTok.pos, "unknown constructor %q; valid constructors are Item, Component, Technology, Value, Coordinate, Range", nameTok.val)
 	}
 }
 
@@ -668,7 +668,7 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		if idx, ok := syms.paramMap[tok.val]; ok {
 			return &LiteralExpr{Value: idx}, nil
 		}
-		return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
+		return nil, p.errorf(tok.pos, "unknown register %q; expected a unit register or a declared @param", tok.val)
 	}
 	if _, ok := syms.lookupVar(tok.val); !ok {
 		// Check constants before erroring
@@ -685,7 +685,7 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		if tok.val == "Unit" {
 			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
-		return nil, p.errorf(tok.pos, "unknown function or variable %q", tok.val)
+		return nil, p.errorf(tok.pos, "unknown function or variable %q; check spelling or use 'let'/'var' to declare it", tok.val)
 	}
 	syms.markUsed(tok.val)
 	return &IdentExpr{Name: tok.val}, nil
@@ -945,7 +945,7 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 			} else if idx, ok := syms.paramMap[tok.val]; ok {
 				resolved = &LiteralExpr{Value: idx}
 			} else {
-				return nil, p.errorf(tok.pos, "unknown register %q", tok.val)
+				return nil, p.errorf(tok.pos, "unknown register %q; expected a unit register or a declared @param", tok.val)
 			}
 			result, err := p.parseArithExprFromFull(resolved, resolve)
 			if err != nil {
@@ -1951,7 +1951,7 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		return nil, fnErr
 	}
 	if fn == nil {
-		return nil, p.errorf(tok.pos, "unknown function %q", tok.val)
+		return nil, p.errorf(tok.pos, "unknown function %q; check spelling or make sure it is imported", tok.val)
 	}
 	args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
 	if err != nil {
@@ -1998,7 +1998,7 @@ func (p *parser) parseBhvDefaultStmtUnified(tok token, syms *symbolTable, exprTa
 				return nil, false, fnErr
 			}
 			if fn == nil {
-				return nil, false, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+				return nil, false, p.errorf(calleeTok.pos, "unknown function %q; check spelling or make sure it is imported", calleeTok.val)
 			}
 			args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
 			if err != nil {
@@ -2677,7 +2677,7 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 				return nil, false, fnErr
 			}
 			if fn == nil {
-				return nil, false, p.errorf(calleeTok.pos, "unknown function %q", calleeTok.val)
+				return nil, false, p.errorf(calleeTok.pos, "unknown function %q; check spelling or make sure it is imported", calleeTok.val)
 			}
 			args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
 			if err != nil {
@@ -3207,7 +3207,7 @@ func (p *parser) emitBhvConstructorTo(ctor *ConstructorExpr, target any, syms *s
 		kwArgs := map[string]any{"x": startVal, "y": stopVal}
 		return p.expandCall("combine_register", []any{stepVal, false}, kwArgs, []any{target}, b, 0, comment, syms.usedVars)
 	}
-	return fmt.Errorf("unknown constructor %q", ctor.TypeName)
+	return fmt.Errorf("unknown constructor %q; valid constructors are Item, Component, Technology, Value, Coordinate, Range", ctor.TypeName)
 }
 
 // emitBhvAmpersandTo emits an & expression to target.

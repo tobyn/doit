@@ -132,7 +132,7 @@ func (p *parser) parseContinuationBlocksMulti(execNames []string, execDetached m
 	}
 
 	if len(blocks) == 0 {
-		return nil, p.errorf(0, "empty continuation block")
+		return nil, p.errorf(firstTok.pos, "empty continuation block")
 	}
 	return blocks, nil
 }
@@ -324,7 +324,7 @@ func findMaxReturnSlot(stmts []Stmt) int {
 // in an instruction block: name(@1, @2) or return(@1). The opening '('
 // has already been consumed. Returns the list of args (returnSlot values,
 // integers, false for null).
-func (p *parser) parseExecBindingArgs() ([]any, error) {
+func (p *parser) parseExecBindingArgs(openPos int) ([]any, error) {
 	var args []any
 	for {
 		tok, err := p.next()
@@ -368,7 +368,7 @@ func (p *parser) parseExecBindingArgs() ([]any, error) {
 		}
 	}
 	if len(args) == 0 {
-		return nil, p.errorf(0, "empty exec binding argument list")
+		return nil, p.errorf(openPos, "empty exec binding argument list")
 	}
 	return args, nil
 }
@@ -784,7 +784,7 @@ func (p *parser) parseIterDecl(private bool) (string, error) {
 	// Check if this is a single instruction body (instruction-backed iter)
 	if len(astBody) == 1 {
 		if instrStmt, ok := astBody[0].(*InstructionStmt); ok {
-			return p.buildInstructionIter(nameTok.val, params, outputs, instrStmt.Frame, private)
+			return p.buildInstructionIter(nameTok.val, nameTok.pos, params, outputs, instrStmt.Frame, private)
 		}
 	}
 
@@ -805,7 +805,7 @@ func (p *parser) parseIterDecl(private bool) (string, error) {
 // buildInstructionIter builds an instruction-backed iterDef from a parsed
 // instruction frame inside an iter body. The frame uses simplified syntax:
 // output names map to numbered slots, `done: N` signals exhaustion.
-func (p *parser) buildInstructionIter(name string, params []paramDef, outputs []string, frame map[string]any, private bool) (string, error) {
+func (p *parser) buildInstructionIter(name string, pos int, params []paramDef, outputs []string, frame map[string]any, private bool) (string, error) {
 	// Find the done slot and resolve output name → slot mappings.
 	// In the iter instruction block:
 	//   - numbered slots with output name values → output mappings
@@ -873,7 +873,7 @@ func (p *parser) buildInstructionIter(name string, params []paramDef, outputs []
 			if n, ok := v.(int); ok {
 				doneSlot = strconv.Itoa(n)
 			} else {
-				return "", p.errorf(0, "iter %q: 'done' value must be a number", name)
+				return "", p.errorf(pos, "iter %q: 'done' value must be a number", name)
 			}
 			continue
 		}
@@ -899,7 +899,7 @@ func (p *parser) buildInstructionIter(name string, params []paramDef, outputs []
 	}
 
 	if doneSlot == "" {
-		return "", p.errorf(0, "iter %q: instruction block requires 'done: N' to specify exhaustion slot", name)
+		return "", p.errorf(pos, "iter %q: instruction block requires 'done: N' to specify exhaustion slot", name)
 	}
 
 	p.iters[name] = &iterDef{
@@ -952,7 +952,7 @@ func bodyHasYield(stmts []Stmt) bool {
 }
 
 // parseYieldStmt parses a yield statement: `yield expr, expr, ...`
-func (p *parser) parseYieldStmt(ctx *fnBodyContext, comment string) (*YieldStmt, error) {
+func (p *parser) parseYieldStmt(ctx *fnBodyContext, pos int, comment string) (*YieldStmt, error) {
 	var values []Expr
 	for {
 		expr, err := p.parseFnBodyArgExpr(ctx)
@@ -972,10 +972,10 @@ func (p *parser) parseYieldStmt(ctx *fnBodyContext, comment string) (*YieldStmt,
 	}
 
 	if len(values) != len(ctx.iterOutputs) {
-		return nil, p.errorf(0, "yield produces %d value(s), but iter declares %d output(s)", len(values), len(ctx.iterOutputs))
+		return nil, p.errorf(pos, "yield produces %d value(s), but iter declares %d output(s)", len(values), len(ctx.iterOutputs))
 	}
 
-	return &YieldStmt{Values: values, Comment: comment}, nil
+	return &YieldStmt{Pos: pos, Values: values, Comment: comment}, nil
 }
 
 // --- AST-based fn body parsing ---
@@ -1000,7 +1000,7 @@ func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int)
 		if e.Name == "Unit" {
 			return p.errorf(pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
-		return p.errorf(pos, "unknown function or variable %q", e.Name)
+		return p.errorf(pos, "unknown function or variable %q; check spelling or use 'let'/'var' to declare it", e.Name)
 	case *ArithExpr:
 		if err := p.checkFnBodyExprDeclared(e.LHS, ctx, pos); err != nil {
 			return err
@@ -1052,7 +1052,7 @@ func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 			if tok.val == "Unit" {
 				return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 			}
-			return nil, p.errorf(tok.pos, "unknown function or variable %q", tok.val)
+			return nil, p.errorf(tok.pos, "unknown function or variable %q; check spelling or use 'let'/'var' to declare it", tok.val)
 		}
 		ctx.markFnVarUsed(tok.val)
 		return &IdentExpr{Name: tok.val}, nil
@@ -1884,7 +1884,7 @@ func (p *parser) emitConstructorTo(ctor *ConstructorExpr, target any, b *frameBu
 		kwArgs := map[string]any{"x": startVal, "y": stopVal}
 		return p.expandCall("combine_register", []any{stepVal, false}, kwArgs, []any{target}, b, pos, comment, usedVars)
 	}
-	return fmt.Errorf("unknown constructor %q", ctor.TypeName)
+	return fmt.Errorf("unknown constructor %q; valid constructors are Item, Component, Technology, Value, Coordinate, Range", ctor.TypeName)
 }
 
 // emitAmpersandTo emits an & expression writing the result to target.
@@ -4317,7 +4317,7 @@ func (ctx *fnBodyContext) canAssign(name string, p *parser, pos int) error {
 		}
 		return nil
 	}
-	return p.errorf(pos, "undeclared variable %q", name)
+	return p.errorf(pos, "undeclared variable %q; declare it with 'let' or 'var'", name)
 }
 
 // canRead checks whether name can be read from in a fn body context
@@ -4484,7 +4484,7 @@ func (p *parser) parseUserFn() (string, error) {
 		count := len(ret.ContinuationArgs)
 		if prev, ok := execContArgs[ret.Continuation]; ok {
 			if prev != count {
-				return "", p.errorf(0, "inconsistent arg count for continuation %q: %d vs %d", ret.Continuation, prev, count)
+				return "", p.errorf(ret.Pos, "inconsistent arg count for continuation %q: %d vs %d", ret.Continuation, prev, count)
 			}
 		} else {
 			if execContArgs == nil {
@@ -5785,7 +5785,7 @@ func (p *parser) parseFnDefaultStmtUnified(tok token, ctx *fnBodyContext, commen
 
 	// Bare function call
 	if callee == nil {
-		return nil, false, p.errorf(tok.pos, "unknown function %q", tok.val)
+		return nil, false, p.errorf(tok.pos, "unknown function %q; check spelling or make sure it is imported", tok.val)
 	}
 	args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
 	if err != nil {
@@ -5986,7 +5986,7 @@ func (p *parser) parseInstruction() (map[string]any, error) {
 				return nil, err
 			}
 			if peek.kind == tokLParen {
-				eb.args, err = p.parseExecBindingArgs()
+				eb.args, err = p.parseExecBindingArgs(peek.pos)
 				if err != nil {
 					return nil, err
 				}
@@ -6054,7 +6054,7 @@ type expandCallOpts struct {
 func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool, opts ...expandCallOpts) error {
 	fn := p.fns[name]
 	if fn == nil {
-		return p.errorf(pos, "unknown function %q", name)
+		return p.errorf(pos, "unknown function %q; check spelling or make sure it is imported", name)
 	}
 
 	// Extract optional parameters

@@ -340,7 +340,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 				}
 				value["keeparrays"] = "store"
 			default:
-				return nil, p.errorf(attr.pos, "unknown attribute @%s", attr.val)
+				return nil, p.errorf(attr.pos, "unknown attribute @%s; valid attributes are @name, @param, @keepvars, @keeparrays", attr.val)
 			}
 			continue
 		}
@@ -663,9 +663,9 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, co
 			}
 			return idx, nil
 		}
-		return nil, p.errorf(pos, "unknown register %q", name)
+		return nil, p.errorf(pos, "unknown register %q; expected a unit register or a declared @param", name)
 	}
-	return nil, p.errorf(pos, "undeclared variable %q", name)
+	return nil, p.errorf(pos, "undeclared variable %q; declare it with 'let' or 'var'", name)
 }
 
 // emitComparison emits a 3-frame comparison pattern that produces a boolean
@@ -1373,7 +1373,7 @@ func (p *parser) parseConstructorExpr(nameTok token, parseArg func() (Expr, erro
 			Args:     []Expr{arg1, arg2, arg3},
 		}, nil
 	}
-	return nil, p.errorf(nameTok.pos, "unknown constructor %q", nameTok.val)
+	return nil, p.errorf(nameTok.pos, "unknown constructor %q; valid constructors are Item, Component, Technology, Value, Coordinate, Range", nameTok.val)
 }
 
 // checkVarName validates that a variable name doesn't conflict with existing
@@ -2063,7 +2063,7 @@ func (p *parser) emitForStmt(s *ForStmt, ctx *emitContext, comment string) error
 func (p *parser) emitForIterStmt(s *ForStmt, ctx *emitContext, comment string) error {
 	it := p.iters[s.IterName]
 	if it == nil {
-		return p.errorf(0, "unknown iterator %q", s.IterName)
+		return p.errorf(s.Pos, "unknown iterator %q", s.IterName)
 	}
 
 	if it.frame != nil {
@@ -2411,6 +2411,7 @@ func (p *parser) parseIteratorInstruction(iterVars []string, label, comment stri
 	}
 
 	return &ForStmt{
+		Pos:            kwTok.pos,
 		Label:          label,
 		IterVars:       iterVars,
 		IterInstrFrame: frame,
@@ -3371,7 +3372,7 @@ func (p *parser) parseStmtBlock(ctx *parseContext, exprTail bool) ([]Stmt, error
 			if ctx.mode != modeFunction {
 				return nil, p.errorf(tok.pos, "'return' can only be used inside function bodies")
 			}
-			retStmt, err := p.parseReturnStmt(ctx, comment)
+			retStmt, err := p.parseReturnStmt(ctx, tok.pos, comment)
 			if err != nil {
 				return nil, err
 			}
@@ -3381,7 +3382,7 @@ func (p *parser) parseStmtBlock(ctx *parseContext, exprTail bool) ([]Stmt, error
 			if ctx.mode != modeIterator {
 				return nil, p.errorf(tok.pos, "'yield' can only be used inside an iter body")
 			}
-			stmt, err := p.parseYieldStmt(ctx.fnCtx, comment)
+			stmt, err := p.parseYieldStmt(ctx.fnCtx, tok.pos, comment)
 			if err != nil {
 				return nil, err
 			}
@@ -3419,7 +3420,7 @@ func (p *parser) parseStmtBlock(ctx *parseContext, exprTail bool) ([]Stmt, error
 
 // parseReturnStmt parses a return statement in function body context.
 // The 'return' keyword has already been consumed.
-func (p *parser) parseReturnStmt(ctx *parseContext, comment string) (*ReturnStmt, error) {
+func (p *parser) parseReturnStmt(ctx *parseContext, pos int, comment string) (*ReturnStmt, error) {
 	retPeek, err := p.next()
 	if err != nil {
 		return nil, err
@@ -3442,7 +3443,7 @@ func (p *parser) parseReturnStmt(ctx *parseContext, comment string) (*ReturnStmt
 				return nil, err
 			}
 		}
-		return &ReturnStmt{Values: []Expr{&InstructionExpr{Frame: frame, Blocks: blocks}}, Comment: comment}, nil
+		return &ReturnStmt{Pos: pos, Values: []Expr{&InstructionExpr{Frame: frame, Blocks: blocks}}, Comment: comment}, nil
 	}
 
 	// return <cont_name> or return <cont_name>(args...)
@@ -3482,7 +3483,7 @@ func (p *parser) parseReturnStmt(ctx *parseContext, comment string) (*ReturnStmt
 		} else {
 			p.unget(peek)
 		}
-		return &ReturnStmt{Continuation: contName, ContinuationArgs: contArgs, Comment: comment}, nil
+		return &ReturnStmt{Pos: pos, Continuation: contName, ContinuationArgs: contArgs, Comment: comment}, nil
 	}
 
 	// return <value>, <value>, ...
@@ -3503,7 +3504,7 @@ func (p *parser) parseReturnStmt(ctx *parseContext, comment string) (*ReturnStmt
 			break
 		}
 	}
-	return &ReturnStmt{Values: values, Comment: comment}, nil
+	return &ReturnStmt{Pos: pos, Values: values, Comment: comment}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -4233,6 +4234,7 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 			}
 
 			return &ForStmt{
+				Pos:        rangeTok.pos,
 				Label:      lbl,
 				IterVars:   iterVars,
 				IterName:   resolvedName,
@@ -4295,7 +4297,7 @@ func (p *parser) parseForStmt(ctx *parseContext, comment string, label ...string
 		return nil, err
 	}
 
-	return &ForStmt{Label: lbl, IterVars: []string{iterTok.val}, Range: rangeExpr, Body: body, Comment: comment}, nil
+	return &ForStmt{Pos: rangeTok.pos, Label: lbl, IterVars: []string{iterTok.val}, Range: rangeExpr, Body: body, Comment: comment}, nil
 }
 
 // parseIterCallArgs parses positional and keyword arguments for an iterator
@@ -4578,7 +4580,7 @@ func (p *parser) resolveCallBehaviorName(tok token) (string, *bhvDef, error) {
 		}
 		p.unget(peek)
 	}
-	return "", nil, p.errorf(tok.pos, "unknown behavior %q", tok.val)
+	return "", nil, p.errorf(tok.pos, "unknown behavior %q; define it at file scope or import it", tok.val)
 }
 
 // parseCallBehaviorArgs parses keyword arguments for a `call` statement.
@@ -4776,7 +4778,7 @@ func (p *parser) resolveCallSub(behaviorID string, pos int) (int, error) {
 func (p *parser) compileDependency(behaviorID string, pos int) (map[string]any, error) {
 	bhv := p.bhvs[behaviorID]
 	if bhv == nil {
-		return nil, p.errorf(pos, "unknown behavior %q", behaviorID)
+		return nil, p.errorf(pos, "unknown behavior %q; define it at file scope or import it", behaviorID)
 	}
 
 	// Mark as compiling (cycle detection)

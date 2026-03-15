@@ -105,6 +105,7 @@ type ModeBlockStmt struct {
 // When Continuation is non-empty, it's a continuation dispatch: `return big`
 // ContinuationArgs are optional data arguments: `return big(x, y)`
 type ReturnStmt struct {
+	Pos              int    // source position (for diagnostics)
 	Values           []Expr // nil for bare return or continuation dispatch
 	Continuation     string // non-empty = dispatch to this exec continuation
 	ContinuationArgs []Expr // data args for continuation dispatch (nil = no data)
@@ -145,6 +146,7 @@ type LoopStmt struct {
 // ForStmt is a for-in loop. Range form: `for i in Range(5) { ... }`.
 // Iterator form: `for comp, idx in for_component() { ... }`.
 type ForStmt struct {
+	Pos            int               // source position (for diagnostics)
 	Label          string            // "" for unlabeled
 	IterVars       []string          // iteration variable names (let-bound)
 	Range          Expr              // range expression (nil for iterator form)
@@ -159,6 +161,7 @@ type ForStmt struct {
 
 // YieldStmt produces values for one iteration of an enclosing iter body.
 type YieldStmt struct {
+	Pos     int // source position (for diagnostics)
 	Values  []Expr
 	Comment string
 }
