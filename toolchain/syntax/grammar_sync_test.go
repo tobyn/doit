@@ -1,4 +1,4 @@
-package compiler
+package syntax
 
 import (
 	"encoding/json"
@@ -58,7 +58,7 @@ func TestTextMateKeywordSync(t *testing.T) {
 
 	// Check: every non-constructor keyword in Keywords is in the grammar.
 	for kw := range Keywords {
-		if isConstructor(kw) || kw == "Unit" {
+		if IsConstructor(kw) || kw == "Unit" {
 			continue // checked separately below
 		}
 		if !tmKeywords[kw] {
@@ -75,7 +75,7 @@ func TestTextMateKeywordSync(t *testing.T) {
 }
 
 // TestTextMateTypeConstructorSync verifies that the TextMate grammar's
-// type-constructors pattern matches the scanner's isConstructor function.
+// type-constructors pattern matches the scanner's IsConstructor function.
 func TestTextMateTypeConstructorSync(t *testing.T) {
 	data, err := os.ReadFile("../../editors/doit.tmLanguage.json")
 	if err != nil {
@@ -110,8 +110,8 @@ func TestTextMateTypeConstructorSync(t *testing.T) {
 
 	// Check: every TextMate type constructor is known to the scanner.
 	for ty := range tmTypes {
-		if !isConstructor(ty) && ty != "Unit" {
-			t.Errorf("type %q in TextMate grammar but not in scanner.isConstructor", ty)
+		if !IsConstructor(ty) && ty != "Unit" {
+			t.Errorf("type %q in TextMate grammar but not in scanner.IsConstructor", ty)
 		}
 	}
 }

@@ -34,19 +34,18 @@ node codec/refcodec.js encode file.json  # encode with reference
   time
 - **`codec/`** — Encodes and decodes the Base62 strings used by the game to
   represent blueprints and behaviors. Tests live in `codec/codec_test.go`.
+- **`syntax/`** — Authoritative lexical grammar for doit. Contains
+  the scanner (`scanner.go`), token types, keywords, type constructors,
+  the semantic tokenizer (`highlight.go`), and grammar sync tests
+  (`grammar_sync_test.go`). Used by both the compiler and LSP.
 - **`compiler/`** — Compiles the doit language into the structured
   representation supported by the `codec` package. Tests live in
   `compiler/compiler_test.go`, using test cases from `compiler/tests/`.
-  Also contains `highlight.go` — a semantic tokenizer (`Tokenize`)
-  that classifies source tokens into LSP semantic types (keyword,
-  function, variable, parameter, type, label, register, etc.) using
-  the scanner's `rawNext()` method with context-aware classification.
-  `grammar_sync_test.go` verifies that keywords, type constructors,
-  and escape sequences stay in sync between `scanner.go` and the
-  TextMate grammar (`editors/doit.tmLanguage.json`).
+  The compiler's `scanner` wraps `syntax.Scanner`, keeping a local
+  `token` type with lowercase fields to minimize refactoring churn.
 - **`lsp/`** — Language Server Protocol server for doit. Communicates
   over stdio JSON-RPC 2.0. Provides semantic token highlighting via
-  the compiler's `Tokenize` function. Invoked as `doit language-server`.
+  the `syntax.Tokenize` function. Invoked as `doit language-server`.
 
 ## Toolchain functionality
 

@@ -6,6 +6,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/tobyn/doit/toolchain/syntax"
 )
 
 // --- Behavior subroutine calls (call keyword) ---
@@ -263,7 +265,7 @@ func (p *parser) compileDependency(behaviorID string, pos int) (map[string]any, 
 	// Create a sub-parser for the callee's source
 	dp := &parser{
 		scanner: scanner{
-			src:          bhv.sourceText,
+			syn:          syntax.Scanner{Src: bhv.sourceText},
 			locale:       p.locale,
 			sourceFile:   bhv.sourcePath,
 			sourceOffset: sourceOffset,
@@ -290,7 +292,7 @@ func (p *parser) compileDependency(behaviorID string, pos int) (map[string]any, 
 
 	// Skip pass 1 — the sub-parser already has all symbols cloned from the root.
 	// Just find and compile the target behavior.
-	dp.pos = 0
+	dp.syn.Pos = 0
 	dp.ungot = nil
 	for {
 		tok, err := dp.next()

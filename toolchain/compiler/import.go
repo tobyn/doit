@@ -6,6 +6,8 @@ import (
 	"maps"
 	"path"
 	"strings"
+
+	"github.com/tobyn/doit/toolchain/syntax"
 )
 
 // ImportStmt represents a parsed import statement.
@@ -86,7 +88,7 @@ func (p *parser) parseImports() error {
 //	import "<path>" as <namespace>
 //	import <names> from "<path>" as <namespace>
 func (p *parser) parseImportStmt() (ImportStmt, error) {
-	startPos := p.pos
+	startPos := p.syn.Pos
 
 	// Peek to determine form: path string or name list
 	tok, err := p.next()
@@ -246,7 +248,7 @@ func (p *parser) parseImportNames() ([]ImportName, bool, error) {
 	}
 
 	if len(names) == 0 && !hasGlob {
-		return nil, false, p.errorf(p.pos, "expected at least one import name or '*'")
+		return nil, false, p.errorf(p.syn.Pos, "expected at least one import name or '*'")
 	}
 
 	return names, hasGlob, nil
@@ -362,7 +364,7 @@ func (p *parser) parseImportedFile(fsys fs.FS, filePath string, pos int) (*impor
 	// normal import path.
 	ip := &parser{
 		scanner: scanner{
-			src:          src,
+			syn:          syntax.Scanner{Src: src},
 			locale:       p.locale,
 			sourceFile:   filePath,
 			sourceOffset: sourceOffset,

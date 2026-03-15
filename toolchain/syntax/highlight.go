@@ -1,9 +1,9 @@
-package compiler
+package syntax
 
 // --- Semantic Token Types ---
 //
 // Tokenize produces classified token spans from doit source code for use
-// in syntax highlighting. It uses the compiler's scanner with lightweight
+// in syntax highlighting. It uses the scanner (RawNext) with lightweight
 // context tracking to classify tokens semantically without requiring a
 // full parse.
 
@@ -109,12 +109,12 @@ const (
 )
 
 // Tokenize produces semantic tokens for the given doit source code.
-// It uses the compiler's scanner (rawNext) with lightweight context
+// It uses the scanner's RawNext method with lightweight context
 // tracking to classify tokens semantically without requiring a full
 // parse. Tokens are returned in source order.
 func Tokenize(src string) []SemanticToken {
 	t := &tokenizer{
-		s:      scanner{src: src},
+		s:      Scanner{Src: src},
 		tokens: make([]SemanticToken, 0, 256),
 	}
 	t.tokenize()
@@ -122,7 +122,7 @@ func Tokenize(src string) []SemanticToken {
 }
 
 type tokenizer struct {
-	s      scanner
+	s      Scanner
 	tokens []SemanticToken
 	ctx    highlightContext
 	// Track brace depth for enum body detection.
@@ -153,27 +153,27 @@ func (t *tokenizer) flushPendingAt() {
 func (t *tokenizer) tokenize() {
 	t.pendingAt = -1
 	for {
-		prevPos := t.s.pos
-		tok, err := t.s.rawNext()
+		prevPos := t.s.Pos
+		tok, err := t.s.RawNext()
 		if err != nil {
 			// Ensure progress on scanner errors (some don't advance pos).
-			if t.s.pos <= prevPos {
-				t.s.pos = prevPos + 1
+			if t.s.Pos <= prevPos {
+				t.s.Pos = prevPos + 1
 			}
 			continue
 		}
-		if tok.kind == tokEOF {
+		if tok.Kind == TokEOF {
 			t.flushPendingAt()
 			break
 		}
 
-		rawLen := t.s.pos - tok.pos
+		rawLen := t.s.Pos - tok.Pos
 
 		// Handle @N slot reference detection: if we have a pending @
 		// and this token is a number immediately after it, combine them.
 		if t.pendingAt >= 0 {
-			if tok.kind == tokNumber && tok.pos == t.pendingAt+1 {
-				t.emit(t.pendingAt, t.s.pos-t.pendingAt, TokenVariable, 0)
+			if tok.Kind == TokNumber && tok.Pos == t.pendingAt+1 {
+				t.emit(t.pendingAt, t.s.Pos-t.pendingAt, TokenVariable, 0)
 				t.pendingAt = -1
 				t.ctx = ctxNone
 				continue
@@ -181,48 +181,48 @@ func (t *tokenizer) tokenize() {
 			t.flushPendingAt()
 		}
 
-		switch tok.kind {
-		case tokComment:
-			if len(tok.val) >= 2 && tok.val[1] == '!' {
-				t.emit(tok.pos, rawLen, TokenComment, ModDocumentation)
+		switch tok.Kind {
+		case TokComment:
+			if len(tok.Val) >= 2 && tok.Val[1] == '!' {
+				t.emit(tok.Pos, rawLen, TokenComment, ModDocumentation)
 			} else {
-				t.emit(tok.pos, rawLen, TokenComment, 0)
+				t.emit(tok.Pos, rawLen, TokenComment, 0)
 			}
 
-		case tokString:
-			t.emit(tok.pos, rawLen, TokenString, 0)
+		case TokString:
+			t.emit(tok.Pos, rawLen, TokenString, 0)
 			t.ctx = ctxNone
 
-		case tokNumber:
-			t.emit(tok.pos, rawLen, TokenNumber, 0)
+		case TokNumber:
+			t.emit(tok.Pos, rawLen, TokenNumber, 0)
 			t.ctx = ctxNone
 
-		case tokIdent:
-			if len(tok.val) > 0 && tok.val[0] == '$' {
+		case TokIdent:
+			if len(tok.Val) > 0 && tok.Val[0] == '$' {
 				// Register reference ($ident).
 				if t.ctx == ctxAfterOn {
-					t.emit(tok.pos, rawLen, TokenParameter, 0)
+					t.emit(tok.Pos, rawLen, TokenParameter, 0)
 				} else {
-					t.emit(tok.pos, rawLen, TokenRegister, 0)
+					t.emit(tok.Pos, rawLen, TokenRegister, 0)
 				}
 				t.ctx = ctxNone
 			} else {
-				t.classifyIdent(tok.pos, tok.val)
+				t.classifyIdent(tok.Pos, tok.Val)
 			}
 
-		case tokLabel:
-			t.emit(tok.pos, rawLen, TokenLabel, 0)
+		case TokLabel:
+			t.emit(tok.Pos, rawLen, TokenLabel, 0)
 			t.ctx = ctxNone
 
-		case tokAt:
+		case TokAt:
 			// Defer emission — might be @N (slot reference).
-			t.pendingAt = tok.pos
+			t.pendingAt = tok.Pos
 
-		case tokDoubleColon:
-			t.emit(tok.pos, rawLen, TokenOperator, 0)
+		case TokDoubleColon:
+			t.emit(tok.Pos, rawLen, TokenOperator, 0)
 			t.ctx = ctxAfterDoubleColon
 
-		case tokLBrace:
+		case TokLBrace:
 			t.braceDepth++
 			if t.ctx == ctxAfterEnum {
 				t.enumBraceDepth = t.braceDepth
@@ -232,33 +232,33 @@ func (t *tokenizer) tokenize() {
 			} else {
 				t.ctx = ctxNone
 			}
-			t.emit(tok.pos, rawLen, TokenOperator, 0)
+			t.emit(tok.Pos, rawLen, TokenOperator, 0)
 
-		case tokRBrace:
+		case TokRBrace:
 			if t.ctx == ctxInEnumBody && t.braceDepth == t.enumBraceDepth {
 				t.ctx = ctxNone
 				t.enumBraceDepth = 0
 			}
 			t.braceDepth--
-			t.emit(tok.pos, rawLen, TokenOperator, 0)
+			t.emit(tok.Pos, rawLen, TokenOperator, 0)
 
-		case tokDot:
-			t.emit(tok.pos, rawLen, TokenOperator, 0)
+		case TokDot:
+			t.emit(tok.Pos, rawLen, TokenOperator, 0)
 			t.ctx = ctxAfterDot
 
-		case tokComma:
-			t.emit(tok.pos, rawLen, TokenOperator, 0)
+		case TokComma:
+			t.emit(tok.Pos, rawLen, TokenOperator, 0)
 			// Don't reset context (preserves for-loop ident context, import context).
 
-		case tokLParen, tokRParen, tokColon:
-			t.emit(tok.pos, rawLen, TokenOperator, 0)
+		case TokLParen, TokRParen, TokColon:
+			t.emit(tok.Pos, rawLen, TokenOperator, 0)
 			if t.ctx != ctxAfterForIdents && t.ctx != ctxAfterImport {
 				t.ctx = ctxNone
 			}
 
 		default:
 			// All other operators.
-			t.emit(tok.pos, rawLen, TokenOperator, 0)
+			t.emit(tok.Pos, rawLen, TokenOperator, 0)
 			t.ctx = ctxNone
 		}
 	}
@@ -394,7 +394,7 @@ func (t *tokenizer) classifyIdentDefault(offset int, word string) {
 	length := len(word)
 
 	// Type constructors.
-	if isConstructor(word) || word == "Unit" {
+	if IsConstructor(word) || word == "Unit" {
 		t.emit(offset, length, TokenType, 0)
 		t.ctx = ctxNone
 		return

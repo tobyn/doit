@@ -89,11 +89,11 @@ func (p *parser) parseAssertStmt(ctx *parseContext, comment string, assertPos in
 	}
 	// Capture source text of condition: from the start of the first condition
 	// token to the position of the next peeked token.
-	condEnd := p.pos
+	condEnd := p.syn.Pos
 	if p.ungot != nil {
 		condEnd = p.ungot.pos
 	}
-	stmt.ConditionText = strings.TrimSpace(p.src[condStart:condEnd])
+	stmt.ConditionText = strings.TrimSpace(p.syn.Src[condStart:condEnd])
 	stmt.Condition = cond
 
 	// Parse optional trailing `, "message"` and/or `, value: <expr>`.
@@ -267,7 +267,7 @@ func (p *parser) parseAssertParens(ctx *parseContext, stmt *AssertStmt, lparenPo
 
 		// Parse as expression (could be string literal or condition)
 		p.unget(peek)
-		condStart := p.pos
+		condStart := p.syn.Pos
 		if p.ungot != nil {
 			condStart = p.ungot.pos
 		}
@@ -275,7 +275,7 @@ func (p *parser) parseAssertParens(ctx *parseContext, stmt *AssertStmt, lparenPo
 		if err != nil {
 			return nil, err
 		}
-		condEnd := p.pos
+		condEnd := p.syn.Pos
 		if p.ungot != nil {
 			condEnd = p.ungot.pos
 		}
@@ -284,7 +284,7 @@ func (p *parser) parseAssertParens(ctx *parseContext, stmt *AssertStmt, lparenPo
 		positionalExprs = append(positionalExprs, expr)
 		// Store condition text for first non-string positional
 		if peek.kind != tokString && stmt.ConditionText == "" {
-			stmt.ConditionText = strings.TrimSpace(p.src[condStart:condEnd])
+			stmt.ConditionText = strings.TrimSpace(p.syn.Src[condStart:condEnd])
 		}
 	}
 

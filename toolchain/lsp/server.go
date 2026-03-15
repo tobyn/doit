@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tobyn/doit/toolchain/compiler"
+	"github.com/tobyn/doit/toolchain/syntax"
 )
 
 // Server is the doit language server.
@@ -197,8 +197,8 @@ func (s *Server) handleInitialize(msg *jsonrpcMessage) {
 			},
 			"semanticTokensProvider": map[string]any{
 				"legend": map[string]any{
-					"tokenTypes":     compiler.SemanticTokenTypes(),
-					"tokenModifiers": compiler.SemanticTokenModifiers(),
+					"tokenTypes":     syntax.SemanticTokenTypes(),
+					"tokenModifiers": syntax.SemanticTokenModifiers(),
 				},
 				"full": true,
 			},
@@ -292,14 +292,14 @@ func (s *Server) handleSemanticTokensFull(msg *jsonrpcMessage) {
 		return
 	}
 
-	tokens := compiler.Tokenize(src)
+	tokens := syntax.Tokenize(src)
 	data := encodeSemanticTokens(src, tokens)
 	s.sendResponse(msg.ID, map[string]any{"data": data})
 }
 
 // encodeSemanticTokens converts absolute token positions to the LSP
 // relative encoding: [deltaLine, deltaStartChar, length, tokenType, tokenModifiers].
-func encodeSemanticTokens(src string, tokens []compiler.SemanticToken) []int {
+func encodeSemanticTokens(src string, tokens []syntax.SemanticToken) []int {
 	data := make([]int, 0, len(tokens)*5)
 	prevLine := 0
 	prevCol := 0

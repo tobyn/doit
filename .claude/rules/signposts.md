@@ -20,8 +20,10 @@ topic is relevant to your current task.
 - **TextMate grammar** — `editors/doit.tmLanguage.json`
   Regex-based syntax highlighting grammar for doit. Used by VS Code,
   JetBrains (via TextMate bundles), and web highlighters (Shiki).
-- **Semantic tokenizer** — `toolchain/compiler/highlight.go`
+- **Semantic tokenizer** — `toolchain/syntax/highlight.go`
   Context-aware token classifier producing LSP semantic types.
+- **Lexical grammar** — `toolchain/syntax/scanner.go`
+  Authoritative token definitions, scanner, keywords, and type constructors.
 - **Language server** — `toolchain/lsp/server.go`
   LSP server over stdio. Invoked as `doit language-server`.
 

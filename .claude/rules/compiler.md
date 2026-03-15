@@ -28,13 +28,20 @@ see `.claude/learnings/test_format.md`.
   handler continuations and jump targets make subsequent code
   reachable. If not found, the code is warned about and skipped via
   `skipToCloseBrace`.
-- **`scanner.go`** — `scanner` struct (embedded by `parser`), token
-  types, `Keywords` map, `skipToCloseBrace`. Two scanning methods:
-  `rawNext()` scans one token including comments (returns `tokComment`);
-  `next()` wraps `rawNext()`, filtering comments and accumulating
-  `#!` doc comments. The semantic tokenizer (`highlight.go`) uses
-  `rawNext()` directly to get comment tokens. The `scanner` has a
-  `sourceOffset` field (byte offset of user source after prepended
+- **`scanner.go`** — Thin wrapper around `syntax.Scanner`. The
+  `scanner` struct stores a `syntax.Scanner` as field `syn` and keeps
+  a local `token` type with lowercase fields (`kind`, `val`, `pos`)
+  to avoid mass renames across the compiler. `rawNext()` delegates to
+  `syn.RawNext()` and converts; `next()` wraps `rawNext()`, filtering
+  comments and accumulating `#!` doc comments. Token kind constants
+  are aliases (`tokEOF = syntax.TokEOF`, etc.) plus compiler-internal
+  kinds `tokIs` (200) and `tokTruthy` (201). `Keywords`,
+  `isConstructor`, `isIdentStart`, `isIdentCont` are re-exported from
+  syntax. Parser-specific methods remain: `posToLineCol`,
+  `sourceAnnotation`, `errorf`, `expect`, `blockContainsReachabilityPath`,
+  `skipToCloseBrace`, `save`/`restore`, `unget`, `next`,
+  `parseLocalePrefix`, `resolveLocalizedDocComment`. The `scanner` has
+  a `sourceOffset` field (byte offset of user source after prepended
   prelude; `posToLineCol` starts counting from this offset). The
   `parser` struct extends `scanner` with `fns`, `iters`, `consts`,
   `enums`, import state, `prelude` string (propagated to sub-parsers),

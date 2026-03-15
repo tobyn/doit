@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tobyn/doit/toolchain/compiler"
+	"github.com/tobyn/doit/toolchain/syntax"
 )
 
 func TestInitializeResponse(t *testing.T) {
@@ -50,9 +50,9 @@ func TestSemanticTokensFull(t *testing.T) {
 	}
 
 	// First token: "let" at line 0, col 0, length 3, type=keyword
-	assertData(t, data, 0, 0, 0, 3, int(compiler.TokenKeyword), 0)
+	assertData(t, data, 0, 0, 0, 3, int(syntax.TokenKeyword), 0)
 	// Second token: "x" at line 0, col 4, length 1, type=variable
-	assertData(t, data, 1, 0, 4, 1, int(compiler.TokenVariable), int(compiler.ModDeclaration|compiler.ModReadonly))
+	assertData(t, data, 1, 0, 4, 1, int(syntax.TokenVariable), int(syntax.ModDeclaration|syntax.ModReadonly))
 }
 
 func TestSemanticTokensMultiLine(t *testing.T) {
@@ -72,7 +72,7 @@ func TestSemanticTokensMultiLine(t *testing.T) {
 	}
 
 	// Token 4 (second "let"): deltaLine=1, deltaCol=0
-	assertData(t, data, 4, 1, 0, 3, int(compiler.TokenKeyword), 0)
+	assertData(t, data, 4, 1, 0, 3, int(syntax.TokenKeyword), 0)
 }
 
 func TestDocumentLifecycle(t *testing.T) {
@@ -131,7 +131,7 @@ func TestDocumentLifecycle(t *testing.T) {
 		t.Errorf("response 2: expected 20 data values, got %d", len(data2))
 	}
 	// "var" keyword should have the same type as "let" (TokenKeyword)
-	assertData(t, data2, 0, 0, 0, 3, int(compiler.TokenKeyword), 0)
+	assertData(t, data2, 0, 0, 0, 3, int(syntax.TokenKeyword), 0)
 
 	// Third response: empty after close
 	data3, _ := responses[2]["data"].([]any)

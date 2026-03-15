@@ -922,7 +922,7 @@ func (p *parser) parseFile() (*codec.Object, error) {
 	}
 
 	// Pass 2: find and compile the behavior
-	p.pos = 0
+	p.syn.Pos = 0
 	p.ungot = nil
 	for {
 		tok, err := p.next()
@@ -1173,7 +1173,7 @@ func (p *parser) collectDecls(isImport bool) error {
 				params:     params,
 				sourceFS:   p.sourceFS,
 				sourcePath: p.sourcePath,
-				sourceText: p.src,
+				sourceText: p.syn.Src,
 				prelude:    p.prelude,
 			}
 			if isImport {

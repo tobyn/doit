@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tobyn/doit/toolchain/codec"
+	"github.com/tobyn/doit/toolchain/syntax"
 )
 
 // Compile reads doit source from r and compiles it into a codec Object.
@@ -62,7 +63,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 	release := len(releaseMode) > 0 && releaseMode[0]
 
 	p := &parser{
-		scanner:    scanner{src: src, locale: locale, sourceOffset: sourceOffset},
+		scanner:    scanner{syn: syntax.Scanner{Src: src}, locale: locale, sourceOffset: sourceOffset},
 		fns:        map[string]*fnDef{},
 		iters:      map[string]*iterDef{},
 		target:     behaviorID,
@@ -86,7 +87,7 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 
 // hasSkipPrelude reports whether the source starts with a `skip prelude` directive.
 func hasSkipPrelude(src string) bool {
-	s := &scanner{src: src}
+	s := &scanner{syn: syntax.Scanner{Src: src}}
 	tok1, err := s.next()
 	if err != nil || tok1.kind != tokIdent || tok1.val != "skip" {
 		return false
