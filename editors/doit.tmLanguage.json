@@ -1,0 +1,292 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "doit",
+    "scopeName": "source.doit",
+    "fileTypes": ["doit"],
+    "patterns": [
+        { "include": "#comments" },
+        { "include": "#declarations" },
+        { "include": "#statements" }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.documentation.doit",
+                    "match": "#!.*$"
+                },
+                {
+                    "name": "comment.line.number-sign.doit",
+                    "match": "#.*$"
+                }
+            ]
+        },
+
+        "declarations": {
+            "patterns": [
+                { "include": "#behavior-declaration" },
+                { "include": "#function-declaration" },
+                { "include": "#iterator-declaration" },
+                { "include": "#enum-declaration" },
+                { "include": "#const-declaration" },
+                { "include": "#import-statement" }
+            ]
+        },
+
+        "behavior-declaration": {
+            "match": "\\b(behavior)\\s+(\"[^\"]*\"|[a-zA-Z_][a-zA-Z0-9_]*)\\s*",
+            "captures": {
+                "1": { "name": "keyword.declaration.behavior.doit" },
+                "2": { "name": "entity.name.type.behavior.doit" }
+            }
+        },
+
+        "function-declaration": {
+            "match": "\\b(private\\s+)?(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*",
+            "captures": {
+                "1": { "name": "storage.modifier.private.doit" },
+                "2": { "name": "keyword.declaration.function.doit" },
+                "3": { "name": "entity.name.function.doit" }
+            }
+        },
+
+        "iterator-declaration": {
+            "match": "\\b(private\\s+)?(iter)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*",
+            "captures": {
+                "1": { "name": "storage.modifier.private.doit" },
+                "2": { "name": "keyword.declaration.iterator.doit" },
+                "3": { "name": "entity.name.function.iterator.doit" }
+            }
+        },
+
+        "enum-declaration": {
+            "match": "\\b(enum)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*",
+            "captures": {
+                "1": { "name": "keyword.declaration.enum.doit" },
+                "2": { "name": "entity.name.type.enum.doit" }
+            }
+        },
+
+        "const-declaration": {
+            "match": "\\b(const)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*",
+            "captures": {
+                "1": { "name": "keyword.declaration.const.doit" },
+                "2": { "name": "variable.other.constant.doit" }
+            }
+        },
+
+        "import-statement": {
+            "patterns": [
+                {
+                    "match": "\\b(import)\\s+(\\*)\\s+(from)\\s+(\"[^\"]*\")",
+                    "captures": {
+                        "1": { "name": "keyword.control.import.doit" },
+                        "2": { "name": "keyword.operator.glob.doit" },
+                        "3": { "name": "keyword.control.from.doit" },
+                        "4": { "name": "string.quoted.double.doit" }
+                    }
+                },
+                {
+                    "begin": "\\b(import)\\s*\\{",
+                    "beginCaptures": {
+                        "1": { "name": "keyword.control.import.doit" }
+                    },
+                    "end": "\\}\\s*(from)\\s*(\"[^\"]*\")",
+                    "endCaptures": {
+                        "1": { "name": "keyword.control.from.doit" },
+                        "2": { "name": "string.quoted.double.doit" }
+                    },
+                    "patterns": [
+                        {
+                            "match": "\\b(as)\\b",
+                            "name": "keyword.control.as.doit"
+                        },
+                        {
+                            "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+                            "name": "entity.name.function.doit"
+                        }
+                    ]
+                }
+            ]
+        },
+
+        "statements": {
+            "patterns": [
+                { "include": "#directives" },
+                { "include": "#strings" },
+                { "include": "#numbers" },
+                { "include": "#labels" },
+                { "include": "#registers" },
+                { "include": "#type-constructors" },
+                { "include": "#enum-access" },
+                { "include": "#dot-access" },
+                { "include": "#slot-references" },
+                { "include": "#control-flow-keywords" },
+                { "include": "#declaration-keywords" },
+                { "include": "#mode-keywords" },
+                { "include": "#literal-keywords" },
+                { "include": "#operator-keywords" },
+                { "include": "#other-keywords" },
+                { "include": "#operators" },
+                { "include": "#identifiers" }
+            ]
+        },
+
+        "directives": {
+            "patterns": [
+                {
+                    "match": "(@)(name|keepvars|keeparrays|signal)\\b",
+                    "captures": {
+                        "1": { "name": "punctuation.definition.directive.doit" },
+                        "2": { "name": "keyword.other.directive.doit" }
+                    }
+                },
+                {
+                    "match": "(@)(param)\\s+(in|out|inout)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+(\"[^\"]*\")",
+                    "captures": {
+                        "1": { "name": "punctuation.definition.directive.doit" },
+                        "2": { "name": "keyword.other.directive.doit" },
+                        "3": { "name": "storage.modifier.direction.doit" },
+                        "4": { "name": "variable.parameter.doit" },
+                        "5": { "name": "string.quoted.double.doit" }
+                    }
+                }
+            ]
+        },
+
+        "strings": {
+            "name": "string.quoted.double.doit",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.doit",
+                    "match": "\\\\[\"\\\\nt]"
+                }
+            ]
+        },
+
+        "numbers": {
+            "name": "constant.numeric.integer.doit",
+            "match": "\\b[0-9]+\\b"
+        },
+
+        "labels": {
+            "match": "'([a-zA-Z_][a-zA-Z0-9_]*)",
+            "captures": {
+                "0": { "name": "entity.name.label.doit" }
+            }
+        },
+
+        "registers": {
+            "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*",
+            "name": "variable.other.register.doit"
+        },
+
+        "type-constructors": {
+            "match": "\\b(Coordinate|Component|Item|Range|Technology|Value|Unit)\\b",
+            "name": "support.type.constructor.doit"
+        },
+
+        "enum-access": {
+            "match": "\\b([A-Z][a-zA-Z0-9_]*)\\s*(::)\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+            "captures": {
+                "1": { "name": "entity.name.type.enum.doit" },
+                "2": { "name": "punctuation.separator.double-colon.doit" },
+                "3": { "name": "variable.other.enummember.doit" }
+            }
+        },
+
+        "dot-access": {
+            "match": "\\.(number|value)\\b",
+            "captures": {
+                "0": { "name": "variable.other.property.doit" }
+            }
+        },
+
+        "slot-references": {
+            "match": "@([0-9]+)",
+            "name": "variable.other.slot.doit"
+        },
+
+        "control-flow-keywords": {
+            "match": "\\b(if|else|while|loop|for|in|break|continue|return|exit|restart|wait|last|yield|jump|label|on)\\b",
+            "name": "keyword.control.doit"
+        },
+
+        "declaration-keywords": {
+            "match": "\\b(let|var)\\b",
+            "name": "keyword.declaration.variable.doit"
+        },
+
+        "mode-keywords": {
+            "match": "\\b(locked|unlocked)\\b",
+            "name": "keyword.other.mode.doit"
+        },
+
+        "literal-keywords": {
+            "match": "\\b(true|false|null|infinity|not_equal)\\b",
+            "name": "constant.language.doit"
+        },
+
+        "operator-keywords": {
+            "match": "\\b(is|in|out|inout|exec|as)\\b",
+            "name": "keyword.operator.doit"
+        },
+
+        "other-keywords": {
+            "match": "\\b(instruction|iterator_instruction|call|localize|skip|assert|param|private)\\b",
+            "name": "keyword.other.doit"
+        },
+
+        "operators": {
+            "patterns": [
+                {
+                    "match": "->",
+                    "name": "punctuation.separator.arrow.doit"
+                },
+                {
+                    "match": "&&|\\|\\|",
+                    "name": "keyword.operator.logical.doit"
+                },
+                {
+                    "match": "==|!=|<=|>=|<|>",
+                    "name": "keyword.operator.comparison.doit"
+                },
+                {
+                    "match": "\\+=|-=|\\*=|/=|%=",
+                    "name": "keyword.operator.assignment.compound.doit"
+                },
+                {
+                    "match": "\\+\\+|--",
+                    "name": "keyword.operator.increment-decrement.doit"
+                },
+                {
+                    "match": "=",
+                    "name": "keyword.operator.assignment.doit"
+                },
+                {
+                    "match": "\\+|-|\\*|/|%",
+                    "name": "keyword.operator.arithmetic.doit"
+                },
+                {
+                    "match": "&",
+                    "name": "keyword.operator.ampersand.doit"
+                },
+                {
+                    "match": "!",
+                    "name": "keyword.operator.logical.not.doit"
+                },
+                {
+                    "match": "::",
+                    "name": "punctuation.separator.double-colon.doit"
+                }
+            ]
+        },
+
+        "identifiers": {
+            "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b",
+            "name": "variable.other.doit"
+        }
+    }
+}
