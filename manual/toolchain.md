@@ -22,6 +22,15 @@ behavior ID.
 If `-e` or `--error` is provided, any compiler warnings are treated as errors
 and compilation will fail. This is useful for CI pipelines or strict mode.
 
+Compiler errors and warnings include the source line and a caret pointing to the
+error location:
+
+```
+error: 3:9: unknown function or variable "foo"
+  3 |     x = foo(42)
+    |         ^
+```
+
 The compiled behavior is encoded as a Base62 string and written to `output_path`
 if `-o` is provided, or stdout otherwise. If `-j` or `--json` is provided, the
 JSON representation of the behavior is emitted instead of the Base62 string.

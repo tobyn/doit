@@ -229,10 +229,11 @@ func (s *scanner) posToLineCol(pos int) (line, col int) {
 func (p *parser) warnf(pos int, format string, args ...any) {
 	line, col := p.posToLineCol(pos)
 	msg := fmt.Sprintf(format, args...)
+	annotation := p.sourceAnnotation(pos)
 	if p.sourceFile != "" {
-		p.warnings = append(p.warnings, fmt.Sprintf("%s:%d:%d: %s", p.sourceFile, line, col, msg))
+		p.warnings = append(p.warnings, fmt.Sprintf("%s:%d:%d: %s%s", p.sourceFile, line, col, msg, annotation))
 	} else {
-		p.warnings = append(p.warnings, fmt.Sprintf("%d:%d: %s", line, col, msg))
+		p.warnings = append(p.warnings, fmt.Sprintf("%d:%d: %s%s", line, col, msg, annotation))
 	}
 }
 
@@ -283,13 +284,68 @@ func (p *parser) enterExecBlock() func() {
 	}
 }
 
+// sourceAnnotation returns source line + caret annotation for an error at pos.
+// Returns empty string if pos is in the prelude or annotation can't be built.
+func (s *scanner) sourceAnnotation(pos int) string {
+	if pos < s.sourceOffset || pos >= len(s.src) {
+		return ""
+	}
+
+	// Find line start and end.
+	lineStart := pos
+	for lineStart > s.sourceOffset && s.src[lineStart-1] != '\n' {
+		lineStart--
+	}
+	lineEnd := pos
+	for lineEnd < len(s.src) && s.src[lineEnd] != '\n' {
+		lineEnd++
+	}
+
+	sourceLine := s.src[lineStart:lineEnd]
+	if strings.TrimSpace(sourceLine) == "" {
+		return ""
+	}
+
+	line, _ := s.posToLineCol(pos)
+	col := pos - lineStart // 0-based byte offset into the line
+
+	// Expand tabs and compute display column.
+	var display strings.Builder
+	displayCol := 0
+	for i, c := range sourceLine {
+		if c == '\t' {
+			spaces := 4 - (display.Len() % 4)
+			for range spaces {
+				display.WriteByte(' ')
+			}
+			if i < col {
+				displayCol = display.Len()
+			}
+		} else {
+			display.WriteRune(c)
+			if i < col {
+				displayCol = display.Len()
+			}
+		}
+	}
+	if col == 0 {
+		displayCol = 0
+	}
+
+	lineNum := fmt.Sprintf("%d", line)
+	padding := strings.Repeat(" ", len(lineNum))
+
+	return fmt.Sprintf("\n  %s | %s\n  %s | %s^", lineNum, display.String(), padding, strings.Repeat(" ", displayCol))
+}
+
 func (s *scanner) errorf(pos int, format string, args ...any) error {
 	line, col := s.posToLineCol(pos)
 	msg := fmt.Sprintf(format, args...)
+	annotation := s.sourceAnnotation(pos)
 	if s.sourceFile != "" {
-		return fmt.Errorf("%s:%d:%d: %s", s.sourceFile, line, col, msg)
+		return fmt.Errorf("%s:%d:%d: %s%s", s.sourceFile, line, col, msg, annotation)
 	}
-	return fmt.Errorf("%d:%d: %s", line, col, msg)
+	return fmt.Errorf("%d:%d: %s%s", line, col, msg, annotation)
 }
 
 // parseLocalePrefix checks if line starts with a (locale) prefix.

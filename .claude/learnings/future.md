@@ -15,8 +15,6 @@ register types.
 
 ## 1.0 burndown
 
-- **Error message quality** — review compiler errors for clarity and
-  source locations. Important for new users at 1.0.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
