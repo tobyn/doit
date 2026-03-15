@@ -58,10 +58,15 @@ see `.claude/learnings/test_format.md`.
   (`emitFnBody`), instruction parsing (`parseInstruction`), call
   expansion (`expandCall`), `resolveInstructionFrame`, enum/const
   parsing, compile-time evaluator (`tryEvalExpr`/`tryEvalCall`).
-- **`bhvast.go`** — Behavior-level AST parsers and emitters. Shared
-  expression parsers used by both behavior and fn body paths:
-  `parseArithExpr` chain, `parseBoolExpr`/`parseBoolChain`,
-  `maybeExprContinuation`. Behavior-level emitters:
+- **`expr.go`** — Shared expression parsers parameterized by
+  `operandResolver`. Arithmetic parsing (`parseArithExpr` chain,
+  `parseArithPrimary`, constructors, dot access, compile-time
+  folding), boolean expression parsing (`parseBoolExpr`,
+  `parseBoolChain`, `parseBoolPrimary`, `collectAndChain`), and
+  `maybeExprContinuation`. Used by both behavior and fn body paths.
+- **`bhvast.go`** — Behavior-level AST parsers and emitters.
+  Context setup (`bhvResolver`, `bhvParseCtx`, `bhvEmitCtx`),
+  operand resolution (`resolveBhvOperand`), behavior-level emitters:
   `emitBehaviorStmts`, `emitBhvStmtSimple`, `emitBhvCallStmt`.
 - **`codegen.go`** — `parseStmtBlock` (unified statement-block
   parser for all three modes), `parseBehaviorBody` (two-phase
