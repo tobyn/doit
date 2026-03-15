@@ -230,6 +230,11 @@ func TestFormat(t *testing.T) {
 			input: "if x is Item { exit }\n",
 			want:  "if x is Item { exit }\n",
 		},
+		{
+			name:  "label before paren no space",
+			input: "exec 0: 'larger (@1)\n",
+			want:  "exec 0: 'larger(@1)\n",
+		},
 	}
 
 	for _, tt := range tests {

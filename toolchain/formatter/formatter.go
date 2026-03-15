@@ -189,6 +189,11 @@ func needsSpace(prevprev, prev, cur *syntax.Token) bool {
 		return false
 	}
 
+	// Label before ( — no space: 'larger(@1)
+	if p == syntax.TokLabel && c == syntax.TokLParen {
+		return false
+	}
+
 	// Identifier before ( — space for block keywords, no space for calls
 	if p == syntax.TokIdent && c == syntax.TokLParen {
 		return blockKeywords[prev.Val]
