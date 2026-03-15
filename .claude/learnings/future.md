@@ -17,21 +17,10 @@ register types.
 
 - **Error message quality** — review compiler errors for clarity and
   source locations. Important for new users at 1.0.
-- ~~**Function/behavior parsing parity**~~ — **Done.** Unified into
-  `parseStmtBlock` (codegen.go) with `parseMode` enum. Both
-  `parseBhvStmtBlockInner` and `parseFnBodyStmtsInner` are now thin
-  delegates. Feature drift is structurally eliminated.
 - **Developer tools** — language server, syntax highlighting for
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
-- ~~**Long frame gaps hang Desynced editor**~~ — **Fixed.** The
-  game's visual editor has exponential-cost layout when exec slot
-  connections span large frame index gaps. Event handler continuation
-  triggered this: handlers emitted at the end created ~800-frame
-  backward jumps. Fix: post-emission frame reordering pass that
-  places event handler chains adjacent to their continuation target,
-  minimizing all jump distances.
 
 ## Lint mode
 

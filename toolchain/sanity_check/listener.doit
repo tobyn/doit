@@ -14,7 +14,7 @@
 #   2. Run it — it will wait for Unit A to set up faction registers
 #      and radio transmission, then verify
 #
-# Expected Result: 5
+# Expected Result: 6
 # ============================================================
 
 behavior listener {
@@ -24,6 +24,20 @@ behavior listener {
 
     $result = 0
     $failed = 0
+
+    wait 600
+    $failed = 6
+    exit
+
+    # ----------------------------------------------------------
+    # Test 6: Radio event handler (on radio)
+    # ----------------------------------------------------------
+    # Unit A broadcasts 123 on Item("metalbar") band. The event
+    # handler below should have fired during the wait and captured
+    # the signal value.
+    on radio(Item("metalbar")) -> sig {
+        if sig == 123 { $result += 1 } else { $failed = 6; ; exit }  # 6
+    }
 
     # ----------------------------------------------------------
     # Test 1: Faction register written by Unit A
