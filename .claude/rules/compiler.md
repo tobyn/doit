@@ -83,6 +83,11 @@ see `.claude/learnings/test_format.md`.
   (`resolveBhvCallArgValue`, `emitBhvCallBehavior`,
   `emitBhvCallBehaviorExpr`) and fn body level
   (`emitFnBodyCallBehavior`, `emitFnBodyCallBehaviorExpr`).
+- **`assert.go`** — Assert statement system: `parseAssertStmt`
+  (main parser), `parseAssertBlock` (block form), `parseAssertKwArgs`
+  (keyword args after message), `parseAssertTrailingArgs` (trailing
+  args after condition), `parseAssertParens` (parenthesized form),
+  `emitAssertStmt` (check frames + notify/exit error handler).
 - **`codegen.go`** — `parseStmtBlock` (unified statement-block
   parser for all three modes), `parseBehaviorBody` (two-phase
   parse+emit, attaches `dependencies` array),
