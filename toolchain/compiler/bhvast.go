@@ -668,7 +668,8 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		if idx, ok := syms.paramMap[tok.val]; ok {
 			return &LiteralExpr{Value: idx}, nil
 		}
-		return nil, p.errorf(tok.pos, "unknown register %q; expected a unit register or a declared @param", tok.val)
+		candidates := append(collectKeys(unitRegisters), collectKeys(syms.paramMap)...)
+		return nil, p.errorf(tok.pos, "unknown register %q%s", tok.val, suggest(tok.val, candidates))
 	}
 	if _, ok := syms.lookupVar(tok.val); !ok {
 		// Check constants before erroring
@@ -685,7 +686,8 @@ func (p *parser) resolveBhvOperand(tok token, syms *symbolTable) (Expr, error) {
 		if tok.val == "Unit" {
 			return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
-		return nil, p.errorf(tok.pos, "unknown function or variable %q; check spelling or use 'let'/'var' to declare it", tok.val)
+		hint := suggest(tok.val, collectKeys(p.fns))
+		return nil, p.errorf(tok.pos, "unknown function or variable %q%s", tok.val, hint)
 	}
 	syms.markUsed(tok.val)
 	return &IdentExpr{Name: tok.val}, nil
@@ -945,7 +947,8 @@ func (p *parser) parseBhvArgExpr(syms *symbolTable) (Expr, error) {
 			} else if idx, ok := syms.paramMap[tok.val]; ok {
 				resolved = &LiteralExpr{Value: idx}
 			} else {
-				return nil, p.errorf(tok.pos, "unknown register %q; expected a unit register or a declared @param", tok.val)
+				candidates := append(collectKeys(unitRegisters), collectKeys(syms.paramMap)...)
+				return nil, p.errorf(tok.pos, "unknown register %q%s", tok.val, suggest(tok.val, candidates))
 			}
 			result, err := p.parseArithExprFromFull(resolved, resolve)
 			if err != nil {
@@ -1951,7 +1954,8 @@ func (p *parser) parseBhvDefaultStmt(tok token, syms *symbolTable) ([]Stmt, erro
 		return nil, fnErr
 	}
 	if fn == nil {
-		return nil, p.errorf(tok.pos, "unknown function %q; check spelling or make sure it is imported", tok.val)
+		hint := suggest(tok.val, collectKeys(p.fns))
+		return nil, p.errorf(tok.pos, "unknown function %q%s", tok.val, hint)
 	}
 	args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: tok.pos}, syms)
 	if err != nil {
@@ -1998,7 +2002,7 @@ func (p *parser) parseBhvDefaultStmtUnified(tok token, syms *symbolTable, exprTa
 				return nil, false, fnErr
 			}
 			if fn == nil {
-				return nil, false, p.errorf(calleeTok.pos, "unknown function %q; check spelling or make sure it is imported", calleeTok.val)
+				return nil, false, p.errorf(calleeTok.pos, "unknown function %q%s", calleeTok.val, suggest(calleeTok.val, collectKeys(p.fns)))
 			}
 			args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
 			if err != nil {
@@ -2677,7 +2681,7 @@ func (p *parser) parseBhvOneStmt(tok token, syms *symbolTable) ([]Stmt, bool, er
 				return nil, false, fnErr
 			}
 			if fn == nil {
-				return nil, false, p.errorf(calleeTok.pos, "unknown function %q; check spelling or make sure it is imported", calleeTok.val)
+				return nil, false, p.errorf(calleeTok.pos, "unknown function %q%s", calleeTok.val, suggest(calleeTok.val, collectKeys(p.fns)))
 			}
 			args, kwArgs, err := p.parseBhvCallArgs(fn, token{kind: tokIdent, val: name, pos: calleeTok.pos}, syms)
 			if err != nil {

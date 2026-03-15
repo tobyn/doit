@@ -1000,7 +1000,7 @@ func (p *parser) checkFnBodyExprDeclared(expr Expr, ctx *fnBodyContext, pos int)
 		if e.Name == "Unit" {
 			return p.errorf(pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 		}
-		return p.errorf(pos, "unknown function or variable %q; check spelling or use 'let'/'var' to declare it", e.Name)
+		return p.errorf(pos, "unknown function or variable %q%s", e.Name, suggest(e.Name, collectKeys(p.fns)))
 	case *ArithExpr:
 		if err := p.checkFnBodyExprDeclared(e.LHS, ctx, pos); err != nil {
 			return err
@@ -1052,7 +1052,7 @@ func (p *parser) fnBodyResolver(ctx *fnBodyContext) operandResolver {
 			if tok.val == "Unit" {
 				return nil, p.errorf(tok.pos, "Unit has no constructor; unit values are produced by instructions at runtime")
 			}
-			return nil, p.errorf(tok.pos, "unknown function or variable %q; check spelling or use 'let'/'var' to declare it", tok.val)
+			return nil, p.errorf(tok.pos, "unknown function or variable %q%s", tok.val, suggest(tok.val, collectKeys(p.fns)))
 		}
 		ctx.markFnVarUsed(tok.val)
 		return &IdentExpr{Name: tok.val}, nil
@@ -4317,7 +4317,7 @@ func (ctx *fnBodyContext) canAssign(name string, p *parser, pos int) error {
 		}
 		return nil
 	}
-	return p.errorf(pos, "undeclared variable %q; declare it with 'let' or 'var'", name)
+	return p.errorf(pos, "undeclared variable %q%s", name, suggest(name, collectKeys(ctx.fnVarInfo)))
 }
 
 // canRead checks whether name can be read from in a fn body context
@@ -5785,7 +5785,7 @@ func (p *parser) parseFnDefaultStmtUnified(tok token, ctx *fnBodyContext, commen
 
 	// Bare function call
 	if callee == nil {
-		return nil, false, p.errorf(tok.pos, "unknown function %q; check spelling or make sure it is imported", tok.val)
+		return nil, false, p.errorf(tok.pos, "unknown function %q%s", tok.val, suggest(tok.val, collectKeys(p.fns)))
 	}
 	args, kwArgs, err := p.parseFnBodyCallArgs(callee, calleeTok, ctx)
 	if err != nil {
@@ -6054,7 +6054,7 @@ type expandCallOpts struct {
 func (p *parser) expandCall(name string, args []any, kwArgs map[string]any, retVals []any, b *frameBuilder, pos int, comment string, usedVars map[string]bool, opts ...expandCallOpts) error {
 	fn := p.fns[name]
 	if fn == nil {
-		return p.errorf(pos, "unknown function %q; check spelling or make sure it is imported", name)
+		return p.errorf(pos, "unknown function %q%s", name, suggest(name, collectKeys(p.fns)))
 	}
 
 	// Extract optional parameters

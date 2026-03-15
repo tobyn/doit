@@ -663,9 +663,10 @@ func (p *parser) resolveAssignTarget(name string, syms *symbolTable, pos int, co
 			}
 			return idx, nil
 		}
-		return nil, p.errorf(pos, "unknown register %q; expected a unit register or a declared @param", name)
+		candidates := append(collectKeys(unitRegisters), collectKeys(syms.paramMap)...)
+		return nil, p.errorf(pos, "unknown register %q%s", name, suggest(name, candidates))
 	}
-	return nil, p.errorf(pos, "undeclared variable %q; declare it with 'let' or 'var'", name)
+	return nil, p.errorf(pos, "undeclared variable %q%s", name, suggest(name, collectKeys(syms.vars)))
 }
 
 // emitComparison emits a 3-frame comparison pattern that produces a boolean
@@ -2063,7 +2064,7 @@ func (p *parser) emitForStmt(s *ForStmt, ctx *emitContext, comment string) error
 func (p *parser) emitForIterStmt(s *ForStmt, ctx *emitContext, comment string) error {
 	it := p.iters[s.IterName]
 	if it == nil {
-		return p.errorf(s.Pos, "unknown iterator %q", s.IterName)
+		return p.errorf(s.Pos, "unknown iterator %q%s", s.IterName, suggest(s.IterName, collectKeys(p.iters)))
 	}
 
 	if it.frame != nil {
@@ -4580,7 +4581,7 @@ func (p *parser) resolveCallBehaviorName(tok token) (string, *bhvDef, error) {
 		}
 		p.unget(peek)
 	}
-	return "", nil, p.errorf(tok.pos, "unknown behavior %q; define it at file scope or import it", tok.val)
+	return "", nil, p.errorf(tok.pos, "unknown behavior %q%s", tok.val, suggest(tok.val, collectKeys(p.bhvs)))
 }
 
 // parseCallBehaviorArgs parses keyword arguments for a `call` statement.
@@ -4778,7 +4779,7 @@ func (p *parser) resolveCallSub(behaviorID string, pos int) (int, error) {
 func (p *parser) compileDependency(behaviorID string, pos int) (map[string]any, error) {
 	bhv := p.bhvs[behaviorID]
 	if bhv == nil {
-		return nil, p.errorf(pos, "unknown behavior %q; define it at file scope or import it", behaviorID)
+		return nil, p.errorf(pos, "unknown behavior %q%s", behaviorID, suggest(behaviorID, collectKeys(p.bhvs)))
 	}
 
 	// Mark as compiling (cycle detection)
