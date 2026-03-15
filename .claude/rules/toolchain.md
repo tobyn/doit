@@ -50,8 +50,8 @@ node codec/refcodec.js encode file.json  # encode with reference
   over stdio JSON-RPC 2.0. Provides semantic token highlighting via
   the `syntax.Tokenize` function, document formatting via the
   `formatter` package, real-time diagnostics (errors and warnings)
-  via `compiler.Check`, document symbols (outline), and hover info.
-  Invoked as `doit language-server`.
+  via `compiler.Check`, document symbols (outline), hover info, and
+  signature help. Invoked as `doit language-server`.
 
 ## Toolchain functionality
 

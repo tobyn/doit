@@ -86,13 +86,21 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 }
 
 // Symbol represents a top-level declaration found during parsing.
-// Used by the LSP for document symbols and hover.
+// Used by the LSP for document symbols, hover, and signature help.
 type Symbol struct {
-	Name string     // declaration name
-	Kind SymbolKind // declaration type
-	Line int        // 0-based line number in user source
-	Col  int        // 0-based column number in user source
-	Doc  string     // doc comment text (from #! lines), empty if none
+	Name   string      // declaration name
+	Kind   SymbolKind  // declaration type
+	Line   int         // 0-based line number in user source
+	Col    int         // 0-based column number in user source
+	Doc    string      // doc comment text (from #! lines), empty if none
+	Params []ParamInfo // parameter info (functions and iterators only)
+}
+
+// ParamInfo describes a function or iterator parameter.
+type ParamInfo struct {
+	Name      string // parameter name
+	Direction string // "in", "out", or "inout"
+	Keyword   string // non-empty for keyword parameters
 }
 
 // SymbolKind identifies the type of a top-level declaration.

@@ -33,9 +33,8 @@ Features to add to the language server, roughly in priority order.
 - ~~**Hover**~~ — done. Shows declaration kind + doc comment for
   symbols in the current file. Stdlib/imported symbol hover is not
   yet supported.
-- **Signature help** — Trigger on `(` and `,`. `paramDef` already has
-  name, direction, and keyword status. Just needs cursor-to-call-site
-  mapping.
+- ~~**Signature help**~~ — done. Triggers on `(` and `,`, shows
+  parameter names and directions for current-file functions/iterators.
 
 ### Worth considering
 

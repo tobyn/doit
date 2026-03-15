@@ -150,8 +150,10 @@ invoked directly. Editor extensions handle this automatically:
 - **Document symbols** — lists all top-level declarations (behaviors,
   functions, iterators, constants, enums) for outline views and quick
   navigation (Ctrl+Shift+O in VS Code).
-- **Hover** — shows declaration kind and doc comment (`#!` lines) for
-  identifiers defined in the current file.
+- **Hover** — shows declaration kind, parameter signature, and doc
+  comment (`#!` lines) for identifiers defined in the current file.
+- **Signature help** — shows parameter names and directions when typing
+  inside a parenthesized function call. Triggered by `(` and `,`.
 - **Full document sync** — tracks open documents and responds to changes in
   real time.
 

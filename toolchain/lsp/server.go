@@ -190,6 +190,8 @@ func (s *Server) handleMessage(msg *jsonrpcMessage) (exit bool, err error) {
 		s.handleDocumentSymbol(msg)
 	case "textDocument/hover":
 		s.handleHover(msg)
+	case "textDocument/signatureHelp":
+		s.handleSignatureHelp(msg)
 	case "textDocument/formatting":
 		s.handleFormatting(msg)
 	case "textDocument/onTypeFormatting":
@@ -218,6 +220,9 @@ func (s *Server) handleInitialize(msg *jsonrpcMessage) {
 			"documentFormattingProvider": true,
 			"documentSymbolProvider":    true,
 			"hoverProvider":             true,
+			"signatureHelpProvider": map[string]any{
+				"triggerCharacters": []string{"(", ","},
+			},
 			"documentOnTypeFormattingProvider": map[string]any{
 				"firstTriggerCharacter": "\n",
 				"moreTriggerCharacter":  []string{"}"},
@@ -548,10 +553,12 @@ func formatHover(sym compiler.Symbol) string {
 	case compiler.SymbolFunction:
 		sb.WriteString("```doit\nfn ")
 		sb.WriteString(sym.Name)
+		sb.WriteString(formatParams(sym.Params))
 		sb.WriteString("\n```")
 	case compiler.SymbolIterator:
 		sb.WriteString("```doit\niter ")
 		sb.WriteString(sym.Name)
+		sb.WriteString(formatParams(sym.Params))
 		sb.WriteString("\n```")
 	case compiler.SymbolConstant:
 		sb.WriteString("```doit\nconst ")
@@ -569,6 +576,25 @@ func formatHover(sym compiler.Symbol) string {
 	}
 
 	return sb.String()
+}
+
+// formatParams formats a parameter list for display.
+func formatParams(params []compiler.ParamInfo) string {
+	if len(params) == 0 {
+		return "()"
+	}
+	var parts []string
+	for _, p := range params {
+		s := p.Name
+		if p.Keyword != "" {
+			s = p.Keyword + " " + p.Name
+		}
+		if p.Direction != "" && p.Direction != "in" {
+			s += " [" + p.Direction + "]"
+		}
+		parts = append(parts, s)
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
 }
 
 // lineColToOffset converts 0-based line and column to a byte offset.
@@ -611,6 +637,154 @@ func identAtOffset(src string, offset int) string {
 
 func isIdentChar(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'
+}
+
+// --- Signature help ---
+
+type signatureHelpParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+	Position struct {
+		Line      int `json:"line"`
+		Character int `json:"character"`
+	} `json:"position"`
+}
+
+func (s *Server) handleSignatureHelp(msg *jsonrpcMessage) {
+	var params signatureHelpParams
+	if err := json.Unmarshal(msg.Params, &params); err != nil {
+		s.sendError(msg.ID, -32602, "invalid params")
+		return
+	}
+
+	s.docsMu.Lock()
+	src, ok := s.docs[params.TextDocument.URI]
+	s.docsMu.Unlock()
+	if !ok {
+		s.sendResponse(msg.ID, nil)
+		return
+	}
+
+	offset := lineColToOffset(src, params.Position.Line, params.Position.Character)
+	fnName, activeParam := findCallContext(src, offset)
+	if fnName == "" {
+		s.sendResponse(msg.ID, nil)
+		return
+	}
+
+	// Look up the function in symbols.
+	var sourceFS fs.FS
+	var sourcePath string
+	if filePath := uriToPath(params.TextDocument.URI); filePath != "" {
+		sourceFS = os.DirFS(filepath.Dir(filePath))
+		sourcePath = filepath.Base(filePath)
+	}
+
+	symbols, _, _ := compiler.Check(src, s.stdlib, sourceFS, sourcePath)
+
+	for _, sym := range symbols {
+		if sym.Name == fnName && len(sym.Params) > 0 {
+			sigParams := make([]map[string]any, len(sym.Params))
+			for i, p := range sym.Params {
+				label := p.Name
+				if p.Keyword != "" {
+					label = p.Keyword + " " + p.Name
+				}
+				if p.Direction != "" && p.Direction != "in" {
+					label += " [" + p.Direction + "]"
+				}
+				sigParams[i] = map[string]any{"label": label}
+			}
+
+			sigLabel := sym.Name + formatParams(sym.Params)
+
+			sig := map[string]any{
+				"label":      sigLabel,
+				"parameters": sigParams,
+			}
+			if sym.Doc != "" {
+				sig["documentation"] = map[string]any{
+					"kind":  "markdown",
+					"value": sym.Doc,
+				}
+			}
+
+			s.sendResponse(msg.ID, map[string]any{
+				"signatures":      []any{sig},
+				"activeSignature": 0,
+				"activeParameter": activeParam,
+			})
+			return
+		}
+	}
+
+	s.sendResponse(msg.ID, nil)
+}
+
+// findCallContext scans backward from offset to find the enclosing function
+// call. Returns the function name and the 0-based active parameter index.
+// Returns ("", 0) if the cursor is not inside a parenthesized call.
+func findCallContext(src string, offset int) (string, int) {
+	if offset > len(src) {
+		offset = len(src)
+	}
+
+	// Scan backward to find the matching '(' while counting commas.
+	depth := 0
+	commas := 0
+	for i := offset - 1; i >= 0; i-- {
+		c := src[i]
+		switch c {
+		case ')':
+			depth++
+		case '(':
+			if depth > 0 {
+				depth--
+			} else {
+				// Found the opening paren. The function name is the
+				// identifier immediately before it.
+				name := identEndingAt(src, i)
+				return name, commas
+			}
+		case ',':
+			if depth == 0 {
+				commas++
+			}
+		case '"':
+			// Skip backward over string literals.
+			i--
+			for i >= 0 && src[i] != '"' {
+				if i > 0 && src[i-1] == '\\' {
+					i--
+				}
+				i--
+			}
+		}
+	}
+	return "", 0
+}
+
+// identEndingAt returns the identifier that ends just before position pos.
+func identEndingAt(src string, pos int) string {
+	// Skip whitespace before the paren.
+	end := pos
+	for end > 0 && (src[end-1] == ' ' || src[end-1] == '\t') {
+		end--
+	}
+	if end == 0 {
+		return ""
+	}
+	// Walk backward through identifier characters.
+	start := end
+	for start > 0 && isIdentChar(src[start-1]) {
+		start--
+	}
+	word := src[start:end]
+	if len(word) > 0 && (word[0] >= 'a' && word[0] <= 'z' || word[0] >= 'A' && word[0] <= 'Z' || word[0] == '_') {
+		return word
+	}
+	return ""
 }
 
 // --- Semantic tokens ---

@@ -171,7 +171,28 @@ func (p *parser) recordSymbol(name string, kind SymbolKind, pos int, doc string)
 	}
 	line, col := p.posToLineCol(pos)
 	// posToLineCol returns 1-based; convert to 0-based for LSP.
-	p.symbols = append(p.symbols, Symbol{Name: name, Kind: kind, Line: line - 1, Col: col - 1, Doc: doc})
+	sym := Symbol{Name: name, Kind: kind, Line: line - 1, Col: col - 1, Doc: doc}
+
+	// Attach parameter info for functions and iterators.
+	var params []paramDef
+	if kind == SymbolFunction {
+		if fn, ok := p.fns[name]; ok {
+			params = fn.params
+		}
+	} else if kind == SymbolIterator {
+		if it, ok := p.iters[name]; ok {
+			params = it.params
+		}
+	}
+	for _, pd := range params {
+		sym.Params = append(sym.Params, ParamInfo{
+			Name:      pd.name,
+			Direction: pd.effectiveDirection(),
+			Keyword:   pd.keyword,
+		})
+	}
+
+	p.symbols = append(p.symbols, sym)
 }
 
 // warnf appends a formatted warning message with line:column prefix.

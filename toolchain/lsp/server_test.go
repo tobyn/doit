@@ -697,6 +697,90 @@ func TestHover(t *testing.T) {
 	}
 }
 
+func TestSignatureHelp(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output, nil)
+
+	uri := "file:///test.doit"
+	src := "skip prelude\nfn add(a, b) {\n}\nbehavior test {\n    add(\n}\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	// Cursor right after "add(" — first parameter.
+	writeRequest(&input, 1, "textDocument/signatureHelp", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 4, "character": 8},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(responses[0], &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	sigs, ok := result["signatures"].([]any)
+	if !ok || len(sigs) == 0 {
+		t.Fatal("expected at least one signature")
+	}
+	sig := sigs[0].(map[string]any)
+	label := sig["label"].(string)
+	if !strings.Contains(label, "add") {
+		t.Errorf("signature label should contain 'add', got: %s", label)
+	}
+	if activeParam := int(result["activeParameter"].(float64)); activeParam != 0 {
+		t.Errorf("activeParameter = %d, want 0", activeParam)
+	}
+}
+
+func TestSignatureHelpCapabilityAdvertised(t *testing.T) {
+	resp := sendRequest(t, "initialize", map[string]any{
+		"capabilities": map[string]any{},
+	})
+	caps := resp["capabilities"].(map[string]any)
+	sigHelp, ok := caps["signatureHelpProvider"].(map[string]any)
+	if !ok {
+		t.Fatal("signatureHelpProvider not advertised")
+	}
+	triggers, ok := sigHelp["triggerCharacters"].([]any)
+	if !ok || len(triggers) == 0 {
+		t.Error("missing triggerCharacters")
+	}
+}
+
+func TestFindCallContext(t *testing.T) {
+	tests := []struct {
+		src        string
+		offset     int
+		wantName   string
+		wantParam  int
+	}{
+		{"foo(", 4, "foo", 0},
+		{"foo(a, ", 7, "foo", 1},
+		{"foo(a, b, ", 10, "foo", 2},
+		{"bar(foo(x), ", 12, "bar", 1},
+		{"let x = 5", 5, "", 0},
+		{"foo(\"a,b\", ", 11, "foo", 1}, // comma inside string
+	}
+	for _, tt := range tests {
+		name, param := findCallContext(tt.src, tt.offset)
+		if name != tt.wantName || param != tt.wantParam {
+			t.Errorf("findCallContext(%q, %d) = (%q, %d), want (%q, %d)",
+				tt.src, tt.offset, name, param, tt.wantName, tt.wantParam)
+		}
+	}
+}
+
 func TestHoverCapabilityAdvertised(t *testing.T) {
 	resp := sendRequest(t, "initialize", map[string]any{
 		"capabilities": map[string]any{},
