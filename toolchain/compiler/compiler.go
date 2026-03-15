@@ -968,6 +968,157 @@ func (b *frameBuilder) eliminateNoopBridges() {
 	b.cursor = len(newFrames)
 }
 
+// reorderEventHandlers moves event handler chains adjacent to their
+// continuation targets. The Desynced visual editor has an exponential-cost
+// auto-layout algorithm that hangs when exec slot connections span large
+// frame index gaps. Event handlers are emitted at the end of the frame
+// list but their continuation "next" points back to an early frame,
+// creating a large gap. This pass eliminates the gap by relocating each
+// event chain (event instruction + handler body) to just before its
+// continuation target.
+func (b *frameBuilder) reorderEventHandlers() {
+	// Phase 1: Identify event chains.
+	// An event chain starts with an event_parameter or event_radio frame,
+	// followed by its handler body frames up to and including the terminal
+	// frame (one with an explicit "next" that is a frameRef, or "next": false,
+	// or an exit instruction).
+	type eventChain struct {
+		start       int      // index of event instruction
+		end         int      // index of last handler frame (inclusive)
+		contTarget  int      // 0-based frame index the handler continues to (-1 if none)
+	}
+	var chains []eventChain
+
+	for i, f := range b.frames {
+		op, _ := f["op"].(string)
+		if op != "event_parameter" && op != "event_radio" {
+			continue
+		}
+
+		// Walk the handler body: starts at the frame after the event instruction
+		// (the event's "next" points there, but we just walk sequentially since
+		// emitDeferredEvents emits them contiguously).
+		end := i
+		contTarget := -1
+		for j := i + 1; j < len(b.frames); j++ {
+			hf := b.frames[j]
+			end = j
+
+			// Check if this frame has an explicit "next"
+			if next, hasNext := hf["next"]; hasNext {
+				if ref, ok := next.(frameRef); ok {
+					target := int(ref)
+					// If target is before the event chain, it's the continuation
+					if target < i {
+						contTarget = target
+					}
+				}
+				break
+			}
+
+			// If it's a terminal op with no "next", the chain ends here
+			hop, _ := hf["op"].(string)
+			if hop == "exit" || hop == "jump" {
+				break
+			}
+		}
+
+		if contTarget >= 0 {
+			chains = append(chains, eventChain{start: i, end: end, contTarget: contTarget})
+		}
+	}
+
+	if len(chains) == 0 {
+		return
+	}
+
+	// Phase 2: Build new frame ordering.
+	// Mark all event chain frames.
+	isEventFrame := make([]bool, len(b.frames))
+	for _, ch := range chains {
+		for j := ch.start; j <= ch.end; j++ {
+			isEventFrame[j] = true
+		}
+	}
+
+	// Build insertion map: continuation target -> chains to insert before it.
+	// Only insert if the predecessor frame is terminal (won't fall through),
+	// so the event chain stays unreachable from normal flow. If the
+	// continuation target is frame 0 or its predecessor falls through,
+	// leave the chain in its original position.
+	insertBefore := map[int][]eventChain{}
+	for _, ch := range chains {
+		target := ch.contTarget
+		if target > 0 {
+			pred := b.frames[target-1]
+			op, _ := pred["op"].(string)
+			// Only safe to insert if the predecessor truly can't fall
+			// through: exit instructions are always terminal, and frames
+			// with "next": false have no successor. Branching instructions
+			// (compare_register, check_number, value_type) may have absent
+			// exec slots that fall through even if "next" is explicit.
+			safe := op == "exit" || op == "jump" || pred["next"] == false
+			if safe {
+				insertBefore[target] = append(insertBefore[target], ch)
+				continue
+			}
+		}
+		// Can't safely insert — unmark these frames so they stay in place.
+		for j := ch.start; j <= ch.end; j++ {
+			isEventFrame[j] = false
+		}
+	}
+
+	if len(insertBefore) == 0 {
+		return
+	}
+
+	// Build new order: walk frames, skip event frames, insert chains at targets.
+	newOrder := make([]int, 0, len(b.frames))
+	for i := range b.frames {
+		if chs, ok := insertBefore[i]; ok {
+			for _, ch := range chs {
+				for j := ch.start; j <= ch.end; j++ {
+					newOrder = append(newOrder, j)
+				}
+			}
+		}
+		if !isEventFrame[i] {
+			newOrder = append(newOrder, i)
+		}
+	}
+
+	// Phase 3: Remap all frameRef values.
+	// Build old→new index mapping.
+	remap := make([]int, len(b.frames))
+	for newIdx, oldIdx := range newOrder {
+		remap[oldIdx] = newIdx
+	}
+
+	newFrames := make([]map[string]any, len(b.frames))
+	for newIdx, oldIdx := range newOrder {
+		f := b.frames[oldIdx]
+		for k, v := range f {
+			if ref, ok := v.(frameRef); ok {
+				f[k] = frameRef(remap[int(ref)])
+			}
+		}
+		newFrames[newIdx] = f
+	}
+
+	// Phase 4: Strip redundant "next" that now points to the natural successor.
+	for i, f := range newFrames {
+		if next, ok := f["next"]; ok {
+			if ref, ok := next.(frameRef); ok && int(ref) == i+1 {
+				delete(f, "next")
+			}
+		}
+	}
+
+	b.frames = newFrames
+	b.cursor = len(newFrames)
+}
+
 // finalize writes frame entries into value, converting any frameRef
 // values to plain integers.
 func (b *frameBuilder) finalize(value map[string]any) {

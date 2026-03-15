@@ -372,6 +372,24 @@ instruction is the only block-control opcode. The doit compiler never
 emits `break` — it uses `last` for iterator breaks and noop bridges /
 `jump` for other break forms.
 
+## Visual Editor Layout Bug
+
+The game's visual editor has an exponential-cost auto-layout algorithm
+that hangs (minutes, 45GB+ memory) when exec slot connections span
+large frame index gaps. A `"next"` from frame 808 to frame 6 causes
+the hang; the same connection from frame 8 to frame 9 is instant.
+The behavior runs fine — only the editor is affected.
+
+**Impact on the compiler**: frame ordering matters. Event handlers
+(emitted after the main flow) create long backward jumps via their
+continuation `"next"`. The fix is a post-emission reordering pass
+that places disconnected chains (event handlers) adjacent to their
+continuation target, minimizing jump distances.
+
+`jump`/`label` instructions do NOT trigger the bug — only `"next"`
+and numbered exec slot connections. This is why the old `jump`/`label`
+event handler pattern worked and the continuation-based pattern didn't.
+
 ## Import/Export
 
 The game's UI supports importing and exporting behaviors as Base62-encoded

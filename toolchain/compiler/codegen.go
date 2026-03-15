@@ -479,6 +479,7 @@ func (p *parser) parseBehaviorBody(behaviorID string) (*codec.Object, error) {
 	}
 
 	b.eliminateNoopBridges()
+	b.reorderEventHandlers()
 	b.finalize(value)
 
 	// Attach compiled dependencies for behavior subroutine calls

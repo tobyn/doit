@@ -25,6 +25,14 @@ register types.
   VS Code and JetBrains IDEs.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting.
+- ~~**Long frame gaps hang Desynced editor**~~ — **Fixed.** The
+  game's visual editor has exponential-cost layout when exec slot
+  connections span large frame index gaps. Event handler continuation
+  triggered this: handlers emitted at the end created ~800-frame
+  backward jumps. Fix: post-emission frame reordering pass that
+  places event handler chains adjacent to their continuation target,
+  minimizing all jump distances.
+
 ## Lint mode
 
 A `--lint` flag (or separate `doit lint` subcommand) that checks for
