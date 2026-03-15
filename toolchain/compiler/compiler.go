@@ -85,13 +85,33 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 	return obj, p.warnings, nil
 }
 
+// Symbol represents a top-level declaration found during parsing.
+// Used by the LSP for document symbols.
+type Symbol struct {
+	Name string     // declaration name
+	Kind SymbolKind // declaration type
+	Line int        // 0-based line number in user source
+	Col  int        // 0-based column number in user source
+}
+
+// SymbolKind identifies the type of a top-level declaration.
+type SymbolKind int
+
+const (
+	SymbolBehavior SymbolKind = iota
+	SymbolFunction
+	SymbolIterator
+	SymbolConstant
+	SymbolEnum
+)
+
 // Check parses the source and collects all declarations (functions, iterators,
 // constants, enums, behaviors) without compiling any specific behavior. This
 // catches syntax errors and declaration-level semantic errors across the entire
 // file, making it suitable for LSP diagnostics where no single behavior is
-// selected. The returned warnings and error use the same line:col format as
-// CompileString.
-func Check(src string, stdlib fs.FS, sourceFS fs.FS, sourcePath string) ([]string, error) {
+// selected. The returned symbols list all top-level declarations in the file.
+// The returned warnings and error use the same line:col format as CompileString.
+func Check(src string, stdlib fs.FS, sourceFS fs.FS, sourcePath string) ([]Symbol, []string, error) {
 	sourceDir := ""
 	if sourcePath != "" {
 		sourceDir = path.Dir(sourcePath)
@@ -105,7 +125,7 @@ func Check(src string, stdlib fs.FS, sourceFS fs.FS, sourcePath string) ([]strin
 	if stdlib != nil {
 		data, err := fs.ReadFile(stdlib, "prelude.doit")
 		if err != nil {
-			return nil, fmt.Errorf("stdlib: reading prelude: %w", err)
+			return nil, nil, fmt.Errorf("stdlib: reading prelude: %w", err)
 		}
 		preludeText = string(data)
 	}
@@ -128,8 +148,16 @@ func Check(src string, stdlib fs.FS, sourceFS fs.FS, sourcePath string) ([]strin
 		sourceDir:  sourceDir,
 		stdlibFS:   stdlib,
 	}
+	p.collectSymbols = true
 	err := p.collectUserFns()
-	return p.warnings, err
+	// Filter to symbols from user source (not prelude/stdlib).
+	var userSymbols []Symbol
+	for _, s := range p.symbols {
+		if s.Line >= 0 {
+			userSymbols = append(userSymbols, s)
+		}
+	}
+	return userSymbols, p.warnings, err
 }
 
 // hasSkipPrelude reports whether the source starts with a `skip prelude` directive.

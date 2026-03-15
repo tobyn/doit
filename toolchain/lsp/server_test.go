@@ -574,6 +574,64 @@ func TestDiagnosticsOnChange(t *testing.T) {
 	}
 }
 
+func TestDocumentSymbols(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output, nil)
+
+	uri := "file:///test.doit"
+	src := "skip prelude\nconst MAX = 10\nfn greet() {\n}\nenum Color {\n    Red\n    Blue\n}\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	writeRequest(&input, 1, "textDocument/documentSymbol", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var symbols []map[string]any
+	if err := json.Unmarshal(responses[0], &symbols); err != nil {
+		t.Fatalf("unmarshal symbols: %v (raw: %s)", err, responses[0])
+	}
+	if len(symbols) != 3 {
+		t.Fatalf("expected 3 symbols (const, fn, enum), got %d: %v", len(symbols), symbols)
+	}
+
+	// Check names and kinds.
+	wantNames := []string{"MAX", "greet", "Color"}
+	wantKinds := []float64{14, 12, 10} // Constant, Function, Enum
+	for i, sym := range symbols {
+		name := sym["name"].(string)
+		kind := sym["kind"].(float64)
+		if name != wantNames[i] {
+			t.Errorf("symbol %d: name = %q, want %q", i, name, wantNames[i])
+		}
+		if kind != wantKinds[i] {
+			t.Errorf("symbol %d: kind = %v, want %v", i, kind, wantKinds[i])
+		}
+	}
+}
+
+func TestDocumentSymbolsCapabilityAdvertised(t *testing.T) {
+	resp := sendRequest(t, "initialize", map[string]any{
+		"capabilities": map[string]any{},
+	})
+	caps := resp["capabilities"].(map[string]any)
+	if caps["documentSymbolProvider"] != true {
+		t.Error("documentSymbolProvider not advertised")
+	}
+}
+
 func TestParseDiagnostic(t *testing.T) {
 	tests := []struct {
 		msg      string

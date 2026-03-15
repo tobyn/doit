@@ -146,8 +146,10 @@ type parser struct {
 	breakRetVals   []any            // target registers for break-with-value; nil outside expression blocks
 	loopLabels      map[string]bool // labels of enclosing loops
 	outerLoopLabels map[string]bool // labels of loops beyond exec block boundaries
-	warnings    []string         // compiler warnings (non-fatal)
-	releaseMode bool             // true when compiling with --release (omits assert)
+	warnings       []string         // compiler warnings (non-fatal)
+	releaseMode    bool             // true when compiling with --release (omits assert)
+	collectSymbols bool             // when true, populate symbols during collectDecls
+	symbols        []Symbol         // top-level declarations (populated when collectSymbols is true)
 
 	// callExprParser is set by behavior/fn body contexts to enable
 	// function call parsing in boolean primary position (e.g., d || my_fn x).
@@ -159,6 +161,17 @@ type parser struct {
 	depIndex         map[string]int       // behavior ID → 1-based dependency index (dedup)
 	depCompiling     map[string]bool      // behaviors currently being compiled (cycle detection)
 	selfBehaviorID   string               // behavior currently being compiled (for self-recursion)
+}
+
+// recordSymbol adds a symbol to the symbols list if symbol collection is enabled.
+// pos is the byte offset in the source; it is converted to 0-based line:col.
+func (p *parser) recordSymbol(name string, kind SymbolKind, pos int) {
+	if !p.collectSymbols {
+		return
+	}
+	line, col := p.posToLineCol(pos)
+	// posToLineCol returns 1-based; convert to 0-based for LSP.
+	p.symbols = append(p.symbols, Symbol{Name: name, Kind: kind, Line: line - 1, Col: col - 1})
 }
 
 // warnf appends a formatted warning message with line:column prefix.

@@ -186,6 +186,8 @@ func (s *Server) handleMessage(msg *jsonrpcMessage) (exit bool, err error) {
 		s.handleDidChange(msg)
 	case "textDocument/didClose":
 		s.handleDidClose(msg)
+	case "textDocument/documentSymbol":
+		s.handleDocumentSymbol(msg)
 	case "textDocument/formatting":
 		s.handleFormatting(msg)
 	case "textDocument/onTypeFormatting":
@@ -212,6 +214,7 @@ func (s *Server) handleInitialize(msg *jsonrpcMessage) {
 				"change":    1, // Full sync
 			},
 			"documentFormattingProvider": true,
+			"documentSymbolProvider":    true,
 			"documentOnTypeFormattingProvider": map[string]any{
 				"firstTriggerCharacter": "\n",
 				"moreTriggerCharacter":  []string{"}"},
@@ -322,7 +325,7 @@ func (s *Server) publishDiagnostics(uri, src string) {
 		sourcePath = filepath.Base(filePath)
 	}
 
-	warnings, err := compiler.Check(src, s.stdlib, sourceFS, sourcePath)
+	_, warnings, err := compiler.Check(src, s.stdlib, sourceFS, sourcePath)
 	if err != nil {
 		if d := parseDiagnostic(err.Error(), 1); d != nil {
 			diags = append(diags, d)
@@ -401,6 +404,68 @@ func parseDiagnostic(msg string, severity int) map[string]any {
 		"severity": severity,
 		"source":   "doit",
 		"message":  message,
+	}
+}
+
+// --- Document symbols ---
+
+// handleDocumentSymbol returns an outline of top-level declarations.
+func (s *Server) handleDocumentSymbol(msg *jsonrpcMessage) {
+	var params semanticTokensParams // reuse — same shape (textDocument.uri)
+	if err := json.Unmarshal(msg.Params, &params); err != nil {
+		s.sendError(msg.ID, -32602, "invalid params")
+		return
+	}
+
+	s.docsMu.Lock()
+	src, ok := s.docs[params.TextDocument.URI]
+	s.docsMu.Unlock()
+	if !ok {
+		s.sendResponse(msg.ID, []any{})
+		return
+	}
+
+	var sourceFS fs.FS
+	var sourcePath string
+	if filePath := uriToPath(params.TextDocument.URI); filePath != "" {
+		sourceFS = os.DirFS(filepath.Dir(filePath))
+		sourcePath = filepath.Base(filePath)
+	}
+
+	symbols, _, _ := compiler.Check(src, s.stdlib, sourceFS, sourcePath)
+
+	result := make([]map[string]any, len(symbols))
+	for i, sym := range symbols {
+		pos := map[string]any{
+			"start": map[string]any{"line": sym.Line, "character": sym.Col},
+			"end":   map[string]any{"line": sym.Line, "character": sym.Col},
+		}
+		result[i] = map[string]any{
+			"name":           sym.Name,
+			"kind":           symbolKindToLSP(sym.Kind),
+			"range":          pos,
+			"selectionRange": pos,
+		}
+	}
+	s.sendResponse(msg.ID, result)
+}
+
+// symbolKindToLSP converts a compiler SymbolKind to an LSP SymbolKind number.
+// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#symbolKind
+func symbolKindToLSP(kind compiler.SymbolKind) int {
+	switch kind {
+	case compiler.SymbolBehavior:
+		return 5 // Class
+	case compiler.SymbolFunction:
+		return 12 // Function
+	case compiler.SymbolIterator:
+		return 12 // Function
+	case compiler.SymbolConstant:
+		return 14 // Constant
+	case compiler.SymbolEnum:
+		return 10 // Enum
+	default:
+		return 1 // File (fallback)
 	}
 }
 

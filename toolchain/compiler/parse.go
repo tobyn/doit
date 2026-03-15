@@ -1161,6 +1161,7 @@ func (p *parser) collectDecls(isImport bool) error {
 			}
 			if !isImport {
 				p.behaviorIDs = append(p.behaviorIDs, idTok.val)
+				p.recordSymbol(idTok.val, SymbolBehavior, idTok.pos)
 			}
 			params, err := p.scanBehaviorParams()
 			if err != nil {
@@ -1192,24 +1193,36 @@ func (p *parser) collectDecls(isImport bool) error {
 				}
 				p.fns[name].private = true
 				p.fileDecls = append(p.fileDecls, name)
+				if !isImport {
+					p.recordSymbol(name, SymbolFunction, fnTok.pos)
+				}
 			case "iter":
 				name, err := p.parseIterDecl(true)
 				if err != nil {
 					return err
 				}
 				p.fileDecls = append(p.fileDecls, name)
+				if !isImport {
+					p.recordSymbol(name, SymbolIterator, fnTok.pos)
+				}
 			case "const":
 				name, err := p.parseConstDecl(true)
 				if err != nil {
 					return err
 				}
 				p.fileDecls = append(p.fileDecls, name)
+				if !isImport {
+					p.recordSymbol(name, SymbolConstant, fnTok.pos)
+				}
 			case "enum":
 				name, err := p.parseEnumDecl(true)
 				if err != nil {
 					return err
 				}
 				p.fileDecls = append(p.fileDecls, name)
+				if !isImport {
+					p.recordSymbol(name, SymbolEnum, fnTok.pos)
+				}
 			default:
 				return p.errorf(fnTok.pos, "expected 'fn', 'iter', 'const', or 'enum' after 'private', got %q", fnTok.val)
 			}
@@ -1219,24 +1232,36 @@ func (p *parser) collectDecls(isImport bool) error {
 				return err
 			}
 			p.fileDecls = append(p.fileDecls, name)
+			if !isImport {
+				p.recordSymbol(name, SymbolFunction, tok.pos)
+			}
 		case "iter":
 			name, err := p.parseIterDecl(false)
 			if err != nil {
 				return err
 			}
 			p.fileDecls = append(p.fileDecls, name)
+			if !isImport {
+				p.recordSymbol(name, SymbolIterator, tok.pos)
+			}
 		case "const":
 			name, err := p.parseConstDecl(false)
 			if err != nil {
 				return err
 			}
 			p.fileDecls = append(p.fileDecls, name)
+			if !isImport {
+				p.recordSymbol(name, SymbolConstant, tok.pos)
+			}
 		case "enum":
 			name, err := p.parseEnumDecl(false)
 			if err != nil {
 				return err
 			}
 			p.fileDecls = append(p.fileDecls, name)
+			if !isImport {
+				p.recordSymbol(name, SymbolEnum, tok.pos)
+			}
 		case "skip":
 			// Consume "skip prelude" directive
 			next, err := p.expect(tokIdent)

@@ -147,6 +147,9 @@ invoked directly. Editor extensions handle this automatically:
 - **Diagnostics** — reports syntax errors and warnings as you type. Runs the
   compiler's declaration-level checks on every edit and publishes results as
   inline editor diagnostics (red/yellow squiggles).
+- **Document symbols** — lists all top-level declarations (behaviors,
+  functions, iterators, constants, enums) for outline views and quick
+  navigation (Ctrl+Shift+O in VS Code).
 - **Full document sync** — tracks open documents and responds to changes in
   real time.
 

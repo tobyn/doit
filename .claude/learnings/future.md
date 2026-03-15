@@ -26,13 +26,10 @@ Features to add to the language server, roughly in priority order.
 
 ### No-brainers
 
-- **Diagnostics** — Compile on every `didChange`, convert errors and
-  warnings to LSP diagnostics. The compiler already returns both;
-  `posToLineCol()` handles position mapping. Highest value, lowest
-  effort.
-- **Document symbols** — Walk the parser's `fns`, `iters`, `consts`,
-  `enums`, `bhvs` maps to produce an outline. Powers breadcrumbs and
-  Ctrl+Shift+O in VS Code.
+- ~~**Diagnostics**~~ — done. `compiler.Check` runs pass 1 and
+  returns errors, warnings, and symbols.
+- ~~**Document symbols**~~ — done. Uses `compiler.Check` symbols to
+  populate `textDocument/documentSymbol`.
 - **Hover** — Resolve the identifier under the cursor against the
   symbol table, show signature + doc comment. Stdlib doc comments
   already follow a consistent format.

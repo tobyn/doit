@@ -49,8 +49,9 @@ node codec/refcodec.js encode file.json  # encode with reference
 - **`lsp/`** — Language Server Protocol server for doit. Communicates
   over stdio JSON-RPC 2.0. Provides semantic token highlighting via
   the `syntax.Tokenize` function, document formatting via the
-  `formatter` package, and real-time diagnostics (errors and warnings)
-  via `compiler.Check`. Invoked as `doit language-server`.
+  `formatter` package, real-time diagnostics (errors and warnings)
+  via `compiler.Check`, and document symbols (outline). Invoked as
+  `doit language-server`.
 
 ## Toolchain functionality
 
