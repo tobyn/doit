@@ -100,8 +100,9 @@ stdin/stdout using JSON-RPC 2.0. Editors and IDEs use this to provide
 semantic syntax highlighting for doit source files.
 
 The language server is typically launched by an editor extension rather than
-invoked directly. For VS Code, the doit extension (in `editors/vscode/`)
-configures this automatically.
+invoked directly. Editor extensions handle this automatically:
+- **JetBrains** — the doit plugin (in `editors/jetbrains/`) uses LSP4IJ
+- **VS Code** — the doit extension (in `editors/vscode/`)
 
 ### Supported capabilities
 

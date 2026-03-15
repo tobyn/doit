@@ -1,0 +1,7 @@
+.gradle/
+.intellijPlatform/
+build/
+.idea/
+*.iml
+# Grammar is copied from editors/ at build time; only package.json is tracked.
+src/main/resources/textmate/doit.tmLanguage.json

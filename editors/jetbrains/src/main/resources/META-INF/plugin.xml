@@ -1,0 +1,46 @@
+<idea-plugin>
+    <id>dev.tobyn.doit</id>
+    <name>doit Language</name>
+    <vendor>Tobyn Baugher</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.textmate</depends>
+    <depends>com.redhat.devtools.lsp4ij</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- File type -->
+        <fileType
+            name="doit"
+            implementationClass="dev.tobyn.doit.jetbrains.DoitFileType"
+            fieldName="INSTANCE"
+            language="doit"
+            extensions="doit"/>
+
+        <!-- Settings -->
+        <applicationConfigurable
+            parentId="tools"
+            instance="dev.tobyn.doit.jetbrains.DoitSettingsConfigurable"
+            id="dev.tobyn.doit.settings"
+            displayName="doit Language"/>
+        <applicationService
+            serviceImplementation="dev.tobyn.doit.jetbrains.DoitSettings"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <textmate.bundleProvider implementation="dev.tobyn.doit.jetbrains.DoitTextMateBundleProvider"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
+        <server id="dev.tobyn.doit.lsp"
+                name="doit Language Server"
+                factoryClass="dev.tobyn.doit.jetbrains.DoitLspServerFactory">
+            <description><![CDATA[
+                Language server for the doit programming language.
+                Provides semantic token highlighting.
+            ]]></description>
+        </server>
+        <languageMapping language="doit"
+                         serverId="dev.tobyn.doit.lsp"
+                         languageId="doit"/>
+    </extensions>
+</idea-plugin>
