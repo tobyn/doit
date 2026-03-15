@@ -53,11 +53,17 @@ see `.claude/learnings/test_format.md`.
   `emitContext` struct, `execMode` tracking (initial `modeUnknown`),
   slot constants for `check_number`, `compare_register`, and
   `value_type`.
+- **`consteval.go`** — Compile-time constants and evaluator.
+  Const declarations (`parseConstDecl`), enum declarations
+  (`parseEnumDecl`), compile-time evaluator
+  (`tryEvalExpr`/`tryEvalCall`/`tryEvalStmts`/`tryEvalCallArgs`),
+  const call argument parsing (`parseConstCallArgs`/`parseConstArgExpr`),
+  helper types and functions (`constEvalStatus`, `extractNum`,
+  `isTruthy`, `evalCompare`, `evalTypeCheck`).
 - **`parse.go`** — File-level parsing, function and iterator
   definitions (`parseUserFn`, `parseIterDecl`), fn body AST parsing and emission
   (`emitFnBody`), instruction parsing (`parseInstruction`), call
-  expansion (`expandCall`), `resolveInstructionFrame`, enum/const
-  parsing, compile-time evaluator (`tryEvalExpr`/`tryEvalCall`).
+  expansion (`expandCall`), `resolveInstructionFrame`.
 - **`expr.go`** — Shared expression parsers parameterized by
   `operandResolver`. Arithmetic parsing (`parseArithExpr` chain,
   `parseArithPrimary`, constructors, dot access, compile-time
