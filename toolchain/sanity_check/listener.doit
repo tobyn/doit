@@ -36,7 +36,7 @@ behavior listener {
     # handler below should have fired during the wait and captured
     # the signal value.
     on radio(Item("metalbar")) -> sig {
-        if sig == 123 { $result += 1 } else { $failed = 6; ; exit }  # 6
+        if sig == 123 { $result += 1 } else { $failed = 6; exit } # 6
     }
 
     # ----------------------------------------------------------
@@ -47,31 +47,31 @@ behavior listener {
     wait 50
 
     var fr1 = %sanity_test_val
-    if fr1 == 777 { $result += 1 } else { $failed = 1; exit }   # 1
+    if fr1 == 777 { $result += 1 } else { $failed = 1; exit } # 1
 
     # ----------------------------------------------------------
     # Test 2: Faction register counter written by Unit A
     # ----------------------------------------------------------
     var fr2 = %sanity_test_counter
-    if fr2 == 15 { $result += 1 } else { $failed = 2; exit }    # 2
+    if fr2 == 15 { $result += 1 } else { $failed = 2; exit } # 2
 
     # ----------------------------------------------------------
     # Test 3: Faction register flag
     # ----------------------------------------------------------
-    if %sanity_test_flag == 42 { $result += 1 } else { $failed = 3; exit }   # 3
+    if %sanity_test_flag == 42 { $result += 1 } else { $failed = 3; exit } # 3
 
     # ----------------------------------------------------------
     # Test 4: get_self returns this unit (not Unit A)
     # ----------------------------------------------------------
     let me = get_self
-    if me is Unit { $result += 1 } else { $failed = 4; exit }   # 4
+    if me is Unit { $result += 1 } else { $failed = 4; exit } # 4
 
     # ----------------------------------------------------------
     # Test 5: Read radio signal via read_radio
     # ----------------------------------------------------------
     # Unit A's transmitter should be broadcasting 123 on Item("metalbar") band.
     let radio_val = read_radio Item("metalbar")
-    if radio_val == 123 { $result += 1 } else { $failed = 5; exit }  # 5
+    if radio_val == 123 { $result += 1 } else { $failed = 5; exit } # 5
 
     # Signal completion to Unit A via faction register
     %sanity_listener_result = $result

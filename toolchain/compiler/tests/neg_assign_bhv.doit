@@ -1,6 +1,6 @@
 # AI-generated test
 behavior test {
-  var x = 0
-  x = -5
-  set_reg x
+    var x = 0
+    x = -5
+    set_reg x
 }

@@ -1,6 +1,6 @@
 # AI-generated test
 behavior test {
-  @param in a "A"
-  let x = $a > -5
-  set_reg x
+    @param in a "A"
+    let x = $a > -5
+    set_reg x
 }

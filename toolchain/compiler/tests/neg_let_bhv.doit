@@ -1,5 +1,5 @@
 # AI-generated test
 behavior test {
-  let x = -5
-  set_reg x
+    let x = -5
+    set_reg x
 }

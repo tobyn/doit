@@ -4,7 +4,7 @@ behavior instr_local_blocks_data {
     @name "Instr Local Blocks Data"
 
     instruction "check_number" {
-        exec 0: 'larger(@1)
+        exec 0: 'larger (@1)
         exec 1: 'smaller
         2: $signal
         3: 5

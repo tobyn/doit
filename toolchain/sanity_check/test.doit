@@ -39,489 +39,478 @@ behavior sanity_check {
     # Section 1: Constants and imports
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 1: imported constant
-    if MAGIC == 42 { $result += 1 } else { $failed = 1; exit }
+        # 1: imported constant
+        if MAGIC == 42 { $result += 1 } else { $failed = 1; exit }
 
-    # 2: imported type constructor constant
-    if METAL == Item("metalbar") { $result += 1 } else { $failed = 2; exit }
+        # 2: imported type constructor constant
+        if METAL == Item("metalbar") { $result += 1 } else { $failed = 2; exit }
 
-    # 3: composite constant (& operator)
-    if METAL_STACK >= 10 && METAL_STACK <= 10 { $result += 1 } else { $failed = 3; exit }
+        # 3: composite constant (& operator)
+        if METAL_STACK >= 10 && METAL_STACK <= 10 { $result += 1 } else { $failed = 3; exit }
 
-    # 4: coordinate constant
-    if ORIGIN is Coordinate { $result += 1 } else { $failed = 4; exit }
+        # 4: coordinate constant
+        if ORIGIN is Coordinate { $result += 1 } else { $failed = 4; exit }
 
-    # 5: computed constant (constant folding)
-    if COMPUTED == 22 { $result += 1 } else { $failed = 5; exit }
+        # 5: computed constant (constant folding)
+        if COMPUTED == 22 { $result += 1 } else { $failed = 5; exit }
 
-    # 6: enum values
-    if Color::Red == 0 && Color::Green == 1 && Color::Blue == 2 { $result += 1 } else { $failed = 6; exit }
+        # 6: enum values
+        if Color::Red == 0 && Color::Green == 1 && Color::Blue == 2 { $result += 1 } else { $failed = 6; exit }
 
-    # 7: enum with explicit values
-    if Priority::Low == 0 && Priority::Medium == 5 && Priority::High == 6 && Priority::Critical == 100 { $result += 1 } else { $failed = 7; exit }
+        # 7: enum with explicit values
+        if Priority::Low == 0 && Priority::Medium == 5 && Priority::High == 6 && Priority::Critical == 100 { $result += 1 } else { $failed = 7; exit }
     }
 
     # ----------------------------------------------------------
     # Section 2: Basic function calls
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 8: zero-arg function
-    if get_magic() == 42 { $result += 1 } else { $failed = 8; exit }
+        # 8: zero-arg function
+        if get_magic() == 42 { $result += 1 } else { $failed = 8; exit }
 
-    # 9: private fn via public wrapper (transitive privacy)
-    if get_secret() == 99 { $result += 1 } else { $failed = 9; exit }
+        # 9: private fn via public wrapper (transitive privacy)
+        if get_secret() == 99 { $result += 1 } else { $failed = 9; exit }
 
-    # 10: arithmetic functions
-    if adder(3, 4) == 7 { $result += 1 } else { $failed = 10; exit }
+        # 10: arithmetic functions
+        if adder(3, 4) == 7 { $result += 1 } else { $failed = 10; exit }
 
-    # 11: subtraction
-    if sub_fn(10, 3) == 7 { $result += 1 } else { $failed = 11; exit }
+        # 11: subtraction
+        if sub_fn(10, 3) == 7 { $result += 1 } else { $failed = 11; exit }
 
-    # 12: multiplication
-    if mul_fn(4, 5) == 20 { $result += 1 } else { $failed = 12; exit }
+        # 12: multiplication
+        if mul_fn(4, 5) == 20 { $result += 1 } else { $failed = 12; exit }
 
-    # 13: division
-    if div_fn(20, 4) == 5 { $result += 1 } else { $failed = 13; exit }
+        # 13: division
+        if div_fn(20, 4) == 5 { $result += 1 } else { $failed = 13; exit }
 
-    # 14: modulo
-    if mod_fn(17, 5) == 2 { $result += 1 } else { $failed = 14; exit }
+        # 14: modulo
+        if mod_fn(17, 5) == 2 { $result += 1 } else { $failed = 14; exit }
 
-    # 15: negation
-    if negate(7) == -7 { $result += 1 } else { $failed = 15; exit }
+        # 15: negation
+        if negate(7) == -7 { $result += 1 } else { $failed = 15; exit }
 
-    # 16: clamp (below range)
-    if clamp(1, 5, 10) == 5 { $result += 1 } else { $failed = 16; exit }
+        # 16: clamp (below range)
+        if clamp(1, 5, 10) == 5 { $result += 1 } else { $failed = 16; exit }
 
-    # 17: clamp (above range)
-    if clamp(15, 5, 10) == 10 { $result += 1 } else { $failed = 17; exit }
+        # 17: clamp (above range)
+        if clamp(15, 5, 10) == 10 { $result += 1 } else { $failed = 17; exit }
 
-    # 18: clamp (in range)
-    if clamp(7, 5, 10) == 7 { $result += 1 } else { $failed = 18; exit }
+        # 18: clamp (in range)
+        if clamp(7, 5, 10) == 7 { $result += 1 } else { $failed = 18; exit }
 
-    # 19: sum_to (while loop)
-    if sum_to(3) == 6 { $result += 1 } else { $failed = 19; exit }
+        # 19: sum_to (while loop)
+        if sum_to(3) == 6 { $result += 1 } else { $failed = 19; exit }
 
-    # 20: factorial
-    if factorial(3) == 6 { $result += 1 } else { $failed = 20; exit }
+        # 20: factorial
+        if factorial(3) == 6 { $result += 1 } else { $failed = 20; exit }
 
-    # 21: transitive call (double calls adder)
-    if double(6) == 12 { $result += 1 } else { $failed = 21; exit }
+        # 21: transitive call (double calls adder)
+        if double(6) == 12 { $result += 1 } else { $failed = 21; exit }
 
-    # 22: multiple return values
-    let a22, b22 = swap(3, 7)
-    if a22 == 7 && b22 == 3 { $result += 1 } else { $failed = 22; exit }
+        # 22: multiple return values
+        let a22, b22 = swap(3, 7)
+        if a22 == 7 && b22 == 3 { $result += 1 } else { $failed = 22; exit }
 
-    # 23: out parameter
-    var out23 = 0
-    writer out out23
-    if out23 is Unit { $result += 1 } else { $failed = 23; exit }
+        # 23: out parameter
+        var out23 = 0
+        writer out out23
+        if out23 is Unit { $result += 1 } else { $failed = 23; exit }
 
-    # 24: inout parameter
-    var val24 = 5
-    incrementer inout val24
-    if val24 == 6 { $result += 1 } else { $failed = 24; exit }
+        # 24: inout parameter
+        var val24 = 5
+        incrementer inout val24
+        if val24 == 6 { $result += 1 } else { $failed = 24; exit }
 
-    # 25: early return (abs_val)
-    if abs_val(-8) == 8 && abs_val(3) == 3 { $result += 1 } else { $failed = 25; exit }
+        # 25: early return (abs_val)
+        if abs_val(-8) == 8 && abs_val(3) == 3 { $result += 1 } else { $failed = 25; exit }
 
-    # 26: boolean return
-    if is_positive(5) && !is_positive(-1) { $result += 1 } else { $failed = 26; exit }
+        # 26: boolean return
+        if is_positive(5) && !is_positive(-1) { $result += 1 } else { $failed = 26; exit }
 
-    # 27: boolean AND return
-    if both_positive(3, 4) && !both_positive(-1, 4) { $result += 1 } else { $failed = 27; exit }
+        # 27: boolean AND return
+        if both_positive(3, 4) && !both_positive(-1, 4) { $result += 1 } else { $failed = 27; exit }
 
-    # 28: boolean OR return
-    if either_positive(-1, 4) && !either_positive(-1, -2) { $result += 1 } else { $failed = 28; exit }
+        # 28: boolean OR return
+        if either_positive(-1, 4) && !either_positive(-1, -2) { $result += 1 } else { $failed = 28; exit }
     }
 
     # ----------------------------------------------------------
     # Section 3: Arithmetic and expressions
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 29: basic arithmetic
-    let sum29 = 3 + 4
-    if sum29 == 7 { $result += 1 } else { $failed = 29; exit }
+        # 29: basic arithmetic
+        let sum29 = 3 + 4
+        if sum29 == 7 { $result += 1 } else { $failed = 29; exit }
 
-    # 30: PEMDAS
-    let pemdas30 = 2 + 3 * 4
-    if pemdas30 == 14 { $result += 1 } else { $failed = 30; exit }
+        # 30: PEMDAS
+        let pemdas30 = 2 + 3 * 4
+        if pemdas30 == 14 { $result += 1 } else { $failed = 30; exit }
 
-    # 31: parenthesized override
-    let paren31 = (2 + 3) * 4
-    if paren31 == 20 { $result += 1 } else { $failed = 31; exit }
+        # 31: parenthesized override
+        let paren31 = (2 + 3) * 4
+        if paren31 == 20 { $result += 1 } else { $failed = 31; exit }
 
-    # 32: compound assignment
-    var comp32 = 10
-    comp32 += 5
-    comp32 -= 2
-    comp32 *= 3
-    comp32 /= 13
-    if comp32 == 3 { $result += 1 } else { $failed = 32; exit }
+        # 32: compound assignment
+        var comp32 = 10
+        comp32 += 5
+        comp32 -= 2
+        comp32 *= 3
+        comp32 /= 13
+        if comp32 == 3 { $result += 1 } else { $failed = 32; exit }
 
-    # 33: increment/decrement
-    var inc33 = 0
-    inc33++
-    inc33++
-    inc33--
-    if inc33 == 1 { $result += 1 } else { $failed = 33; exit }
+        # 33: increment/decrement
+        var inc33 = 0
+        inc33++
+        inc33++
+        inc33--
+        if inc33 == 1 { $result += 1 } else { $failed = 33; exit }
 
-    # 34: unary minus on variable
-    var neg34 = 5
-    let neg34b = -neg34
-    if neg34b == -5 { $result += 1 } else { $failed = 34; exit }
+        # 34: unary minus on variable
+        var neg34 = 5
+        let neg34b = -neg34
+        if neg34b == -5 { $result += 1 } else { $failed = 34; exit }
 
-    # 35: modulo operator
-    let mod35 = 17 % 5
-    if mod35 == 2 { $result += 1 } else { $failed = 35; exit }
+        # 35: modulo operator
+        let mod35 = 17 % 5
+        if mod35 == 2 { $result += 1 } else { $failed = 35; exit }
 
-    # 36: constant folding in arithmetic
-    let fold36 = 2 * 3 + 4 * 5
-    if fold36 == 26 { $result += 1 } else { $failed = 36; exit }
+        # 36: constant folding in arithmetic
+        let fold36 = 2 * 3 + 4 * 5
+        if fold36 == 26 { $result += 1 } else { $failed = 36; exit }
     }
 
     # ----------------------------------------------------------
     # Section 4: Comparisons and boolean logic
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 37: comparison operators
-    if 5 > 3 && 3 < 5 && 5 >= 5 && 5 <= 5 { $result += 1 } else { $failed = 37; exit }
+        # 37: comparison operators
+        if 5 > 3 && 3 < 5 && 5 >= 5 && 5 <= 5 { $result += 1 } else { $failed = 37; exit }
 
-    # 38: equality and inequality
-    let eq38a = 5
-    let eq38b = 5
-    if eq38a == eq38b && eq38a != 3 { $result += 1 } else { $failed = 38; exit }
+        # 38: equality and inequality
+        let eq38a = 5
+        let eq38b = 5
+        if eq38a == eq38b && eq38a != 3 { $result += 1 } else { $failed = 38; exit }
 
-    # 39: boolean chain (&&)
-    var val39 = 7
-    let bc39 = val39 > 0 && val39 < 100 && val39 != 50
-    if bc39 { $result += 1 } else { $failed = 39; exit }
+        # 39: boolean chain (&&)
+        var val39 = 7
+        let bc39 = val39 > 0 && val39 < 100 && val39 != 50
+        if bc39 { $result += 1 } else { $failed = 39; exit }
 
-    # 40: boolean chain (||)
-    var val40 = -5
-    let bc40 = val40 > 100 || val40 < 0
-    if bc40 { $result += 1 } else { $failed = 40; exit }
+        # 40: boolean chain (||)
+        var val40 = -5
+        let bc40 = val40 > 100 || val40 < 0
+        if bc40 { $result += 1 } else { $failed = 40; exit }
 
-    # 41: mixed && and || precedence
-    var a41 = 10
-    let r41 = a41 > 5 && a41 < 20 || a41 == 100
-    if r41 { $result += 1 } else { $failed = 41; exit }
+        # 41: mixed && and || precedence
+        var a41 = 10
+        let r41 = a41 > 5 && a41 < 20 || a41 == 100
+        if r41 { $result += 1 } else { $failed = 41; exit }
 
-    # 42: negation operator
-    var f42 = null
-    if !f42 { $result += 1 } else { $failed = 42; exit }
+        # 42: negation operator
+        var f42 = null
+        if !f42 { $result += 1 } else { $failed = 42; exit }
 
-    # 43: double negation
-    var t43 = 1
-    if !!t43 { $result += 1 } else { $failed = 43; exit }
+        # 43: double negation
+        var t43 = 1
+        if !!t43 { $result += 1 } else { $failed = 43; exit }
 
-    # 44: parenthesized boolean
-    var a44 = 3
-    let r44 = (a44 > 1 || a44 < -1) && a44 < 10
-    if r44 { $result += 1 } else { $failed = 44; exit }
+        # 44: parenthesized boolean
+        var a44 = 3
+        let r44 = (a44 > 1 || a44 < -1) && a44 < 10
+        if r44 { $result += 1 } else { $failed = 44; exit }
     }
 
     # ----------------------------------------------------------
     # Section 5: Type constructors and type checks
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 45: Item constructor
-    let item45 = Item("metalbar")
-    if item45 is Item { $result += 1 } else { $failed = 45; exit }
+        # 45: Item constructor
+        let item45 = Item("metalbar")
+        if item45 is Item { $result += 1 } else { $failed = 45; exit }
 
-    # 46: Component constructor
-    let comp46 = Component("behavior")
-    if comp46 is Component { $result += 1 } else { $failed = 46; exit }
+        # 46: Component constructor
+        let comp46 = Component("behavior")
+        if comp46 is Component { $result += 1 } else { $failed = 46; exit }
 
-    # 47: Technology constructor
-    let tech47 = Technology("signals2")
-    if tech47 is Technology { $result += 1 } else { $failed = 47; exit }
+        # 47: Technology constructor
+        let tech47 = Technology("signals2")
+        if tech47 is Technology { $result += 1 } else { $failed = 47; exit }
 
-    # 48: Value constructor
-    let val48 = Value("pentagon")
-    if val48 is Value { $result += 1 } else { $failed = 48; exit }
+        # 48: Value constructor
+        let val48 = Value("pentagon")
+        if val48 is Value { $result += 1 } else { $failed = 48; exit }
 
-    # 49: Coordinate constructor (literal)
-    let coord49 = Coordinate(3, 7)
-    if coord49 is Coordinate { $result += 1 } else { $failed = 49; exit }
+        # 49: Coordinate constructor (literal)
+        let coord49 = Coordinate(3, 7)
+        if coord49 is Coordinate { $result += 1 } else { $failed = 49; exit }
 
-    # 50: & operator — composite value
-    let stack50 = Item("metalbar") & 5
-    if stack50 is Item && stack50 >= 5 && stack50 <= 5 { $result += 1 } else { $failed = 50; exit }
+        # 50: & operator — composite value
+        let stack50 = Item("metalbar") & 5
+        if stack50 is Item && stack50 >= 5 && stack50 <= 5 { $result += 1 } else { $failed = 50; exit }
 
-    # 51: !is (negated type check)
-    let num51 = 42
-    if num51 !is Unit && num51 !is Item { $result += 1 } else { $failed = 51; exit }
+        # 51: !is (negated type check)
+        let num51 = 42
+        if num51 !is Unit && num51 !is Item { $result += 1 } else { $failed = 51; exit }
 
-    # 52: value_type branching
-    let vt52 = Item("circuit")
-    let vt52_ok = value_type(vt52) {
-        item { 1 }
-        unit { 0 }
-        component { 0 }
-        tech { 0 }
-        value { 0 }
-        coord { 0 }
-        no_match { 0 }
-    }
-    if vt52_ok { $result += 1 } else { $failed = 52; exit }
+        # 52: value_type branching
+        let vt52 = Item("circuit")
+        let vt52_ok = value_type(vt52) {
+            item { 1 }
+            unit { 0 }
+            component { 0 }
+            tech { 0 }
+            value { 0 }
+            coord { 0 }
+            no_match { 0 }
+        }
+        if vt52_ok { $result += 1 } else { $failed = 52; exit }
     }
 
     # ----------------------------------------------------------
     # Section 6: Variables and scoping
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 53: block scoping
-    var scope53 = 1
-    if true {
-        let scope53 = 99
-    }
-    if scope53 == 1 { $result += 1 } else { $failed = 53; exit }
+        # 53: block scoping
+        var scope53 = 1
+        if true {
+            let scope53 = 99
+        }
+        if scope53 == 1 { $result += 1 } else { $failed = 53; exit }
 
-    # 54: shadowing
-    let shd54 = 5
-    let shd54_a = shd54
-    let shd54 = 10
-    if shd54_a == 5 && shd54 == 10 { $result += 1 } else { $failed = 54; exit }
+        # 54: shadowing
+        let shd54 = 5
+        let shd54_a = shd54
+        let shd54 = 10
+        if shd54_a == 5 && shd54 == 10 { $result += 1 } else { $failed = 54; exit }
 
-    # 55: multi-binding expression list
-    let mb55a, mb55b, mb55c = 1, 2, 3
-    if mb55a == 1 && mb55b == 2 && mb55c == 3 { $result += 1 } else { $failed = 55; exit }
+        # 55: multi-binding expression list
+        let mb55a, mb55b, mb55c = 1, 2, 3
+        if mb55a == 1 && mb55b == 2 && mb55c == 3 { $result += 1 } else { $failed = 55; exit }
 
-    # 56: null vs 0 distinction
-    var zero56 = 0
-    var empty56 = null
-    if zero56 && !empty56 { $result += 1 } else { $failed = 56; exit }
+        # 56: null vs 0 distinction
+        var zero56 = 0
+        var empty56 = null
+        if zero56 && !empty56 { $result += 1 } else { $failed = 56; exit }
 
-    # 57: boolean literals
-    let t57 = true
-    let f57 = false
-    if t57 && !f57 { $result += 1 } else { $failed = 57; exit }
+        # 57: boolean literals
+        let t57 = true
+        let f57 = false
+        if t57 && !f57 { $result += 1 } else { $failed = 57; exit }
     }
 
     # ----------------------------------------------------------
     # Section 7: Control flow
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 58: if/else if/else
-    var r58 = 0
-    var v58 = 5
-    if v58 > 10 {
-        r58 = 1
-    } else if v58 > 3 {
-        r58 = 2
-    } else {
-        r58 = 3
-    }
-    if r58 == 2 { $result += 1 } else { $failed = 58; exit }
+        # 58: if/else if/else
+        var r58 = 0
+        var v58 = 5
+        if v58 > 10 {
+            r58 = 1
+        } else if v58 > 3 {
+            r58 = 2
+        } else {
+            r58 = 3
+        }
+        if r58 == 2 { $result += 1 } else { $failed = 58; exit }
 
-    # 59: while loop
-    var sum59 = 0
-    var i59 = 1
-    while i59 <= 3 {
-        sum59 += i59
-        i59++
-    }
-    if sum59 == 6 { $result += 1 } else { $failed = 59; exit }
+        # 59: while loop
+        var sum59 = 0
+        var i59 = 1
+        while i59 <= 3 {
+            sum59 += i59
+            i59++
+        }
+        if sum59 == 6 { $result += 1 } else { $failed = 59; exit }
 
-    # 60: loop with break
-    var cnt60 = 0
-    loop {
-        cnt60++
-        if cnt60 >= 3 { break }
-    }
-    if cnt60 == 3 { $result += 1 } else { $failed = 60; exit }
+        # 60: loop with break
+        var cnt60 = 0
+        loop {
+            cnt60++
+            if cnt60 >= 3 { break }
+        }
+        if cnt60 == 3 { $result += 1 } else { $failed = 60; exit }
 
-    # 61: counted loop
-    var cnt61 = 0
-    loop 3 {
-        cnt61++
-    }
-    if cnt61 == 3 { $result += 1 } else { $failed = 61; exit }
+        # 61: counted loop
+        var cnt61 = 0
+        loop 3 {
+            cnt61++
+        }
+        if cnt61 == 3 { $result += 1 } else { $failed = 61; exit }
 
-    # 62: for with Range
-    var sum62 = 0
-    for i in Range(1, 3) {
-        sum62 += i
-    }
-    if sum62 == 6 { $result += 1 } else { $failed = 62; exit }
+        # 62: for with Range
+        var sum62 = 0
+        for i in Range(1, 3) {
+            sum62 += i
+        }
+        if sum62 == 6 { $result += 1 } else { $failed = 62; exit }
 
-    # 63: for with Range(start, stop, step)
-    var sum63 = 0
-    for i in Range(0, 4, 2) {
-        sum63 += i
-    }
-    if sum63 == 6 { $result += 1 } else { $failed = 63; exit }
+        # 63: for with Range(start, stop, step)
+        var sum63 = 0
+        for i in Range(0, 4, 2) {
+            sum63 += i
+        }
+        if sum63 == 6 { $result += 1 } else { $failed = 63; exit }
 
-    # 64: for with negative step
-    var sum64 = 0
-    for i in Range(3, 1, -1) {
-        sum64 += i
-    }
-    if sum64 == 6 { $result += 1 } else { $failed = 64; exit }
+        # 64: for with negative step
+        var sum64 = 0
+        for i in Range(3, 1, -1) {
+            sum64 += i
+        }
+        if sum64 == 6 { $result += 1 } else { $failed = 64; exit }
 
-    # 65: labeled break
-    var r65 = 0
-    'outer65: loop {
-        var j = 0
-        while j < 5 {
-            if j == 3 {
-                r65 = j
-                break 'outer65
+        # 65: labeled break
+        var r65 = 0
+        'outer65: loop {
+            var j = 0
+            while j < 5 {
+                if j == 3 {
+                    r65 = j
+                    break 'outer65
+                }
+                j++
             }
-            j++
         }
-    }
-    if r65 == 3 { $result += 1 } else { $failed = 65; exit }
+        if r65 == 3 { $result += 1 } else { $failed = 65; exit }
 
-    # 66: continue
-    var sum66 = 0
-    for i in Range(1, 4) {
-        if i == 3 { continue }
-        sum66 += i
-    }
-    if sum66 == 7 { $result += 1 } else { $failed = 66; exit }
-
-    # 67: nested for loops
-    var sum67 = 0
-    for i in Range(1, 2) {
-        for j in Range(1, 2) {
-            sum67 += 1
+        # 66: continue
+        var sum66 = 0
+        for i in Range(1, 4) {
+            if i == 3 { continue }
+            sum66 += i
         }
-    }
-    if sum67 == 4 { $result += 1 } else { $failed = 67; exit }
+        if sum66 == 7 { $result += 1 } else { $failed = 66; exit }
+
+        # 67: nested for loops
+        var sum67 = 0
+        for i in Range(1, 2) {
+            for j in Range(1, 2) {
+                sum67 += 1
+            }
+        }
+        if sum67 == 4 { $result += 1 } else { $failed = 67; exit }
     }
 
     # ----------------------------------------------------------
     # Section 8: If-expressions and mode block expressions
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 68: basic if-expression
-    var v68 = 7
-    let r68 = if v68 > 5 { 1 } else { 0 }
-    if r68 == 1 { $result += 1 } else { $failed = 68; exit }
+        # 68: basic if-expression
+        var v68 = 7
+        let r68 = if v68 > 5 { 1 } else { 0 }
+        if r68 == 1 { $result += 1 } else { $failed = 68; exit }
 
-    # 69: if-expression without else (null)
-    var v69 = 1
-    let r69 = if v69 > 100 { 99 }
-    if !r69 { $result += 1 } else { $failed = 69; exit }
+        # 69: if-expression without else (null)
+        var v69 = 1
+        let r69 = if v69 > 100 { 99 }
+        if !r69 { $result += 1 } else { $failed = 69; exit }
 
-    # 70: if-expression with else if
-    var v70 = 5
-    let r70 = if v70 > 10 { 3 } else if v70 > 3 { 2 } else { 1 }
-    if r70 == 2 { $result += 1 } else { $failed = 70; exit }
+        # 70: if-expression with else if
+        var v70 = 5
+        let r70 = if v70 > 10 { 3 } else if v70 > 3 { 2 } else { 1 }
+        if r70 == 2 { $result += 1 } else { $failed = 70; exit }
 
-    # 71: mode block expression
-    let me71 = unlocked { get_self }
-    if me71 is Unit { $result += 1 } else { $failed = 71; exit }
+        # 71: mode block expression
+        let me71 = unlocked { get_self }
+        if me71 is Unit { $result += 1 } else { $failed = 71; exit }
     }
 
     # ----------------------------------------------------------
     # Section 9: Branching functions and continuations
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 72: pure-logic branching (classify)
-    var r72 = 0
-    classify(10) {
-        big { r72 = 1 }
-        small { r72 = 0 }
-    }
-    if r72 == 1 { $result += 1 } else { $failed = 72; exit }
+        # 72: pure-logic branching (classify)
+        var r72 = 0
+        classify(10) {
+            big { r72 = 1 }
+            small { r72 = 0 }
+        }
+        if r72 == 1 { $result += 1 } else { $failed = 72; exit }
 
-    # 73: branching with data
-    var r73 = 0
-    classify_data(10) {
-        big { v, flag -> r73 = flag }
-        small { v, flag -> r73 = 0 }
-    }
-    if r73 == 1 { $result += 1 } else { $failed = 73; exit }
+        # 73: branching with data
+        var r73 = 0
+        classify_data(10) {
+            big { v, flag -> r73 = flag }
+            small { v, flag -> r73 = 0 }
+        }
+        if r73 == 1 { $result += 1 } else { $failed = 73; exit }
 
-    # 74: expression-form branching
-    let r74 = classify(10) {
-        big { 1 }
-        small { 0 }
-    }
-    if r74 == 1 { $result += 1 } else { $failed = 74; exit }
+        # 74: expression-form branching
+        let r74 = classify(10) {
+            big { 1 }
+            small { 0 }
+        }
+        if r74 == 1 { $result += 1 } else { $failed = 74; exit }
 
-    # 75: stdlib branching — check_number
-    var v75 = 10
-    var r75 = 0
-    check_number(v75, 5) {
-        larger { r75 = 1 }
-        smaller { r75 = 2 }
-        equal { r75 = 3 }
-    }
-    if r75 == 1 { $result += 1 } else { $failed = 75; exit }
+        # 75: stdlib branching — check_number
+        var v75 = 10
+        var r75 = 0
+        check_number(v75, 5) {
+            larger { r75 = 1 }
+            smaller { r75 = 2 }
+            equal { r75 = 3 }
+        }
+        if r75 == 1 { $result += 1 } else { $failed = 75; exit }
 
-    # 76: stdlib branching — compare_register
-    let a76 = Item("metalbar")
-    let b76 = Item("metalbar")
-    var r76 = 0
-    compare_register(a76, b76) {
-        different { r76 = 0 }
-        equal { r76 = 1 }
-    }
-    if r76 == 1 { $result += 1 } else { $failed = 76; exit }
+        # 76: stdlib branching — compare_register
+        let a76 = Item("metalbar")
+        let b76 = Item("metalbar")
+        var r76 = 0
+        compare_register(a76, b76) {
+            different { r76 = 0 }
+            equal { r76 = 1 }
+        }
+        if r76 == 1 { $result += 1 } else { $failed = 76; exit }
     }
 
     # ----------------------------------------------------------
     # Section 10: Iterators (user-defined)
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 77: static sequence iterator
-    var sum77 = 0
-    for v in countdown() {
-        sum77 += v
-    }
-    if sum77 == 6 { $result += 1 } else { $failed = 77; exit }
+        # 77: static sequence iterator
+        var sum77 = 0
+        for v in countdown() {
+            sum77 += v
+        }
+        if sum77 == 6 { $result += 1 } else { $failed = 77; exit }
 
-    # 78: parameterized iterator
-    var cnt78 = 0
-    for v in repeat_val(42, 3) {
-        cnt78++
-    }
-    if cnt78 == 3 { $result += 1 } else { $failed = 78; exit }
+        # 78: parameterized iterator
+        var cnt78 = 0
+        for v in repeat_val(42, 3) {
+            cnt78++
+        }
+        if cnt78 == 3 { $result += 1 } else { $failed = 78; exit }
     }
 
     # ----------------------------------------------------------
     # Section 11: Library functions with control flow
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 79: count_range (for loop in function)
-    if count_range(1, 3) == 3 { $result += 1 } else { $failed = 79; exit }
+        # 79: count_range (for loop in function)
+        if count_range(1, 3) == 3 { $result += 1 } else { $failed = 79; exit }
 
-    # 80: find_threshold (loop/break in function)
-    if find_threshold(1) == 10 { $result += 1 } else { $failed = 80; exit }
+        # 80: find_threshold (loop/break in function)
+        if find_threshold(1) == 10 { $result += 1 } else { $failed = 80; exit }
 
-    # 81: nested_break_test (labeled break in function)
-    if nested_break_test() == 2 { $result += 1 } else { $failed = 81; exit }
+        # 81: nested_break_test (labeled break in function)
+        if nested_break_test() == 2 { $result += 1 } else { $failed = 81; exit }
 
-    # 82: sum_skip_three (continue in function)
-    if sum_skip_three(4) == 7 { $result += 1 } else { $failed = 82; exit }
+        # 82: sum_skip_three (continue in function)
+        if sum_skip_three(4) == 7 { $result += 1 } else { $failed = 82; exit }
 
-    # 83: pick (if-expression in function)
-    if pick(10) == 10 && pick(2) == 0 { $result += 1 } else { $failed = 83; exit }
+        # 83: pick (if-expression in function)
+        if pick(10) == 10 && pick(2) == 0 { $result += 1 } else { $failed = 83; exit }
     }
 
     # ----------------------------------------------------------
@@ -571,15 +560,14 @@ behavior sanity_check {
     # Section 15: Special values
     # ----------------------------------------------------------
 
-
     unlocked {
-    # 89: infinity keyword
-    let inf89 = infinity
-    if inf89 > 999999 { $result += 1 } else { $failed = 89; exit }
+        # 89: infinity keyword
+        let inf89 = infinity
+        if inf89 > 999999 { $result += 1 } else { $failed = 89; exit }
 
-    # 90: not_equal keyword
-    let ne90 = not_equal
-    if ne90 < -999999 { $result += 1 } else { $failed = 90; exit }
+        # 90: not_equal keyword
+        let ne90 = not_equal
+        if ne90 < -999999 { $result += 1 } else { $failed = 90; exit }
     }
 
     # ----------------------------------------------------------
@@ -626,7 +614,7 @@ behavior sanity_check {
 
     # 99: assert (debug mode — should not exit)
     assert $result > 0
-    $result += 1   # 99: if assert didn't exit, we get here
+    $result += 1 # 99: if assert didn't exit, we get here
 
     # 100: Coordinate with runtime variables
     var cx100 = 3

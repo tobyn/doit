@@ -8,7 +8,7 @@ const METAL = Item("metalbar")
 const METAL_STACK = METAL & 10
 const ORIGIN = Coordinate(0, 0)
 const GREETING = "lib hello"
-const COMPUTED = 3 * 7 + 1     # 22, constant folding
+const COMPUTED = 3 * 7 + 1 # 22, constant folding
 
 # --- Enums ---
 

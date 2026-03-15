@@ -116,7 +116,6 @@ fn build_registered(coordinate, rotation, id) exec(working, failed) {
     }
 }
 
-
 # Returns if a unit can produce an item.
 #   item [in] - production item
 #   component [in, optional] - component to check
@@ -1872,7 +1871,6 @@ fn request_wait(item, channel channel, mode mode) {
         c: mode
     }
 }
-
 
 # Scan for the closest unit that matches the filters.
 #   filter_1 [in] - first filter

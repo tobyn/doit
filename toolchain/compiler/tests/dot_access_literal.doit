@@ -3,7 +3,7 @@
 behavior dot_access_literal {
     @name "Dot Access Literal"
     # number from a pure number: stays as number
-    notify "Num", value: 42 .number
+    notify "Num", value: 42.number
     # value from Item constructor: extracts typed value
     notify "Val", value: Item("metalbar").value
     # number from Item constructor: no numeric component → null
