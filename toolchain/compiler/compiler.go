@@ -995,31 +995,33 @@ func (b *frameBuilder) reorderEventHandlers() {
 			continue
 		}
 
-		// Walk the handler body: starts at the frame after the event instruction
-		// (the event's "next" points there, but we just walk sequentially since
-		// emitDeferredEvents emits them contiguously).
+		// Walk the handler body to find its end. The body is contiguous,
+		// ending at the next event instruction or the end of the frame list.
+		// The continuation "next" is on the terminal frame (patched by
+		// patchHandlerEnd), but intermediate frames may also have "next"
+		// values (e.g., if/else branches), so we must walk to the actual end.
 		end := i
 		contTarget := -1
 		for j := i + 1; j < len(b.frames); j++ {
 			hf := b.frames[j]
+			// Stop before the next event instruction
+			hop, _ := hf["op"].(string)
+			if hop == "event_parameter" || hop == "event_radio" {
+				break
+			}
 			end = j
+		}
 
-			// Check if this frame has an explicit "next"
-			if next, hasNext := hf["next"]; hasNext {
+		// Check the terminal frame for a backward-pointing continuation
+		if end > i {
+			lastFrame := b.frames[end]
+			if next, hasNext := lastFrame["next"]; hasNext {
 				if ref, ok := next.(frameRef); ok {
 					target := int(ref)
-					// If target is before the event chain, it's the continuation
 					if target < i {
 						contTarget = target
 					}
 				}
-				break
-			}
-
-			// If it's a terminal op with no "next", the chain ends here
-			hop, _ := hf["op"].(string)
-			if hop == "exit" || hop == "jump" {
-				break
 			}
 		}
 
@@ -1095,22 +1097,45 @@ func (b *frameBuilder) reorderEventHandlers() {
 		remap[oldIdx] = newIdx
 	}
 
+	// Build a map from past-the-end sentinel targets to their chain's
+	// continuation target. Event handler if/else branches may jump past the
+	// handler body using a frameRef one past the last handler frame. After
+	// reordering, these must point to the continuation target instead.
+	sentinelToCont := map[int]int{}
+	for _, ch := range chains {
+		if _, ok := insertBefore[ch.contTarget]; ok {
+			sentinel := ch.end + 1
+			sentinelToCont[sentinel] = ch.contTarget
+		}
+	}
+
 	newFrames := make([]map[string]any, len(b.frames))
 	for newIdx, oldIdx := range newOrder {
 		f := b.frames[oldIdx]
 		for k, v := range f {
 			if ref, ok := v.(frameRef); ok {
-				f[k] = frameRef(remap[int(ref)])
+				idx := int(ref)
+				if idx < len(remap) {
+					f[k] = frameRef(remap[idx])
+				} else if cont, ok := sentinelToCont[idx]; ok {
+					f[k] = frameRef(remap[cont])
+				}
+				// Other out-of-bounds refs are left as-is
 			}
 		}
 		newFrames[newIdx] = f
 	}
 
 	// Phase 4: Strip redundant "next" that now points to the natural successor.
+	// Skip terminal instructions (exit, jump) — their "next" is a continuation
+	// pointer (e.g., event handler resume target), not flow-through.
 	for i, f := range newFrames {
 		if next, ok := f["next"]; ok {
 			if ref, ok := next.(frameRef); ok && int(ref) == i+1 {
-				delete(f, "next")
+				op, _ := f["op"].(string)
+				if op != "exit" && op != "jump" {
+					delete(f, "next")
+				}
 			}
 		}
 	}
