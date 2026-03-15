@@ -29,7 +29,7 @@ topic is relevant to your current task.
   blank lines. Used by `doit fmt` CLI and LSP `textDocument/formatting`.
 - **Language server** — `toolchain/lsp/server.go`
   LSP server over stdio. Invoked as `doit language-server`.
-  Capabilities: semantic tokens, document formatting.
+  Capabilities: semantic tokens, document formatting, diagnostics.
 - **JetBrains plugin** — `editors/jetbrains/`
   IntelliJ Platform plugin. TextMate grammar + LSP via LSP4IJ.
   Build with `./gradlew buildPlugin` from that directory.

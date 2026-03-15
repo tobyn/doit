@@ -41,7 +41,8 @@ func main() {
 	case "fmt":
 		err = cmdFmt(os.Args[2:])
 	case "language-server":
-		err = lsp.Run()
+		stdlib, _ := fs.Sub(stdlibFS, "stdlib")
+		err = lsp.Run(stdlib)
 	case "help":
 		err = cmdHelp(os.Args[2:])
 	default:

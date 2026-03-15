@@ -20,6 +20,38 @@ register types.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting (build-time tool using existing tokenizer).
 
+## LSP feature roadmap
+
+Features to add to the language server, roughly in priority order.
+
+### No-brainers
+
+- **Diagnostics** — Compile on every `didChange`, convert errors and
+  warnings to LSP diagnostics. The compiler already returns both;
+  `posToLineCol()` handles position mapping. Highest value, lowest
+  effort.
+- **Document symbols** — Walk the parser's `fns`, `iters`, `consts`,
+  `enums`, `bhvs` maps to produce an outline. Powers breadcrumbs and
+  Ctrl+Shift+O in VS Code.
+- **Hover** — Resolve the identifier under the cursor against the
+  symbol table, show signature + doc comment. Stdlib doc comments
+  already follow a consistent format.
+- **Signature help** — Trigger on `(` and `,`. `paramDef` already has
+  name, direction, and keyword status. Just needs cursor-to-call-site
+  mapping.
+
+### Worth considering
+
+- **Completions** — Enumerate stdlib functions, user-defined symbols,
+  and in-scope variables at cursor position. The data exists in the
+  parser's definition maps and symbol table, but scope-correct
+  completions at an arbitrary cursor position require partial parsing
+  of incomplete source.
+- **Go to definition** — Straightforward for user-defined symbols if
+  definition source positions are tracked (currently not stored on AST
+  nodes — would need `pos` fields added). Less useful for stdlib since
+  those live in embedded files.
+
 ## Lint mode
 
 A `--lint` flag (or separate `doit lint` subcommand) that checks for

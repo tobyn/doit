@@ -78,7 +78,7 @@ func TestSemanticTokensMultiLine(t *testing.T) {
 func TestDocumentLifecycle(t *testing.T) {
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	uri := "file:///test.doit"
 
@@ -160,7 +160,7 @@ func TestFormattingCapabilityAdvertised(t *testing.T) {
 func TestFormattingReturnsEdits(t *testing.T) {
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	uri := "file:///test.doit"
 	src := "behavior foo {\nexit\n}\n"
@@ -202,7 +202,7 @@ func TestFormattingReturnsEdits(t *testing.T) {
 func TestFormattingNoChanges(t *testing.T) {
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	uri := "file:///test.doit"
 	src := "behavior foo {\n    exit\n}\n" // already formatted
@@ -237,7 +237,7 @@ func TestFormattingNoChanges(t *testing.T) {
 func TestOnTypeFormattingNewline(t *testing.T) {
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	uri := "file:///test.doit"
 	// User typed Enter after the opening brace on line 0.
@@ -282,7 +282,7 @@ func TestOnTypeFormattingWithDidChange(t *testing.T) {
 	// after user types Enter, then onTypeFormatting.
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	uri := "file:///test.doit"
 	original := "behavior foo {\n    exit\n}\n"
@@ -337,7 +337,7 @@ func TestOnTypeFormattingStaleDoc(t *testing.T) {
 	// correct indentation based on the position.
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	uri := "file:///test.doit"
 	// Original doc — user is about to type Enter after { on line 0.
@@ -388,7 +388,7 @@ func TestOnTypeFormattingStaleDoc(t *testing.T) {
 func TestOnTypeFormattingCloseBrace(t *testing.T) {
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	uri := "file:///test.doit"
 	// User typed } on line 2 (wrong indentation — 8 spaces instead of 0).
@@ -427,10 +427,206 @@ func TestOnTypeFormattingCloseBrace(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsOnOpen(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output, nil)
+
+	uri := "file:///test.doit"
+	// Source with a syntax error (unterminated block).
+	src := "behavior foo {\n    exit\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	notifs := parseNotifications(t, output.Bytes(), "textDocument/publishDiagnostics")
+	if len(notifs) != 1 {
+		t.Fatalf("expected 1 diagnostics notification, got %d", len(notifs))
+	}
+
+	diags, ok := notifs[0]["diagnostics"].([]any)
+	if !ok {
+		t.Fatal("missing diagnostics array")
+	}
+	if len(diags) == 0 {
+		t.Fatal("expected at least one diagnostic for syntax error")
+	}
+	d := diags[0].(map[string]any)
+	if sev := d["severity"].(float64); sev != 1 {
+		t.Errorf("severity = %v, want 1 (Error)", sev)
+	}
+	if src := d["source"]; src != "doit" {
+		t.Errorf("source = %v, want \"doit\"", src)
+	}
+}
+
+func TestDiagnosticsClearOnClose(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output, nil)
+
+	uri := "file:///test.doit"
+	src := "behavior foo {\n    exit\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	writeNotification(&input, "textDocument/didClose", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	notifs := parseNotifications(t, output.Bytes(), "textDocument/publishDiagnostics")
+	if len(notifs) != 2 {
+		t.Fatalf("expected 2 diagnostics notifications (open + close), got %d", len(notifs))
+	}
+
+	// Second notification (on close) should have empty diagnostics.
+	diags, ok := notifs[1]["diagnostics"].([]any)
+	if !ok {
+		t.Fatal("missing diagnostics array in close notification")
+	}
+	if len(diags) != 0 {
+		t.Errorf("expected 0 diagnostics on close, got %d", len(diags))
+	}
+}
+
+func TestDiagnosticsCleanSource(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output, nil)
+
+	uri := "file:///test.doit"
+	// Valid source — no errors. Uses skip prelude since tests have no stdlib.
+	src := "skip prelude\nconst x = 5\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	notifs := parseNotifications(t, output.Bytes(), "textDocument/publishDiagnostics")
+	if len(notifs) != 1 {
+		t.Fatalf("expected 1 diagnostics notification, got %d", len(notifs))
+	}
+
+	diags, ok := notifs[0]["diagnostics"].([]any)
+	if !ok {
+		t.Fatal("missing diagnostics array")
+	}
+	if len(diags) != 0 {
+		t.Errorf("expected 0 diagnostics for clean source, got %d", len(diags))
+	}
+}
+
+func TestDiagnosticsOnChange(t *testing.T) {
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output, nil)
+
+	uri := "file:///test.doit"
+	// Start with broken source.
+	src := "behavior foo {"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": src},
+	})
+	// Fix the source.
+	writeNotification(&input, "textDocument/didChange", map[string]any{
+		"textDocument":   map[string]any{"uri": uri},
+		"contentChanges": []map[string]any{{"text": "skip prelude\nconst x = 5\n"}},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	notifs := parseNotifications(t, output.Bytes(), "textDocument/publishDiagnostics")
+	if len(notifs) != 2 {
+		t.Fatalf("expected 2 diagnostics notifications (open + change), got %d", len(notifs))
+	}
+
+	// First: should have errors.
+	diags1 := notifs[0]["diagnostics"].([]any)
+	if len(diags1) == 0 {
+		t.Error("expected diagnostics on open with broken source")
+	}
+
+	// Second: should be clean.
+	diags2 := notifs[1]["diagnostics"].([]any)
+	if len(diags2) != 0 {
+		t.Errorf("expected 0 diagnostics after fix, got %d", len(diags2))
+	}
+}
+
+func TestParseDiagnostic(t *testing.T) {
+	tests := []struct {
+		msg      string
+		severity int
+		wantLine int
+		wantCol  int
+		wantMsg  string
+	}{
+		{
+			msg:      "3:10: unexpected token",
+			severity: 1,
+			wantLine: 2, wantCol: 9, // 0-based
+			wantMsg: "unexpected token",
+		},
+		{
+			msg:      "1:1: something wrong\n  1 | some code\n    | ^",
+			severity: 2,
+			wantLine: 0, wantCol: 0,
+			wantMsg: "something wrong",
+		},
+	}
+	for _, tt := range tests {
+		d := parseDiagnostic(tt.msg, tt.severity)
+		if d == nil {
+			t.Errorf("parseDiagnostic(%q) returned nil", tt.msg)
+			continue
+		}
+		r := d["range"].(map[string]any)
+		start := r["start"].(map[string]any)
+		if line := int(start["line"].(int)); line != tt.wantLine {
+			t.Errorf("line = %d, want %d", line, tt.wantLine)
+		}
+		if col := int(start["character"].(int)); col != tt.wantCol {
+			t.Errorf("character = %d, want %d", col, tt.wantCol)
+		}
+		if msg := d["message"].(string); msg != tt.wantMsg {
+			t.Errorf("message = %q, want %q", msg, tt.wantMsg)
+		}
+		if sev := d["severity"].(int); sev != tt.severity {
+			t.Errorf("severity = %d, want %d", sev, tt.severity)
+		}
+	}
+
+	// Non-parseable messages should return nil.
+	if d := parseDiagnostic("no line info here", 1); d != nil {
+		t.Errorf("expected nil for unparseable message, got %v", d)
+	}
+}
+
 func TestShutdownExit(t *testing.T) {
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	writeRequest(&input, 1, "shutdown", nil)
 	writeNotification(&input, "exit", nil)
@@ -474,7 +670,7 @@ func roundtrip(t *testing.T, src string) map[string]any {
 	t.Helper()
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	uri := "file:///test.doit"
 	writeNotification(&input, "textDocument/didOpen", map[string]any{
@@ -501,7 +697,7 @@ func sendRequest(t *testing.T, method string, params any) map[string]any {
 	t.Helper()
 	var input bytes.Buffer
 	var output bytes.Buffer
-	s := NewServer(&input, &output)
+	s := NewServer(&input, &output, nil)
 
 	writeRequest(&input, 1, method, params)
 	writeNotification(&input, "exit", nil)
@@ -573,10 +769,14 @@ func parseResponses(t *testing.T, data []byte) []map[string]any {
 		str = str[bodyStart+cLen:]
 
 		var resp struct {
+			ID     json.RawMessage `json:"id,omitempty"`
 			Result json.RawMessage `json:"result"`
 		}
 		if err := json.Unmarshal([]byte(body), &resp); err != nil {
 			continue
+		}
+		if resp.ID == nil {
+			continue // skip notifications (e.g., diagnostics)
 		}
 		if resp.Result == nil {
 			results = append(results, nil)
@@ -626,12 +826,66 @@ func parseRawResponses(t *testing.T, data []byte) []json.RawMessage {
 		str = str[bodyStart+cLen:]
 
 		var resp struct {
+			ID     json.RawMessage `json:"id,omitempty"`
 			Result json.RawMessage `json:"result"`
 		}
 		if err := json.Unmarshal([]byte(body), &resp); err != nil {
 			continue
 		}
+		if resp.ID == nil {
+			continue // skip notifications (e.g., diagnostics)
+		}
 		results = append(results, resp.Result)
+	}
+	return results
+}
+
+// parseNotifications extracts notification params for the given method from raw output.
+func parseNotifications(t *testing.T, data []byte, method string) []map[string]any {
+	t.Helper()
+	str := string(data)
+	var results []map[string]any
+
+	for str != "" {
+		idx := strings.Index(str, "Content-Length:")
+		if idx < 0 {
+			break
+		}
+		str = str[idx:]
+		nlIdx := strings.Index(str, "\r\n")
+		if nlIdx < 0 {
+			break
+		}
+		lenStr := strings.TrimSpace(str[len("Content-Length:"):nlIdx])
+		var cLen int
+		_, _ = fmt.Sscanf(lenStr, "%d", &cLen)
+
+		bodyStart := strings.Index(str, "\r\n\r\n")
+		if bodyStart < 0 {
+			break
+		}
+		bodyStart += 4
+		if bodyStart+cLen > len(str) {
+			break
+		}
+		body := str[bodyStart : bodyStart+cLen]
+		str = str[bodyStart+cLen:]
+
+		var msg struct {
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
+		}
+		if err := json.Unmarshal([]byte(body), &msg); err != nil {
+			continue
+		}
+		if msg.Method != method {
+			continue
+		}
+		var params map[string]any
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			continue
+		}
+		results = append(results, params)
 	}
 	return results
 }

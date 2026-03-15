@@ -85,6 +85,53 @@ func CompileString(src string, stdlib fs.FS, behaviorID, locale string, sourceFS
 	return obj, p.warnings, nil
 }
 
+// Check parses the source and collects all declarations (functions, iterators,
+// constants, enums, behaviors) without compiling any specific behavior. This
+// catches syntax errors and declaration-level semantic errors across the entire
+// file, making it suitable for LSP diagnostics where no single behavior is
+// selected. The returned warnings and error use the same line:col format as
+// CompileString.
+func Check(src string, stdlib fs.FS, sourceFS fs.FS, sourcePath string) ([]string, error) {
+	sourceDir := ""
+	if sourcePath != "" {
+		sourceDir = path.Dir(sourcePath)
+		if sourceDir == "." {
+			sourceDir = ""
+		}
+	}
+
+	preludeText := ""
+	sourceOffset := 0
+	if stdlib != nil {
+		data, err := fs.ReadFile(stdlib, "prelude.doit")
+		if err != nil {
+			return nil, fmt.Errorf("stdlib: reading prelude: %w", err)
+		}
+		preludeText = string(data)
+	}
+	if preludeText != "" && !hasSkipPrelude(src) {
+		src = preludeText + src
+		sourceOffset = len(preludeText)
+	}
+
+	p := &parser{
+		scanner:    scanner{syn: syntax.Scanner{Src: src}, sourceOffset: sourceOffset},
+		fns:        map[string]*fnDef{},
+		iters:      map[string]*iterDef{},
+		loopLabels: map[string]bool{},
+		consts:     map[string]*constDef{},
+		enums:      map[string]*enumDef{},
+		bhvs:       map[string]*bhvDef{},
+		prelude:    preludeText,
+		sourceFS:   sourceFS,
+		sourcePath: sourcePath,
+		sourceDir:  sourceDir,
+		stdlibFS:   stdlib,
+	}
+	err := p.collectUserFns()
+	return p.warnings, err
+}
+
 // hasSkipPrelude reports whether the source starts with a `skip prelude` directive.
 func hasSkipPrelude(src string) bool {
 	s := &scanner{syn: syntax.Scanner{Src: src}}

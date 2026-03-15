@@ -8,11 +8,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
+	"net/url"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/tobyn/doit/toolchain/compiler"
 	"github.com/tobyn/doit/toolchain/formatter"
 	"github.com/tobyn/doit/toolchain/syntax"
 )
@@ -26,23 +31,29 @@ type Server struct {
 	// Open documents keyed by URI.
 	docs   map[string]string
 	docsMu sync.Mutex
+
+	// Standard library filesystem for compilation.
+	stdlib fs.FS
 }
 
 // NewServer creates a new language server using the given reader and writer
-// for JSON-RPC communication.
-func NewServer(r io.Reader, w io.Writer) *Server {
+// for JSON-RPC communication. The stdlib parameter provides the standard
+// library filesystem for compilation diagnostics; it may be nil.
+func NewServer(r io.Reader, w io.Writer, stdlib fs.FS) *Server {
 	return &Server{
 		reader: bufio.NewReader(r),
 		writer: w,
 		docs:   make(map[string]string),
+		stdlib: stdlib,
 	}
 }
 
 // Run starts the language server, reading JSON-RPC messages from stdin
 // and writing responses to stdout. It blocks until the exit notification
-// is received or an I/O error occurs.
-func Run() error {
-	s := NewServer(os.Stdin, os.Stdout)
+// is received or an I/O error occurs. The stdlib parameter provides the
+// standard library filesystem for compilation diagnostics.
+func Run(stdlib fs.FS) error {
+	s := NewServer(os.Stdin, os.Stdout, stdlib)
 	return s.Serve()
 }
 
@@ -238,6 +249,7 @@ func (s *Server) handleDidOpen(msg *jsonrpcMessage) {
 	s.docsMu.Lock()
 	s.docs[params.TextDocument.URI] = params.TextDocument.Text
 	s.docsMu.Unlock()
+	s.publishDiagnostics(params.TextDocument.URI, params.TextDocument.Text)
 }
 
 type didChangeParams struct {
@@ -258,9 +270,11 @@ func (s *Server) handleDidChange(msg *jsonrpcMessage) {
 		return
 	}
 	// Full sync: take the last content change.
+	text := params.ContentChanges[len(params.ContentChanges)-1].Text
 	s.docsMu.Lock()
-	s.docs[params.TextDocument.URI] = params.ContentChanges[len(params.ContentChanges)-1].Text
+	s.docs[params.TextDocument.URI] = text
 	s.docsMu.Unlock()
+	s.publishDiagnostics(params.TextDocument.URI, text)
 }
 
 type didCloseParams struct {
@@ -277,6 +291,117 @@ func (s *Server) handleDidClose(msg *jsonrpcMessage) {
 	s.docsMu.Lock()
 	delete(s.docs, params.TextDocument.URI)
 	s.docsMu.Unlock()
+	// Clear diagnostics for the closed document.
+	s.sendNotification("textDocument/publishDiagnostics", map[string]any{
+		"uri":         params.TextDocument.URI,
+		"diagnostics": []any{},
+	})
+}
+
+// --- Diagnostics ---
+
+// sendNotification sends a JSON-RPC notification (no id, no response expected).
+func (s *Server) sendNotification(method string, params any) {
+	msg := map[string]any{
+		"jsonrpc": "2.0",
+		"method":  method,
+		"params":  params,
+	}
+	s.writeMessage(msg)
+}
+
+// publishDiagnostics compiles the source to collect errors and warnings,
+// then publishes them as LSP diagnostics.
+func (s *Server) publishDiagnostics(uri, src string) {
+	diags := []map[string]any{}
+
+	var sourceFS fs.FS
+	var sourcePath string
+	if filePath := uriToPath(uri); filePath != "" {
+		sourceFS = os.DirFS(filepath.Dir(filePath))
+		sourcePath = filepath.Base(filePath)
+	}
+
+	warnings, err := compiler.Check(src, s.stdlib, sourceFS, sourcePath)
+	if err != nil {
+		if d := parseDiagnostic(err.Error(), 1); d != nil {
+			diags = append(diags, d)
+		}
+	}
+	for _, w := range warnings {
+		if d := parseDiagnostic(w, 2); d != nil {
+			diags = append(diags, d)
+		}
+	}
+
+	s.sendNotification("textDocument/publishDiagnostics", map[string]any{
+		"uri":         uri,
+		"diagnostics": diags,
+	})
+}
+
+// uriToPath converts a file:// URI to a local filesystem path.
+// Returns empty string for non-file URIs or on parse failure.
+func uriToPath(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil || u.Scheme != "file" {
+		return ""
+	}
+	p := u.Path
+	// On Windows, file URIs look like file:///C:/path — strip the leading /.
+	if runtime.GOOS == "windows" && len(p) >= 3 && p[0] == '/' && p[2] == ':' {
+		p = p[1:]
+	}
+	return filepath.FromSlash(p)
+}
+
+// parseDiagnostic extracts a line:col prefixed message into an LSP diagnostic.
+// severity: 1=Error, 2=Warning. Returns nil if the format is not recognized.
+func parseDiagnostic(msg string, severity int) map[string]any {
+	// Format: "line:col: message" (1-based) optionally with source annotation.
+	// Strip any source annotation (starts with newline).
+	if idx := strings.Index(msg, "\n"); idx >= 0 {
+		msg = msg[:idx]
+	}
+
+	colon1 := strings.Index(msg, ":")
+	if colon1 < 0 {
+		return nil
+	}
+	line, err := strconv.Atoi(msg[:colon1])
+	if err != nil {
+		return nil
+	}
+	rest := msg[colon1+1:]
+	colon2 := strings.Index(rest, ":")
+	if colon2 < 0 {
+		return nil
+	}
+	col, err := strconv.Atoi(rest[:colon2])
+	if err != nil {
+		return nil
+	}
+	message := strings.TrimSpace(rest[colon2+1:])
+
+	// Convert from 1-based to 0-based for LSP.
+	line--
+	col--
+	if line < 0 {
+		line = 0
+	}
+	if col < 0 {
+		col = 0
+	}
+
+	return map[string]any{
+		"range": map[string]any{
+			"start": map[string]any{"line": line, "character": col},
+			"end":   map[string]any{"line": line, "character": col},
+		},
+		"severity": severity,
+		"source":   "doit",
+		"message":  message,
+	}
 }
 
 // --- Semantic tokens ---

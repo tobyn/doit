@@ -129,7 +129,8 @@ doit language-server
 
 Starts a Language Server Protocol (LSP) server that communicates over
 stdin/stdout using JSON-RPC 2.0. Editors and IDEs use this to provide
-semantic syntax highlighting for doit source files.
+syntax highlighting, diagnostics, and other language features for doit
+source files.
 
 The language server is typically launched by an editor extension rather than
 invoked directly. Editor extensions handle this automatically:
@@ -143,6 +144,9 @@ invoked directly. Editor extensions handle this automatically:
   coloring.
 - **Document formatting** — canonical code formatting (same as `doit fmt`).
   Triggered by the editor's "Reformat Code" or "Format Document" command.
+- **Diagnostics** — reports syntax errors and warnings as you type. Runs the
+  compiler's declaration-level checks on every edit and publishes results as
+  inline editor diagnostics (red/yellow squiggles).
 - **Full document sync** — tracks open documents and responds to changes in
   real time.
 

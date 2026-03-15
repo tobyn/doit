@@ -48,8 +48,9 @@ node codec/refcodec.js encode file.json  # encode with reference
   blank lines. Used by both `doit fmt` and the LSP formatting handler.
 - **`lsp/`** — Language Server Protocol server for doit. Communicates
   over stdio JSON-RPC 2.0. Provides semantic token highlighting via
-  the `syntax.Tokenize` function and document formatting via the
-  `formatter` package. Invoked as `doit language-server`.
+  the `syntax.Tokenize` function, document formatting via the
+  `formatter` package, and real-time diagnostics (errors and warnings)
+  via `compiler.Check`. Invoked as `doit language-server`.
 
 ## Toolchain functionality
 
