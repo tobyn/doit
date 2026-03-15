@@ -29,7 +29,11 @@ see `.claude/learnings/test_format.md`.
   reachable. If not found, the code is warned about and skipped via
   `skipToCloseBrace`.
 - **`scanner.go`** — `scanner` struct (embedded by `parser`), token
-  types, `Keywords` map, `skipToCloseBrace`. The `scanner` has a
+  types, `Keywords` map, `skipToCloseBrace`. Two scanning methods:
+  `rawNext()` scans one token including comments (returns `tokComment`);
+  `next()` wraps `rawNext()`, filtering comments and accumulating
+  `#!` doc comments. The semantic tokenizer (`highlight.go`) uses
+  `rawNext()` directly to get comment tokens. The `scanner` has a
   `sourceOffset` field (byte offset of user source after prepended
   prelude; `posToLineCol` starts counting from this offset). The
   `parser` struct extends `scanner` with `fns`, `iters`, `consts`,

@@ -40,7 +40,10 @@ node codec/refcodec.js encode file.json  # encode with reference
   Also contains `highlight.go` — a semantic tokenizer (`Tokenize`)
   that classifies source tokens into LSP semantic types (keyword,
   function, variable, parameter, type, label, register, etc.) using
-  context-aware scanning.
+  the scanner's `rawNext()` method with context-aware classification.
+  `grammar_sync_test.go` verifies that keywords, type constructors,
+  and escape sequences stay in sync between `scanner.go` and the
+  TextMate grammar (`editors/doit.tmLanguage.json`).
 - **`lsp/`** — Language Server Protocol server for doit. Communicates
   over stdio JSON-RPC 2.0. Provides semantic token highlighting via
   the compiler's `Tokenize` function. Invoked as `doit language-server`.

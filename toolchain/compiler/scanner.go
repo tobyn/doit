@@ -48,8 +48,9 @@ const (
 	tokArrow // ->
 	tokDot
 	tokDoubleColon
-	tokLabel  // 'identifier — loop label sigil
-	tokIs     // internal-only: represents the 'is' operator in comparisonTerm.op
+	tokLabel   // 'identifier — loop label sigil
+	tokComment // # or #! comment line (only returned by rawNext)
+	tokIs      // internal-only: represents the 'is' operator in comparisonTerm.op
 	tokTruthy // internal-only: represents a truthy check in comparisonTerm.op
 )
 
@@ -372,90 +373,39 @@ func parseLocalePrefix(line string) (locale, rest string, ok bool) {
 	return locale, rest, true
 }
 
-func (s *scanner) skipWhitespaceAndComments() {
-	s.docComment = ""
-	var docLines []string
-
+func (s *scanner) skipWhitespace() {
 	for s.pos < len(s.src) {
 		c := s.src[s.pos]
 		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ';' {
 			s.pos++
-		} else if c == '#' && s.pos+1 < len(s.src) && s.src[s.pos+1] == '!' {
-			s.pos += 2 // skip #!
-			start := s.pos
-			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
-				s.pos++
-			}
-			docLines = append(docLines, strings.TrimSpace(s.src[start:s.pos]))
-		} else if c == '#' {
-			for s.pos < len(s.src) && s.src[s.pos] != '\n' {
-				s.pos++
-			}
 		} else {
 			break
 		}
 	}
-
-	if len(docLines) == 0 {
-		return
-	}
-
-	if loc, rest, ok := parseLocalePrefix(docLines[0]); ok {
-		s.docComment = s.resolveLocalizedDocComment(loc, rest, docLines[1:])
-	} else {
-		s.docComment = strings.Join(docLines, " ")
-	}
 }
 
-func (s *scanner) resolveLocalizedDocComment(firstLocale, firstText string, remaining []string) string {
-	type entry struct {
-		locale string
-		text   string
-	}
-	entries := []entry{{firstLocale, firstText}}
-
-	for _, line := range remaining {
-		if loc, rest, ok := parseLocalePrefix(line); ok {
-			entries = append(entries, entry{loc, rest})
-		} else {
-			last := &entries[len(entries)-1]
-			if last.text != "" {
-				last.text += " " + line
-			} else {
-				last.text = line
-			}
-		}
-	}
-
-	locales := make([]string, len(entries))
-	for i, e := range entries {
-		locales[i] = e.locale
-	}
-	idx := matchLocale(s.locale, locales)
-	return entries[idx].text
-}
-
-func (s *scanner) unget(tok token) {
-	t := tok
-	s.ungot = &t
-	s.ungotComment = s.docComment
-}
-
-func (s *scanner) next() (token, error) {
-	if s.ungot != nil {
-		tok := *s.ungot
-		s.ungot = nil
-		s.docComment = s.ungotComment
-		return tok, nil
-	}
-
-	s.skipWhitespaceAndComments()
+// rawNext scans the next token including comments. Comments are returned
+// as tokComment tokens (with the full line from '#' to end-of-line in val).
+// This is the low-level scanning primitive used by both next() (which
+// filters comments and accumulates doc comments) and the semantic tokenizer
+// (which emits comment tokens directly).
+func (s *scanner) rawNext() (token, error) {
+	s.skipWhitespace()
 	if s.pos >= len(s.src) {
 		return token{kind: tokEOF, pos: s.pos}, nil
 	}
 
 	start := s.pos
 	c := s.src[s.pos]
+
+	// Comments (both # and #!).
+	if c == '#' {
+		for s.pos < len(s.src) && s.src[s.pos] != '\n' {
+			s.pos++
+		}
+		return token{tokComment, s.src[start:s.pos], start}, nil
+	}
+
 	switch {
 	case c == '{':
 		s.pos++
@@ -587,6 +537,72 @@ func (s *scanner) next() (token, error) {
 		return s.scanIdent(), nil
 	default:
 		return token{}, s.errorf(start, "unexpected character %q", c)
+	}
+}
+
+func (s *scanner) resolveLocalizedDocComment(firstLocale, firstText string, remaining []string) string {
+	type entry struct {
+		locale string
+		text   string
+	}
+	entries := []entry{{firstLocale, firstText}}
+
+	for _, line := range remaining {
+		if loc, rest, ok := parseLocalePrefix(line); ok {
+			entries = append(entries, entry{loc, rest})
+		} else {
+			last := &entries[len(entries)-1]
+			if last.text != "" {
+				last.text += " " + line
+			} else {
+				last.text = line
+			}
+		}
+	}
+
+	locales := make([]string, len(entries))
+	for i, e := range entries {
+		locales[i] = e.locale
+	}
+	idx := matchLocale(s.locale, locales)
+	return entries[idx].text
+}
+
+func (s *scanner) unget(tok token) {
+	t := tok
+	s.ungot = &t
+	s.ungotComment = s.docComment
+}
+
+func (s *scanner) next() (token, error) {
+	if s.ungot != nil {
+		tok := *s.ungot
+		s.ungot = nil
+		s.docComment = s.ungotComment
+		return tok, nil
+	}
+
+	s.docComment = ""
+	var docLines []string
+	for {
+		tok, err := s.rawNext()
+		if err != nil {
+			return tok, err
+		}
+		if tok.kind != tokComment {
+			if len(docLines) > 0 {
+				if loc, rest, ok := parseLocalePrefix(docLines[0]); ok {
+					s.docComment = s.resolveLocalizedDocComment(loc, rest, docLines[1:])
+				} else {
+					s.docComment = strings.Join(docLines, " ")
+				}
+			}
+			return tok, nil
+		}
+		// Accumulate doc comment lines (#!), skip regular comments.
+		if len(tok.val) >= 2 && tok.val[1] == '!' {
+			docLines = append(docLines, strings.TrimSpace(tok.val[2:]))
+		}
 	}
 }
 
@@ -792,6 +808,8 @@ func (t token) describe() string {
 		return "'::'"
 	case tokLabel:
 		return fmt.Sprintf("label '%s", t.val)
+	case tokComment:
+		return fmt.Sprintf("comment %q", t.val)
 	case tokIs:
 		return "'is'"
 	case tokTruthy:

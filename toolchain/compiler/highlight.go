@@ -109,11 +109,12 @@ const (
 )
 
 // Tokenize produces semantic tokens for the given doit source code.
-// It classifies each token based on context-aware scanning without
-// requiring a full parse. Tokens are returned in source order.
+// It uses the compiler's scanner (rawNext) with lightweight context
+// tracking to classify tokens semantically without requiring a full
+// parse. Tokens are returned in source order.
 func Tokenize(src string) []SemanticToken {
 	t := &tokenizer{
-		src:    src,
+		s:      scanner{src: src},
 		tokens: make([]SemanticToken, 0, 256),
 	}
 	t.tokenize()
@@ -121,12 +122,14 @@ func Tokenize(src string) []SemanticToken {
 }
 
 type tokenizer struct {
-	src    string
+	s      scanner
 	tokens []SemanticToken
 	ctx    highlightContext
 	// Track brace depth for enum body detection.
 	enumBraceDepth int
 	braceDepth     int
+	// Pending @ token for @N slot reference detection.
+	pendingAt int // byte offset of '@', or -1 if none
 }
 
 func (t *tokenizer) emit(offset, length int, typ SemanticTokenType, mods SemanticTokenModifier) {
@@ -138,185 +141,125 @@ func (t *tokenizer) emit(offset, length int, typ SemanticTokenType, mods Semanti
 	})
 }
 
+// flushPendingAt emits a pending '@' as a decorator token.
+func (t *tokenizer) flushPendingAt() {
+	if t.pendingAt >= 0 {
+		t.emit(t.pendingAt, 1, TokenDecorator, 0)
+		t.ctx = ctxAfterAt
+		t.pendingAt = -1
+	}
+}
+
 func (t *tokenizer) tokenize() {
-	pos := 0
-	for pos < len(t.src) {
-		// Skip whitespace (not comments — we want to emit those).
-		c := t.src[pos]
-		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ';' {
-			pos++
-			continue
-		}
-
-		// Doc comments (#!).
-		if c == '#' && pos+1 < len(t.src) && t.src[pos+1] == '!' {
-			start := pos
-			for pos < len(t.src) && t.src[pos] != '\n' {
-				pos++
+	t.pendingAt = -1
+	for {
+		prevPos := t.s.pos
+		tok, err := t.s.rawNext()
+		if err != nil {
+			// Ensure progress on scanner errors (some don't advance pos).
+			if t.s.pos <= prevPos {
+				t.s.pos = prevPos + 1
 			}
-			t.emit(start, pos-start, TokenComment, ModDocumentation)
 			continue
 		}
+		if tok.kind == tokEOF {
+			t.flushPendingAt()
+			break
+		}
 
-		// Regular comments (#).
-		if c == '#' {
-			start := pos
-			for pos < len(t.src) && t.src[pos] != '\n' {
-				pos++
+		rawLen := t.s.pos - tok.pos
+
+		// Handle @N slot reference detection: if we have a pending @
+		// and this token is a number immediately after it, combine them.
+		if t.pendingAt >= 0 {
+			if tok.kind == tokNumber && tok.pos == t.pendingAt+1 {
+				t.emit(t.pendingAt, t.s.pos-t.pendingAt, TokenVariable, 0)
+				t.pendingAt = -1
+				t.ctx = ctxNone
+				continue
 			}
-			t.emit(start, pos-start, TokenComment, 0)
-			continue
+			t.flushPendingAt()
 		}
 
-		// Strings.
-		if c == '"' {
-			start := pos
-			pos++ // skip opening quote
-			for pos < len(t.src) {
-				if t.src[pos] == '\\' && pos+1 < len(t.src) {
-					pos += 2
-				} else if t.src[pos] == '"' {
-					pos++
-					break
+		switch tok.kind {
+		case tokComment:
+			if len(tok.val) >= 2 && tok.val[1] == '!' {
+				t.emit(tok.pos, rawLen, TokenComment, ModDocumentation)
+			} else {
+				t.emit(tok.pos, rawLen, TokenComment, 0)
+			}
+
+		case tokString:
+			t.emit(tok.pos, rawLen, TokenString, 0)
+			t.ctx = ctxNone
+
+		case tokNumber:
+			t.emit(tok.pos, rawLen, TokenNumber, 0)
+			t.ctx = ctxNone
+
+		case tokIdent:
+			if len(tok.val) > 0 && tok.val[0] == '$' {
+				// Register reference ($ident).
+				if t.ctx == ctxAfterOn {
+					t.emit(tok.pos, rawLen, TokenParameter, 0)
 				} else {
-					pos++
+					t.emit(tok.pos, rawLen, TokenRegister, 0)
 				}
-			}
-			t.emit(start, pos-start, TokenString, 0)
-			t.ctx = ctxNone
-			continue
-		}
-
-		// Numbers.
-		if c >= '0' && c <= '9' {
-			start := pos
-			for pos < len(t.src) && t.src[pos] >= '0' && t.src[pos] <= '9' {
-				pos++
-			}
-			t.emit(start, pos-start, TokenNumber, 0)
-			t.ctx = ctxNone
-			continue
-		}
-
-		// Register references ($ident).
-		if c == '$' {
-			start := pos
-			pos++
-			for pos < len(t.src) && isIdentCont(t.src[pos]) {
-				pos++
-			}
-			if t.ctx == ctxAfterOn {
-				t.emit(start, pos-start, TokenParameter, 0)
-			} else {
-				t.emit(start, pos-start, TokenRegister, 0)
-			}
-			t.ctx = ctxNone
-			continue
-		}
-
-		// Label sigils ('ident).
-		if c == '\'' && pos+1 < len(t.src) && isIdentStart(t.src[pos+1]) {
-			start := pos
-			pos++
-			for pos < len(t.src) && isIdentCont(t.src[pos]) {
-				pos++
-			}
-			t.emit(start, pos-start, TokenLabel, 0)
-			t.ctx = ctxNone
-			continue
-		}
-
-		// Slot references (@N) and @ token.
-		if c == '@' {
-			start := pos
-			pos++
-			if pos < len(t.src) && t.src[pos] >= '0' && t.src[pos] <= '9' {
-				for pos < len(t.src) && t.src[pos] >= '0' && t.src[pos] <= '9' {
-					pos++
-				}
-				t.emit(start, pos-start, TokenVariable, 0)
 				t.ctx = ctxNone
 			} else {
-				t.emit(start, 1, TokenDecorator, 0)
-				t.ctx = ctxAfterAt
+				t.classifyIdent(tok.pos, tok.val)
 			}
-			continue
-		}
 
-		// Identifiers and keywords.
-		if isIdentStart(c) {
-			start := pos
-			for pos < len(t.src) && isIdentCont(t.src[pos]) {
-				pos++
-			}
-			word := t.src[start:pos]
-			t.classifyIdent(start, word)
-			continue
-		}
+		case tokLabel:
+			t.emit(tok.pos, rawLen, TokenLabel, 0)
+			t.ctx = ctxNone
 
-		// Multi-character operators (check before single-char).
-		if pos+1 < len(t.src) {
-			two := t.src[pos : pos+2]
-			switch two {
-			case "->", "&&", "||", "==", "!=", "<=", ">=",
-				"+=", "-=", "*=", "/=", "%=", "++", "--":
-				t.emit(pos, 2, TokenOperator, 0)
-				pos += 2
-				t.ctx = ctxNone
-				continue
-			case "::":
-				t.emit(pos, 2, TokenOperator, 0)
-				pos += 2
-				t.ctx = ctxAfterDoubleColon
-				continue
-			}
-		}
+		case tokAt:
+			// Defer emission — might be @N (slot reference).
+			t.pendingAt = tok.pos
 
-		// Single-character operators and punctuation.
-		switch c {
-		case '{':
+		case tokDoubleColon:
+			t.emit(tok.pos, rawLen, TokenOperator, 0)
+			t.ctx = ctxAfterDoubleColon
+
+		case tokLBrace:
 			t.braceDepth++
 			if t.ctx == ctxAfterEnum {
 				t.enumBraceDepth = t.braceDepth
 				t.ctx = ctxInEnumBody
 			} else if t.ctx == ctxAfterImport {
-				// Stay in import context for named imports
+				// Stay in import context for named imports.
 			} else {
 				t.ctx = ctxNone
 			}
-			t.emit(pos, 1, TokenOperator, 0)
-			pos++
-		case '}':
+			t.emit(tok.pos, rawLen, TokenOperator, 0)
+
+		case tokRBrace:
 			if t.ctx == ctxInEnumBody && t.braceDepth == t.enumBraceDepth {
 				t.ctx = ctxNone
 				t.enumBraceDepth = 0
 			}
-			// After } in import { ... }, we need to recognize 'from'
-			if t.ctx == ctxAfterImport {
-				// Stay in import context
-			}
 			t.braceDepth--
-			t.emit(pos, 1, TokenOperator, 0)
-			pos++
-		case '(', ')', ',', ':', '.':
-			t.emit(pos, 1, TokenOperator, 0)
-			pos++
-			if c == '.' {
-				t.ctx = ctxAfterDot
-			} else if c == ',' {
-				// Don't reset context for comma (preserves for-loop ident context, import context)
-			} else {
-				if t.ctx != ctxAfterForIdents && t.ctx != ctxAfterImport {
-					t.ctx = ctxNone
-				}
+			t.emit(tok.pos, rawLen, TokenOperator, 0)
+
+		case tokDot:
+			t.emit(tok.pos, rawLen, TokenOperator, 0)
+			t.ctx = ctxAfterDot
+
+		case tokComma:
+			t.emit(tok.pos, rawLen, TokenOperator, 0)
+			// Don't reset context (preserves for-loop ident context, import context).
+
+		case tokLParen, tokRParen, tokColon:
+			t.emit(tok.pos, rawLen, TokenOperator, 0)
+			if t.ctx != ctxAfterForIdents && t.ctx != ctxAfterImport {
+				t.ctx = ctxNone
 			}
-		case '=', '+', '-', '*', '/', '%', '<', '>', '!', '&', '|':
-			t.emit(pos, 1, TokenOperator, 0)
-			pos++
-			t.ctx = ctxNone
+
 		default:
-			// Unknown character — skip it.
-			pos++
+			// All other operators.
+			t.emit(tok.pos, rawLen, TokenOperator, 0)
+			t.ctx = ctxNone
 		}
 	}
 }
