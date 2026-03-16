@@ -16,13 +16,11 @@ import (
 	"github.com/tobyn/doit/toolchain/compiler"
 	"github.com/tobyn/doit/toolchain/formatter"
 	"github.com/tobyn/doit/toolchain/lsp"
+	doitstdlib "github.com/tobyn/doit/toolchain/stdlib"
 )
 
 //go:embed usage/*.txt
 var usageFS embed.FS
-
-//go:embed stdlib
-var stdlibFS embed.FS
 
 func main() {
 	if len(os.Args) < 2 {
@@ -42,8 +40,7 @@ func main() {
 	case "fmt":
 		err = cmdFmt(os.Args[2:])
 	case "language-server":
-		stdlib, _ := fs.Sub(stdlibFS, "stdlib")
-		err = lsp.Run(stdlib)
+		err = lsp.Run(doitstdlib.FS)
 	case "extract-stdlib":
 		err = cmdExtractStdlib(os.Args[2:])
 	case "help":
@@ -119,7 +116,7 @@ func cmdCompile(args []string) (err error) {
 	if *stdlibPath != "" {
 		stdlib = os.DirFS(*stdlibPath)
 	} else {
-		stdlib, _ = fs.Sub(stdlibFS, "stdlib")
+		stdlib = doitstdlib.FS
 	}
 
 	treatWarningsAsErrors := *errorFlag || *errorLongFlag
@@ -333,8 +330,7 @@ func cmdExtractStdlib(args []string) error {
 		return err
 	}
 
-	stdlib, _ := fs.Sub(stdlibFS, "stdlib")
-	entries, err := fs.ReadDir(stdlib, ".")
+	entries, err := fs.ReadDir(doitstdlib.FS, ".")
 	if err != nil {
 		return err
 	}
@@ -342,7 +338,7 @@ func cmdExtractStdlib(args []string) error {
 		if e.IsDir() {
 			continue
 		}
-		data, err := fs.ReadFile(stdlib, e.Name())
+		data, err := fs.ReadFile(doitstdlib.FS, e.Name())
 		if err != nil {
 			return err
 		}

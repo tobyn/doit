@@ -19,6 +19,9 @@ go test ./compiler                # Run compiler tests only
 go test ./compiler -run TestCompileErrors  # Run compiler error case tests only
 go test ./codec                   # Run codec tests only
 
+# Build WebAssembly target (for in-browser compiler):
+GOOS=js GOARCH=wasm go build -o doit.wasm ./wasm/
+
 # Validate against reference JS codec (requires Node.js):
 node codec/refcodec.js decode file.b62   # decode with reference
 node codec/refcodec.js encode file.json  # encode with reference
@@ -30,8 +33,8 @@ node codec/refcodec.js encode file.json  # encode with reference
   use by integration tests
 - **`main_test.go`** — Integration smoke test (compile-encode-decode
   pipeline) and CLI flag tests
-- **`stdlib/`** — The standard library, embedded into the binary at build
-  time
+- **`stdlib/`** — The standard library. `stdlib.go` exports the embedded
+  `embed.FS` for use by both the CLI and WASM entry points
 - **`codec/`** — Encodes and decodes the Base62 strings used by the game to
   represent blueprints and behaviors. Tests live in `codec/codec_test.go`.
 - **`syntax/`** — Authoritative lexical grammar for doit. Contains
@@ -52,6 +55,11 @@ node codec/refcodec.js encode file.json  # encode with reference
   `formatter` package, real-time diagnostics (errors and warnings)
   via `compiler.Check`, document symbols (outline), hover info, and
   signature help. Invoked as `doit language-server`.
+- **`wasm/`** — WebAssembly entry point (`GOOS=js GOARCH=wasm`). Exposes
+  `doitCompile`, `doitDecode`, `doitEncode`, and `doitFormat` to
+  JavaScript via `syscall/js`. Requires Go's `wasm_exec.js` glue
+  (found at `$(go env GOROOT)/lib/wasm/wasm_exec.js`). Produces a
+  ~6MB binary (~1.6MB gzipped).
 - **`sanity_check/`** — Drift checker program and golden files. Compiles
   sanity check source and compares against last-known-good output.
   See `.claude/learnings/sanity_check.md` for details.
