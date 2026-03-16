@@ -15,8 +15,10 @@ register types.
 
 ## 1.0 burndown
 
-- **Developer tools** — ~~language server~~, ~~syntax highlighting~~,
-  ~~VS Code extension~~, ~~JetBrains plugin~~, ~~code formatter~~ done.
+- **VS Code feature parity** — the JetBrains plugin has a
+  compile-behavior run configuration and action (Ctrl+Shift+B) that
+  the VS Code extension lacks. Add an equivalent compile task or
+  command to the VS Code extension.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting (build-time tool using existing tokenizer).
 

@@ -36,6 +36,8 @@ intellijPlatform {
             <ul>
               <li>Syntax highlighting via TextMate grammar</li>
               <li>Semantic token highlighting via built-in LSP server</li>
+              <li>Compile behavior from editor (Ctrl+Shift+B)</li>
+              <li>Run configuration for doit compile with all options</li>
               <li>Configurable path to the <code>doit</code> binary</li>
             </ul>
         """.trimIndent()

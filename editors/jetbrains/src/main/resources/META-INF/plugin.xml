@@ -24,7 +24,22 @@
             displayName="doit Language"/>
         <applicationService
             serviceImplementation="dev.tobyn.doit.jetbrains.DoitSettings"/>
+
+        <!-- Run configuration -->
+        <configurationType
+            implementation="dev.tobyn.doit.jetbrains.DoitCompileConfigurationType"/>
     </extensions>
+
+    <actions>
+        <action id="dev.tobyn.doit.compileBehavior"
+                class="dev.tobyn.doit.jetbrains.DoitCompileBehaviorAction"
+                text="Compile doit Behavior"
+                description="Compile the current doit behavior">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift B"/>
+            <add-to-group group-id="RunMenu" anchor="first"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+        </action>
+    </actions>
 
     <extensions defaultExtensionNs="com.intellij">
         <textmate.bundleProvider implementation="dev.tobyn.doit.jetbrains.DoitTextMateBundleProvider"/>

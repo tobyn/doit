@@ -33,6 +33,8 @@ topic is relevant to your current task.
   document symbols, hover, signature help.
 - **JetBrains plugin** — `editors/jetbrains/`
   IntelliJ Platform plugin. TextMate grammar + LSP via LSP4IJ.
+  Includes "Compile doit Behavior" run configuration and action
+  (Ctrl+Shift+B) that compiles the behavior at cursor.
   Build with `./gradlew buildPlugin` from that directory.
 - **VS Code extension** — `editors/vscode/`
   TextMate grammar + LSP client via vscode-languageclient.
