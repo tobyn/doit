@@ -25,9 +25,10 @@
         <applicationService
             serviceImplementation="dev.tobyn.doit.jetbrains.DoitSettings"/>
 
-        <!-- Enter between braces handler -->
-        <enterHandlerDelegate
-            implementation="dev.tobyn.doit.jetbrains.DoitEnterBetweenBracesHandler"/>
+        <!-- Enter between braces handler (wraps the Enter action directly
+             because EnterHandlerDelegate is not invoked for TextMate-backed files) -->
+        <postStartupActivity
+            implementation="dev.tobyn.doit.jetbrains.DoitEnterHandlerInstaller"/>
 
         <!-- Run configuration -->
         <configurationType
