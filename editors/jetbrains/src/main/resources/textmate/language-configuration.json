@@ -19,5 +19,16 @@
   "indentationRules": {
     "increaseIndentPattern": "\\{\\s*$",
     "decreaseIndentPattern": "^\\s*\\}"
-  }
+  },
+  "onEnterRules": [
+    {
+      "beforeText": "^\\s*.*\\{\\s*$",
+      "afterText": "^\\s*\\}",
+      "action": { "indent": "indentOutdent" }
+    },
+    {
+      "beforeText": "^\\s*.*\\{\\s*$",
+      "action": { "indent": "indent" }
+    }
+  ]
 }
