@@ -25,6 +25,10 @@
         <applicationService
             serviceImplementation="dev.tobyn.doit.jetbrains.DoitSettings"/>
 
+        <!-- Enter between braces handler -->
+        <enterHandlerDelegate
+            implementation="dev.tobyn.doit.jetbrains.DoitEnterBetweenBracesHandler"/>
+
         <!-- Run configuration -->
         <configurationType
             implementation="dev.tobyn.doit.jetbrains.DoitCompileConfigurationType"/>
