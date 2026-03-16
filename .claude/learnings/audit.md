@@ -76,8 +76,23 @@ dimensions in a single pass:
 
 ### Medium
 
+- **Expression emitter pair duplication (constructor/ampersand/dotAccess).**
+  `emitBhvConstructorTo`/`emitConstructorTo`,
+  `emitBhvAmpersandTo`/`emitAmpersandTo`, and
+  `emitBhvDotAccessTo`/`emitDotAccessTo` are structurally identical
+  pairs in `bhvast.go` and `fnbody_emit.go` that differ only in
+  the getValue resolution call. Could be unified with a getValue
+  callback parameter.
 
 ### Low
+
+- **`set_number` vs `set_reg` inconsistency for number literals.**
+  `emitBhvExprTo` (bhvast.go:2308–2314) emits `set_number` for pure
+  number literal assignments, while `emitExprTo` (fnbody_emit.go:388–392)
+  emits `set_reg` for the same case. Both produce valid but different
+  instructions. Tests confirm the discrepancy (e.g., `arith_assign.json`
+  uses `set_number`, `if_expr_ret.json` uses `set_reg`). Harmless but
+  inconsistent — unify to one instruction choice.
 
 ### Deferred
 

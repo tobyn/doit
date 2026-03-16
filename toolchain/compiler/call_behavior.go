@@ -388,9 +388,46 @@ func (p *parser) resolveBhvCallArgValue(expr Expr, syms *symbolTable, b *frameBu
 }
 
 func (p *parser) emitBhvCallBehavior(stmt *CallBehaviorStmt, b *frameBuilder, syms *symbolTable) error {
-	bhv := p.bhvs[stmt.BehaviorName]
+	resolve := func(e Expr) (any, error) {
+		return p.resolveBhvCallArgValue(e, syms, b)
+	}
+	return p.emitCallBehaviorStmt(stmt.BehaviorName, stmt.Args, b, resolve, stmt.Comment, stmt.Pos)
+}
 
-	sub, err := p.resolveCallSub(stmt.BehaviorName, stmt.Pos)
+// emitBhvCallBehaviorExpr emits a call instruction for expression-form behavior calls.
+// Unbound out params are captured as return values into the given target registers.
+func (p *parser) emitBhvCallBehaviorExpr(expr *CallBehaviorExpr, retVals []any, syms *symbolTable, b *frameBuilder, comment string) error {
+	resolve := func(e Expr) (any, error) {
+		return p.resolveBhvCallArgValue(e, syms, b)
+	}
+	return p.emitCallBehaviorExprFrame(expr.BehaviorName, expr.Args, retVals, b, resolve, comment, expr.Pos)
+}
+
+// emitFnBodyCallBehavior emits a call instruction frame within a function body context.
+func (p *parser) emitFnBodyCallBehavior(stmt *CallBehaviorStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string) error {
+	resolve := func(e Expr) (any, error) {
+		return p.emitExprGetValue(e, b, paramMap, usedVars, "", stmt.Pos)
+	}
+	return p.emitCallBehaviorStmt(stmt.BehaviorName, stmt.Args, b, resolve, comment, stmt.Pos)
+}
+
+// emitFnBodyCallBehaviorExpr emits a call instruction for expression-form behavior calls in fn body.
+func (p *parser) emitFnBodyCallBehaviorExpr(expr *CallBehaviorExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string) error {
+	resolve := func(e Expr) (any, error) {
+		return p.emitExprGetValue(e, b, paramMap, usedVars, "", expr.Pos)
+	}
+	return p.emitCallBehaviorExprFrame(expr.BehaviorName, expr.Args, retVals, b, resolve, comment, expr.Pos)
+}
+
+// callArgResolver resolves a call argument expression to its emitted value.
+type callArgResolver func(expr Expr) (any, error)
+
+// emitCallBehaviorStmt emits a call instruction for statement-form behavior calls.
+// The resolve callback handles context-specific argument resolution.
+func (p *parser) emitCallBehaviorStmt(bhvName string, args map[string]*CallBhvArg, b *frameBuilder, resolve callArgResolver, comment string, pos int) error {
+	bhv := p.bhvs[bhvName]
+
+	sub, err := p.resolveCallSub(bhvName, pos)
 	if err != nil {
 		return err
 	}
@@ -400,19 +437,19 @@ func (p *parser) emitBhvCallBehavior(stmt *CallBehaviorStmt, b *frameBuilder, sy
 	// Wire numbered slots to args (0-based, matching instruction slot numbering)
 	for i, param := range bhv.params {
 		slotKey := strconv.Itoa(i) // 0-based
-		arg, ok := stmt.Args[param.keyword]
+		arg, ok := args[param.keyword]
 		if !ok {
 			continue // omitted param
 		}
 
-		val, err := p.resolveBhvCallArgValue(arg.Value, syms, b)
+		val, err := resolve(arg.Value)
 		if err != nil {
 			return err
 		}
 		f[slotKey] = val
 	}
 
-	setComment(f, stmt.Comment)
+	setComment(f, comment)
 	b.emit(f)
 
 	// After a call, execution mode is unknown (callee may have changed it)
@@ -420,12 +457,13 @@ func (p *parser) emitBhvCallBehavior(stmt *CallBehaviorStmt, b *frameBuilder, sy
 	return nil
 }
 
-// emitBhvCallBehaviorExpr emits a call instruction for expression-form behavior calls.
-// Unbound out params are captured as return values into the given target registers.
-func (p *parser) emitBhvCallBehaviorExpr(expr *CallBehaviorExpr, retVals []any, syms *symbolTable, b *frameBuilder, comment string) error {
-	bhv := p.bhvs[expr.BehaviorName]
+// emitCallBehaviorExprFrame emits a call instruction for expression-form behavior calls.
+// Unbound out/inout params are captured as return values into retVals registers.
+// The resolve callback handles context-specific argument resolution.
+func (p *parser) emitCallBehaviorExprFrame(bhvName string, args map[string]*CallBhvArg, retVals []any, b *frameBuilder, resolve callArgResolver, comment string, pos int) error {
+	bhv := p.bhvs[bhvName]
 
-	sub, err := p.resolveCallSub(expr.BehaviorName, expr.Pos)
+	sub, err := p.resolveCallSub(bhvName, pos)
 	if err != nil {
 		return err
 	}
@@ -436,9 +474,9 @@ func (p *parser) emitBhvCallBehaviorExpr(expr *CallBehaviorExpr, retVals []any, 
 	retIdx := 0
 	for i, param := range bhv.params {
 		slotKey := strconv.Itoa(i) // 0-based
-		arg, ok := expr.Args[param.keyword]
+		arg, ok := args[param.keyword]
 		if ok {
-			val, err := p.resolveBhvCallArgValue(arg.Value, syms, b)
+			val, err := resolve(arg.Value)
 			if err != nil {
 				return err
 			}
@@ -457,72 +495,6 @@ func (p *parser) emitBhvCallBehaviorExpr(expr *CallBehaviorExpr, retVals []any, 
 	setComment(f, comment)
 	b.emit(f)
 
-	b.mode = modeUnknown
-	return nil
-}
-
-// emitFnBodyCallBehavior emits a call instruction frame within a function body context.
-func (p *parser) emitFnBodyCallBehavior(stmt *CallBehaviorStmt, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string) error {
-	bhv := p.bhvs[stmt.BehaviorName]
-
-	sub, err := p.resolveCallSub(stmt.BehaviorName, stmt.Pos)
-	if err != nil {
-		return err
-	}
-
-	f := map[string]any{"op": "call", "sub": sub}
-
-	for i, param := range bhv.params {
-		slotKey := strconv.Itoa(i) // 0-based
-		arg, ok := stmt.Args[param.keyword]
-		if !ok {
-			continue
-		}
-
-		val, err := p.emitExprGetValue(arg.Value, b, paramMap, usedVars, "", stmt.Pos)
-		if err != nil {
-			return err
-		}
-		f[slotKey] = val
-	}
-
-	setComment(f, comment)
-	b.emit(f)
-	b.mode = modeUnknown
-	return nil
-}
-
-// emitFnBodyCallBehaviorExpr emits a call instruction for expression-form behavior calls in fn body.
-func (p *parser) emitFnBodyCallBehaviorExpr(expr *CallBehaviorExpr, retVals []any, b *frameBuilder, paramMap map[string]any, usedVars map[string]bool, comment string) error {
-	bhv := p.bhvs[expr.BehaviorName]
-
-	sub, err := p.resolveCallSub(expr.BehaviorName, expr.Pos)
-	if err != nil {
-		return err
-	}
-
-	f := map[string]any{"op": "call", "sub": sub}
-
-	retIdx := 0
-	for i, param := range bhv.params {
-		slotKey := strconv.Itoa(i) // 0-based
-		arg, ok := expr.Args[param.keyword]
-		if ok {
-			val, err := p.emitExprGetValue(arg.Value, b, paramMap, usedVars, "", expr.Pos)
-			if err != nil {
-				return err
-			}
-			f[slotKey] = val
-		} else if param.direction == "out" || param.direction == "inout" {
-			if retIdx < len(retVals) {
-				f[slotKey] = retVals[retIdx]
-				retIdx++
-			}
-		}
-	}
-
-	setComment(f, comment)
-	b.emit(f)
 	b.mode = modeUnknown
 	return nil
 }
