@@ -20,23 +20,7 @@ register types.
 - **Website** — static marketing/download page, web-hosted manual,
   syntax highlighting (build-time tool using existing tokenizer).
 
-## LSP feature roadmap
-
-Features to add to the language server, roughly in priority order.
-
-### No-brainers
-
-- ~~**Diagnostics**~~ — done. `compiler.Check` runs pass 1 and
-  returns errors, warnings, and symbols.
-- ~~**Document symbols**~~ — done. Uses `compiler.Check` symbols to
-  populate `textDocument/documentSymbol`.
-- ~~**Hover**~~ — done. Shows declaration kind + doc comment for
-  symbols in the current file. Stdlib/imported symbol hover is not
-  yet supported.
-- ~~**Signature help**~~ — done. Triggers on `(` and `,`, shows
-  parameter names and directions for current-file functions/iterators.
-
-### Worth considering
+## LSP feature ideas
 
 - **Completions** — Enumerate stdlib functions, user-defined symbols,
   and in-scope variables at cursor position. The data exists in the

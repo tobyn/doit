@@ -122,6 +122,7 @@ func (p *parser) parseIterDecl(private bool) (string, error) {
 		outputs: outputs,
 		astBody: astBody,
 		private: private,
+		doc:     p.pendingDoc,
 	}
 	return nameTok.val, nil
 }
@@ -232,6 +233,7 @@ func (p *parser) buildInstructionIter(name string, pos int, params []paramDef, o
 		frame:    promoted,
 		doneSlot: doneSlot,
 		private:  private,
+		doc:      p.pendingDoc,
 	}
 	return name, nil
 }
@@ -1153,7 +1155,13 @@ func (p *parser) collectDecls(isImport bool) error {
 		if tok.kind != tokIdent {
 			return p.errorf(tok.pos, "expected declaration, got %s", tok.describe())
 		}
-		doc := p.docComment // capture before sub-parsers consume more tokens
+		// Capture doc comment before sub-parsers consume more tokens.
+		// Prefer #! doc comments; fall back to # source comments.
+		doc := p.docComment
+		if doc == "" {
+			doc = p.sourceComment
+		}
+		p.pendingDoc = doc
 		switch tok.val {
 		case "behavior":
 			idTok, err := p.parseBehaviorID()
@@ -1529,7 +1537,7 @@ func (p *parser) parseUserFn() (string, error) {
 	if len(astBody) == 1 {
 		if instrStmt, ok := astBody[0].(*InstructionStmt); ok {
 			if promoted := tryPromoteInstruction(instrStmt.Frame, params, nil); promoted != nil {
-				p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, frame: promoted})
+				p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, frame: promoted, doc: p.pendingDoc})
 				return nameTok.val, nil
 			}
 		}
@@ -1620,12 +1628,12 @@ func (p *parser) parseUserFn() (string, error) {
 					// Pure-instruction promotion
 					if len(astBody) == 1 {
 						if canPromote := tryPromoteInstruction(modifiedFrame, params, rets); canPromote != nil {
-							p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, frame: canPromote})
+							p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, frame: canPromote, doc: p.pendingDoc})
 							return nameTok.val, nil
 						}
 					}
 
-					p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody})
+					p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody, doc: p.pendingDoc})
 					return nameTok.val, nil
 				}
 			}
@@ -1644,7 +1652,7 @@ func (p *parser) parseUserFn() (string, error) {
 				}
 				// Remove the ReturnStmt from the body
 				astBody = astBody[:len(astBody)-1]
-				p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody})
+				p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody, doc: p.pendingDoc})
 				return nameTok.val, nil
 			}
 		}
@@ -1664,7 +1672,7 @@ func (p *parser) parseUserFn() (string, error) {
 		// Leave ReturnStmt nodes in the body for emitFnBody to handle
 	}
 
-	p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody})
+	p.fns[nameTok.val] = makeFnDef(&fnDef{params: params, rets: rets, astBody: astBody, doc: p.pendingDoc})
 	return nameTok.val, nil
 }
 

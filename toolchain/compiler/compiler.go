@@ -159,14 +159,53 @@ func Check(src string, stdlib fs.FS, sourceFS fs.FS, sourcePath string) ([]Symbo
 	}
 	p.collectSymbols = true
 	err := p.collectUserFns()
-	// Filter to symbols from user source (not prelude/stdlib).
-	var userSymbols []Symbol
+
+	// Build a set of user-defined symbol names (already recorded).
+	recorded := map[string]bool{}
 	for _, s := range p.symbols {
-		if s.Line >= 0 {
-			userSymbols = append(userSymbols, s)
+		recorded[s.Name] = true
+	}
+
+	// Add imported symbols (stdlib + imports) that weren't recorded.
+	// These get Line: -1 to distinguish from user-defined symbols.
+	for name, fn := range p.fns {
+		if !recorded[name] && !fn.private {
+			sym := Symbol{Name: name, Kind: SymbolFunction, Line: -1, Col: -1, Doc: fn.doc}
+			for _, pd := range fn.params {
+				sym.Params = append(sym.Params, ParamInfo{
+					Name:      pd.name,
+					Direction: pd.effectiveDirection(),
+					Keyword:   pd.keyword,
+				})
+			}
+			p.symbols = append(p.symbols, sym)
 		}
 	}
-	return userSymbols, p.warnings, err
+	for name, it := range p.iters {
+		if !recorded[name] && !it.private {
+			sym := Symbol{Name: name, Kind: SymbolIterator, Line: -1, Col: -1, Doc: it.doc}
+			for _, pd := range it.params {
+				sym.Params = append(sym.Params, ParamInfo{
+					Name:      pd.name,
+					Direction: pd.effectiveDirection(),
+					Keyword:   pd.keyword,
+				})
+			}
+			p.symbols = append(p.symbols, sym)
+		}
+	}
+	for name, cd := range p.consts {
+		if !recorded[name] && !cd.private {
+			p.symbols = append(p.symbols, Symbol{Name: name, Kind: SymbolConstant, Line: -1, Col: -1})
+		}
+	}
+	for name, ed := range p.enums {
+		if !recorded[name] && !ed.private {
+			p.symbols = append(p.symbols, Symbol{Name: name, Kind: SymbolEnum, Line: -1, Col: -1})
+		}
+	}
+
+	return p.symbols, p.warnings, err
 }
 
 // hasSkipPrelude reports whether the source starts with a `skip prelude` directive.
@@ -449,6 +488,7 @@ type iterDef struct {
 	private   bool                // true for private iter
 	scope     map[string]*fnDef  // functions available when this iter was defined
 	iterScope map[string]*iterDef // iterators available when this iter was defined
+	doc       string              // source comment (# lines) preceding the declaration
 }
 
 // execBinding marks an instruction block slot as wired to a continuation.
@@ -470,6 +510,7 @@ type fnDef struct {
 	private      bool                // true for private fn (not visible as import)
 	scope        map[string]*fnDef  // functions available when this fn was defined (for imports)
 	iterScope    map[string]*iterDef // iterators available when this fn was defined (for imports)
+	doc          string              // source comment (# lines) preceding the declaration
 }
 
 // positionalCount returns the number of positional params.

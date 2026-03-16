@@ -442,18 +442,24 @@ func (s *Server) handleDocumentSymbol(msg *jsonrpcMessage) {
 
 	symbols, _, _ := compiler.Check(src, s.stdlib, sourceFS, sourcePath)
 
-	result := make([]map[string]any, len(symbols))
-	for i, sym := range symbols {
+	var result []map[string]any
+	for _, sym := range symbols {
+		if sym.Line < 0 {
+			continue // skip imported symbols
+		}
 		pos := map[string]any{
 			"start": map[string]any{"line": sym.Line, "character": sym.Col},
 			"end":   map[string]any{"line": sym.Line, "character": sym.Col},
 		}
-		result[i] = map[string]any{
+		result = append(result, map[string]any{
 			"name":           sym.Name,
 			"kind":           symbolKindToLSP(sym.Kind),
 			"range":          pos,
 			"selectionRange": pos,
-		}
+		})
+	}
+	if result == nil {
+		result = []map[string]any{}
 	}
 	s.sendResponse(msg.ID, result)
 }

@@ -552,3 +552,49 @@ func TestUpdateGolden(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckStdlibSymbols(t *testing.T) {
+	stdlib := os.DirFS("../stdlib")
+	src := "behavior test {\n    notify \"hello\"\n}\n"
+	symbols, _, err := compiler.Check(src, stdlib, nil, "")
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	// Find some well-known stdlib symbols.
+	found := map[string]compiler.Symbol{}
+	for _, s := range symbols {
+		if s.Name == "notify" || s.Name == "add" || s.Name == "get_self" {
+			found[s.Name] = s
+		}
+	}
+
+	// notify should be a function with params and a doc comment.
+	if sym, ok := found["notify"]; !ok {
+		t.Error("notify not found in symbols")
+	} else {
+		if sym.Kind != compiler.SymbolFunction {
+			t.Errorf("notify: kind = %d, want SymbolFunction", sym.Kind)
+		}
+		if len(sym.Params) == 0 {
+			t.Error("notify: expected params")
+		}
+		if sym.Doc == "" {
+			t.Error("notify: expected doc comment")
+		}
+		if sym.Line != -1 {
+			t.Errorf("notify: line = %d, want -1 (imported)", sym.Line)
+		}
+	}
+
+	// The user-defined behavior should be present with line >= 0.
+	behaviorFound := false
+	for _, s := range symbols {
+		if s.Name == "test" && s.Kind == compiler.SymbolBehavior && s.Line >= 0 {
+			behaviorFound = true
+		}
+	}
+	if !behaviorFound {
+		t.Error("behavior 'test' not found with Line >= 0")
+	}
+}

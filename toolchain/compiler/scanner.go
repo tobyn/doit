@@ -81,20 +81,24 @@ var (
 )
 
 type scannerState struct {
-	pos          int
-	ungot        *token
-	docComment   string
-	ungotComment string
+	pos             int
+	ungot           *token
+	docComment      string
+	ungotComment    string
+	sourceComment   string
+	ungotSrcComment string
 }
 
 type scanner struct {
-	syn          syntax.Scanner
-	ungot        *token
-	docComment   string // accumulated #! lines before the current token
-	ungotComment string // saved docComment for ungotten token
-	locale       string // BCP 47 locale tag; empty = use first entry
-	sourceFile   string // source file path for error messages (empty = main file)
-	sourceOffset int    // byte offset of user source (after prepended prelude)
+	syn            syntax.Scanner
+	ungot          *token
+	docComment     string // accumulated #! lines before the current token
+	ungotComment   string // saved docComment for ungotten token
+	sourceComment  string // accumulated # lines before the current token (for LSP hover)
+	ungotSrcComment string // saved sourceComment for ungotten token
+	locale         string // BCP 47 locale tag; empty = use first entry
+	sourceFile     string // source file path for error messages (empty = main file)
+	sourceOffset   int    // byte offset of user source (after prepended prelude)
 }
 
 func (s *scanner) save() scannerState {
@@ -104,10 +108,12 @@ func (s *scanner) save() scannerState {
 		ungot = &t
 	}
 	return scannerState{
-		pos:          s.syn.Pos,
-		ungot:        ungot,
-		docComment:   s.docComment,
-		ungotComment: s.ungotComment,
+		pos:             s.syn.Pos,
+		ungot:           ungot,
+		docComment:      s.docComment,
+		ungotComment:    s.ungotComment,
+		sourceComment:   s.sourceComment,
+		ungotSrcComment: s.ungotSrcComment,
 	}
 }
 
@@ -116,6 +122,8 @@ func (s *scanner) restore(state scannerState) {
 	s.ungot = state.ungot
 	s.docComment = state.docComment
 	s.ungotComment = state.ungotComment
+	s.sourceComment = state.sourceComment
+	s.ungotSrcComment = state.ungotSrcComment
 }
 
 type parser struct {
@@ -150,6 +158,7 @@ type parser struct {
 	releaseMode    bool             // true when compiling with --release (omits assert)
 	collectSymbols bool             // when true, populate symbols during collectDecls
 	symbols        []Symbol         // top-level declarations (populated when collectSymbols is true)
+	pendingDoc     string           // doc comment to attach to the next parsed definition
 
 	// callExprParser is set by behavior/fn body contexts to enable
 	// function call parsing in boolean primary position (e.g., d || my_fn x).
@@ -403,6 +412,7 @@ func (s *scanner) unget(tok token) {
 	t := tok
 	s.ungot = &t
 	s.ungotComment = s.docComment
+	s.ungotSrcComment = s.sourceComment
 }
 
 func (s *scanner) next() (token, error) {
@@ -410,11 +420,14 @@ func (s *scanner) next() (token, error) {
 		tok := *s.ungot
 		s.ungot = nil
 		s.docComment = s.ungotComment
+		s.sourceComment = s.ungotSrcComment
 		return tok, nil
 	}
 
 	s.docComment = ""
+	s.sourceComment = ""
 	var docLines []string
+	var srcLines []string
 	for {
 		tok, err := s.rawNext()
 		if err != nil {
@@ -428,11 +441,19 @@ func (s *scanner) next() (token, error) {
 					s.docComment = strings.Join(docLines, " ")
 				}
 			}
+			if len(srcLines) > 0 {
+				s.sourceComment = strings.Join(srcLines, "\n")
+			}
 			return tok, nil
 		}
 		// Accumulate doc comment lines (#!), skip regular comments.
 		if len(tok.val) >= 2 && tok.val[1] == '!' {
 			docLines = append(docLines, strings.TrimSpace(tok.val[2:]))
+		}
+		// Accumulate regular comment lines (#) for source doc.
+		if len(tok.val) >= 1 && (len(tok.val) < 2 || tok.val[1] != '!') {
+			line := strings.TrimSpace(tok.val[1:])
+			srcLines = append(srcLines, line)
 		}
 	}
 }
