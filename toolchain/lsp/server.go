@@ -368,31 +368,17 @@ func uriToPath(uri string) string {
 
 // parseDiagnostic extracts a line:col prefixed message into an LSP diagnostic.
 // severity: 1=Error, 2=Warning. Returns nil if the format is not recognized.
+// Handles both "line:col: message" and "filename:line:col: message" formats.
 func parseDiagnostic(msg string, severity int) map[string]any {
-	// Format: "line:col: message" (1-based) optionally with source annotation.
 	// Strip any source annotation (starts with newline).
 	if idx := strings.Index(msg, "\n"); idx >= 0 {
 		msg = msg[:idx]
 	}
 
-	colon1 := strings.Index(msg, ":")
-	if colon1 < 0 {
+	line, col, message, ok := parseLineColMessage(msg)
+	if !ok {
 		return nil
 	}
-	line, err := strconv.Atoi(msg[:colon1])
-	if err != nil {
-		return nil
-	}
-	rest := msg[colon1+1:]
-	colon2 := strings.Index(rest, ":")
-	if colon2 < 0 {
-		return nil
-	}
-	col, err := strconv.Atoi(rest[:colon2])
-	if err != nil {
-		return nil
-	}
-	message := strings.TrimSpace(rest[colon2+1:])
 
 	// Convert from 1-based to 0-based for LSP.
 	line--
@@ -413,6 +399,32 @@ func parseDiagnostic(msg string, severity int) map[string]any {
 		"source":   "doit",
 		"message":  message,
 	}
+}
+
+// parseLineColMessage extracts line, col, and message from a compiler error string.
+// Handles "line:col: message" and "filename:line:col: message" formats.
+func parseLineColMessage(msg string) (line, col int, message string, ok bool) {
+	colon1 := strings.Index(msg, ":")
+	if colon1 < 0 {
+		return 0, 0, "", false
+	}
+	line, err := strconv.Atoi(msg[:colon1])
+	if err != nil {
+		// First field isn't a number — try filename:line:col: format.
+		rest := msg[colon1+1:]
+		return parseLineColMessage(rest)
+	}
+	rest := msg[colon1+1:]
+	colon2 := strings.Index(rest, ":")
+	if colon2 < 0 {
+		return 0, 0, "", false
+	}
+	col, err = strconv.Atoi(rest[:colon2])
+	if err != nil {
+		return 0, 0, "", false
+	}
+	message = strings.TrimSpace(rest[colon2+1:])
+	return line, col, message, true
 }
 
 // --- Document symbols ---

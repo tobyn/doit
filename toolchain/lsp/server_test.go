@@ -897,6 +897,12 @@ func TestParseDiagnostic(t *testing.T) {
 			wantLine: 0, wantCol: 0,
 			wantMsg: "something wrong",
 		},
+		{
+			msg:      "libs/helper.doit:5:3: undefined variable",
+			severity: 1,
+			wantLine: 4, wantCol: 2, // 0-based
+			wantMsg: "undefined variable",
+		},
 	}
 	for _, tt := range tests {
 		d := parseDiagnostic(tt.msg, tt.severity)
