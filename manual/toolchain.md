@@ -125,6 +125,20 @@ clipboard.
 Reads from stdin and writes to stdout by default. Use `input_path` to read from
 a file and `-o` to write to a file.
 
+## `doit extract-stdlib`
+
+Extract the embedded standard library to a directory.
+
+```
+doit extract-stdlib <path>
+```
+
+Writes all embedded stdlib files to `<path>`, creating the directory if it does
+not exist (one level only). The extracted directory can then be passed to
+`--stdlib` on subsequent compile commands, producing identical output.
+
+This is useful for inspecting or modifying the stdlib during development.
+
 ## `doit language-server`
 
 Start the doit language server.

@@ -44,6 +44,8 @@ func main() {
 	case "language-server":
 		stdlib, _ := fs.Sub(stdlibFS, "stdlib")
 		err = lsp.Run(stdlib)
+	case "extract-stdlib":
+		err = cmdExtractStdlib(os.Args[2:])
 	case "help":
 		err = cmdHelp(os.Args[2:])
 	default:
@@ -319,6 +321,36 @@ func cmdEncode(args []string) error {
 		return err
 	}
 	return os.WriteFile(*outputPath, []byte(encoded), 0o644)
+}
+
+func cmdExtractStdlib(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: doit extract-stdlib <path>")
+	}
+	dir := args[0]
+
+	if err := os.Mkdir(dir, 0o755); err != nil && !os.IsExist(err) {
+		return err
+	}
+
+	stdlib, _ := fs.Sub(stdlibFS, "stdlib")
+	entries, err := fs.ReadDir(stdlib, ".")
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := fs.ReadFile(stdlib, e.Name())
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dir, e.Name()), data, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func cmdHelp(args []string) error {
