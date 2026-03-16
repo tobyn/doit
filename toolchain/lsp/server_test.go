@@ -811,10 +811,10 @@ func TestSignatureHelpCapabilityAdvertised(t *testing.T) {
 
 func TestFindCallContext(t *testing.T) {
 	tests := []struct {
-		src        string
-		offset     int
-		wantName   string
-		wantParam  int
+		src       string
+		offset    int
+		wantName  string
+		wantParam int
 	}{
 		{"foo(", 4, "foo", 0},
 		{"foo(a, ", 7, "foo", 1},
@@ -850,14 +850,14 @@ func TestIdentAtOffset(t *testing.T) {
 	}{
 		{0, "let"},
 		{1, "let"},
-		{3, ""},       // space
+		{3, ""}, // space
 		{4, "foo"},
 		{6, "foo"},
-		{8, ""},       // =
+		{8, ""}, // =
 		{10, "bar"},
-		{13, ""},      // (
+		{13, ""}, // (
 		{14, "baz"},
-		{17, ""},      // )
+		{17, ""}, // )
 	}
 	for _, tt := range tests {
 		got := identAtOffset(src, tt.offset)

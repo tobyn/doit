@@ -218,8 +218,8 @@ func (s *Server) handleInitialize(msg *jsonrpcMessage) {
 				"change":    1, // Full sync
 			},
 			"documentFormattingProvider": true,
-			"documentSymbolProvider":    true,
-			"hoverProvider":             true,
+			"documentSymbolProvider":     true,
+			"hoverProvider":              true,
 			"signatureHelpProvider": map[string]any{
 				"triggerCharacters": []string{"(", ","},
 			},
@@ -990,7 +990,6 @@ func (s *Server) handleOnTypeFormatting(msg *jsonrpcMessage) {
 
 	s.sendResponse(msg.ID, []any{})
 }
-
 
 // braceDepth counts unmatched '{' in src, skipping strings and comments.
 func braceDepth(src string) int {

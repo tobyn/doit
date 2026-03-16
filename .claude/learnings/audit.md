@@ -84,6 +84,17 @@ dimensions in a single pass:
 
 ### Rejected
 
+- **`unitRegisters` lookup duplication across compiler files.** 10
+  call sites look up `unitRegisters[name]` but each has different
+  return types (LiteralExpr, raw int, existence check) and different
+  fallback behavior (paramMap, error, IdentExpr). Not meaningfully
+  extractable.
+- **LSP handler silently ignoring parse errors.** The handlers that
+  silently return are LSP *notifications* (no response per JSON-RPC
+  spec). Request handlers correctly call `sendError`.
+- **Direction validation duplication.** Only 3 instances, each in
+  different contexts (parsing, validation, wire-format generation).
+  Normal enum comparison, not meaningful duplication.
 - **`private fn` visibility within the same file.** Not a bug —
   `private` means file-scoped (not importable), and within a file
   everything is visible. Matches Go/Python/Rust module semantics.
