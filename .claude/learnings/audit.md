@@ -78,14 +78,6 @@ dimensions in a single pass:
 
 ### Low
 
-- **`set_number` vs `set_reg` inconsistency for number literals.**
-  `emitBhvExprTo` (bhvast.go:2308–2314) emits `set_number` for pure
-  number literal assignments, while `emitExprTo` (fnbody_emit.go:388–392)
-  emits `set_reg` for the same case. Both produce valid but different
-  instructions. Tests confirm the discrepancy (e.g., `arith_assign.json`
-  uses `set_number`, `if_expr_ret.json` uses `set_reg`). Harmless but
-  inconsistent — unify to one instruction choice.
-
 ### Deferred
 
 ### Rejected
@@ -103,3 +95,8 @@ dimensions in a single pass:
   similar but each function is 12–35 lines. Extraction would require
   passing a getValue callback plus `pos`+`usedVars` for `expandCall`,
   adding more indirection than it saves.
+- **`set_number` vs `set_reg` inconsistency for number literals.**
+  bhv path emits `set_number` for pure number literal assignments,
+  fn body path emits `set_reg`. Both produce valid instructions and
+  all tests pass. Unifying would require updating 130+ test files
+  for no behavioral change.
