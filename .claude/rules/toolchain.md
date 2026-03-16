@@ -52,6 +52,24 @@ node codec/refcodec.js encode file.json  # encode with reference
   `formatter` package, real-time diagnostics (errors and warnings)
   via `compiler.Check`, document symbols (outline), hover info, and
   signature help. Invoked as `doit language-server`.
+- **`sanity_check/`** — Drift checker program and golden files. Compiles
+  sanity check source and compares against last-known-good output.
+  See `.claude/learnings/sanity_check.md` for details.
+
+## Pre-commit: Sanity Check Drift
+
+Before each commit that touches `toolchain/**/*.go` or
+`toolchain/stdlib/**/*.doit`, run the sanity check drift checker:
+
+```sh
+cd toolchain
+go run ./sanity_check
+```
+
+This is informational — drift does not block the commit. The program
+manages its own state in `.claude/learnings/sanity_check.md` (the
+`> Drift status:` line). If it updates the status to drifted, include
+the changed `sanity_check.md` in the commit.
 
 ## Toolchain functionality
 

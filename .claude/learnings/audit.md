@@ -25,7 +25,8 @@ dimensions in a single pass:
    round. Read end-to-end:
    - All manual pages (`manual/`)
    - All test cases (`toolchain/compiler/tests/`)
-   - The parser/emitter source (`toolchain/compiler/`)
+   - All toolchain source (`toolchain/`) — compiler, codec, formatter,
+     LSP, syntax/highlighting, CLI, and any other packages
 
    Look for issues in both dimensions:
    - **Ergonomics**: syntax that would surprise users, semantics that
@@ -33,9 +34,10 @@ dimensions in a single pass:
      behavior. Focus on compiler-level issues — VM limitations that
      the language faithfully reflects (null/false/0 equivalence,
      `is Number` unsupported, etc.) are not audit findings.
-   - **Implementation**: duplicated logic between bhv/fn paths,
-     redundant data structures, repeated code patterns that could be
-     extracted into helpers, structural issues that risk bugs.
+   - **Implementation**: duplicated logic, redundant data structures,
+     repeated code patterns that could be extracted into helpers,
+     structural issues that risk bugs. Applies to all toolchain
+     packages, not just the compiler.
 3. Categorize each finding as High (likely bugs/confusion), Medium
    (cleanup or design decision needed), or Low (minor gap). Do not
    re-report issues that have already been fixed — check git history

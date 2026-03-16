@@ -1,0 +1,257 @@
+{
+    "0": {
+        "1": {
+            "num": 0
+        },
+        "2": 1,
+        "op": "set_number"
+    },
+    "1": {
+        "1": {
+            "num": 0
+        },
+        "2": 2,
+        "op": "set_number"
+    },
+    "10": {
+        "0": {
+            "num": 50
+        },
+        "op": "wait"
+    },
+    "11": {
+        "0": {
+            "fr": "sanity_test_val"
+        },
+        "1": "fr1",
+        "op": "set_reg"
+    },
+    "12": {
+        "0": 15,
+        "1": "fr1",
+        "2": {
+            "num": 777
+        },
+        "op": "compare_register"
+    },
+    "13": {
+        "0": 1,
+        "1": {
+            "num": 1
+        },
+        "2": 1,
+        "next": 17,
+        "op": "add"
+    },
+    "14": {
+        "1": {
+            "num": 1
+        },
+        "2": 2,
+        "op": "set_number"
+    },
+    "15": {
+        "op": "exit"
+    },
+    "16": {
+        "0": {
+            "fr": "sanity_test_counter"
+        },
+        "1": "fr2",
+        "op": "set_reg"
+    },
+    "17": {
+        "0": 20,
+        "1": "fr2",
+        "2": {
+            "num": 15
+        },
+        "op": "compare_register"
+    },
+    "18": {
+        "0": 1,
+        "1": {
+            "num": 1
+        },
+        "2": 1,
+        "next": 22,
+        "op": "add"
+    },
+    "19": {
+        "1": {
+            "num": 2
+        },
+        "2": 2,
+        "op": "set_number"
+    },
+    "2": {
+        "0": {
+            "num": 600
+        },
+        "op": "wait"
+    },
+    "20": {
+        "op": "exit"
+    },
+    "21": {
+        "0": 24,
+        "1": {
+            "fr": "sanity_test_flag"
+        },
+        "2": {
+            "num": 42
+        },
+        "op": "compare_register"
+    },
+    "22": {
+        "0": 1,
+        "1": {
+            "num": 1
+        },
+        "2": 1,
+        "next": 26,
+        "op": "add"
+    },
+    "23": {
+        "1": {
+            "num": 3
+        },
+        "2": 2,
+        "op": "set_number"
+    },
+    "24": {
+        "op": "exit"
+    },
+    "25": {
+        "0": "me",
+        "op": "get_self"
+    },
+    "26": {
+        "0": "me",
+        "1": 29,
+        "3": 29,
+        "4": 29,
+        "5": 29,
+        "6": 29,
+        "next": 29,
+        "op": "value_type"
+    },
+    "27": {
+        "0": 1,
+        "1": {
+            "num": 1
+        },
+        "2": 1,
+        "next": 31,
+        "op": "add"
+    },
+    "28": {
+        "1": {
+            "num": 4
+        },
+        "2": 2,
+        "op": "set_number"
+    },
+    "29": {
+        "op": "exit"
+    },
+    "3": {
+        "1": {
+            "num": 6
+        },
+        "2": 2,
+        "op": "set_number"
+    },
+    "30": {
+        "0": {
+            "id": "metalbar"
+        },
+        "1": "radio_val",
+        "op": "read_radio"
+    },
+    "31": {
+        "0": 34,
+        "1": "radio_val",
+        "2": {
+            "num": 123
+        },
+        "op": "compare_register"
+    },
+    "32": {
+        "0": 1,
+        "1": {
+            "num": 1
+        },
+        "2": 1,
+        "next": 36,
+        "op": "add"
+    },
+    "33": {
+        "1": {
+            "num": 5
+        },
+        "2": 2,
+        "op": "set_number"
+    },
+    "34": {
+        "op": "exit"
+    },
+    "35": {
+        "0": 1,
+        "1": {
+            "fr": "sanity_listener_result"
+        },
+        "op": "set_reg"
+    },
+    "36": {
+        "next": false,
+        "op": "exit"
+    },
+    "4": {
+        "op": "exit"
+    },
+    "5": {
+        "0": "sig",
+        "band": {
+            "id": "metalbar"
+        },
+        "op": "event_radio"
+    },
+    "6": {
+        "0": 9,
+        "1": "sig",
+        "2": {
+            "num": 123
+        },
+        "op": "compare_register"
+    },
+    "7": {
+        "0": 1,
+        "1": {
+            "num": 1
+        },
+        "2": 1,
+        "next": 11,
+        "op": "add"
+    },
+    "8": {
+        "1": {
+            "num": 6
+        },
+        "2": 2,
+        "op": "set_number"
+    },
+    "9": {
+        "next": 11,
+        "op": "exit"
+    },
+    "name": "Sanity Listener",
+    "parameters": [
+        true,
+        true
+    ],
+    "pnames": [
+        "Result",
+        "Failed"
+    ]
+}

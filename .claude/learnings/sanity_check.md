@@ -1,5 +1,7 @@
 # Sanity Check
 
+> Drift status: clean
+
 End-to-end verification that the compiler produces correct game behavior.
 The developer imports compiled base62 into Desynced and reports the output
 parameter values.
@@ -26,7 +28,15 @@ repo):
 - **`sanity_check/listener.doit`** — Listener behavior for multi-unit tests.
 
 Compiled output (`.b62` files) go in `toolchain/sanity_check/` itself
-(`.b62` and `.json` are gitignored there).
+(`.b62` and ad-hoc `.json` are gitignored there; golden files are tracked).
+
+- **`sanity_check/check.go`** — Drift checker program. Compiles the
+  source files, compares JSON output against golden files, and updates
+  the drift status line above.
+- **`sanity_check/test.golden.json`** — Golden compiled output for the
+  main sanity check behavior (including embedded `call_helper`).
+- **`sanity_check/listener.golden.json`** — Golden compiled output for
+  the listener behavior.
 
 These files are **persistent and incremental** — do not delete or
 rewrite them from scratch. New features get new tests appended;
@@ -198,6 +208,36 @@ This eliminates manual bridging — both behaviors run autonomously.
 - `private fn` (accessed indirectly through a public wrapper)
 - Control flow in function bodies (while, if/else if/else, early return)
 - Transitive function calls (function A calling function B)
+
+## Drift Checker
+
+The drift checker (`go run ./sanity_check` from `toolchain/`) is a
+smoke test that detects when compiler output changes relative to the
+last in-game-verified golden files. It is **informational, not a gate**
+— drift does not block commits.
+
+### How it works
+
+1. Reads the `> Drift status:` line in this file.
+2. If already drifted, exits immediately (no recompilation).
+3. If clean, compiles `test.doit` and `listener.doit`, compares JSON
+   output against `test.golden.json` and `listener.golden.json`.
+4. If output differs, updates the status line to
+   `> Drift status: drifted after <commit>` (the HEAD commit at the
+   time drift was detected).
+
+### Updating golden files
+
+After a successful in-game test, regenerate the golden files and reset
+the status:
+
+```sh
+cd toolchain
+go run ./sanity_check -update
+```
+
+This recompiles the source, writes new golden JSON, and marks the
+status line clean.
 
 ## Workflow Notes
 

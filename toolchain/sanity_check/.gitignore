@@ -1,5 +1,7 @@
 *.b62
 *.json
+!test.golden.json
+!listener.golden.json
 *.doit
 !test.doit
 !lib.doit
