@@ -11,7 +11,7 @@ export format.
 Compile doit source into a Base62-encoded behavior string.
 
 ```
-doit compile [--stdlib stdlib_path] [-e|--error] [-j|--json] [-b behavior_id] [-l locale] [-o output_path] [input_path]
+doit compile [--copy] [--stdlib stdlib_path] [-e|--error] [-j|--json] [-b behavior_id] [-l locale] [-o output_path] [input_path]
 ```
 
 Reads doit source from `input_path`, or stdin if no path is given. If the source
@@ -34,6 +34,9 @@ error: 3:9: unknown function or variable "foo"
 The compiled behavior is encoded as a Base62 string and written to `output_path`
 if `-o` is provided, or stdout otherwise. If `-j` or `--json` is provided, the
 JSON representation of the behavior is emitted instead of the Base62 string.
+
+If `--copy` is provided, the output is also copied to the system clipboard.
+The clipboard is only modified on successful compilation.
 
 The `-l` or `--locale` option sets the locale for resolving localized `@name`
 blocks (e.g., `-l ja` or `-l en_US`). If not specified, the locale is
@@ -106,7 +109,7 @@ a file and `-o` to write to a file.
 Encode a JSON object to a Base62 exported string.
 
 ```
-doit encode [-b|-c] [-o output_path] [input_path]
+doit encode [--copy] [-b|-c] [-o output_path] [input_path]
 ```
 
 Reads a JSON object, encodes it as a Base62 string in Desynced's export format,
@@ -115,6 +118,9 @@ and writes the result.
 Without `-b` or `-c`, the input must include `"type"` and `"value"` fields.
 With `-b`, the input is treated as a blueprint directly. With `-c`, the input is
 treated as a behavior directly.
+
+If `--copy` is provided, the encoded string is also copied to the system
+clipboard.
 
 Reads from stdin and writes to stdout by default. Use `input_path` to read from
 a file and `-o` to write to a file.

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/tobyn/doit/toolchain/codec"
 	"github.com/tobyn/doit/toolchain/compiler"
 	"github.com/tobyn/doit/toolchain/formatter"
@@ -85,6 +86,7 @@ func cmdCompile(args []string) (err error) {
 	localeFlag := flags.String("l", "", "locale for @name resolution")
 	localeLongFlag := flags.String("locale", "", "locale for @name resolution")
 	releaseFlag := flags.Bool("release", false, "compile in release mode (omit asserts)")
+	copyFlag := flags.Bool("copy", false, "copy output to clipboard")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -148,6 +150,17 @@ func cmdCompile(args []string) (err error) {
 		if obj == nil {
 			return
 		}
+		if *copyFlag {
+			jsonBytes, jsonErr := json.MarshalIndent(obj.Value, "", "    ")
+			if jsonErr != nil {
+				err = fmt.Errorf("marshaling JSON: %w", jsonErr)
+				return
+			}
+			if clipErr := clipboard.WriteAll(string(jsonBytes)); clipErr != nil {
+				err = fmt.Errorf("clipboard: %w", clipErr)
+				return
+			}
+		}
 		err = writeJSON(obj.Value, *outputPath)
 		return
 	}
@@ -174,6 +187,12 @@ func cmdCompile(args []string) (err error) {
 	}
 	if encoded == "" {
 		return
+	}
+	if *copyFlag {
+		if clipErr := clipboard.WriteAll(encoded); clipErr != nil {
+			err = fmt.Errorf("clipboard: %w", clipErr)
+			return
+		}
 	}
 	encoded += "\n"
 
@@ -240,6 +259,7 @@ func cmdEncode(args []string) error {
 	outputPath := flags.String("o", "", "output file path")
 	flagB := flags.Bool("b", false, "input is a blueprint value")
 	flagC := flags.Bool("c", false, "input is a behavior value")
+	copyFlag := flags.Bool("copy", false, "copy output to clipboard")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -286,6 +306,11 @@ func cmdEncode(args []string) error {
 	encoded, err := codec.EncodeString(&codec.Object{Type: objType, Value: value})
 	if err != nil {
 		return err
+	}
+	if *copyFlag {
+		if err := clipboard.WriteAll(encoded); err != nil {
+			return fmt.Errorf("clipboard: %w", err)
+		}
 	}
 	encoded += "\n"
 

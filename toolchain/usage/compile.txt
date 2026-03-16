@@ -1,6 +1,6 @@
 Compile doit source into a Base62-encoded behavior string.
 
-doit compile [--release] [--stdlib stdlib_path] [-e|--error] [-j|--json] [-b behavior_id] [-l locale|--locale locale] [-o output_path] [input_path]
+doit compile [--release] [--copy] [--stdlib stdlib_path] [-e|--error] [-j|--json] [-b behavior_id] [-l locale|--locale locale] [-o output_path] [input_path]
 
 Reads doit source from input_path, or stdin if no path is given. If the source
 contains a single behavior it is compiled into its Base62 string representation,
@@ -24,6 +24,10 @@ Normally, the doit CLI uses an embedded copy of the standard library. This can
 be overridden with the `--stdlib` argument, which may be useful for standard
 library development, or if the user wishes to use a version of the standard
 library that differs from the one that ships with the compiler.
+
+If the `--copy` option is given, the output is also copied to the system
+clipboard. The clipboard is only modified on successful compilation. This is
+useful for quickly pasting behaviors into the game or other tools.
 
 If the `-j` or `--json` option is provided, the JSON representation of the
 behavior will be emitted instead of the Base62 string. This can be passed to
