@@ -4,6 +4,14 @@
 # Temporary LLM input/output
 /scratch
 
+# Website
+/website/node_modules/
+/website/.vitepress/dist/
+/website/.vitepress/cache/
+/website/docs/
+/website/public/doit.wasm
+/website/public/wasm_exec.js
+
 # Claude Code stuff
 /.claude/**/*.local.json
 /.claude/plans/

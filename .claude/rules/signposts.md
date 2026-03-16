@@ -55,6 +55,12 @@ topic is relevant to your current task.
 - **Test case format** — `.claude/learnings/test_format.md`
   Test pair conventions, JSON numbering, AI-generated test markers.
 
+## Website
+
+- **Website design & plans** — `.claude/learnings/website.md`
+  Hosting, tech stack, landing page elements, docs strategy, and
+  aesthetic decisions.
+
 ## Design
 
 - **Design decisions** — `.claude/learnings/decisions.md`
