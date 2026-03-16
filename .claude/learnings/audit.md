@@ -76,14 +76,6 @@ dimensions in a single pass:
 
 ### Medium
 
-- **Expression emitter pair duplication (constructor/ampersand/dotAccess).**
-  `emitBhvConstructorTo`/`emitConstructorTo`,
-  `emitBhvAmpersandTo`/`emitAmpersandTo`, and
-  `emitBhvDotAccessTo`/`emitDotAccessTo` are structurally identical
-  pairs in `bhvast.go` and `fnbody_emit.go` that differ only in
-  the getValue resolution call. Could be unified with a getValue
-  callback parameter.
-
 ### Low
 
 - **`set_number` vs `set_reg` inconsistency for number literals.**
@@ -106,3 +98,8 @@ dimensions in a single pass:
   a complex return type and interleaving protocol (variable
   declaration timing, LetStmt vs AssignStmt wrapping, fn call
   continuation) that adds more indirection than it saves.
+- **Expression emitter pair duplication (constructor/ampersand/dotAccess).**
+  `emitBhvConstructorTo`/`emitConstructorTo` etc. are structurally
+  similar but each function is 12–35 lines. Extraction would require
+  passing a getValue callback plus `pos`+`usedVars` for `expandCall`,
+  adding more indirection than it saves.
