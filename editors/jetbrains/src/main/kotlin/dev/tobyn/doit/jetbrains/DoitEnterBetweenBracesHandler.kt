@@ -17,6 +17,10 @@ import com.intellij.openapi.startup.ProjectActivity
  *
  * EnterHandlerDelegate is not invoked for TextMate-backed file types, so we
  * wrap the Enter action handler directly via EditorActionManager instead.
+ *
+ * When the LSP is active, this handler defers to the LSP formatter (which
+ * handles brace-splitting correctly but with a slight delay). Modifying the
+ * document here would conflict with the LSP's asynchronous formatting response.
  */
 class DoitEnterHandlerInstaller : ProjectActivity {
     override suspend fun execute(project: Project) {

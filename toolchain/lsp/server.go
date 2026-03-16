@@ -916,7 +916,17 @@ func (s *Server) handleOnTypeFormatting(msg *jsonrpcMessage) {
 		for prevLineEnd < len(src) && src[prevLineEnd] != '\n' {
 			prevLineEnd++
 		}
-		depth := braceDepth(src[:prevLineEnd])
+		// When the document is stale (didChange hasn't arrived yet), the
+		// previous line may still contain the auto-closed {} pair that the
+		// user pressed Enter inside. Exclude the trailing } so depth
+		// reflects the opening brace only — the } will move to its own
+		// line after the editor processes the Enter.
+		depthEnd := prevLineEnd
+		trimmed := strings.TrimRight(src[prevLineStart:prevLineEnd], " \t")
+		if strings.HasSuffix(trimmed, "{}") {
+			depthEnd = prevLineStart + len(trimmed) - 1
+		}
+		depth := braceDepth(src[:depthEnd])
 		if depth < 0 {
 			depth = 0
 		}

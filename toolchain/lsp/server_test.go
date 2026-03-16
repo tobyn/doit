@@ -385,6 +385,57 @@ func TestOnTypeFormattingStaleDoc(t *testing.T) {
 	}
 }
 
+func TestOnTypeFormattingStaleDocAutoPair(t *testing.T) {
+	// Simulates Enter pressed between auto-closed {} when didChange hasn't
+	// arrived yet. The stale document has "if a {}" on one line. The handler
+	// must exclude the trailing } from depth computation so it returns depth 1
+	// (not 0).
+	var input bytes.Buffer
+	var output bytes.Buffer
+	s := NewServer(&input, &output, nil)
+
+	uri := "file:///test.doit"
+	// Stale doc: the {} are still on the same line.
+	original := "behavior foo {\n    if a {}\n}\n"
+
+	writeNotification(&input, "textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "text": original},
+	})
+
+	// Client sends onTypeFormatting for Enter on line 2 (the new line
+	// between { and }), but the server still sees "    if a {}" on line 1.
+	writeRequest(&input, 1, "textDocument/onTypeFormatting", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"position":     map[string]any{"line": 2, "character": 0},
+		"ch":           "\n",
+		"options":      map[string]any{"tabSize": 4, "insertSpaces": true},
+	})
+	writeNotification(&input, "exit", nil)
+
+	if err := s.Serve(); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	responses := parseRawResponses(t, output.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+
+	var edits []map[string]any
+	if err := json.Unmarshal(responses[0], &edits); err != nil {
+		t.Fatalf("unmarshal: %v (raw: %s)", err, responses[0])
+	}
+	if len(edits) == 0 {
+		t.Fatal("expected indentation edit, got empty array")
+	}
+	// Depth should be 2 (behavior { + if a {), not 1 (which would happen
+	// if the trailing } in "if a {}" were counted).
+	newText, _ := edits[0]["newText"].(string)
+	if newText != "        " {
+		t.Errorf("newText = %q, want %q (8 spaces for depth 2)", newText, "        ")
+	}
+}
+
 func TestOnTypeFormattingCloseBrace(t *testing.T) {
 	var input bytes.Buffer
 	var output bytes.Buffer
