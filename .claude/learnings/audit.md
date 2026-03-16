@@ -76,7 +76,18 @@ dimensions in a single pass:
 
 ### High
 
+- **LSP `parseDiagnostic` drops filename-prefixed errors.** Errors
+  from imported files have format `filename:line:col: message`. The
+  parser expects `line:col: message`, so `strconv.Atoi(filename)`
+  fails and the diagnostic is silently dropped. Affects any file
+  with `import` statements — users see no squiggly lines for errors
+  in imported code.
+
 ### Medium
+
+- **LSP `nthLineOffset` duplicates `lineColToOffset` with col=0.**
+  `nthLineOffset(src, line)` is identical to `lineColToOffset(src,
+  line, 0)`. Minor code duplication.
 
 ### Low
 

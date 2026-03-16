@@ -219,7 +219,7 @@ func canEndExpr(tok *syntax.Token) bool {
 		return false
 	}
 	switch tok.Kind {
-	case syntax.TokNumber, syntax.TokString, syntax.TokRParen,
+	case syntax.TokNumber, syntax.TokString, syntax.TokRParen, syntax.TokRBrace,
 		syntax.TokPlusPlus, syntax.TokMinusMinus:
 		return true
 	case syntax.TokIdent:

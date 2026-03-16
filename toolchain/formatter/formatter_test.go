@@ -66,6 +66,16 @@ func TestFormat(t *testing.T) {
 			want:  "let x = a - b\n",
 		},
 		{
+			name:  "binary minus after brace",
+			input: "let x = locked { a } - 1\n",
+			want:  "let x = locked { a } - 1\n",
+		},
+		{
+			name:  "modulo after brace",
+			input: "let x = locked { a } % 3\n",
+			want:  "let x = locked { a } % 3\n",
+		},
+		{
 			name:  "faction register prefix",
 			input: "% counter += 1\nlet x = % counter\n",
 			want:  "%counter += 1\nlet x = %counter\n",
