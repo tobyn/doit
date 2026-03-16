@@ -78,10 +78,6 @@ dimensions in a single pass:
 
 ### Medium
 
-- **LSP `nthLineOffset` duplicates `lineColToOffset` with col=0.**
-  `nthLineOffset(src, line)` is identical to `lineColToOffset(src,
-  line, 0)`. Minor code duplication.
-
 ### Low
 
 ### Deferred

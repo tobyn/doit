@@ -923,7 +923,7 @@ func (s *Server) handleOnTypeFormatting(msg *jsonrpcMessage) {
 			s.sendResponse(msg.ID, []any{})
 			return
 		}
-		prevLineStart := nthLineOffset(src, prevLine)
+		prevLineStart := lineColToOffset(src, prevLine, 0)
 		prevLineEnd := prevLineStart
 		for prevLineEnd < len(src) && src[prevLineEnd] != '\n' {
 			prevLineEnd++
@@ -961,7 +961,7 @@ func (s *Server) handleOnTypeFormatting(msg *jsonrpcMessage) {
 	if params.Ch == "}" {
 		// User typed }. Cursor is at (line, character) right after the }.
 		// Compute depth at the start of this line from lines above it.
-		lineStart := nthLineOffset(src, line)
+		lineStart := lineColToOffset(src, line, 0)
 		depth := braceDepth(src[:lineStart])
 		depth-- // } closes a level
 		if depth < 0 {
@@ -991,16 +991,6 @@ func (s *Server) handleOnTypeFormatting(msg *jsonrpcMessage) {
 	s.sendResponse(msg.ID, []any{})
 }
 
-// nthLineOffset returns the byte offset of the start of the nth line (0-based).
-func nthLineOffset(src string, line int) int {
-	offset := 0
-	for l := 0; l < line && offset < len(src); offset++ {
-		if src[offset] == '\n' {
-			l++
-		}
-	}
-	return offset
-}
 
 // braceDepth counts unmatched '{' in src, skipping strings and comments.
 func braceDepth(src string) int {
